@@ -7,7 +7,7 @@ Visual-PS5 is a local visual IDE for designing interfaces, saving projects, insp
 ## Quick start
 
 1. Clone or download this repository.
-2. To reconstruct the complete project copy, run `.\scripts\Restore-SourceArchive.ps1` from the repository root. The script decodes the segments, verifies SHA-256 and extracts `PS5-Homebrew-Studio`.
+2. The complete source tree is already committed under `PS5-Homebrew-Studio/`. To reconstruct the verified backup copy instead, run `.\scripts\Restore-SourceArchive.ps1` from the repository root. The script decodes the segments, verifies SHA-256 and extracts `PS5-Homebrew-Studio`.
 3. Enter the extracted directory and run `start.bat` on Windows 10/11. PowerShell 7 is recommended; the launcher also supports Windows PowerShell 5.1 as a fallback.
 4. Open `http://127.0.0.1:47813/` if the browser does not open automatically.
 
