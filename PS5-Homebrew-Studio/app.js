@@ -593,7 +593,7 @@
       const pixels=ctx.getImageData(0,0,width,height).data;
       const bytes=new Uint8Array(8+pixels.length);const view=new DataView(bytes.buffer);view.setUint32(0,width,true);view.setUint32(4,height,true);bytes.set(pixels,8);
       let binary='';const chunk=0x8000;for(let i=0;i<bytes.length;i+=chunk)binary+=String.fromCharCode(...bytes.subarray(i,i+chunk));
-      safeIds.add(id);results.push({id,width,height,base64:btoa(binary),encoding:'rgba8-little-endian-v1',sourceName:String(asset.fileName||asset.name||rawId)});
+      results.push({id,width,height,base64:btoa(binary),encoding:'rgba8-little-endian-v1',sourceName:String(asset.fileName||asset.name||rawId)});
     }
     return results;
   }
