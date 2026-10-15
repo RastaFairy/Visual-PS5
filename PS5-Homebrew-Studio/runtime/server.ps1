@@ -456,8 +456,8 @@ function PackageNativeProjectWithUltraPack($Body) {
   $title = FindProjectTitleFolder $projectRoot $true
   $outputRoot = Join-Path $projectRoot ('packages-ultrapack\' + $format + '\' + (Get-Date -Format 'yyyyMMdd-HHmmss'))
   New-Item -ItemType Directory -Force -Path $outputRoot | Out-Null
-  $args = @($cli,[string]$title.path,$outputRoot,'--to',$format,'--force')
-  $logItems = @(& $python @args 2>&1)
+  $cliArgs = @($cli,[string]$title.path,$outputRoot,'--to',$format,'--force')
+  $logItems = @(& $python @cliArgs 2>&1)
   $exitCode = $LASTEXITCODE
   $logText = ($logItems | ForEach-Object { $_.ToString() }) -join [Environment]::NewLine
   $extension = '.' + $format
