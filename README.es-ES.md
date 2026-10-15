@@ -1,35 +1,38 @@
 # Visual-PS5 — PS5 Homebrew Studio
 
-**Versión 1.0.0 · 15 de octubre de 2026**
+**Versión 1.0.1 · 16 de octubre de 2026**
 
-Visual-PS5 es un IDE visual local para diseñar interfaces, guardar modelos, inspeccionar código generado y coordinar compilaciones mediante toolchains comunitarias de PlayStation 5.
+Visual-PS5 es un IDE visual local para diseñar interfaces, guardar proyectos, inspeccionar código generado y coordinar compilaciones mediante toolchains comunitarias de PlayStation 5.
 
-## Para empezar
-1. Descarga o reconstruye el ZIP de la distribución y verifica su SHA-256.
-2. Extrae el directorio `PS5-Homebrew-Studio` en una ubicación con permisos de escritura.
-3. Ejecuta `start.bat` en Windows. Se recomienda PowerShell 7; el lanzador también contempla Windows PowerShell 5.1.
-4. Abre `http://127.0.0.1:47813/` si el navegador no se abre automáticamente.
-5. Mantén abierta la ventana del servidor mientras utilices el editor.
+## Inicio rápido
+
+1. Descarga el ZIP corregido adjunto a la entrega de esta conversación y verifica su SHA-256.
+2. Extrae `PS5-Homebrew-Studio` en una ubicación con permisos de escritura.
+3. Ejecuta `start.bat` en Windows 10/11. Se recomienda PowerShell 7; el lanzador contempla Windows PowerShell 5.1 como alternativa.
+4. Abre `http://127.0.0.1:47813/` si no se abre el navegador automáticamente.
 
 ## Documentación
+
 - [Manual de uso](docs/MANUAL.es-ES.md)
 - [Alcance y limitaciones](docs/ALCANCE-Y-LIMITACIONES.es-ES.md)
 - [Arquitectura y toolchains](docs/ARQUITECTURA-Y-TOOLCHAINS.es-ES.md)
 - [Licencias y seguridad](docs/LICENCIAS-Y-SEGURIDAD.es-ES.md)
-- [Manual en inglés británico](docs/USER-MANUAL.en-GB.md)
-- [Capacidades y límites (en-GB)](docs/CAPABILITIES-AND-LIMITATIONS.en-GB.md)
-- [Arquitectura (en-GB)](docs/ARCHITECTURE-AND-TOOLCHAINS.en-GB.md)
-- [Licencias y seguridad (en-GB)](docs/LICENSING-AND-SECURITY.en-GB.md)
-- [Catálogo y matriz de SDKs](release/UPSTREAM-SDK-MATRIX.md)
-- [Corrección de PowerShell línea 627](docs/patches/FIX-POWERSHELL-627.es-ES.md)
+- [Documentación en inglés británico](README.en-GB.md)
+- [Manual en inglés](docs/USER-MANUAL.en-GB.md)
+- [Matriz de SDKs y repositorios upstream](release/UPSTREAM-SDK-MATRIX.md)
+- [Changelog](docs/CHANGELOG.md)
+- [Hotfix de PowerShell, línea 627](docs/patches/FIX-POWERSHELL-627.es-ES.md)
 
-## Alcance
-El programa mantiene una interfaz web local, modelo visual, jerarquía, pantallas, flujos, recursos, exportación, diagnóstico y generación de UI C++20 para los backends visuales OpenGL y Vulkan/RADV. También integra flujos de plantillas comunitarias, incluido un flujo C# basado en SharpProspero.
+## Qué hace
 
-**No es un SDK oficial de Sony.** No incluye archivos propietarios, firmware, claves, juegos, BIOS ni herramientas de Sony. No desbloquea la consola, no elude protecciones, no instala automáticamente títulos en una PS5 y no garantiza compatibilidad con todos los firmwares. Los builds dependen de toolchains upstream compatibles.
+Proporciona lienzo 1920×1080, inspector, jerarquía, pantallas, flujos visuales, gestión de recursos, diagnósticos, exportación y generación de UI C++20 para OpenGL/Vulkan-RADV. Integra plantillas comunitarias y una ruta C# para SharpProspero. La compilación se delega a los scripts upstream reales.
 
-## Idiomas
-La documentación se mantiene en español de España (`es-ES`) e inglés británico (`en-GB`). Los identificadores de APIs y parte del código generado conservan los nombres originales de los proyectos upstream.
+**No es un SDK oficial de Sony**, no contiene archivos propietarios, firmware, claves, juegos ni BIOS. No hace jailbreak, no instala títulos en consola automáticamente y no garantiza compatibilidad con cada firmware.
 
-## Estado de validación
-Se ejecutaron las comprobaciones de sintaxis de JavaScript y las pruebas del generador. El entorno de preparación no tenía el parser oficial de PowerShell, la toolchain completa de PS5 ni una consola física; por tanto, no se afirma una compilación final de SDK ni una prueba en hardware.
+## Limitaciones y validación
+
+El editor puede modificar el modelo sin SDK descargado. La compilación necesita WSL/Linux y las dependencias concretas del backend. El éxito del proceso upstream y la presencia de un artefacto no demuestran ejecución correcta en consola.
+
+Se ejecutaron pruebas JavaScript y del generador. En el entorno de preparación no había parser oficial de PowerShell, toolchains completas de PS5 ni consola física, así que no se afirma una validación final con SDK/hardware.
+
+El ZIP v1.0.1 corregido se adjunta como artefacto separado; no está almacenado todavía como activo de GitHub Release.
