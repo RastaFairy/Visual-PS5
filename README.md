@@ -20,6 +20,8 @@ A local visual IDE for designing interfaces, saving projects, inspecting generat
 - [Licensing and security](docs/LICENSING-AND-SECURITY.en-GB.md)
 - [Catálogo de SDKs y proyectos upstream](release/UPSTREAM-SDK-MATRIX.md)
 - [Changelog](docs/CHANGELOG.md)
+- [Publicar la release](docs/PUBLICACION-DE-RELEASE.es-ES.md)
+- [Publish a GitHub release](docs/RELEASING.en-GB.md)
 - [Hotfix de PowerShell, español](docs/patches/FIX-POWERSHELL-627.es-ES.md)
 - [PowerShell hotfix, British English](docs/patches/FIX-POWERSHELL-627.en-GB.md)
 
@@ -35,7 +37,7 @@ En Windows 10/11, extrae la distribución en una carpeta con permisos de escritu
 
 ## Estado del paquete binario
 
-El ZIP corregido **PS5-Homebrew-Studio-v1.0.1.zip** se entrega como artefacto descargable en la conversación de preparación y su SHA-256 se comprobó localmente. El ZIP todavía no está publicado como archivo binario ni como activo de una GitHub Release en este repositorio. El árbol actual de GitHub contiene la documentación y la nota del hotfix.
+El ZIP corregido **PS5-Homebrew-Studio-v1.0.1.zip** se entrega como artefacto descargable en la conversación de preparación y su SHA-256 se comprobó localmente. El ZIP todavía no está publicado como archivo binario ni como activo de una GitHub Release en este repositorio. El árbol actual de GitHub contiene la documentación y la nota del hotfix. La guía de publicación explica cómo adjuntar los archivos desde la interfaz web de GitHub.
 
 ## Validación
 
