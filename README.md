@@ -37,7 +37,7 @@ En Windows 10/11, extrae la distribución en una carpeta con permisos de escritu
 
 ## Código fuente corregido en este repositorio
 
-El código completo de la versión 1.0.1 está incluido en este repositorio como un archivo TAR comprimido con XZ, codificado en veinte segmentos Base64 en [`release/source-archive/`](release/source-archive/README.md). Tras clonar el repositorio, ejecuta desde su raíz:
+El árbol de código corregido de la versión 1.0.1 ya está publicado directamente en [`PS5-Homebrew-Studio/`](PS5-Homebrew-Studio/). También se conserva una copia exacta del mismo código en un archivo TAR con XZ, codificado en veinte segmentos Base64 en [`release/source-archive/`](release/source-archive/README.md), para poder reconstruirlo y verificarlo de forma independiente. Si necesitas reconstruir esa copia desde el archivo de respaldo, ejecuta desde la raíz del repositorio:
 
 ```powershell
 .\scripts\Restore-SourceArchive.ps1
