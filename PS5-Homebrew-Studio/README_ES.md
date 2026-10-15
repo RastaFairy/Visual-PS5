@@ -1,0 +1,109 @@
+# PS5 Homebrew Studio
+
+**Release 1.0.1 · IDE visual local para Windows.** Integra un editor visual 1920×1080, análisis de flujos, generación de código C# para SharpProspero y conversión del modelo visual a pantallas C++20 para los kits nativos OpenGL/Vulkan. Incluye un catálogo verificado por función de boilerplates, UI kits, drivers, complementos gráficos y aplicaciones comunitarias de referencia.
+
+## Inicio en Windows
+
+1. Extrae el ZIP en una carpeta con permisos de escritura, por ejemplo `D:\PS5-Homebrew-Studio`.
+2. Ejecuta `start.bat`. El lanzador prefiere PowerShell 7 (`pwsh.exe`) y usa Windows PowerShell 5.1 solo como alternativa.
+3. El lanzador analiza `runtime/server.ps1` con el parser de PowerShell antes de iniciar el servicio. Si detecta un error, muestra línea/columna y no arranca el servidor.
+4. Se abre `http://127.0.0.1:47813/`. Mantén abierta la ventana de PowerShell; cerrarla detiene el servicio.
+
+El servicio escucha únicamente en `127.0.0.1`; no expone el sistema de archivos a la red local. Los proyectos del editor se guardan en `Documentos\PS5HomebrewStudio\Projects`. `Ctrl+S` guarda el modelo visual. El editor puede abrirse y usarse sin descargar ningún toolchain.
+
+## Qué incluye 1.0.1
+
+- Catálogo de 34 repositorios reales clasificados como bases, renderers, kits de UI, drivers, dependencias, complementos gráficos y aplicaciones de referencia. Los repositorios con asistencia de IA solo se etiquetan como tal cuando lo declaran explícitamente.
+- Inicializadores upstream para Native App Boilerplate, PS5 Homebrew UI y PS5 Vulkan Template. El IDE conserva los repositorios originales, sus licencias y los scripts de compilación.
+- Un generador nativo compartido que convierte las posiciones, dimensiones, estilos, controles y flujos del lienzo en una implementación de `hui::app::Concept`.
+- Backend OpenGL 4.6: inyecta el concepto generado en `ps5-homebrew-ui`, activa el registro de la pantalla generada y ejecuta `make` del proyecto upstream. Las imágenes vinculadas se predecodifican en el navegador, se limitan a 512×512, se empaquetan como RGBA8 y se suben como texturas OpenGL en tiempo de ejecución (hasta 16 recursos únicos).
+- Backend Vulkan/RADV: utiliza `PS5_VulkanTemplate` y su `new-title.py`, sustituye la pantalla del módulo UI fijado y ejecuta el build real mediante CMake/Ninja y los scripts de PS5_Vulkan/PS5_Mesa/PS5_PayloadSDK.
+- La compilación solo se marca correcta si el proceso upstream termina con código cero y existe un `eboot.bin` o ZIP verificable. Los logs reales y la ruta del proyecto permanecen disponibles cuando el build falla.
+- Reparación acotada de la cadena Vulkan: si la revisión de PS5_Vulkan descargada no contiene `tools/ninja-build.sh` o `tools/build-host-tools.sh` que el build referencia, el IDE restaura los scripts reales del boilerplate compañero y registra su hash y procedencia. No genera stubs vacíos.
+
+## Editor visual y compilación
+
+El editor ofrece lienzo 1920×1080, cuadrícula, arrastrar/soltar, propiedades, jerarquía, temas, pantallas, vista previa, lógica visual, diagnósticos, recursos, guardado, importación/exportación y código inspeccionable.
+
+**SharpProspero · Aplicación** genera C# y utiliza su pipeline NativeAOT. Requiere .NET SDK 10 en Windows y dentro de WSL, además del SDK correspondiente. Los destinos payload/plugin que no son renderers no aceptan indebidamente código C# de interfaz.
+
+**Native UI · OpenGL 4.6 / C++20** genera una pantalla basada en el contrato real de `ps5-homebrew-ui`. Conserva las coordenadas virtuales y los flujos `notify`, `setText`, `toggleVisibility`, `setValue`, `changeColor` y `navigate`. Los recursos de imagen vinculados se convierten a RGBA8 con un máximo de 512×512 píxeles y se empaquetan en el título; se cargan como texturas OpenGL (máximo 16 IDs únicos por pantalla).
+
+**Native UI · Vulkan / RADV / C++20** genera una pantalla del contrato real del módulo `PS5_VKHomebrewUI`, dentro de un título creado por `PS5_VulkanTemplate`. Los componentes y los flujos funcionales se generan como C++; las imágenes se empaquetan como RGBA8, se registran en `ps5/assets.json` y se cargan mediante `VkRenderer::create_texture`. El paquete incluye una nota de licencia para recursos aportados por el usuario, que debe confirmar los derechos de redistribución.
+
+En los dos backends C++ el `input` visual incluye un teclado en pantalla que se abre al confirmar: permite letras A–Z, números, puntuación básica, espacio, borrar, limpiar, aceptar y cancelar. Es un teclado ASCII propio del proyecto, no un IME multilingüe del sistema. Los demás controles con valor (interruptor, deslizador, incrementador, selector, carrusel/lista) responden a la cruceta y al botón de confirmación. Las pantallas múltiples se cambian mediante flujos de navegación; el shell conserva su control de salida.
+
+La generación se ha probado con pruebas Node.js y la sintaxis del código C++ generado se ha comprobado con Clang contra interfaces de prueba compatibles. El entorno de preparación no dispone de PowerShell, .NET 10 ni un stack de toolchain PS5 completo: por ello **no afirmo haber ejecutado aquí el parser de PowerShell, el build real de PS5 ni una prueba en consola**. Al iniciar en Windows, `start.bat` ejecuta `runtime/check-syntax.ps1` para usar el parser oficial de PowerShell antes de lanzar el servidor.
+
+## Pruebas locales del generador
+
+Si tienes Node.js, ejecuta desde la carpeta del proyecto:
+
+```powershell
+node --check app.js
+node --check runtime/native-generator.js
+node runtime/test-native-generator.js
+```
+
+`test-native-generator.js` comprueba los dos backends, literales escapados, múltiples pantallas, componentes y flujos. El build real sigue requiriendo la cadena upstream indicada en cada plantilla. La primera compilación Vulkan puede ser pesada porque construye RADV desde los fuentes fijados.
+
+## Requisitos y licencias
+
+- OpenGL: Windows + WSL/Linux, Git, Make, Clang/LLD, dependencias de `ps5-homebrew-ui` y el SDK `ps5-opengl` que prepara el upstream.
+- Vulkan: WSL/Linux, Git/submódulos, CMake/Ninja, Clang/LLVM, Meson, rsync, PS5_Vulkan, PS5_Mesa y la revisión fijada de PS5_PayloadSDK.
+- Los títulos generados integran kits que mantienen licencias GPL. Revisa `LICENSE`, `THIRD_PARTY_NOTICES.md` y las licencias de cada recurso antes de redistribuir. No se incluyen firmware de PS5, claves, ROMs, BIOS, datos de juegos ni binarios propietarios de Sony/NVIDIA.
+- El IDE solo escucha en `127.0.0.1`. El workspace se guarda en `Documentos\PS5HomebrewStudio\Projects`; las toolchains quedan en la carpeta del proyecto IDE.
+
+## Ecosistema investigado
+
+### Bases y SDKs
+
+- [SharpProspero](https://github.com/SvenGDK/SharpProspero): aplicaciones nativas, bibliotecas y payloads C#.
+- [PS5 Native App Boilerplate](https://github.com/blackbearreloaded/ps5-native-app-boilerplate): base C++20, runtime shim reproducible y empaquetado de título.
+- [PS5 Vulkan Template](https://github.com/mihawk-99/PS5_VulkanTemplate): generador C++, muestras Vulkan y UI opcional.
+- [PS5SDK](https://github.com/PS5Dev/PS5SDK): orientado principalmente a payload ELF y homebrew sencillo; upstream indica que todavía no genera títulos completos.
+- [ps5-payload-dev/sdk](https://github.com/ps5-payload-dev/sdk): toolchain de payloads C/C++ y enlace dinámico.
+- [ps5link-sdk](https://github.com/Rufidj/ps5link-sdk): enlazador de títulos nativos, con dependencias adicionales.
+- [etaHEN-Plugins](https://github.com/etaHEN/etaHEN-Plugins): plugins/daemons de etaHEN, no aplicaciones GUI independientes.
+
+### Gráficos y UI
+
+- [PS5 OpenGL 4.6](https://github.com/blackbearreloaded/ps5-opengl) y su [kit de UI](https://github.com/blackbearreloaded/ps5-homebrew-ui).
+- [PS5 Vulkan Template](https://github.com/mihawk-99/PS5_VulkanTemplate), [PS5_Vulkan](https://github.com/mihawk-99/PS5_Vulkan), [PS5_Mesa](https://github.com/mihawk-99/PS5_Mesa) y [PS5 VKHomebrewUI](https://github.com/mihawk-99/PS5_VKHomebrewUI).
+- [PS5 OpenGL de mihawk-99](https://github.com/mihawk-99/ps5-opengl), [ps5gl](https://github.com/Rufidj/ps5gl) y [ps5-vulkan alternativo](https://github.com/mpereiraesaa/ps5-vulkan): proyectos diferentes, con niveles de compatibilidad distintos.
+- [Aurora](https://github.com/encounter/aurora): capa GX/WebGPU con SDL3, backends multiplataforma y UI; los ports de PS5 le añaden una capa de plataforma.
+- [PS5 FSR4](https://github.com/blackbearreloaded/ps5-fsr4) y [PS5 HelixSR](https://github.com/blackbearreloaded/ps5-helixsr): complementos experimentales de Vulkan compute que exigen revisar licencias, requisitos y procedencia de sus dependencias.
+
+### Aplicaciones reales de referencia
+
+Incluye [ProsperoLight](https://github.com/blackbearreloaded/ProsperoLight), [Unofficial Stremio PS5 Port](https://github.com/Sp9nky/unofficial-stremio-ps5-port), [Nativehbl](https://github.com/Rufidj/Nativehbl), [Quake3e PS5](https://github.com/griches/PS5_Quake3e), [Ghostship](https://github.com/griches/PS5_Ghostship), [SwitchWaker](https://github.com/griches/PS5_SwitchWaker), [Dusklight](https://github.com/griches/PS5_Dusklight), [Sunshine](https://github.com/griches/PS5_Sunshine), [Porpoise/Dolphin](https://github.com/elripalda/Porpoise-Dolphin-Emulator-for-PS5), [PS5 RetroArch](https://github.com/mihawk-99/PS5_RetroArch), [PS5X360](https://github.com/BrinooTk/PS5X360) y [Syobon Action PS5](https://github.com/kvaps/syobon-action-ps5).
+
+Consulta [la matriz de SDKs](docs/SDK_MATRIX.md), [el estudio del ecosistema](docs/PROJECT_ECOSYSTEM.md) y la guía de [generación visual OpenGL/Vulkan](docs/NATIVE_VISUAL_BACKENDS.md) para saber qué es una base, un renderer, un driver, cómo se genera el código y qué limitaciones conserva cada backend. Un repositorio de aplicación completa puede aportar patrones arquitectónicos, pero no es necesariamente reutilizable sin portar dependencias, verificar licencia y resolver diferencias de firmware.
+
+## Procedencia de IA
+
+La etiqueta **IA declarada** está reservada a declaraciones explícitas. Por ejemplo, [ProsperoEden0](https://github.com/Tiang-88/ProsperoEden0) declara asistencia de herramientas OpenAI/Anthropic; [X360PS5 de polarco](https://github.com/polarco/X360PS5) documenta uso activo de Codex, pero el propio README indica que no se ha probado en una PS5 y que aún no carga juegos Xbox 360. Estos casos son evidencia de asistencia declarada, no garantía de calidad o compatibilidad. Los proyectos con `AGENTS.md`/`CLAUDE.md` no se etiquetan automáticamente como generados por IA.
+
+## Licencias, dependencias y artefactos externos
+
+- Cada fuente conserva su repositorio y avisos upstream; revisa `LICENSE`, `THIRD_PARTY_NOTICES.md` y licencias de subcomponentes antes de redistribuir.
+- No se incluye firmware PS5, llaves de Sony, `libc.prx` propietario, ROMs, BIOS, datos de juegos ni binarios de NVIDIA. Si un repositorio requiere recursos que el usuario debe aportar, el IDE lo indica en su ficha.
+- Clonar un repositorio no instala sus herramientas del sistema, ni garantiza que sus submódulos/dependencias puedan compilar en el equipo.
+- La compatibilidad depende del firmware, loader, stack gráfico y las dependencias exactas. Los resultados de pruebas y limitaciones se toman de los documentos upstream; no se extrapolan a todas las consolas.
+
+## Archivos importantes
+
+- `start.bat`: comprueba sintaxis e inicia el IDE.
+- `runtime/server.ps1`: servidor loopback, gestor de fuentes, materializador RGBA y build providers de SharpProspero, Homebrew UI y Vulkan Template.
+- `runtime/native-generator.js`: generador C++20 para el contrato Concept del kit UI upstream.
+- `runtime/test-native-generator.js`: pruebas automatizadas del generador y de las rutas OpenGL/Vulkan.
+- `runtime/check-syntax.ps1`: usa el parser de PowerShell disponible en Windows y muestra línea/columna de errores.
+- `index.html`, `styles.css`, `app.js`: editor visual y catálogo.
+- `docs/SDK_MATRIX.md`, `docs/PROJECT_ECOSYSTEM.md`: investigación técnica.
+
+**Validación de esta release:** `node --check` pasa para `app.js` y el generador; las pruebas automatizadas del generador pasan y Clang compila sintácticamente dos pantallas generadas contra interfaces de prueba. No se pudo ejecutar el parser oficial de PowerShell ni construir títulos con los SDK PS5 porque esas toolchains no están instaladas en el entorno de preparación. El script de inicio analiza el servidor con el parser real de PowerShell en Windows antes de iniciarlo.
+
+
+## Corrección 1.0.1
+
+Corrige un error de parseo de PowerShell en la generación del README de proyecto: se delimita `${sourceName}` explícitamente en la cadena que produce `SaveProject`. Consulta `docs/patches/FIX-POWERSHELL-627.es-ES.md`.
