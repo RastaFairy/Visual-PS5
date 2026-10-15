@@ -44,6 +44,7 @@ $script:Catalog = @(
   @{id='quake3e';name='PS5 Quake3e';repo='griches/PS5_Quake3e';branch='main';folder='PS5_Quake3e';role='Motor/port Vulkan-RADV';license='GPL-3.0 según upstream; revisar componentes';description='Port real del motor Quake3e con Vulkan/RADV, DualSense y audio. Requiere datos del juego del usuario.';category='source';method='git'},
   @{id='retroarch';name='PS5 RetroArch';repo='mihawk-99/PS5_RetroArch';branch='main';folder='PS5_RetroArch';role='Frontend/emulación Vulkan';license='GPL y licencias individuales de cores';description='Aplicación nativa modular con RetroArch, EmulationStation, WebUI y numerosos cores; no incluye ROMs/BIOS.';category='source';method='git'},
   @{id='x360-ai';name='X360PS5 (asistencia IA declarada)';repo='polarco/X360PS5';branch='master';folder='X360PS5-AI-Prototype';role='Prototipo experimental Xenia/Vulkan';license='Revisar licencia y dependencias';description='Investigación asistida por Codex declarada por su README; pruebas de host, no PS5 probado y aún no carga juegos.';category='source';method='git';aiDeclared=$true}
+  @{id='ps5-ultrapack';name='PS5 UltraPack';repo='knutwurst/ps5-ultrapack';branch='main';folder='ps5-ultrapack';role='Empaquetado ffpfs/ffpfsc/fPKG';license='MIT para código propio + licencias de terceros';description='CLI para convertir carpetas de título en .ffpfs/.ffpfsc/.pkg; el soporte fuera de macOS puede ser limitado.'}
 )
 function WriteUtf8([string]$Path,[string]$Content) { [IO.File]::WriteAllText($Path,$Content,$script:Utf8) }
 function SendBytes($C,[byte[]]$B,[string]$Type='application/octet-stream',[int]$Code=200) {
@@ -275,6 +276,208 @@ function EnsureVulkanBuildSupport([string]$VulkanDir) {
   }
   return @($provenance)
 }
+
+function GetIntegrationConfig {
+  $stored = @{}
+  $configPath = Join-Path $script:Runtime 'integrations.json'
+  if (Test-Path -LiteralPath $configPath -PathType Leaf) {
+    try {
+      $raw = Get-Content -LiteralPath $configPath -Raw | ConvertFrom-Json
+      $stored.kytyExe = [string]$raw.kytyExe
+      $stored.pythonExe = [string]$raw.pythonExe
+      $stored.ultraPackCli = [string]$raw.ultraPackCli
+    } catch { $stored = @{} }
+  }
+  $kyty = [string]$stored.kytyExe
+  if (!$kyty -or !(Test-Path -LiteralPath $kyty -PathType Leaf)) {
+    $kyty = ''
+    foreach ($candidate in @(
+      (Join-Path $script:Toolchains 'KytyPS5\_Build\windows\install\kyty_emulator.exe'),
+      (Join-Path $script:Toolchains 'KytyPS5\build\windows\install\kyty_emulator.exe'),
+      (Join-Path $script:Toolchains 'KytyPS5\kyty_emulator.exe')
+    )) { if (Test-Path -LiteralPath $candidate -PathType Leaf) { $kyty = $candidate; break } }
+  }
+  $python = [string]$stored.pythonExe
+  if (!$python -or !(Test-Path -LiteralPath $python -PathType Leaf)) {
+    $python = ''
+    foreach ($commandName in @('python.exe','python3.exe','python','python3')) {
+      $found = CmdInfo $commandName
+      if ($found.ok -and $found.path -and (Test-Path -LiteralPath $found.path -PathType Leaf)) { $python = [string]$found.path; break }
+    }
+  }
+  $cli = [string]$stored.ultraPackCli
+  if (!$cli -or !(Test-Path -LiteralPath $cli -PathType Leaf)) {
+    $candidate = Join-Path $script:Toolchains 'ps5-ultrapack\backend\cli.py'
+    if (Test-Path -LiteralPath $candidate -PathType Leaf) { $cli = $candidate } else { $cli = '' }
+  }
+  return @{
+    kytyExe = $kyty
+    pythonExe = $python
+    ultraPackCli = $cli
+    kytyReady = [bool]($kyty -and (Test-Path -LiteralPath $kyty -PathType Leaf))
+    pythonReady = [bool]($python -and (Test-Path -LiteralPath $python -PathType Leaf))
+    ultraPackReady = [bool]($cli -and (Test-Path -LiteralPath $cli -PathType Leaf))
+    kytyDownloads = 'https://github.com/KytyPS5/KytyPS5/releases'
+    ultraPackRepo = 'https://github.com/knutwurst/ps5-ultrapack'
+  }
+}
+function SetIntegrationConfig($Body) {
+  $kyty = ([string]$Body.kytyExe).Trim()
+  $python = ([string]$Body.pythonExe).Trim()
+  $cli = ([string]$Body.ultraPackCli).Trim()
+  if ($kyty) {
+    try { $kyty = [IO.Path]::GetFullPath($kyty) } catch { throw 'La ruta de kyty_emulator.exe no es válida.' }
+    if (!(Test-Path -LiteralPath $kyty -PathType Leaf)) { throw "No existe el ejecutable de Kyty indicado: $kyty" }
+    if ([IO.Path]::GetFileName($kyty) -ine 'kyty_emulator.exe') { throw 'Selecciona el ejecutable kyty_emulator.exe, no el launcher ni una carpeta.' }
+  }
+  if ($python) {
+    if ($python -match '[\\/]') {
+      try { $python = [IO.Path]::GetFullPath($python) } catch { throw 'La ruta de Python no es válida.' }
+      if (!(Test-Path -LiteralPath $python -PathType Leaf)) { throw "No se encontró el ejecutable de Python: $python" }
+    } else {
+      $command = CmdInfo $python
+      if (!$command.ok -or !$command.path) { throw "No se encontró Python '$python'. Instala Python 3.10+ o introduce la ruta completa a python.exe." }
+      $python = [string]$command.path
+    }
+  }
+  if ($cli) {
+    try { $cli = [IO.Path]::GetFullPath($cli) } catch { throw 'La ruta de backend/cli.py de UltraPack no es válida.' }
+    if (!(Test-Path -LiteralPath $cli -PathType Leaf) -or [IO.Path]::GetFileName($cli) -ine 'cli.py' -or (Split-Path -Leaf (Split-Path -Parent $cli)) -ine 'backend') {
+      throw 'Indica el archivo backend\cli.py de PS5 UltraPack, no la aplicación gráfica ni una carpeta.'
+    }
+    $repoRoot = Split-Path -Parent (Split-Path -Parent $cli)
+    if (!(Test-Path -LiteralPath (Join-Path $repoRoot 'README.md') -PathType Leaf)) { throw 'La ruta no parece corresponder a una copia del repositorio PS5 UltraPack (falta README.md).' }
+  }
+  $configPath = Join-Path $script:Runtime 'integrations.json'
+  WriteUtf8 $configPath (ConvertTo-Json -InputObject @{kytyExe=$kyty;pythonExe=$python;ultraPackCli=$cli;updatedAt=(Get-Date).ToString('o')} -Depth 5)
+  $config = GetIntegrationConfig
+  return @{ok=$true;message='Configuración de integraciones guardada localmente.';config=$config}
+}
+function ResolveNativeProjectRoot([string]$InputPath) {
+  if ([string]::IsNullOrWhiteSpace($InputPath)) { throw 'La ruta del proyecto está vacía.' }
+  try { $projectRoot = [IO.Path]::GetFullPath($InputPath) } catch { throw 'La ruta del proyecto no es válida.' }
+  $workspaceRoot = [IO.Path]::GetFullPath($script:Workspace)
+  $separator = [string][IO.Path]::DirectorySeparatorChar
+  if (!$workspaceRoot.EndsWith($separator)) { $workspaceRoot += $separator }
+  if (!$projectRoot.StartsWith($workspaceRoot,[StringComparison]::OrdinalIgnoreCase)) {
+    throw 'Solo se permiten proyectos creados dentro del workspace de Homebrew Studio.'
+  }
+  $markerPath = Join-Path $projectRoot '.ps5hs-project.json'
+  if (!(Test-Path -LiteralPath $markerPath -PathType Leaf)) { throw 'No se encontró .ps5hs-project.json. Abre un proyecto nativo creado por Homebrew Studio.' }
+  try { $meta = Get-Content -LiteralPath $markerPath -Raw | ConvertFrom-Json } catch { throw 'El manifiesto del proyecto no se puede leer.' }
+  if ($meta.schema -ne 'ps5hs-native-project' -or [string]$meta.template -notin @('nativecpp','hui-gl','vulkan-template')) {
+    throw 'El manifiesto no identifica una plantilla nativa compatible.'
+  }
+  return @{path=$projectRoot;meta=$meta}
+}
+function GetProjectEbootFolders([string]$ProjectRoot) {
+  $items = @()
+  $rootEboot = Join-Path $ProjectRoot 'eboot.bin'
+  if (Test-Path -LiteralPath $rootEboot -PathType Leaf) { $items += Get-Item -LiteralPath $rootEboot }
+  $distPath = Join-Path $ProjectRoot 'dist'
+  if (Test-Path -LiteralPath $distPath -PathType Container) {
+    $items += @(Get-ChildItem -LiteralPath $distPath -Filter 'eboot.bin' -File -Recurse -ErrorAction SilentlyContinue)
+  }
+  $seen = @{}
+  $files = @()
+  foreach ($item in $items) {
+    $key = $item.FullName.ToLowerInvariant()
+    if (!$seen.ContainsKey($key)) { $seen[$key] = $true; $files += $item }
+  }
+  return @($files | Sort-Object LastWriteTime -Descending)
+}
+function FindProjectTitleFolder([string]$ProjectRoot,[bool]$RequireParamJson) {
+  $eboots = @(GetProjectEbootFolders $ProjectRoot)
+  if (!$eboots.Count) { throw "No se encontró eboot.bin en el proyecto ni en '$ProjectRoot\dist'. Compila primero el título nativo." }
+  foreach ($eboot in $eboots) {
+    $folder = Split-Path -Parent $eboot.FullName
+    if (!$RequireParamJson -or (Test-Path -LiteralPath (Join-Path $folder 'sce_sys\param.json') -PathType Leaf)) {
+      return @{path=$folder;eboot=$eboot.FullName;staged=$false}
+    }
+  }
+  if ($RequireParamJson -and (Test-Path -LiteralPath (Join-Path $ProjectRoot 'sce_sys\param.json') -PathType Leaf)) {
+    $selected = $eboots | Select-Object -First 1
+    $sourceFolder = Split-Path -Parent $selected.FullName
+    $stageRoot = Join-Path (Join-Path $script:Runtime 'ultrapack-staging') ([IO.Path]::GetFileName($ProjectRoot))
+    if (Test-Path -LiteralPath $stageRoot -PathType Container) { Remove-Item -LiteralPath $stageRoot -Recurse -Force }
+    New-Item -ItemType Directory -Force -Path $stageRoot | Out-Null
+    foreach ($child in (Get-ChildItem -LiteralPath $sourceFolder -Force -ErrorAction SilentlyContinue)) {
+      Copy-Item -LiteralPath $child.FullName -Destination $stageRoot -Recurse -Force
+    }
+    Copy-Item -LiteralPath (Join-Path $ProjectRoot 'sce_sys') -Destination $stageRoot -Recurse -Force
+    foreach ($assetFolder in @('assets','data','resources','modules','lib')) {
+      $candidate = Join-Path $ProjectRoot $assetFolder
+      if ((Test-Path -LiteralPath $candidate -PathType Container) -and !(Test-Path -LiteralPath (Join-Path $stageRoot $assetFolder))) {
+        Copy-Item -LiteralPath $candidate -Destination $stageRoot -Recurse -Force
+      }
+    }
+    foreach ($module in @(Get-ChildItem -LiteralPath $ProjectRoot -Filter '*.prx' -File -ErrorAction SilentlyContinue)) {
+      Copy-Item -LiteralPath $module.FullName -Destination $stageRoot -Force
+    }
+    if (!(Test-Path -LiteralPath (Join-Path $stageRoot 'eboot.bin') -PathType Leaf) -or !(Test-Path -LiteralPath (Join-Path $stageRoot 'sce_sys\param.json') -PathType Leaf)) {
+      throw 'No se pudo preparar una carpeta con eboot.bin y sce_sys\param.json para UltraPack.'
+    }
+    return @{path=$stageRoot;eboot=(Join-Path $stageRoot 'eboot.bin');staged=$true}
+  }
+  throw 'UltraPack requiere una carpeta de título que contenga eboot.bin y sce_sys\param.json. La compilación no produjo metadatos de título en esa estructura.'
+}
+function RunKytyProject($Body) {
+  $resolved = ResolveNativeProjectRoot ([string]$Body.path)
+  $projectRoot = [string]$resolved.path
+  $config = GetIntegrationConfig
+  $emulator = [string]$config.kytyExe
+  if (!$emulator -or !(Test-Path -LiteralPath $emulator -PathType Leaf)) {
+    throw "Kyty no está configurado. Pulsa 'Herramientas' y selecciona kyty_emulator.exe. Descargas oficiales: https://github.com/KytyPS/KytyPS5/releases"
+  }
+  $title = FindProjectTitleFolder $projectRoot $false
+  $psi = New-Object System.Diagnostics.ProcessStartInfo
+  $psi.FileName = $emulator
+  $psi.WorkingDirectory = Split-Path -Parent $emulator
+  $psi.Arguments = '--game "' + ([string]$title.path).Replace('"','\"') + '"'
+  $psi.UseShellExecute = $false
+  $proc = [System.Diagnostics.Process]::Start($psi)
+  if (!$proc) { throw 'Windows no pudo iniciar kyty_emulator.exe.' }
+  return @{ok=$true;message='KytyPS5 se ha iniciado con el directorio compilado del título.';pid=$proc.Id;gameFolder=[string]$title.path;eboot=[string]$title.eboot;path=$projectRoot}
+}
+function PackageNativeProjectWithUltraPack($Body) {
+  $resolved = ResolveNativeProjectRoot ([string]$Body.path)
+  $projectRoot = [string]$resolved.path
+  $format = ([string]$Body.format).Trim().ToLowerInvariant()
+  if ($format -notin @('ffpfs','ffpfsc','pkg')) { throw 'Formato de salida no válido. Elige .ffpfs, .ffpfsc o .pkg.' }
+  $config = GetIntegrationConfig
+  $python = [string]$config.pythonExe
+  $cli = [string]$config.ultraPackCli
+  if (!$python -or !(Test-Path -LiteralPath $python -PathType Leaf)) {
+    throw 'No se ha configurado Python. En Herramientas, indica python.exe (Python 3.10 o posterior).'
+  }
+  if (!$cli -or !(Test-Path -LiteralPath $cli -PathType Leaf)) {
+    throw "No se ha encontrado backend\cli.py de UltraPack. Usa 'Descargar UltraPack (fuente)' en Herramientas o indica su ruta manualmente. Repositorio: https://github.com/knutwurst/ps5-ultrapack"
+  }
+  $title = FindProjectTitleFolder $projectRoot $true
+  $outputRoot = Join-Path $projectRoot ('packages-ultrapack\' + $format + '\' + (Get-Date -Format 'yyyyMMdd-HHmmss'))
+  New-Item -ItemType Directory -Force -Path $outputRoot | Out-Null
+  $cliArgs = @($cli,[string]$title.path,$outputRoot,'--to',$format,'--force')
+  $logItems = @(& $python @cliArgs 2>&1)
+  $exitCode = $LASTEXITCODE
+  $logText = ($logItems | ForEach-Object { $_.ToString() }) -join [Environment]::NewLine
+  $extension = '.' + $format
+  $artifact = ''
+  if (Test-Path -LiteralPath $outputRoot -PathType Container) {
+    $candidate = Get-ChildItem -LiteralPath $outputRoot -Filter ('*' + $extension) -File -Recurse -ErrorAction SilentlyContinue |
+      Sort-Object LastWriteTime -Descending | Select-Object -First 1
+    if ($candidate) { $artifact = $candidate.FullName }
+  }
+  if ($exitCode -eq 0 -and $artifact) {
+    $formatLabel = if ($format -eq 'pkg') { 'fPKG (.pkg)' } elseif ($format -eq 'ffpfs') { 'PFS sin comprimir (.ffpfs)' } else { 'PFS comprimido (.ffpfsc)' }
+    $stageMessage = if ($title.staged) { 'Se creó una carpeta temporal con el eboot compilado, los metadatos sce_sys y recursos habituales del proyecto.' } else { 'Se usó directamente la carpeta de título compilada.' }
+    return @{ok=$true;message="UltraPack terminó y generó $formatLabel.";output=$logText;path=$projectRoot;source=[string]$title.path;artifact=$artifact;format=$format;exitCode=$exitCode;note=$stageMessage}
+  }
+  if ($exitCode -ne 0 -and $format -eq 'pkg') {
+    $logText += ([Environment]::NewLine + [Environment]::NewLine + 'Nota: el README de UltraPack documenta actualmente la app empaquetada para macOS. En Windows, el CLI puede requerir ajustes y el ayudante fPKG de .NET no viene precompilado en el repositorio.')
+  }
+  return @{ok=$false;message="UltraPack terminó con código $exitCode o no generó el archivo .$format esperado.";output=$logText;path=$projectRoot;source=[string]$title.path;artifact=$artifact;format=$format;exitCode=$exitCode}
+}
+
 function BuildNativeProject([string]$ProjectPath) {
   $workspaceRoot = [IO.Path]::GetFullPath($script:Workspace)
   $separator = [string]([IO.Path]::DirectorySeparatorChar)
@@ -790,6 +993,9 @@ while ($listener.Server.IsBound) {
                         if ($method -eq 'GET' -and $path -eq '/api/status') {
                             SendJson $ctx (GetStatus)
                         }
+                        elseif ($method -eq 'GET' -and $path -eq '/api/integrations') {
+                            SendJson $ctx (GetIntegrationConfig)
+                        }
                         elseif ($method -eq 'GET' -and $path -eq '/api/projects') {
                             $items = @()
                             Get-ChildItem $script:Workspace -Directory -ErrorAction SilentlyContinue | ForEach-Object {
@@ -855,6 +1061,18 @@ while ($listener.Server.IsBound) {
                                         $result = NewNativeTitle ([string]$body.name) ([string]$body.titleId) $category $templateId
                                     }
                                     else { $result=@{ok=$false;message='Generador upstream no reconocido.';output='';templateId=$templateId} }
+                                    SendJson $ctx $result
+                                }
+                                '/api/integration-config' {
+                                    $result = SetIntegrationConfig $body
+                                    SendJson $ctx $result
+                                }
+                                '/api/run-kyty' {
+                                    $result = RunKytyProject $body
+                                    SendJson $ctx $result
+                                }
+                                '/api/package-ultrapack' {
+                                    $result = PackageNativeProjectWithUltraPack $body
                                     SendJson $ctx $result
                                 }
                                 '/api/build-native' {

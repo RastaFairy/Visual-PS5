@@ -164,7 +164,109 @@
       const projects=result.projects||[];
       if(!projects.length){root.innerHTML='<div class="empty-screen">Todavía no hay proyectos nativos creados desde Homebrew Studio. Usa «Crear base C++», «Crear app UI OpenGL» o «Crear título Vulkan» en una tarjeta compatible.</div>';return;}
       root.innerHTML=projects.map(p=>`<article class="native-project-card"><div class="native-project-main"><strong>${esc(p.name||p.titleId||'Proyecto nativo')}</strong><span class="native-project-meta">${esc(p.visualBackend||p.templateId||'plantilla')} · ${esc(p.titleId||'sin TITLE_ID')}${p.design?' · diseño '+esc(p.design):''}${p.generatedFromStudio?' · canvas → C++20':''}</span><code title="Ruta del proyecto">${esc(p.path||'')}</code>${p.built?`<span class="native-build-state success">Artefacto: ${esc(p.artifact)}</span>`:'<span class="native-build-state pending">Aún no compilado</span>'}</div><div class="native-project-actions"><button class="btn primary small" data-native-build="${esc(p.path||'')}">Compilar</button><button class="btn ghost small" data-source-open="${p.templateId==='vulkan-template'?'https://github.com/mihawk-99/PS5_VulkanTemplate':p.templateId==='hui-gl'?'https://github.com/blackbearreloaded/ps5-homebrew-ui':'https://github.com/blackbearreloaded/ps5-native-app-boilerplate'}">Upstream ↗</button></div></article>`).join('');
+      root.querySelectorAll('.native-project-card').forEach((card,index)=>{
+        const p=projects[index]||{};
+        const actions=card.querySelector('.native-project-actions');
+        if(!actions)return;
+        const run=document.createElement('button');run.className='btn secondary small';run.textContent='Probar en Kyty';run.disabled=!p.built;run.dataset.nativeRun=p.path||'';run.title='Iniciar el título compilado en KytyPS5';
+        const pack=document.createElement('button');pack.className='btn secondary small';pack.textContent='UltraPack';pack.disabled=!p.built;pack.dataset.nativePackage=p.path||'';pack.title='Crear ffpfs, ffpfsc o pkg con PS5 UltraPack';
+        actions.insertBefore(run,actions.children[1]||null);
+        actions.insertBefore(pack,actions.children[2]||null);
+        run.onclick=()=>runNativeKyty(run.dataset.nativeRun);
+        pack.onclick=()=>packageNativeWithUltraPack(pack.dataset.nativePackage);
+      });
+
     }catch(e){root.innerHTML=`<div class="empty-screen">No se pudo consultar el workspace de Windows: ${esc(e.message)}. El servicio local debe estar ejecutándose.</div>`;}
+  }
+
+
+  async function openIntegrationSettings(){
+    let config={};
+    try{config=await api('integrations');}
+    catch(e){toast('No se pudo leer la configuración: '+e.message,'error');return;}
+    const ready=flag=>flag?'<span style="color:var(--green)">Detectado</span>':'<span style="color:var(--yellow)">Pendiente</span>';
+    const body=
+      '<p>Configura ejecutables ya instalados en este PC. Las rutas se guardan localmente en <code>.runtime/integrations.json</code>.</p>'+
+      '<div class="form-field"><label>Ejecutable de KytyPS5 · kyty_emulator.exe</label><input id="integrationKytyPath" spellcheck="false" value="'+esc(config.kytyExe||'')+'" placeholder="D:\\Kyty\\_Build\\windows\\install\\kyty_emulator.exe"></div>'+
+      '<div class="form-field"><label>Ejecutable de Python 3.10 o posterior</label><input id="integrationPythonPath" spellcheck="false" value="'+esc(config.pythonExe||'')+'" placeholder="python.exe o C:\\Python311\\python.exe"></div>'+
+      '<div class="form-field"><label>PS5 UltraPack · archivo backend\\cli.py</label><input id="integrationUltraPackPath" spellcheck="false" value="'+esc(config.ultraPackCli||'')+'" placeholder="D:\\ps5-ultrapack\\backend\\cli.py"></div>'+
+      '<div class="system-tile"><strong>Estado detectado</strong><p>KytyPS5: '+ready(config.kytyReady)+' · Python: '+ready(config.pythonReady)+' · UltraPack: '+ready(config.ultraPackReady)+'</p>'+
+      '<p><a class="repo-link" href="https://github.com/KytyPS5/KytyPS5/releases" target="_blank" rel="noreferrer">Descargas de KytyPS5 ↗</a> · <a class="repo-link" href="https://github.com/knutwurst/ps5-ultrapack" target="_blank" rel="noreferrer">Repositorio UltraPack ↗</a></p></div>'+
+      '<p>UltraPack puede necesitar dependencias adicionales. El soporte de creación de fPKG (.pkg) en Windows no está garantizado. El IDE mostrará el registro real de cada proceso.</p>';
+    openModal('Herramientas externas · KytyPS5 y UltraPack',body,[
+      {text:'Cerrar',class:'ghost',action:closeModal},
+      {text:'Descargar UltraPack (fuente)',class:'secondary',action:async()=>{
+        const button=$('#modalActions button').find(x=>x.textContent==='Descargar UltraPack (fuente)');
+        if(button)button.disabled=true;
+        try{
+          const result=await api('sdk-install',{ids:['ps5-ultrapack']});
+          const item=(result.results||[]).find(x=>x.name==='PS5 UltraPack'||x.path);
+          if(!item||!item.ok||!item.path)throw new Error(item?.message||result.message||'La descarga no terminó correctamente.');
+          const cli=item.path+'\\backend\\cli.py';
+          const saved=await api('integration-config',{kytyExe:$('#integrationKytyPath').value.trim(),pythonExe:$('#integrationPythonPath').value.trim(),ultraPackCli:cli});
+          log('UltraPack descargado como código fuente: '+item.path,'INFO');
+          toast(saved.message||'UltraPack preparado');
+          closeModal();await openIntegrationSettings();
+        }catch(e){
+          toast('No se pudo preparar UltraPack: '+e.message,'error');
+          if(button)button.disabled=false;
+        }
+      }},
+      {text:'Guardar configuración',class:'primary',action:async()=>{
+        const data={kytyExe:$('#integrationKytyPath').value.trim(),pythonExe:$('#integrationPythonPath').value.trim(),ultraPackCli:$('#integrationUltraPackPath').value.trim()};
+        try{
+          const result=await api('integration-config',data);
+          closeModal();log(result.message||'Configuración guardada.','INFO');toast('Configuración de herramientas guardada');
+          await renderNativeProjects();
+        }catch(e){toast('No se pudo guardar la configuración: '+e.message,'error');}
+      }}
+    ]);
+  }
+
+  async function runNativeKyty(path){
+    if(!path){toast('La ruta del proyecto está vacía.','error');return;}
+    const body='<p>Se intentará iniciar Kyty con la carpeta del título compilado. La compatibilidad del emulador es experimental y depende del título.</p>'+
+      '<pre id="kytyRunOutput" style="font:10px/1.55 Consolas,monospace;white-space:pre-wrap;word-break:break-word;max-height:42vh;overflow:auto">Iniciando KytyPS5…</pre>';
+    openModal('Ejecutar en KytyPS5',body,[{text:'Cerrar',class:'ghost',action:closeModal}]);
+    log('Solicitada prueba local de KytyPS5 para '+path,'INFO');
+    try{
+      const result=await api('run-kyty',{path});
+      const box=$('#kytyRunOutput');
+      if(box)box.textContent=(result.message||'Kyty iniciado.')+'\nPID: '+(result.pid??'desconocido')+'\nCarpeta: '+(result.gameFolder||'')+'\neboot.bin: '+(result.eboot||'');
+      log(result.message||'KytyPS5 iniciado.','INFO');toast('KytyPS5 iniciado');
+    }catch(e){
+      const box=$('#kytyRunOutput');if(box)box.textContent='No se pudo iniciar KytyPS5.\n'+e.message;
+      log('Error de ejecución KytyPS5: '+e.message,'ERROR');toast('No se pudo iniciar KytyPS5','error');
+    }
+  }
+
+  async function packageNativeWithUltraPack(path){
+    if(!path){toast('La ruta del proyecto está vacía.','error');return;}
+    const body='<p>El título debe incluir <code>eboot.bin</code> y <code>sce_sys/param.json</code>. El resultado se guardará dentro de <code>packages-ultrapack</code> en la carpeta del proyecto.</p>'+
+      '<div class="form-field"><label>Formato de salida</label><select id="ultraPackFormat" class="compact-select" style="width:100%"><option value="ffpfsc">.ffpfsc · PFS comprimido</option><option value="ffpfs">.ffpfs · PFS sin comprimir</option><option value="pkg">.pkg · fPKG (experimental en Windows)</option></select></div>'+
+      '<pre id="ultraPackOutput" style="font:10px/1.55 Consolas,monospace;white-space:pre-wrap;word-break:break-word;max-height:40vh;overflow:auto">Listo para ejecutar PS5 UltraPack.</pre>';
+    openModal('Empaquetar con PS5 UltraPack',body,[
+      {text:'Cerrar',class:'ghost',action:closeModal},
+      {text:'Empaquetar',class:'primary',action:async()=>{
+        const format=$('#ultraPackFormat').value;
+        const buttons=$('#modalActions button');buttons.forEach(b=>b.disabled=true);
+        const box=$('#ultraPackOutput');if(box)box.textContent='Ejecutando UltraPack en formato '+format+'…\nNo cierres la consola local.';
+        const started=Date.now();
+        const ticker=setInterval(()=>{const out=$('#ultraPackOutput');if(out)out.textContent='UltraPack sigue ejecutándose ('+Math.floor((Date.now()-started)/1000)+' s).\nEl resultado real aparecerá cuando termine.';},1200);
+        try{
+          const result=await api('package-ultrapack',{path,format});
+          const output=(result.output||result.message||'Proceso finalizado.')+(result.artifact?'\n\nArchivo generado: '+result.artifact:'')+(result.note?'\n\n'+result.note:'');
+          if(box)box.textContent=output;
+          if(result.ok){log(result.message||'Empaquetado completado.','INFO');log('Artefacto UltraPack: '+result.artifact,'INFO');toast('Paquete creado con UltraPack');}
+          else{log(result.message||'UltraPack no generó el archivo esperado.','ERROR');toast('UltraPack terminó con errores','error');}
+        }catch(e){
+          if(box)box.textContent='No se pudo ejecutar UltraPack.\n'+e.message;
+          log('Error de UltraPack: '+e.message,'ERROR');toast('No se pudo ejecutar UltraPack','error');
+        }finally{
+          clearInterval(ticker);buttons.forEach(b=>b.disabled=false);await renderNativeProjects();
+        }
+      }}
+    ]);
   }
 
   async function buildNativeProject(path){
@@ -534,7 +636,7 @@
   $$('.editor-tab').forEach(b=>b.addEventListener('click',()=>setActiveView(b.dataset.view)));
   $$('.right-tab').forEach(b=>b.addEventListener('click',()=>setRightPane(b.dataset.right)));
   $$('.dock-tab').forEach(b=>b.addEventListener('click',()=>setDock(b.dataset.dock)));
-  $('#newProjectBtn').onclick=newProject;$('#openProjectBtn').onclick=openProject;$('#saveProjectBtn').onclick=saveProject;$('#exportProjectBtn').onclick=exportProject;$('#buildBtn').onclick=buildProject;$('#previewBtn').onclick=togglePreview;$('#addFlowBtn').onclick=()=>addFlow();$('#recheckBtn').onclick=()=>{runAnalysis();renderDiagnostics();log('Análisis estático ejecutado.');};$('#diagFilter').onchange=renderDiagnostics;
+  $('#newProjectBtn').onclick=newProject;$('#openProjectBtn').onclick=openProject;$('#saveProjectBtn').onclick=saveProject;$('#exportProjectBtn').onclick=exportProject;$('#buildBtn').onclick=buildProject;$('#integrationSettingsBtn')?.addEventListener('click',openIntegrationSettings);$('#previewBtn').onclick=togglePreview;$('#addFlowBtn').onclick=()=>addFlow();$('#recheckBtn').onclick=()=>{runAnalysis();renderDiagnostics();log('Análisis estático ejecutado.');};$('#diagFilter').onchange=renderDiagnostics;
   $('#dismissNotice').onclick=()=>$('#noticeStrip').remove();$('#dockToggle').onclick=()=>{$('.bottom-dock').classList.toggle('collapsed');$('#dockToggle').textContent=$('.bottom-dock').classList.contains('collapsed')?'⌃':'⌄';};$('#gridBtn').onclick=()=>{showGrid=!showGrid;renderCanvas();};$('#fitBtn').onclick=()=>{zoom=100;$('#canvasStage').style.transform='scale(1)';$('#canvasStage').style.transformOrigin='center center';$('#zoomValue').textContent='100%';};$('#centerBtn').onclick=()=>{screenComponents().forEach(c=>{c.x=clamp(c.x,0,1920-c.w);c.y=clamp(c.y,0,1080-c.h);});renderCanvas();changed('Lienzo comprobado');};
   $('#backendSelect').onchange=()=>{const previous=project.backend;project.backend=$('#backendSelect').value;if(previous!==project.backend&&project.manualCode){project.manualCode=false;project.customCode='';toast('Se regenerará el código para el nuevo backend.','warn');}changed('Backend actualizado');renderCode();runAnalysis();};
   $('#projectName').addEventListener('input',()=>{project.name=$('#projectName').value;changed('Nombre del proyecto actualizado');});

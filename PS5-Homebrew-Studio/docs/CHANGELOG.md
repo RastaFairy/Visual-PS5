@@ -34,3 +34,12 @@
 - Corregida la interpolación PowerShell de `$sourceName:` en `runtime/server.ps1` para evitar que el parser interprete el colon como una referencia cualificada inválida.
 - Actualizados los identificadores de versión visibles en la UI.
 - Esta corrección no implica que se haya ejecutado el parser oficial en el entorno de preparación ni una build real de SDK/hardware.
+
+
+## 1.0.2 — 16 de octubre de 2026
+
+- Añadidas rutas de configuración locales para KytyPS5, Python y PS5 UltraPack.
+- Añadida la acción «Probar en Kyty» para lanzar un título compilado desde su carpeta.
+- Añadido el empaquetado UltraPack a `.ffpfs`, `.ffpfsc` o `.pkg`, con registro y verificación del archivo de salida.
+- Añadida guía en `docs/INTEGRACIONES-KYTY-ULTRAPACK.es-ES.md`.
+- La integración no distribuye binarios ni garantiza compatibilidad de emulación o soporte de fPKG en Windows.
