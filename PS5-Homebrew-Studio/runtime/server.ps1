@@ -868,7 +868,7 @@ function ServeStatic($C,[string]$UrlPath) {
   $relative=[Uri]::UnescapeDataString($UrlPath.TrimStart('/'));if(!$relative){$relative='index.html'}
   if($relative.StartsWith('downloads/')){$file=[IO.Path]::GetFileName($relative.Substring(10));$p=Join-Path $script:Exports $file;if(!(Test-Path $p)){SendJson $C @{error='ZIP no encontrado'} 404;return};SendBytes $C ([IO.File]::ReadAllBytes($p)) 'application/zip';return}
   $relative=$relative.Replace('\','/').TrimStart('/')
-  $allowed=@('index.html','styles.css','app.js','docs/SDK_MATRIX.md','docs/PROJECT_ECOSYSTEM.md')
+  $allowed=@('index.html','styles.css','app.js','runtime/native-generator.js','docs/SDK_MATRIX.md','docs/PROJECT_ECOSYSTEM.md')
   if($relative -notin $allowed){SendJson $C @{error='Ruta no disponible'} 404;return}
   $full=Join-Path $script:Root ($relative.Replace('/','\'));if(!(Test-Path $full -PathType Leaf)){SendJson $C @{error='Archivo no encontrado'} 404;return}
   $ext = [IO.Path]::GetExtension($full).ToLowerInvariant()
