@@ -21,6 +21,8 @@ Visual-PS5 es un IDE visual local para diseñar interfaces, guardar proyectos, i
 - [Manual en inglés](docs/USER-MANUAL.en-GB.md)
 - [Matriz de SDKs y repositorios upstream](release/UPSTREAM-SDK-MATRIX.md)
 - [Changelog](docs/CHANGELOG.md)
+- [Publicar la release en GitHub](docs/PUBLICACION-DE-RELEASE.es-ES.md)
+- [PowerShell hotfix, en-GB](docs/patches/FIX-POWERSHELL-627.en-GB.md)
 - [Hotfix de PowerShell, línea 627](docs/patches/FIX-POWERSHELL-627.es-ES.md)
 
 ## Qué hace
@@ -35,4 +37,4 @@ El editor puede modificar el modelo sin SDK descargado. La compilación necesita
 
 Se ejecutaron pruebas JavaScript y del generador. En el entorno de preparación no había parser oficial de PowerShell, toolchains completas de PS5 ni consola física, así que no se afirma una validación final con SDK/hardware.
 
-El ZIP v1.0.1 corregido se adjunta como artefacto separado; no está almacenado todavía como activo de GitHub Release.
+El ZIP v1.0.1 corregido se adjunta como artefacto separado; todavía no está publicado como activo de GitHub Release.
