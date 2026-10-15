@@ -23,6 +23,13 @@ if ($actualHash -ne $expectedHash) {
 Write-Host "Verified SHA-256: $actualHash"
 $null = & tar -tJf $output
 if ($LASTEXITCODE -ne 0) { throw 'tar could not read the XZ archive.' }
+$target = Join-Path $repoRoot 'PS5-Homebrew-Studio'
+if (Test-Path -LiteralPath $target) {
+    Write-Host "The source directory already exists; it has been left untouched."
+    Write-Host "Verified archive saved at: $output"
+    Write-Host "To extract separately: tar -xJf `"$output`" -C <destination-folder>"
+    exit 0
+}
 & tar -xJf $output -C $repoRoot
 if ($LASTEXITCODE -ne 0) { throw 'Extraction failed.' }
 Write-Host "Source restored under $repoRoot\PS5-Homebrew-Studio"
