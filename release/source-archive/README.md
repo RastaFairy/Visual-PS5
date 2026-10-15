@@ -1,6 +1,6 @@
 # Source archive — Visual-PS5 v1.0.1
 
-The exact compressed source distribution is stored as seven ordered Base64 text segments in this folder because the connected GitHub interface can write text files but cannot attach binary release assets. Reassemble them with the supplied scripts before extracting the project.
+The exact compressed source distribution is stored as twenty ordered Base64 text segments (the original fourteen chunks were split into smaller pieces for transport) in this folder because the connected GitHub interface can write text files but cannot attach binary release assets. Reassemble them with the supplied scripts before extracting the project.
 
 - Format: XZ-compressed TAR
 - Archive filename: PS5-Homebrew-Studio-v1.0.1.tar.xz
