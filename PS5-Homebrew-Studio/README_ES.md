@@ -1,6 +1,6 @@
 # PS5 Homebrew Studio
 
-**Release 1.0.1 · IDE visual local para Windows.** Integra un editor visual 1920×1080, análisis de flujos, generación de código C# para SharpProspero y conversión del modelo visual a pantallas C++20 para los kits nativos OpenGL/Vulkan. Incluye un catálogo verificado por función de boilerplates, UI kits, drivers, complementos gráficos y aplicaciones comunitarias de referencia.
+**Release 1.0.2 · IDE visual local para Windows.** Integra un editor visual 1920×1080, análisis de flujos, generación de código C# para SharpProspero y conversión del modelo visual a pantallas C++20 para los kits nativos OpenGL/Vulkan. Incluye un catálogo verificado por función de boilerplates, UI kits, drivers, complementos gráficos y aplicaciones comunitarias de referencia.
 
 ## Inicio en Windows
 
@@ -11,7 +11,7 @@
 
 El servicio escucha únicamente en `127.0.0.1`; no expone el sistema de archivos a la red local. Los proyectos del editor se guardan en `Documentos\PS5HomebrewStudio\Projects`. `Ctrl+S` guarda el modelo visual. El editor puede abrirse y usarse sin descargar ningún toolchain.
 
-## Qué incluye 1.0.1
+## Qué incluye 1.0.2
 
 - Catálogo de 34 repositorios reales clasificados como bases, renderers, kits de UI, drivers, dependencias, complementos gráficos y aplicaciones de referencia. Los repositorios con asistencia de IA solo se etiquetan como tal cuando lo declaran explícitamente.
 - Inicializadores upstream para Native App Boilerplate, PS5 Homebrew UI y PS5 Vulkan Template. El IDE conserva los repositorios originales, sus licencias y los scripts de compilación.
@@ -20,6 +20,10 @@ El servicio escucha únicamente en `127.0.0.1`; no expone el sistema de archivos
 - Backend Vulkan/RADV: utiliza `PS5_VulkanTemplate` y su `new-title.py`, sustituye la pantalla del módulo UI fijado y ejecuta el build real mediante CMake/Ninja y los scripts de PS5_Vulkan/PS5_Mesa/PS5_PayloadSDK.
 - La compilación solo se marca correcta si el proceso upstream termina con código cero y existe un `eboot.bin` o ZIP verificable. Los logs reales y la ruta del proyecto permanecen disponibles cuando el build falla.
 - Reparación acotada de la cadena Vulkan: si la revisión de PS5_Vulkan descargada no contiene `tools/ninja-build.sh` o `tools/build-host-tools.sh` que el build referencia, el IDE restaura los scripts reales del boilerplate compañero y registra su hash y procedencia. No genera stubs vacíos.
+
+## Herramientas externas: KytyPS5 y UltraPack
+
+La barra superior incluye **Herramientas** para configurar el ejecutable local de KytyPS5, Python 3.10+ y la CLI `backend\\cli.py` de PS5 UltraPack. En las tarjetas de proyectos nativos compilados aparecen **Probar en Kyty** y **UltraPack**. El empaquetado permite elegir `.ffpfs`, `.ffpfsc` o `.pkg`; esta última opción depende del helper fPKG y puede no funcionar en Windows. La configuración se guarda dentro de `.runtime`, no en el repositorio. Consulta [la guía de integraciones](docs/INTEGRACIONES-KYTY-ULTRAPACK.es-ES.md).
 
 ## Editor visual y compilación
 
