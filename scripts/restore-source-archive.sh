@@ -15,5 +15,10 @@ if [ "$ACTUAL" != "$EXPECTED" ]; then
   exit 1
 fi
 tar -tJf "$OUTPUT" >/dev/null
+if [ -e "$REPO_ROOT/PS5-Homebrew-Studio" ]; then
+  printf 'Archive verified at %s; existing source directory left untouched.\n' "$OUTPUT"
+  printf 'To extract separately: mkdir -p <destination-folder> && tar -xJf "%s" -C <destination-folder>\n' "$OUTPUT"
+  exit 0
+fi
 tar -xJf "$OUTPUT" -C "$REPO_ROOT"
 printf 'Source restored and verified under %s/PS5-Homebrew-Studio\n' "$REPO_ROOT"
