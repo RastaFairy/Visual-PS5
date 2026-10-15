@@ -6,10 +6,12 @@ Visual-PS5 es un IDE visual local para diseñar interfaces, guardar proyectos, i
 
 ## Inicio rápido
 
-1. Descarga el ZIP corregido adjunto a la entrega de esta conversación y verifica su SHA-256.
-2. Extrae `PS5-Homebrew-Studio` en una ubicación con permisos de escritura.
-3. Ejecuta `start.bat` en Windows 10/11. Se recomienda PowerShell 7; el lanzador contempla Windows PowerShell 5.1 como alternativa.
-4. Abre `http://127.0.0.1:47813/` si no se abre el navegador automáticamente.
+1. Clona o descarga este repositorio.
+2. Para reconstruir la copia completa del proyecto, ejecuta desde la raíz `.\scripts\Restore-SourceArchive.ps1`. El script decodifica los segmentos, verifica SHA-256 y extrae `PS5-Homebrew-Studio`.
+3. Entra en la carpeta extraída y ejecuta `start.bat` en Windows 10/11. Se recomienda PowerShell 7; el lanzador contempla Windows PowerShell 5.1 como alternativa.
+4. Abre `http://127.0.0.1:47813/` si el navegador no se abre automáticamente.
+
+En Linux/WSL también está disponible `sh scripts/restore-source-archive.sh`.
 
 ## Documentación
 
@@ -22,7 +24,6 @@ Visual-PS5 es un IDE visual local para diseñar interfaces, guardar proyectos, i
 - [Matriz de SDKs y repositorios upstream](release/UPSTREAM-SDK-MATRIX.md)
 - [Changelog](docs/CHANGELOG.md)
 - [Publicar la release en GitHub](docs/PUBLICACION-DE-RELEASE.es-ES.md)
-- [PowerShell hotfix, en-GB](docs/patches/FIX-POWERSHELL-627.en-GB.md)
 - [Hotfix de PowerShell, línea 627](docs/patches/FIX-POWERSHELL-627.es-ES.md)
 
 ## Qué hace
@@ -31,10 +32,10 @@ Proporciona lienzo 1920×1080, inspector, jerarquía, pantallas, flujos visuales
 
 **No es un SDK oficial de Sony**, no contiene archivos propietarios, firmware, claves, juegos ni BIOS. No hace jailbreak, no instala títulos en consola automáticamente y no garantiza compatibilidad con cada firmware.
 
-## Limitaciones y validación
+## Integridad y validación
 
-El editor puede modificar el modelo sin SDK descargado. La compilación necesita WSL/Linux y las dependencias concretas del backend. El éxito del proceso upstream y la presencia de un artefacto no demuestran ejecución correcta en consola.
+El código fuente reconstruido debe tener este SHA-256: `f6aa6aae6d5d58a1e5e2e3582d168f0e97f67e1d105938ed6039ba963b329d13`. La reconstrucción desde los veinte segmentos almacenados en GitHub se ha verificado y coincide exactamente con ese hash.
 
-Se ejecutaron pruebas JavaScript y del generador. En el entorno de preparación no había parser oficial de PowerShell, toolchains completas de PS5 ni consola física, así que no se afirma una validación final con SDK/hardware.
+Se ejecutaron pruebas JavaScript y del generador. El entorno de preparación no disponía del parser oficial de PowerShell, todas las toolchains PS5 ni una consola física; no se afirma una compilación final con SDK/hardware.
 
-El ZIP v1.0.1 corregido se adjunta como artefacto separado; todavía no está publicado como activo de GitHub Release.
+El archivo ZIP binario aún no está publicado como activo de GitHub Release; la guía enlazada explica cómo adjuntarlo desde GitHub.
