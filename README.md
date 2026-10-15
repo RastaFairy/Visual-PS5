@@ -35,10 +35,20 @@ Visual-PS5 (nombre de aplicación: **PS5 Homebrew Studio**) es una capa de edici
 
 En Windows 10/11, extrae la distribución en una carpeta con permisos de escritura y ejecuta `start.bat`. Se recomienda PowerShell 7. El servicio local escucha en `http://127.0.0.1:47813/`. Para compilar también necesitas WSL/Linux y las herramientas requeridas por la plantilla elegida.
 
-## Estado del paquete binario
+## Código fuente corregido en este repositorio
 
-El ZIP corregido **PS5-Homebrew-Studio-v1.0.1.zip** se entrega como artefacto descargable en la conversación de preparación y su SHA-256 se comprobó localmente. El ZIP todavía no está publicado como archivo binario ni como activo de una GitHub Release en este repositorio. El árbol actual de GitHub contiene la documentación y la nota del hotfix. La guía de publicación explica cómo adjuntar los archivos desde la interfaz web de GitHub.
+El código completo de la versión 1.0.1 está incluido en este repositorio como un archivo TAR comprimido con XZ, codificado en veinte segmentos Base64 en [`release/source-archive/`](release/source-archive/README.md). Tras clonar el repositorio, ejecuta desde su raíz:
+
+```powershell
+.\scripts\Restore-SourceArchive.ps1
+```
+
+El script reúne los segmentos, comprueba el SHA-256 y extrae el árbol del proyecto. En Linux/WSL puedes usar `sh scripts/restore-source-archive.sh`.
+
+SHA-256 del archivo reconstruido: `f6aa6aae6d5d58a1e5e2e3582d168f0e97f67e1d105938ed6039ba963b329d13`. El contenido remoto de los veinte segmentos se ha descargado y reconstruido durante la verificación; el hash coincide con el del archivo fuente preparado.
+
+El ZIP binario todavía no está adjunto como activo de GitHub Release. Para publicar también el ZIP descargable desde la página Releases, sigue la [guía de publicación](docs/PUBLICACION-DE-RELEASE.es-ES.md).
 
 ## Validación
 
-Se ejecutaron comprobaciones de sintaxis de JavaScript y pruebas del generador OpenGL/Vulkan. No se dispone en el entorno de preparación del parser oficial de PowerShell, la toolchain completa de PS5 ni una consola física; por tanto, no se afirma una build final del SDK ni una prueba en hardware.
+Se ejecutaron comprobaciones de sintaxis de JavaScript y pruebas del generador OpenGL/Vulkan. El entorno de preparación no disponía del parser oficial de PowerShell, de todas las toolchains PS5 ni de una consola física; no se afirma una compilación final con el SDK ni una prueba en hardware.
