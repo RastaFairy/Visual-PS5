@@ -21,6 +21,7 @@ Visual-PS5 is a local visual IDE for designing interfaces, saving projects, insp
 - [Manual de uso en español](docs/MANUAL.es-ES.md)
 - [Upstream SDK/repository matrix](release/UPSTREAM-SDK-MATRIX.md)
 - [Changelog](docs/CHANGELOG.md)
+- [Release publication instructions](docs/RELEASING.en-GB.md)
 - [PowerShell line 627 hotfix](docs/patches/FIX-POWERSHELL-627.en-GB.md)
 
 ## What it does
