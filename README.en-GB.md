@@ -6,10 +6,12 @@ Visual-PS5 is a local visual IDE for designing interfaces, saving projects, insp
 
 ## Quick start
 
-1. Download the corrected ZIP attached to this conversation's delivery and verify its SHA-256.
-2. Extract `PS5-Homebrew-Studio` to a writable directory.
-3. Run `start.bat` on Windows 10/11. PowerShell 7 is recommended; the launcher also supports Windows PowerShell 5.1 as a fallback.
+1. Clone or download this repository.
+2. To reconstruct the complete project copy, run `.\scripts\Restore-SourceArchive.ps1` from the repository root. The script decodes the segments, verifies SHA-256 and extracts `PS5-Homebrew-Studio`.
+3. Enter the extracted directory and run `start.bat` on Windows 10/11. PowerShell 7 is recommended; the launcher also supports Windows PowerShell 5.1 as a fallback.
 4. Open `http://127.0.0.1:47813/` if the browser does not open automatically.
+
+On Linux/WSL, use `sh scripts/restore-source-archive.sh`.
 
 ## Documentation
 
@@ -30,10 +32,10 @@ The editor provides a 1920×1080 canvas, property inspector, hierarchy, screens,
 
 **It is not an official Sony SDK**, includes no proprietary files, firmware, keys, games or BIOS, does not jailbreak a console, and does not install titles on hardware automatically or guarantee compatibility across firmware versions.
 
-## Limitations and validation
+## Integrity and validation
 
-The editor can modify models without an SDK downloaded. Builds require WSL/Linux and the selected backend's dependencies. A successful upstream process plus an artefact does not prove that the application works correctly on a console.
+The reconstructed source archive must have this SHA-256: `f6aa6aae6d5d58a1e5e2e3582d168f0e97f67e1d105938ed6039ba963b329d13`. Reconstruction from the twenty segments committed to GitHub has been verified and matches that hash exactly.
 
-JavaScript and generator tests were run. The preparation environment did not include the official PowerShell parser, complete PS5 toolchains or a physical console, so no final SDK/hardware validation is claimed.
+JavaScript and generator tests were run. The preparation environment did not have the official PowerShell parser, the complete PS5 toolchains or a physical console, so no final SDK/hardware validation is claimed.
 
-The corrected v1.0.1 ZIP is supplied as a separate attachment; it is not yet stored as a GitHub Release asset.
+The binary ZIP is not yet attached as a GitHub Release asset; the linked instructions explain how to attach it through GitHub.
