@@ -36,7 +36,7 @@ jobs:
           test -f "$source/start.bat"
           test -f "$source/app.js"
           test -f "$source/runtime/server.ps1"
-          grep -Fq '\${sourceName}: $description' "$source/runtime/server.ps1"
+          grep -Fq '${sourceName}: $description' "$source/runtime/server.ps1"
           target="$GITHUB_WORKSPACE/PS5-Homebrew-Studio"
           if [ -e "$target" ]; then
             echo "Refusing to overwrite existing PS5-Homebrew-Studio/ directory." >&2
