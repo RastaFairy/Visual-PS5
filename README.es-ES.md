@@ -1,6 +1,6 @@
 # Visual-PS5 — PS5 Homebrew Studio
 
-**Versión 1.0.1 · 16 de octubre de 2026**
+**Versión 1.0.2 · 16 de octubre de 2026**
 
 Visual-PS5 es un IDE visual local para diseñar interfaces, guardar proyectos, inspeccionar código generado y coordinar compilaciones mediante toolchains comunitarias de PlayStation 5.
 
