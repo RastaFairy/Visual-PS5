@@ -390,8 +390,25 @@
       card.querySelector('.flow-delete').onclick=()=>{snapshot();project.flows=project.flows.filter(x=>x.id!==f.id);changed('Flujo eliminado');renderFlows();};card.querySelectorAll('[data-flow-prop]').forEach(el=>el.addEventListener('change',()=>{snapshot();const key=el.dataset.flowProp;f[key]=el.value;changed('Flujo actualizado');renderFlows();}));root.append(card);if(i<project.flows.length-1){const connect=document.createElement('div');connect.className='flow-connect';root.append(connect);}});
   }
 
+  function hasNativeCodegen(){
+    return Boolean(window.PS5HSNativeCodegen && typeof window.PS5HSNativeCodegen.generate === 'function');
+  }
+  async function ensureNativeCodegen(){
+    if(hasNativeCodegen()) return window.PS5HSNativeCodegen;
+    await new Promise((resolve,reject)=>{
+      const script=document.createElement('script');
+      script.src=new URL('runtime/native-generator.js',document.baseURI).href;
+      script.async=true;
+      script.onload=resolve;
+      script.onerror=()=>reject(new Error('No se pudo cargar runtime/native-generator.js. Comprueba que la carpeta runtime está junto a index.html y vuelve a iniciar Homebrew Studio desde start.bat.'));
+      document.head.appendChild(script);
+    });
+    if(!hasNativeCodegen()) throw new Error('El generador nativo se ha cargado, pero no expone PS5HSNativeCodegen.generate. Reinstala los archivos de Homebrew Studio y comprueba la consola del navegador.');
+    return window.PS5HSNativeCodegen;
+  }
+
   function generateCode(){
-    if ((project.backend === 'opengl-ui' || project.backend === 'vulkan-ui') && window.PS5HSNativeCodegen) {
+    if ((project.backend === 'opengl-ui' || project.backend === 'vulkan-ui') && hasNativeCodegen()) {
       return window.PS5HSNativeCodegen.generate(project, project.backend);
     }
     const comps=screenComponents().slice().sort((a,b)=>a.y-b.y||a.x-b.x);
@@ -605,7 +622,8 @@
           project.name=name;project.settings=project.settings||{};project.settings.titleId=tid;
           $('#projectName').value=name;
           const data=projectPayload();data.name=name;data.backend=backend;data.settings=data.settings||{};data.settings.titleId=tid;
-          const code=data.manualCode?$('#codeEditor').value:window.PS5HSNativeCodegen.generate(data,backend);
+          const nativeCodegen=data.manualCode?null:await ensureNativeCodegen();
+          const code=data.manualCode?$('#codeEditor').value:nativeCodegen.generate(data,backend);
           if(!code||code.length<2000){throw new Error('El generador no produjo una pantalla C++20 válida. Regenera el código e inténtalo de nuevo.');}
           const nativeAssets=await prepareNativeImageAssets(data,backend);
           const wireProject=clone(data);
