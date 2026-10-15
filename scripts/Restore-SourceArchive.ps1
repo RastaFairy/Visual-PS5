@@ -5,8 +5,8 @@ $output = Join-Path $repoRoot 'PS5-Homebrew-Studio-v1.0.1.tar.xz'
 $expectedHash = 'f6aa6aae6d5d58a1e5e2e3582d168f0e97f67e1d105938ed6039ba963b329d13'
 
 $parts = @(Get-ChildItem -LiteralPath $segments -Filter 'part*.b64' -File | Sort-Object Name)
-if ($parts.Count -ne 7) {
-    throw "Expected 7 archive segments; found $($parts.Count). Do not continue with an incomplete archive."
+if ($parts.Count -ne 20) {
+    throw "Expected 20 archive segments; found $($parts.Count). Do not continue with an incomplete archive."
 }
 $base64 = ($parts | ForEach-Object { (Get-Content -LiteralPath $_.FullName -Raw).Trim() }) -join ''
 try {
