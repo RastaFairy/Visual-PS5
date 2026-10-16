@@ -152,11 +152,11 @@ function InstallRepo($Entry) {
     if (!(Test-Path -LiteralPath $existingCli -PathType Leaf)) {
       throw "Existe una carpeta UltraPack incompleta en '$dest' sin backend\cli.py. No se ha sobrescrito para proteger archivos locales; renómbrala manualmente si deseas volver a descargar el repositorio."
     }
-    $pythonCmd = CmdInfo 'python.exe'; if (!$pythonCmd.ok) { $pythonCmd = CmdInfo 'python' }
-    if (!$pythonCmd.ok -or !$pythonCmd.path) { throw "La copia de UltraPack ya existe en '$dest'. Instala Python 3.10+ para reparar su entorno virtual sin reemplazar la carpeta." }
     $venvPath = Join-Path $dest '.venv'
     $venvPython = Join-Path $venvPath 'Scripts\python.exe'
     if (!(Test-Path -LiteralPath $venvPython -PathType Leaf)) {
+      $pythonCmd = CmdInfo 'python.exe'; if (!$pythonCmd.ok) { $pythonCmd = CmdInfo 'python' }
+      if (!$pythonCmd.ok -or !$pythonCmd.path) { throw "La copia de UltraPack ya existe en '$dest'. Instala Python 3.10+ para reparar su entorno virtual sin reemplazar la carpeta." }
       $venvOut = @(& $pythonCmd.path -m venv $venvPath 2>&1); $venvExit = $LASTEXITCODE
       if ($venvExit -ne 0 -or !(Test-Path -LiteralPath $venvPython -PathType Leaf)) {
         $detail = ($venvOut | ForEach-Object { $_.ToString() }) -join "`r`n"
