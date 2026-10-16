@@ -142,7 +142,14 @@ function InstallRepo($Entry) {
   if($Entry.method -eq 'git'){
     if($marker -and (Test-Path (Join-Path $dest '.git'))){return @{ok=$true;name=$Entry.name;message='Ya estaba clonado; no se ha sobrescrito.';path=$dest}}
     if(Test-Path $dest){throw "Existe una carpeta incompleta en $dest. Renómbrala o elimínala manualmente y vuelve a clonar para no perder archivos."}
-  } elseif($marker -or (Test-Path (Join-Path $dest 'README.md'))){return @{ok=$true;name=$Entry.name;message='Ya estaba instalado; no se ha sobrescrito.';path=$dest}}
+  } elseif($marker -or (Test-Path (Join-Path $dest 'README.md'))){
+    if($Entry.id -eq 'ps5-ultrapack') {
+      $existingVenvPython = Join-Path $dest '.venv\Scripts\python.exe'
+      if(Test-Path -LiteralPath $existingVenvPython -PathType Leaf) {
+        return @{ok=$true;name=$Entry.name;message='UltraPack ya estaba instalado con su entorno Python aislado.';path=$dest;pythonExe=$existingVenvPython;cli=(Join-Path $dest 'backend\cli.py')}
+      }
+    } else { return @{ok=$true;name=$Entry.name;message='Ya estaba instalado; no se ha sobrescrito.';path=$dest} }
+  }
   $temp=Join-Path $script:Runtime ([guid]::NewGuid().ToString('N'));New-Item -ItemType Directory -Force -Path $temp|Out-Null
   try {
     if($Entry.method -eq 'git'){
