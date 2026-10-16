@@ -115,7 +115,7 @@ function GetStatus {
     @{name='Clang';ok=$clang.ok;version='';detail=$clang.path},
     @{name='Make';ok=$make.ok;version='';detail=$make.path}
   )
-  $sdks=@();foreach($e in $script:Catalog){$p=Join-Path $script:Toolchains $e.folder;$marker=Test-Path (Join-Path $p '.ps5hs-source.json');if($e.method -eq 'git'){$installed=($marker -and (Test-Path (Join-Path $p '.git')))}else{$installed=$marker -or (Test-Path (Join-Path $p 'README.md'))};$category='backend';if($e.category){$category=[string]$e.category};$sdks+=@{id=$e.id;name=$e.name;folder=$e.folder;role=$e.role;license=$e.license;description=$e.description;category=$category;method=$e.method;href=('https://github.com/'+$e.repo);installed=$installed;path=$p}}
+  $sdks=@();foreach($e in $script:Catalog){$p=Join-Path $script:Toolchains $e.folder;$marker=Test-Path (Join-Path $p '.ps5hs-source.json');if($e.method -eq 'git'){$installed=((Test-Path (Join-Path $p '.git')) -and (Test-Path (Join-Path $p 'README.md')))}else{$installed=$marker -or (Test-Path (Join-Path $p 'README.md'))};$category='backend';if($e.category){$category=[string]$e.category};$sdks+=@{id=$e.id;name=$e.name;folder=$e.folder;role=$e.role;license=$e.license;description=$e.description;category=$category;method=$e.method;href=('https://github.com/'+$e.repo);installed=$installed;path=$p}}
   return @{root=$script:Root;workspace=$script:Workspace;wslDistribution=$wslDist;sdks=$sdks;prerequisites=@{git=$git.ok;gitPath=$git.path;dotnet10=$dot10;wsl=$wslOk;wslDotnet10=$wslDot;wslGitPython=$wslGitPython;items=$items}}
 }
 function Slug([string]$Text) { $s=([string]$Text).Normalize([Text.NormalizationForm]::FormD) -replace '\p{Mn}','';$s=$s -replace '[^a-zA-Z0-9_-]+','-';$s=$s.Trim('-');if(!$s){$s='MiHomebrew'};if($s.Length -gt 48){$s=$s.Substring(0,48)};return $s }
@@ -140,8 +140,18 @@ function InstallRepo($Entry) {
   $dest=Join-Path $script:Toolchains $Entry.folder
   $marker=Test-Path (Join-Path $dest '.ps5hs-source.json')
   if($Entry.method -eq 'git'){
-    if($marker -and (Test-Path (Join-Path $dest '.git'))){return @{ok=$true;name=$Entry.name;message='Ya estaba clonado; no se ha sobrescrito.';path=$dest}}
-    if(Test-Path $dest){throw "Existe una carpeta incompleta en $dest. Renómbrala o elimínala manualmente y vuelve a clonar para no perder archivos."}
+    $gitDir = Join-Path $dest '.git'
+    $readmePath = Join-Path $dest 'README.md'
+    if ((Test-Path -LiteralPath $gitDir -PathType Container) -and (Test-Path -LiteralPath $readmePath -PathType Leaf)) {
+      $gitCmd = CmdInfo 'git.exe'; if (!$gitCmd.ok) { $gitCmd = CmdInfo 'git' }
+      $commit = ''
+      if ($gitCmd.ok) { try { $commit = ((& $gitCmd.path -C $dest rev-parse HEAD 2>$null) | Out-String).Trim() } catch { } }
+      if (!$marker) {
+        WriteUtf8 (Join-Path $dest '.ps5hs-source.json') (ConvertTo-Json -InputObject @{repository=$Entry.repo;branch=$Entry.branch;commit=$commit;method='existing git checkout; adopted without overwriting';installedAt=(Get-Date).ToString('o')} -Depth 5)
+      }
+      return @{ok=$true;name=$Entry.name;message=$(if($marker){'Ya estaba clonado; no se ha sobrescrito.'}else{'Checkout Git existente reconocido y registrado sin sobrescribir archivos.'});path=$dest;commit=$commit}
+    }
+    if(Test-Path $dest){throw "Existe una carpeta en $dest que no parece un checkout Git válido. No se ha sobrescrito para proteger sus archivos; renómbrala o revisa la carpeta manualmente."}
   } elseif($marker -or (Test-Path (Join-Path $dest 'README.md'))){
     if($Entry.id -ne 'ps5-ultrapack') { return @{ok=$true;name=$Entry.name;message='Ya estaba instalado; no se ha sobrescrito.';path=$dest} }
   }
@@ -247,7 +257,7 @@ function NewNativeTitle([string]$Name,[string]$TitleId,[string]$Category,[string
   try { $cloneResult = InstallRepo $entry; if(!$cloneResult.ok) { return @{ok=$false;message=$cloneResult.message;output=$cloneResult.path} } }
   catch { return @{ok=$false;message='No se pudo descargar la plantilla upstream.';output=$_.Exception.Message} }
   $src=Join-Path $script:Toolchains $entry.folder
-  $expected=@('Makefile','tools/init-project.sh','sce_sys/param.json')
+  $expected=@('Makefile','src/main.cpp')
   foreach($rel in $expected) { if(!(Test-Path (Join-Path $src $rel))) { return @{ok=$false;message="La plantilla upstream está incompleta: falta $rel. Vuelve a clonar $($entry.repo).";output=$src} } }
   $st=GetStatus
   if(!$st.prerequisites.wsl) { return @{ok=$false;message='No hay distribución WSL inicializada.';output='Configura WSL + Debian y completa su primer arranque.'} }
@@ -267,38 +277,41 @@ function NewNativeTitle([string]$Name,[string]$TitleId,[string]$Category,[string
     # defaults (src/ include paths, OpenGL SDK includes, archives and import stubs).
     # Route the generated Windows entry point through the canonical Makefile target.
     $buildEntrypoint = Join-Path $target 'build.ps1'
-    if (!(Test-Path -LiteralPath $buildEntrypoint -PathType Leaf)) {
-      throw "La plantilla upstream no contiene build.ps1: $buildEntrypoint"
+    if (Test-Path -LiteralPath $buildEntrypoint -PathType Leaf) {
+      $buildText = [IO.File]::ReadAllText($buildEntrypoint)
+      $buildChanged = $false
+      $newLine = [Environment]::NewLine
+      $oldEnvBlock = '        "APP_STATIC_ARCHIVES",' + $newLine + '        "APP_RUNTIME_MODULES",'
+      $newEnvBlock = '        "APP_STATIC_ARCHIVES",' + $newLine + '        "APP_IMPORT_STUBS",' + $newLine + '        "APP_RUNTIME_MODULES",' + $newLine + '        "PS5_OPENGL_PREFIX",' + $newLine + '        "BUILD_JOBS",' + $newLine + '        "USE_CCACHE",'
+      if ($buildText.Contains($oldEnvBlock)) {
+        $buildText = $buildText.Replace($oldEnvBlock, $newEnvBlock)
+        $buildChanged = $true
+      }
+      $legacyBuildCall = '$arguments += @("bash", (Convert-ToWslPath $build))'
+      $makeBuildCall = '$arguments += @("make", "-C", (Convert-ToWslPath (Split-Path -Parent $MyInvocation.MyCommand.Path)), "app")'
+      if ($buildText.Contains($legacyBuildCall)) {
+        $buildText = $buildText.Replace($legacyBuildCall, $makeBuildCall)
+        $buildChanged = $true
+      }
+      if ($buildChanged) { WriteUtf8 $buildEntrypoint $buildText }
+    } elseif (!(Test-Path -LiteralPath (Join-Path $target 'Makefile') -PathType Leaf)) {
+      throw 'La plantilla no contiene build.ps1 ni Makefile; no se puede asignar un perfil de compilación seguro.'
     }
-    $buildText = [IO.File]::ReadAllText($buildEntrypoint)
-    $buildChanged = $false
-    $oldEnvBlock = '        "APP_STATIC_ARCHIVES",' + "`n" + '        "APP_RUNTIME_MODULES",'
-    $newEnvBlock = '        "APP_STATIC_ARCHIVES",' + "`n" + '        "APP_IMPORT_STUBS",' + "`n" + '        "APP_RUNTIME_MODULES",' + "`n" + '        "PS5_OPENGL_PREFIX",' + "`n" + '        "BUILD_JOBS",' + "`n" + '        "USE_CCACHE",'
-    if ($buildText.Contains($oldEnvBlock)) {
-      $buildText = $buildText.Replace($oldEnvBlock, $newEnvBlock)
-      $buildChanged = $true
-    }
-    $legacyBuildCall = '$arguments += @("bash", (Convert-ToWslPath $build))'
-    $makeBuildCall = '$arguments += @("make", "-C", (Convert-ToWslPath (Split-Path -Parent $MyInvocation.MyCommand.Path)), "app")'
-    if ($buildText.Contains($legacyBuildCall)) {
-      $buildText = $buildText.Replace($legacyBuildCall, $makeBuildCall)
-      $buildChanged = $true
-    } elseif (!$buildText.Contains($makeBuildCall)) {
-      throw 'La entrada build.ps1 de la plantilla no coincide con el contrato admitido. No se generó un proyecto con un build incompleto.'
-    }
-    if ($buildChanged) { WriteUtf8 $buildEntrypoint $buildText }
     $initializer=Join-Path $target 'tools/init-project.sh'
     $paramPath=Join-Path $target 'sce_sys/param.json'
-    foreach($path in @($initializer,$paramPath,(Join-Path $target 'Makefile'))) { if(!(Test-Path $path)) { throw "La copia no contiene el elemento requerido: $path" } }
     $targetWsl=ConvertToWslPath $target
-    $initWsl=ConvertToWslPath $initializer
-    $paramWsl=ConvertToWslPath $paramPath
-    $cmd='TITLE_ID='+(BashQuote $TitleId)+' APP_NAME='+(BashQuote $Name)+' APP_CATEGORY='+(BashQuote $Category)+' CONTENT_SUFFIX='+(BashQuote $suffix)+' bash '+(BashQuote $initWsl)+' '+(BashQuote $paramWsl)
     $wsl=CmdInfo 'wsl.exe'
     if(!$wsl.ok) { throw 'wsl.exe no está disponible.' }
+    if ((Test-Path -LiteralPath $initializer -PathType Leaf) -and (Test-Path -LiteralPath $paramPath -PathType Leaf)) {
+      $initWsl=ConvertToWslPath $initializer
+      $paramWsl=ConvertToWslPath $paramPath
+      $cmd='cd '+(BashQuote $targetWsl)+' && TITLE_ID='+(BashQuote $TitleId)+' APP_NAME='+(BashQuote $Name)+' APP_CATEGORY='+(BashQuote $Category)+' CONTENT_SUFFIX='+(BashQuote $suffix)+' bash '+(BashQuote $initWsl)+' '+(BashQuote $paramWsl)
+    } else {
+      $cmd='cd '+(BashQuote $targetWsl)+' && make init TITLE_ID='+(BashQuote $TitleId)+' APP_NAME='+(BashQuote $Name)+' APP_CATEGORY='+(BashQuote $Category)
+    }
     $output=@(& $wsl.path -d $dist --exec bash -lc $cmd 2>&1)
     $exit=$LASTEXITCODE
-    $log=($output | ForEach-Object { $_.ToString() }) -join "`r`n"
+    $log=($output | ForEach-Object { $_.ToString() }) -join [Environment]::NewLine
     $valid=($exit -eq 0 -and (Test-Path $paramPath) -and (Test-Path (Join-Path $target 'src/main.cpp')) -and (Test-Path (Join-Path $target 'Makefile')))
     if($valid) {
       $summary=@{schema='ps5hs-native-project';template=$TemplateId;repository=$entry.repo;titleId=$TitleId;name=$Name;category=$Category;initializedAt=(Get-Date).ToString('o')}
@@ -336,43 +349,197 @@ function NewVulkanTitle([string]$Name,[string]$TitleId,[string]$Design) {
     return @{ok=$false;message="El generador upstream terminó con código $exit o no dejó la estructura esperada.";output=$log;path=$target;titleId=$TitleId}
   } catch { return @{ok=$false;message=$_.Exception.Message;output='Error al preparar la ruta o invocar WSL.';path=$target} }
 }
+
+function GetProjectRemote([string]$ProjectRoot) {
+  $gitConfig = Join-Path $ProjectRoot '.git\config'
+  if (!(Test-Path -LiteralPath $gitConfig -PathType Leaf)) { return '' }
+  try {
+    $text = Get-Content -LiteralPath $gitConfig -Raw
+    $match = [regex]::Match($text,'(?im)^\s*url\s*=\s*(.+?)\s*$')
+    if (!$match.Success) { return '' }
+    $url = $match.Groups[1].Value.Trim()
+    $url = $url -replace '^(https?://github\.com/|git@github\.com:|ssh://git@github\.com/)',''
+    $url = $url -replace '\.git$',''
+    return $url.Trim('/').ToLowerInvariant()
+  } catch { return '' }
+}
+function GetProjectTitleId([string]$ProjectRoot) {
+  foreach ($relative in @('sce_sys/param.json','ps5/sce_sys/param.json','param.json')) {
+    $candidate = Join-Path $ProjectRoot ($relative.Replace('/',[IO.Path]::DirectorySeparatorChar))
+    if (!(Test-Path -LiteralPath $candidate -PathType Leaf)) { continue }
+    try {
+      $raw = Get-Content -LiteralPath $candidate -Raw
+      $match = [regex]::Match($raw,'\bPPSA\d{5}\b')
+      if ($match.Success) { return $match.Value.ToUpperInvariant() }
+    } catch { }
+  }
+  return ''
+}
+function GetProjectProfile([string]$ProjectRoot) {
+  $name = Split-Path -Leaf $ProjectRoot
+  $remote = GetProjectRemote $ProjectRoot
+  $markerPath = Join-Path $ProjectRoot '.ps5hs-project.json'
+  $meta = $null
+  if (Test-Path -LiteralPath $markerPath -PathType Leaf) {
+    try { $meta = Get-Content -LiteralPath $markerPath -Raw | ConvertFrom-Json } catch { $meta = $null }
+  }
+  $hasMakefile = Test-Path -LiteralPath (Join-Path $ProjectRoot 'Makefile') -PathType Leaf
+  $hasParam = Test-Path -LiteralPath (Join-Path $ProjectRoot 'sce_sys/param.json') -PathType Leaf
+  $hasMainCpp = Test-Path -LiteralPath (Join-Path $ProjectRoot 'src/main.cpp') -PathType Leaf
+  $hasLegacyInit = Test-Path -LiteralPath (Join-Path $ProjectRoot 'tools/init-project.sh') -PathType Leaf
+  $hasVulkanGenerator = Test-Path -LiteralPath (Join-Path $ProjectRoot 'ps5/tools/new-title.py') -PathType Leaf
+  $hasVulkanBuild = Test-Path -LiteralPath (Join-Path $ProjectRoot 'ps5/tools/build.sh') -PathType Leaf
+  $hasUiFontTool = Test-Path -LiteralPath (Join-Path $ProjectRoot 'tools/bake-fonts.sh') -PathType Leaf
+  $template = ''
+  if ($meta -and $meta.schema -eq 'ps5hs-native-project' -and [string]$meta.template -in @('nativecpp','hui-gl','vulkan-template')) {
+    $template = [string]$meta.template
+  } elseif ($hasVulkanBuild -and $hasParam) {
+    $template = 'vulkan-template'
+  } elseif ($hasVulkanGenerator -and !$hasVulkanBuild) {
+    $template = 'vulkan-template-source'
+  } elseif ($remote -eq 'blackbearreloaded/ps5-homebrew-ui' -or ($hasMakefile -and $hasUiFontTool)) {
+    $template = 'hui-gl'
+  } elseif ($remote -eq 'blackbearreloaded/ps5-native-app-boilerplate' -or ($hasMakefile -and $hasMainCpp -and $hasLegacyInit)) {
+    $template = 'nativecpp'
+  }
+  $titleId = ''
+  if ($meta -and [string]$meta.titleId -match '^PPSA\d{5}$') { $titleId = [string]$meta.titleId }
+  if (!$titleId) { $titleId = GetProjectTitleId $ProjectRoot }
+  $initialized = ($hasParam -and $titleId -match '^PPSA\d{5}$' -and $titleId -ne 'PPSA00000')
+  $typeLabel = ''
+  $buildSystem = 'Upstream'
+  $buildable = $false
+  $buildReason = ''
+  $dependencies = @()
+  switch ($template) {
+    'nativecpp' {
+      $typeLabel = 'Título nativo C/C++ · Native App Boilerplate'
+      $buildSystem = 'Make / LLVM / herramientas upstream'
+      $buildable = ($hasMakefile -and $hasMainCpp)
+      if (!$initialized) { $buildReason = 'La plantilla se reconoce, pero requiere inicializar TITLE_ID y nombre antes de compilar.' }
+    }
+    'hui-gl' {
+      $typeLabel = 'Aplicación UI OpenGL · PS5 Homebrew UI'
+      $buildSystem = 'Make / PS5 OpenGL SDK'
+      $buildable = ($hasMakefile -and ($hasMainCpp -or $hasUiFontTool -or $remote -eq 'blackbearreloaded/ps5-homebrew-ui'))
+      $dependencies = @('nativecpp','opengl')
+      if (!$initialized) { $buildReason = 'La aplicación UI requiere TITLE_ID válido y dependencias OpenGL/Native App Boilerplate.' }
+    }
+    'vulkan-template' {
+      $typeLabel = 'Título nativo Vulkan/RADV'
+      $buildSystem = 'Scripts upstream / CMake / Ninja'
+      $buildable = ($hasVulkanBuild -and $hasParam)
+      $dependencies = @('vulkan-radv','vulkan-sdk','ps5-mesa')
+    }
+    'vulkan-template-source' {
+      $typeLabel = 'Plantilla Vulkan upstream (todavía no es un título)'
+      $buildSystem = 'Generador upstream new-title.py'
+      $buildReason = 'Este directorio es una plantilla; primero crea un título con el generador upstream antes de compilar.'
+    }
+  }
+  if (!$template) {
+    $known = $script:Catalog | Where-Object { $_.repo -and ([string]$_.repo).ToLowerInvariant() -eq $remote } | Select-Object -First 1
+    if ($known) {
+      $typeLabel = [string]$known.role + ' · proyecto upstream'
+      $buildReason = 'Repositorio reconocido, pero no dispone de un perfil de compilación de título validado en Homebrew Studio. Usa las instrucciones upstream específicas.'
+    } elseif (Test-Path -LiteralPath (Join-Path $ProjectRoot 'CMakeLists.txt') -PathType Leaf) {
+      $typeLabel = 'Proyecto CMake externo'
+      $buildSystem = 'CMake (perfil PS5 no confirmado)'
+      $buildReason = 'Se detectó CMake, pero no se infiere una configuración de cross-compilación PS5. Se requiere un perfil explícito del proyecto.'
+    } elseif ($hasMakefile) {
+      $typeLabel = 'Proyecto Make externo'
+      $buildSystem = 'Make (perfil PS5 no confirmado)'
+      $buildReason = 'Se detectó un Makefile, pero no se puede asumir que produzca un título PS5 válido.'
+    } elseif (Test-Path -LiteralPath (Join-Path $ProjectRoot 'build.ps1') -PathType Leaf) {
+      $typeLabel = 'Proyecto con build.ps1 upstream'
+      $buildSystem = 'PowerShell / upstream'
+      $buildReason = 'Se detectó build.ps1; falta un perfil conocido que identifique sus dependencias y artefactos.'
+    } elseif ($remote) {
+      $typeLabel = 'Repositorio GitHub sin perfil reconocido'
+      $buildReason = 'Se detectó el origen Git, pero no una receta de compilación segura y conocida.'
+    } else {
+      $typeLabel = 'Proyecto local sin clasificar'
+      $buildReason = 'No se han encontrado marcadores de un título nativo compatible.'
+    }
+  }
+  if (!$buildable -and !$buildReason) { $buildReason = 'Faltan marcadores estructurales requeridos por el perfil de compilación.' }
+  $supportsClean = $false
+  if ($hasMakefile) {
+    try { $supportsClean = [bool]((Get-Content -LiteralPath (Join-Path $ProjectRoot 'Makefile') -Raw) -match '(?m)^\s*clean\s*:') } catch { }
+  }
+  $isRelevant = ((Test-Path -LiteralPath $markerPath -PathType Leaf) -or $remote -or $hasMakefile -or (Test-Path -LiteralPath (Join-Path $ProjectRoot 'CMakeLists.txt') -PathType Leaf) -or $hasVulkanGenerator -or (Test-Path -LiteralPath (Join-Path $ProjectRoot 'build.ps1') -PathType Leaf))
+  return @{
+    name = $(if ($meta -and $meta.name) { [string]$meta.name } else { $name })
+    path = $ProjectRoot
+    repository = $(if ($meta -and $meta.repository) { [string]$meta.repository } else { $remote })
+    template = $template
+    typeLabel = $typeLabel
+    buildSystem = $buildSystem
+    buildable = [bool]$buildable
+    buildReason = $buildReason
+    titleId = $titleId
+    design = $(if ($meta) { [string]$meta.design } else { '' })
+    generatedFromStudio = [bool]($meta -and $meta.generatedFromStudio)
+    initialized = [bool]$initialized
+    needsInit = [bool]($template -in @('nativecpp','hui-gl') -and !$initialized)
+    supportsClean = [bool]$supportsClean
+    dependencies = @($dependencies)
+    recognized = [bool]($template -in @('nativecpp','hui-gl','vulkan-template'))
+    relevant = [bool]$isRelevant
+  }
+}
+function GetMissingProjectDependencies($Profile) {
+  $missing = @()
+  foreach ($dependencyId in @($Profile.dependencies)) {
+    $entry = $script:Catalog | Where-Object id -eq ([string]$dependencyId) | Select-Object -First 1
+    if (!$entry) { $missing += [string]$dependencyId; continue }
+    $dependencyPath = Join-Path $script:Toolchains $entry.folder
+    $hasSource = ((Test-Path -LiteralPath (Join-Path $dependencyPath '.git') -PathType Container) -and (Test-Path -LiteralPath (Join-Path $dependencyPath 'README.md') -PathType Leaf))
+    if (!$hasSource) { $missing += [string]$entry.name; continue }
+    if ($dependencyId -eq 'opengl' -and !(Test-Path -LiteralPath (Join-Path $dependencyPath 'build/sdk/ps5-opengl-gl46') -PathType Container)) {
+      $missing += 'PS5 OpenGL SDK (necesita compilarse)'
+    }
+  }
+  return ,@($missing)
+}
 function GetGeneratedProjects {
   $items = @()
   foreach ($dir in (Get-ChildItem -LiteralPath $script:Workspace -Directory -ErrorAction SilentlyContinue)) {
-    $markerPath = Join-Path $dir.FullName '.ps5hs-project.json'
-    if (!(Test-Path $markerPath -PathType Leaf)) { continue }
-    try {
-      $meta = Get-Content -LiteralPath $markerPath -Raw | ConvertFrom-Json
-      if ($meta.schema -ne 'ps5hs-native-project') { continue }
-      $artifact = ''
-      $built = $false
-      $eboots = @(GetProjectEbootFolders $dir.FullName)
-      if ($eboots.Count -gt 0) {
-        $eboot = $eboots[0]
-        $ebootFolder = Split-Path -Parent $eboot.FullName
-        $adjacentParam = Join-Path $ebootFolder 'sce_sys\\param.json'
-        $rootParam = Join-Path $dir.FullName 'sce_sys\\param.json'
-        if ((Test-Path -LiteralPath $adjacentParam -PathType Leaf) -or (Test-Path -LiteralPath $rootParam -PathType Leaf)) {
-          $artifact = $eboot.FullName
-          $built = $true
-        }
-      }
-      $items += @{
-        name = [string]$meta.name
-        titleId = [string]$meta.titleId
-        templateId = [string]$meta.template
-        visualBackend = [string]$meta.visualBackend
-        generatedFromStudio = [bool]$meta.generatedFromStudio
-        design = [string]$meta.design
-        path = $dir.FullName
-        artifact = $artifact
-        built = $built
-        initializedAt = [string]$meta.initializedAt
-      }
-    } catch { }
+    $profile = GetProjectProfile $dir.FullName
+    if (!$profile.relevant) { continue }
+    $artifact = ''
+    $built = $false
+    $eboots = @(GetProjectEbootFolders $dir.FullName)
+    foreach ($eboot in $eboots) {
+      $ebootFolder = Split-Path -Parent $eboot.FullName
+      $paramPath = Join-Path $ebootFolder 'sce_sys\param.json'
+      if (!(Test-Path -LiteralPath $paramPath -PathType Leaf)) { $paramPath = Join-Path $dir.FullName 'sce_sys\param.json' }
+      if (Test-Path -LiteralPath $paramPath -PathType Leaf) { $artifact = $eboot.FullName; $built = $true; break }
+    }
+    $items += @{
+      name = [string]$profile.name
+      titleId = [string]$profile.titleId
+      templateId = [string]$profile.template
+      typeLabel = [string]$profile.typeLabel
+      buildSystem = [string]$profile.buildSystem
+      buildable = [bool]$profile.buildable
+      buildReason = [string]$profile.buildReason
+      needsInit = [bool]$profile.needsInit
+      supportsClean = [bool]$profile.supportsClean
+      missingDependencies = @(GetMissingProjectDependencies $profile)
+      visualBackend = [string]$profile.template
+      generatedFromStudio = [bool]$profile.generatedFromStudio
+      design = [string]$profile.design
+      path = $dir.FullName
+      repository = [string]$profile.repository
+      artifact = $artifact
+      built = $built
+      initializedAt = ''
+    }
   }
   return ,@($items | Sort-Object name)
 }
+
 function EnsureVulkanBuildSupport([string]$VulkanDir) {
   # PS5_Vulkan's current Makefile/build.sh still refers to these shared host-build
   # helpers, but some published revisions omit them from tools/. Restore the actual
@@ -681,7 +848,10 @@ function GetNativeBuildJobStatus([string]$JobId) {
 
 function EnableEuropeanFontAtlas([string]$ProjectRoot) {
   $fontScript = Join-Path $ProjectRoot 'tools/bake-fonts.sh'
-  if (!(Test-Path -LiteralPath $fontScript -PathType Leaf)) { throw 'No se encuentra tools/bake-fonts.sh para habilitar los glifos europeos.' }
+  if (!(Test-Path -LiteralPath $fontScript -PathType Leaf)) {
+    if ($script:ActiveBuildLogPath) { WriteBuildJobLog $script:ActiveBuildLogPath 'El upstream actual no incluye tools/bake-fonts.sh; se conserva el sistema de fuentes de la plantilla, sin parche legacy.' }
+    return
+  }
   $source = [IO.File]::ReadAllText($fontScript)
   $basic = '"$size" "$range" 1024'
   $european = '"$size" "$range" 2048 european'
