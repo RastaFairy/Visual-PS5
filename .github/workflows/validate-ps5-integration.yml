@@ -58,6 +58,9 @@ jobs:
             "'/api/run-kyty'",
             "'/api/package-ultrapack'",
             "function NormalizeNativeBuildFiles",
+            "canonical Makefile target",
+            "$makeBuildCall",
+            "$buildText = $buildText.Replace($legacyBuildCall, $makeBuildCall)",
             "core.autocrlf=false",
             "*.sha256 text eol=lf"
           )
@@ -76,10 +79,10 @@ jobs:
         run: |
           $version = (Get-Content PS5-Homebrew-Studio/VERSION.txt | Where-Object { $_ -match '^Version:' }) -replace '^Version:\s*',''
           $html = Get-Content -Raw PS5-Homebrew-Studio/index.html
-          if ($version -ne '1.0.3' -or -not $html.Contains('VERSION 1.0.3')) {
+          if ($version -ne '1.0.4' -or -not $html.Contains('VERSION 1.0.4')) {
             throw "Version mismatch: VERSION.txt=$version"
           }
-          Write-Host "Version 1.0.3: OK"
+          Write-Host "Version 1.0.4: OK"
 
       - name: Package Studio release archive
         if: github.ref == 'refs/heads/main' && success()
@@ -101,9 +104,9 @@ jobs:
         if: github.ref == 'refs/heads/main' && success()
         uses: actions/upload-artifact@v4
         with:
-          name: PS5-Homebrew-Studio-v1.0.3
+          name: PS5-Homebrew-Studio-v1.0.4
           path: |
-            ${{ runner.temp }}/PS5-Homebrew-Studio-v1.0.3.zip
-            ${{ runner.temp }}/PS5-Homebrew-Studio-v1.0.3.zip.sha256
+            ${{ runner.temp }}/PS5-Homebrew-Studio-v*.zip
+            ${{ runner.temp }}/PS5-Homebrew-Studio-v*.zip.sha256
           if-no-files-found: error
           retention-days: 30
