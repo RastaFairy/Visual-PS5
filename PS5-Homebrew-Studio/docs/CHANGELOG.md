@@ -1,5 +1,14 @@
 # Registro de cambios
 
+## 1.1.0 — 2026-10-16
+
+- Se retiró Kyty de las acciones, la configuración y las rutas activas del IDE.
+- El empaquetado UltraPack se ejecuta como tarea independiente y muestra su salida, código de salida y artefacto.
+- Se corrigió el uso de colecciones de botones en el frontend y la compatibilidad de ProcessStartInfo con Windows PowerShell 5.1.
+- La compilación nativa ya no considera un ZIP/PKG residual como prueba de título; se exige `eboot.bin` y `sce_sys/param.json`.
+- El generador Vulkan ya no emite un cargador de texturas vacío y rechaza flujos con destinos o pantallas inexistentes.
+- La reparación de la instalación de UltraPack conserva el checkout y los helpers locales.
+
 ## 1.0.9 — 2026-10-16
 
 - Kyty recibe la ruta completa de `eboot.bin` mediante `--game`, con resolución 1920×1080 y registro del comando utilizado.
