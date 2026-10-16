@@ -1,5 +1,13 @@
 # Registro de cambios
 
+## 1.1.3 — 2026-10-16
+
+- Detecta de forma preventiva unidades WSL/DrvFS sin `metadata` antes del `make source-fetch` de PS5 OpenGL.
+- Si el error de permisos de Git persiste, muestra el procedimiento de reparación en el mensaje y el log de compilación.
+- Añade `runtime/fix-wsl-permissions.sh`, con backup de `/etc/wsl.conf` y edición preservando las demás opciones.
+- El IDE ya no oculta la excepción final de la compilación detrás del registro de dependencias.
+
+
 ## 1.1.2 — 2026-10-16
 
 - Añade la acción «Presentación» a los proyectos nativos inicializados con `sce_sys/param.json`.

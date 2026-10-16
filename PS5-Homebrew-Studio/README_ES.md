@@ -1,6 +1,6 @@
 # PS5 Homebrew Studio
 
-**Release 1.1.2 · IDE visual local para Windows.** Integra un editor visual 1920×1080, análisis de flujos, generación de código C# para SharpProspero y conversión del modelo visual a pantallas C++20 para los kits nativos OpenGL/Vulkan. Incluye un catálogo verificado por función de boilerplates, UI kits, drivers, complementos gráficos y aplicaciones comunitarias de referencia.
+**Release 1.1.3 · IDE visual local para Windows.** Integra un editor visual 1920×1080, análisis de flujos, generación de código C# para SharpProspero y conversión del modelo visual a pantallas C++20 para los kits nativos OpenGL/Vulkan. Incluye un catálogo verificado por función de boilerplates, UI kits, drivers, complementos gráficos y aplicaciones comunitarias de referencia.
 
 ## Inicio en Windows
 
@@ -11,7 +11,7 @@
 
 El servicio escucha únicamente en `127.0.0.1`; no expone el sistema de archivos a la red local. Los proyectos del editor se guardan en `Documentos\PS5HomebrewStudio\Projects`. `Ctrl+S` guarda el modelo visual. El editor puede abrirse y usarse sin descargar ningún toolchain.
 
-## Documentación 1.1.2
+## Documentación 1.1.3
 
 - Manual español: [docs/MANUAL.es-ES.md](docs/MANUAL.es-ES.md)
 - English: [docs/USER-MANUAL.en-GB.md](docs/USER-MANUAL.en-GB.md)
@@ -24,6 +24,12 @@ El servicio escucha únicamente en `127.0.0.1`; no expone el sistema de archivos
 - [Ecosistema de proyectos upstream](docs/PROJECT_ECOSYSTEM.md) · [Matriz de SDK](docs/SDK_MATRIX.md) · [Registro de cambios](docs/CHANGELOG.md)
 
 La UI de esta versión todavía está en español; los manuales traducidos no representan una localización completa de la interfaz.
+
+## Mejoras de desarrollo 1.1.3
+
+- Detecta el error WSL/DrvFS `chmod ... .git/config.lock: Operation not permitted` antes de descargar y compilar las fuentes OpenGL, y muestra una corrección específica.
+- Incluye `runtime/fix-wsl-permissions.sh`, que activa `metadata` en `/etc/wsl.conf` conservando el resto de la configuración y creando copia de seguridad.
+- Más detalles: [solución de permisos WSL](docs/WSL_PERMISSIONS.md).
 
 ## Mejoras de desarrollo 1.1.2
 
