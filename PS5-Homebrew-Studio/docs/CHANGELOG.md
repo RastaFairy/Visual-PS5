@@ -1,5 +1,15 @@
 # Registro de cambios
 
+## 1.1.1 — 2026-10-16
+
+- Detecta proyectos nativos y repositorios upstream en el workspace, distingue títulos, plantillas, SDKs, drivers y referencias y muestra las dependencias pendientes.
+- Reconoce checkouts Git válidos que no tienen manifiesto de procedencia del IDE y los registra sin sobrescribir archivos.
+- Permite inicializar plantillas compatibles mediante `tools/init-project.sh` o `make init`.
+- Prepara las dependencias Native App Boilerplate / PS5 OpenGL y compila el SDK OpenGL antes de construir UI cuando falta.
+- Añade `make clean` opcional y protegido: solo se ejecuta cuando el Makefile declara el target.
+- Añade «Cerrar proyecto» para descargar el modelo visual sin borrar fuentes, compilaciones ni paquetes nativos.
+- Conserva la invocación CLI de UltraPack validada por el usuario, sin añadir `--verify` desde la interfaz.
+
 ## 1.1.0 — 2026-10-16
 
 - Se retiró Kyty de las acciones, la configuración y las rutas activas del IDE.

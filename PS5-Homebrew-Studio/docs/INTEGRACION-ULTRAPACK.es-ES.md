@@ -15,14 +15,14 @@ PS5 Homebrew Studio integra la CLI de [PS5 UltraPack](https://github.com/knutwur
 1. Compila un proyecto nativo.
 2. Comprueba que el origen contenga eboot.bin y sce_sys/param.json. Un ZIP/PKG antiguo no sirve como prueba.
 3. Pulsa Empaquetar y selecciona .ffpfs, .ffpfsc o .pkg.
-4. Mantén activa la casilla «Verificar el contenido contra el origen» para pasar --verify a la CLI. La comprobación puede consumir más tiempo y memoria.
+4. Homebrew Studio conserva la invocación CLI de UltraPack validada por el mantenedor y no añade `--verify` automáticamente. Comprueba el log y el artefacto final; usa las opciones upstream de verificación por separado cuando necesites una comparación íntegra del contenido.
 5. Revisa el registro final, el código de salida, la ruta del resultado y los mensajes del verificador.
 
 El resultado se guarda en packages-ultrapack/<formato>/<fecha-hora>. Cada ejecución usa una carpeta distinta para evitar confundir los resultados nuevos con artefactos previos. La tarea se ejecuta en segundo plano para que la interfaz continúe respondiendo.
 
 ## Interpretación del resultado
 
-Un código de salida cero, un archivo presente y una estructura válida son señales distintas. Cuando se activa --verify, UltraPack compara el contenido con el origen según las capacidades de la CLI utilizada. Si el log indica que se omitió la verificación o que se comprobaron cero hashes, no describas ese resultado como una verificación íntegra de contenido.
+Un código de salida cero, un archivo presente y una estructura válida son señales distintas. La interfaz de Homebrew Studio no fuerza `--verify`; por tanto, la existencia de un `.ffpfsc` correcto no equivale por sí sola a una comparación completa de hashes con el origen.
 
 El mantenedor ha informado de que una imagen .ffpfsc generada funciona en hardware real. Es una validación específica y no garantiza todos los títulos, firmwares ni formatos. En Windows, .pkg requiere un helper nativo y dependencias compatibles.
 
