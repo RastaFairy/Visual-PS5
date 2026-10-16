@@ -13,7 +13,7 @@ El servicio escucha únicamente en `127.0.0.1`; no expone el sistema de archivos
 
 ## Cambios de 1.0.6
 
-- Compilación visual nativa en segundo plano con registro real de WSL/Make/CMake/Ninja consultable durante el proceso.
+- Compilaciones visuales y proyectos nativos C++ en segundo plano con registro real de WSL/Make/CMake/Ninja consultable durante el proceso.
 - Estado final explícito y acciones post-compilación para KytyPS5 y UltraPack.
 - Selector UltraPack para `.ffpfs`, `.ffpfsc` y `.pkg`; PKG puede tener limitaciones en Windows según upstream.
 - Atlas tipográfico europeo OpenGL de 2048 px para conservar acentos españoles.
