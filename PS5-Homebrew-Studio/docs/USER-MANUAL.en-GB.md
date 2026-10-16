@@ -1,4 +1,4 @@
-# User Manual — PS5 Homebrew Studio 1.1.0
+# User Manual — PS5 Homebrew Studio 1.1.2
 
 Last updated: 16 October 2026. The application interface is still in Spanish. Localised manuals do not mean that the UI itself has been translated.
 
@@ -34,7 +34,17 @@ Create a project, choose its backend before preparing dependencies, add componen
 
 The IDE runs real upstream scripts and preserves build logs. Exit code zero alone is not sufficient: native-title packaging requires eboot.bin and sce_sys/param.json. The IDE does not distribute Sony proprietary SDKs and does not guarantee universal firmware compatibility.
 
-## 5. Packaging with UltraPack
+## 5. Native app presentation assets
+
+In **Projects**, choose an initialized title and select **Presentación**. Only selected fields are replaced; blank fields remain unchanged. The operation updates the project source `sce_sys` files for the next build.
+
+- **Icon:** converted to `sce_sys/icon0.png`, 512×512 PNG.
+- **Selection and launch backgrounds:** the selection image produces `pic0.dds` and the launch image `pic1.dds`, each 3840×2160 BC7/DX10. They may differ; if neither exists, select both. DirectXTex `texconv` is required (`winget install Microsoft.DirectXTex.Texconv`); renaming a PNG to `.dds` is not valid conversion.
+- **Selection music:** produces `sce_sys/snd0.at9`, looped 48 kHz ATRAC9 no larger than 2 MiB. An already compatible AT9 can be supplied directly. Converting WAV/MP3/OGG/M4A requires FFmpeg and a compatible, legally obtained ATRAC9 encoder (`ps4_at9tool.exe`). The IDE does not download or redistribute the encoder.
+
+The upstream `tools/prepare-assets.ps1` script validates dimensions and formats. If conversion fails, inspect the output and install the missing tools; incomplete files are not applied. These assets affect the selected app only, not the system-wide home background or console startup sound. The separate [ps5-theme project](https://github.com/Blaze414/ps5-theme) is a plugin/payload for jailbroken PS5 systems and documents firmware support up to 13.60; it is not part of this asset editor.
+
+## 6. Packaging with UltraPack
 
 1. Open Tools and configure Python 3.10+ and the UltraPack backend/cli.py file.
 2. Save settings. Paths are stored locally in .runtime/integrations.json.
@@ -45,12 +55,12 @@ The IDE runs real upstream scripts and preserves build logs. Exit code zero alon
 
 Outputs are stored under packages-ultrapack, grouped by format and timestamp. Packaging runs in the background so the editor remains responsive. The maintainer has reported a generated .ffpfsc image successfully tested on real hardware; that does not guarantee every title, firmware or backend.
 
-## 6. Tests and troubleshooting
+## 7. Tests and troubleshooting
 
 With Node.js installed, run node --check app.js, node --check runtime/native-generator.js and node runtime/test-native-generator.js from the PS5-Homebrew-Studio folder. These tests check JavaScript syntax and generator cases; they do not replace a complete PS5 toolchain build or a console test.
 
 If the server fails to start, keep the full error and check PowerShell and permissions. For build failures, record the backend, upstream versions and commits, full output and exit code. If UltraPack fails, check Python and cli.py paths, eboot.bin, sce_sys/param.json and output permissions. Never share tokens, keys, protected files or logs containing secrets.
 
-## 7. Licensing and scope
+## 8. Licensing and scope
 
 SDKs, drivers, templates and UI kits retain their own licences. Review LICENSE, COPYING, NOTICE and redistribution requirements before publishing a binary. Visual-PS5 is not an official Sony SDK, includes no firmware, keys, games or BIOS, and does not automatically install titles on a console. The editor preview is not a PS5 emulator and does not validate runtime, audio, input or persistence.

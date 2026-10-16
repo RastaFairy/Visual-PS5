@@ -1,4 +1,4 @@
-# Benutzerhandbuch — PS5 Homebrew Studio 1.1.0
+# Benutzerhandbuch — PS5 Homebrew Studio 1.1.2
 
 Letzte Aktualisierung: 16. Oktober 2026. Die Anwendungsoberfläche ist weiterhin auf Spanisch. Das übersetzte Handbuch bedeutet nicht, dass die UI bereits lokalisiert ist.
 
@@ -34,7 +34,19 @@ Erstelle das Projekt, wähle das Backend vor der Einrichtung der Abhängigkeiten
 
 Das IDE führt echte Upstream-Skripte aus und bewahrt Logs auf. Exit-Code null reicht nicht: Für die Paketierung müssen eboot.bin und sce_sys/param.json vorhanden sein. Das IDE liefert keine proprietären Sony-SDKs mit und garantiert keine universelle Firmware-Kompatibilität.
 
-## 5. Paketierung mit UltraPack
+## 5. Präsentationsressourcen einer nativen App
+
+Öffne unter **Projekte** einen initialisierten Titel mit `sce_sys/param.json` und klicke auf **Presentación**. Leere Felder bleiben unverändert.
+
+- **Symbol:** `sce_sys/icon0.png`, PNG mit 512×512 Pixeln.
+
+- **Auswahlhintergrund:** `sce_sys/pic0.dds`. **Start-/Ladehintergrund:** `sce_sys/pic1.dds`. Beide werden in DDS BC7/DX10 mit 3840×2160 Pixeln konvertiert und dürfen verschieden sein. Fehlen beide, wähle beim ersten Mal beide Dateien aus. Benötigt DirectXTex `texconv` (`winget install Microsoft.DirectXTex.Texconv`).
+
+- **Auswahlmusik:** `sce_sys/snd0.at9`, gelooptes ATRAC9 mit 48 kHz, höchstens 2 MiB. Eine kompatible AT9-Datei kann direkt verwendet werden. MP3/WAV/OGG/M4A benötigen FFmpeg und einen kompatiblen, legal bezogenen ATRAC9-Encoder; das IDE lädt ihn nicht herunter.
+
+Das Upstream-Skript `tools/prepare-assets.ps1` validiert Formate vor dem Anwenden. Diese Dateien ändern nur die Präsentation dieser App, nicht den globalen PS5-Hintergrund oder den Startton der Konsole. Für ein separates Systemthema siehe [ps5-theme](https://github.com/Blaze414/ps5-theme).
+
+## 6. Paketierung mit UltraPack
 
 1. Öffne Werkzeuge und konfiguriere Python 3.10+ sowie die Datei backend/cli.py von UltraPack.
 2. Speichere die Einstellungen lokal in .runtime/integrations.json.
@@ -45,12 +57,12 @@ Das IDE führt echte Upstream-Skripte aus und bewahrt Logs auf. Exit-Code null r
 
 Ausgaben werden unter packages-ultrapack nach Format und Zeitstempel sortiert. Die Aufgabe läuft im Hintergrund. Laut Maintainer wurde ein .ffpfsc-Abbild erstellt und erfolgreich auf echter Hardware getestet; dies garantiert nicht jedes Spiel, jede Firmware oder jedes Backend.
 
-## 6. Tests und Fehlerbehebung
+## 7. Tests und Fehlerbehebung
 
 Führe mit installiertem Node.js im Anwendungsordner node --check app.js, node --check runtime/native-generator.js und node runtime/test-native-generator.js aus. Diese Tests prüfen JavaScript und Generatorfälle, ersetzen aber keinen Build mit der vollständigen PS5-Toolchain oder einen Konsolentest.
 
 Wenn der Server nicht startet, sichere die Fehlermeldung und prüfe PowerShell und Berechtigungen. Bei Build-Fehlern notiere Backend, Upstream-Versionen und Commits, vollständige Ausgabe und Exit-Code. Bei UltraPack prüfe Python/cli.py, eboot.bin, sce_sys/param.json und Schreibrechte. Teile keine Geheimnisse.
 
-## 7. Lizenzen und Grenzen
+## 8. Lizenzen und Grenzen
 
 SDKs, Treiber, Vorlagen und UI-Kits behalten ihre eigenen Lizenzen. Prüfe LICENSE, COPYING, NOTICE und die Weitergabebedingungen vor der Veröffentlichung. Visual-PS5 ist kein offizielles Sony-SDK, enthält keine Firmware, Schlüssel, Spiele oder BIOS und installiert Titel nicht automatisch. Die Vorschau ist kein PS5-Emulator und validiert weder Laufzeit noch Audio, Eingabe oder Persistenz.

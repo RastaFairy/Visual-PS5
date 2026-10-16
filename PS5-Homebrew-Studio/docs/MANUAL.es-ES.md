@@ -1,4 +1,4 @@
-# Manual de usuario — PS5 Homebrew Studio 1.1.0
+# Manual de usuario — PS5 Homebrew Studio 1.1.2
 
 Última actualización: 16 de octubre de 2026. La interfaz de la aplicación continúa en español; estos manuales localizados no significan que la UI ya se haya traducido.
 
@@ -34,7 +34,25 @@ Crea el proyecto, elige el backend antes de preparar dependencias, añade compon
 
 El IDE ejecuta scripts upstream reales y conserva los logs. El código de salida cero no basta: el empaquetado de títulos nativos requiere eboot.bin y sce_sys/param.json. El IDE no distribuye SDK propietarios de Sony ni garantiza compatibilidad con todos los firmwares.
 
-## 5. Empaquetar con UltraPack
+## 5. Personalizar la presentación de una app nativa
+
+
+
+En **Proyectos** busca el título ya inicializado y pulsa **Presentación**. Selecciona solo los recursos que quieras sustituir; los campos vacíos se conservan. La acción modifica los archivos fuente `sce_sys` del proyecto para que se incorporen en la próxima compilación.
+
+
+
+- **Icono:** se convierte a `sce_sys/icon0.png`, 512×512 PNG.
+
+- **Fondos de selección y lanzamiento:** la imagen de selección produce `pic0.dds` y la de lanzamiento produce `pic1.dds`, cada una a 3840×2160, BC7/DX10. Pueden ser distintas; si todavía no existe el par, selecciona ambas durante la primera operación. Requiere `texconv` de DirectXTex (`winget install Microsoft.DirectXTex.Texconv`). No basta con renombrar un PNG a `.dds`.
+
+- **Música al seleccionar:** produce `sce_sys/snd0.at9`, ATRAC9 en bucle, 48 kHz y máximo 2 MiB. Se puede aportar un AT9 ya compatible; convertir WAV/MP3/OGG/M4A necesita FFmpeg y un codificador ATRAC9 compatible adquirido legalmente (`ps4_at9tool.exe`). El IDE no descarga ni redistribuye ese codificador.
+
+
+
+El conversor upstream `tools/prepare-assets.ps1` valida las dimensiones y los formatos. Si falla la conversión, revisa el log y las herramientas detectadas; no se aplican archivos incompletos. Estos recursos afectan al icono/fondos/música asociados a **esa aplicación**. No cambian el wallpaper global del sistema, la música de inicio de la consola ni el sonido al salir del modo reposo. Para temas globales existe el proyecto independiente [ps5-theme](https://github.com/Blaze414/ps5-theme), un plugin/payload para PS5 modificadas cuya compatibilidad publicada llega hasta firmware 13.60; no forma parte de este editor de recursos.
+
+## 6. Empaquetar con UltraPack
 
 1. Abre Herramientas y configura Python 3.10 o posterior y el archivo backend/cli.py de UltraPack.
 2. Guarda la configuración. Las rutas quedan localmente en .runtime/integrations.json.
@@ -45,12 +63,12 @@ El IDE ejecuta scripts upstream reales y conserva los logs. El código de salida
 
 Las salidas se guardan bajo packages-ultrapack por formato y fecha/hora. Cada empaquetado se ejecuta en segundo plano para mantener operativo el editor. El mantenedor ha informado de una imagen .ffpfsc generada y probada correctamente en hardware real; esto no garantiza cualquier título, firmware o backend.
 
-## 6. Pruebas y diagnóstico
+## 7. Pruebas y diagnóstico
 
 Con Node.js instalado, ejecuta desde la carpeta PS5-Homebrew-Studio: node --check app.js, node --check runtime/native-generator.js y node runtime/test-native-generator.js. Estas pruebas revisan sintaxis JavaScript y casos del generador; no sustituyen la compilación con la toolchain completa de PS5 ni una prueba en consola.
 
 Si el servidor no arranca, conserva el error completo y comprueba PowerShell y los permisos. Si falla el build, registra backend, versiones y commits upstream, salida íntegra y código de salida. Si falla UltraPack, revisa las rutas de Python y cli.py, la presencia de eboot.bin y sce_sys/param.json y los permisos del destino. No compartas tokens, claves, ficheros protegidos ni logs con secretos.
 
-## 7. Licencias y alcance
+## 8. Licencias y alcance
 
 Los SDK, drivers, plantillas y kits conservan sus licencias propias. Revisa LICENSE, COPYING, NOTICE y las condiciones de redistribución antes de publicar un binario. Visual-PS5 no es un SDK oficial de Sony, no incluye firmware, claves, juegos ni BIOS y no instala automáticamente títulos en la consola. La vista previa no es un emulador de PS5 ni valida runtime, audio, entrada o persistencia.

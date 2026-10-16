@@ -1,4 +1,4 @@
-# 用户手册 — PS5 Homebrew Studio 1.1.0
+# 用户手册 — PS5 Homebrew Studio 1.1.2
 
 最后更新：2026 年 10 月 16 日。应用界面目前仍为西班牙语；手册翻译并不表示 UI 本身已完成本地化。
 
@@ -34,7 +34,19 @@
 
 IDE 会运行真实的上游构建脚本并保留日志。退出代码为 0 并不足够：原生标题打包还要求 eboot.bin 和 sce_sys/param.json。IDE 不提供 Sony 专有 SDK，也不保证兼容所有固件。
 
-## 5. 使用 UltraPack 打包
+## 5. 原生应用的展示资源
+
+在**项目**中打开已初始化且包含 `sce_sys/param.json` 的标题，然后点击 **Presentación**。留空的字段不会更改。
+
+- **图标：** `sce_sys/icon0.png`，512×512 PNG。
+
+- **选中应用时的背景：** `sce_sys/pic0.dds`。**启动/加载背景：** `sce_sys/pic1.dds`。两者都会转换为 3840×2160 的 DDS BC7/DX10，也可以使用不同图片。若两个背景均不存在，首次操作必须同时选择两张图。需要 DirectXTex 的 `texconv`（`winget install Microsoft.DirectXTex.Texconv`）。
+
+- **选择应用时的音乐：** `sce_sys/snd0.at9`，48 kHz 循环 ATRAC9，最大 2 MiB。可以直接提供兼容的 AT9 文件。MP3/WAV/OGG/M4A 等音频需要 FFmpeg 和合法取得的兼容 ATRAC9 编码器；IDE 不会下载该编码器。
+
+上游脚本 `tools/prepare-assets.ps1` 会在应用更改前验证格式。这些文件只影响单个应用，不会修改 PS5 系统全局壁纸或开机声音。系统主题是独立项目，参见 [ps5-theme](https://github.com/Blaze414/ps5-theme)。
+
+## 6. 使用 UltraPack 打包
 
 1. 打开“工具”，配置 Python 3.10+ 和 UltraPack 的 backend/cli.py。
 2. 保存设置；路径只写入本地 .runtime/integrations.json。
@@ -45,12 +57,12 @@ IDE 会运行真实的上游构建脚本并保留日志。退出代码为 0 并�
 
 输出按格式和时间戳保存在 packages-ultrapack 下。打包任务在后台运行。维护者报告称生成的 .ffpfsc 镜像已在真实硬件上成功测试；这并不保证所有标题、固件或后端均已验证。
 
-## 6. 测试与故障排查
+## 7. 测试与故障排查
 
 安装 Node.js 后，在应用目录运行 node --check app.js、node --check runtime/native-generator.js 和 node runtime/test-native-generator.js。这些测试检查 JavaScript 语法和生成器案例，不能替代完整 PS5 工具链构建或真实主机测试。
 
 若服务无法启动，请保留完整错误并检查 PowerShell 和目录权限。若构建失败，记录后端、上游版本和提交、完整日志及退出代码。若 UltraPack 失败，检查 Python/cli.py 路径、eboot.bin、sce_sys/param.json 和输出目录权限。不要分享密钥或令牌。
 
-## 7. 许可与范围
+## 8. 许可与范围
 
 SDK、驱动、模板和 UI 工具包均保留各自许可。发布二进制前请检查 LICENSE、COPYING、NOTICE 和再分发条件。Visual-PS5 不是 Sony 官方 SDK，不包含固件、密钥、游戏或 BIOS，也不会自动将标题安装到主机。编辑器预览不是 PS5 模拟器，无法验证运行时、音频、输入或持久化。

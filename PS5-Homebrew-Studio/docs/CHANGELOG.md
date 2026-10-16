@@ -1,5 +1,13 @@
 # Registro de cambios
 
+## 1.1.2 — 2026-10-16
+
+- Añade la acción «Presentación» a los proyectos nativos inicializados con `sce_sys/param.json`.
+- Permite sustituir el icono `icon0.png`, los fondos independientes de selección/lanzamiento `pic0.dds` y `pic1.dds`, y la música `snd0.at9`.
+- Utiliza `tools/prepare-assets.ps1` de Native App Boilerplate para convertir y validar formatos en staging temporal antes de aplicar los archivos.
+- Añade límites de tamaño y restringe las escrituras al workspace; restaura los archivos si falla la aplicación de recursos.
+- Distingue los recursos de una app de los temas globales de ShellUI.
+
 ## 1.1.1 — 2026-10-16
 
 - Detecta proyectos nativos y repositorios upstream en el workspace, distingue títulos, plantillas, SDKs, drivers y referencias y muestra las dependencias pendientes.
