@@ -86,7 +86,7 @@ jobs:
           foreach ($needle in @("api('integrations')", "api('package-ultrapack/start'", "function openIntegrationSettings")) {
             if (-not $app.Contains($needle)) { throw "Missing UI integration: $needle" }
           }
-          $collectionSelector = 'buttons=$''#modalActions button'')'
+          $collectionSelector = 'buttons=' + [char]36 + [char]36 + [char]39 + '#modalActions button' + [char]39 + ')'
           if (-not $app.Contains($collectionSelector)) {
             throw "UltraPack modal must use querySelectorAll to manage its action-button collection."
           }
