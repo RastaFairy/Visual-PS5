@@ -47,6 +47,50 @@ $script:Catalog = @(
   @{id='ps5-ultrapack';name='PS5 UltraPack';repo='knutwurst/ps5-ultrapack';branch='main';folder='ps5-ultrapack';role='Empaquetado ffpfs/ffpfsc/fPKG';license='MIT para código propio + licencias de terceros';description='CLI para convertir carpetas de título en .ffpfs/.ffpfsc/.pkg; el soporte fuera de macOS puede ser limitado.'}
 )
 function WriteUtf8([string]$Path,[string]$Content) { [IO.File]::WriteAllText($Path,$Content,$script:Utf8) }
+
+# Normalizes build-critical text copied from Windows checkouts before Make/WSL consumes it.
+# This preserves file bytes except CR characters used as line endings and never touches binaries.
+function NormalizeNativeBuildFiles([string]$ProjectRoot) {
+  $root = [IO.Path]::GetFullPath($ProjectRoot)
+  $allowedExtensions = @('.sh','.sha256','.c','.cc','.cpp','.h','.hpp','.ld','.mk','.s','.S'.ToLowerInvariant(),'.cmake','.yml','.yaml')
+  $allowedNames = @('Makefile','GNUmakefile','CMakeLists.txt','.gitattributes')
+  $normalized = 0
+  foreach ($item in (Get-ChildItem -LiteralPath $root -File -Recurse -ErrorAction Stop)) {
+    $extension = $item.Extension
+    if ($item.Name -notin $allowedNames -and $extension -notin $allowedExtensions) { continue }
+    $bytes = [IO.File]::ReadAllBytes($item.FullName)
+    if ($bytes.Length -eq 0) { continue }
+    $output = [System.Collections.Generic.List[byte]]::new()
+    $changed = $false
+    for ($i = 0; $i -lt $bytes.Length; $i++) {
+      if ($bytes[$i] -eq 13) {
+        if ($i + 1 -lt $bytes.Length -and $bytes[$i + 1] -eq 10) { $i++ }
+        $output.Add([byte]10)
+        $changed = $true
+      } else {
+        $output.Add($bytes[$i])
+      }
+    }
+    if ($changed) {
+      [IO.File]::WriteAllBytes($item.FullName, $output.ToArray())
+      $normalized++
+    }
+  }
+
+  # Upstream's checksum manifest is text too. Declare its LF policy so a later
+  # Git checkout on Windows does not reintroduce CRLF and fail an exact digest check.
+  $attributesPath = Join-Path $root '.gitattributes'
+  if (Test-Path -LiteralPath $attributesPath -PathType Leaf) {
+    $attributes = [IO.File]::ReadAllText($attributesPath)
+    $attributes = $attributes -replace "`r`n?", "`n"
+    if ($attributes -notmatch '(?m)^\*\.sha256\s+text\b') {
+      if ($attributes.Length -gt 0 -and !$attributes.EndsWith("`n")) { $attributes += "`n" }
+      $attributes += "*.sha256 text eol=lf`n"
+      [IO.File]::WriteAllText($attributesPath, $attributes, $script:Utf8)
+    }
+  }
+  return $normalized
+}
 function SendBytes($C,[byte[]]$B,[string]$Type='application/octet-stream',[int]$Code=200) {
   $C.Response.StatusCode=$Code; $C.Response.ContentType=$Type; $C.Response.Headers['Cache-Control']='no-store'; $C.Response.Body=$B
 }
@@ -105,7 +149,7 @@ function InstallRepo($Entry) {
       $git=CmdInfo 'git.exe';if(!$git.ok){$git=CmdInfo 'git'}
       if(!$git.ok){throw 'Git no está instalado. Usa Configurar entorno para instalar Git y vuelve a intentarlo.'}
       $stage=Join-Path $temp 'checkout'
-      $cloneArgs=@('-c','core.longpaths=true','clone','--recurse-submodules');if(!$Entry.fullHistory){$cloneArgs+=@('--depth','1','--shallow-submodules')};$cloneArgs+=@('--branch',[string]$Entry.branch,('https://github.com/'+$Entry.repo+'.git'),$stage)
+      $cloneArgs=@('-c','core.longpaths=true','-c','core.autocrlf=false','clone','--recurse-submodules');if(!$Entry.fullHistory){$cloneArgs+=@('--depth','1','--shallow-submodules')};$cloneArgs+=@('--branch',[string]$Entry.branch,('https://github.com/'+$Entry.repo+'.git'),$stage)
       $cloneOut=@(& $git.path @cloneArgs 2>&1);$cloneExit=$LASTEXITCODE
       if($cloneExit -ne 0 -or !(Test-Path (Join-Path $stage 'README.md'))){$detail=($cloneOut|ForEach-Object{$_.ToString()}) -join "`r`n";throw "git clone falló para $($Entry.repo) (código $cloneExit).`r`n$detail"}
       $commit=((& $git.path -C $stage rev-parse HEAD 2>$null)|Out-String).Trim()
@@ -167,6 +211,7 @@ function NewNativeTitle([string]$Name,[string]$TitleId,[string]$Category,[string
   if(Test-Path $target) { return @{ok=$false;message='Ya existe la carpeta de destino; cambia el nombre para evitar sobrescribirla.';output=$target;path=$target} }
   try {
     CopyProjectTree $src $target
+    $normalizedLineEndings = NormalizeNativeBuildFiles $target
     $initializer=Join-Path $target 'tools/init-project.sh'
     $paramPath=Join-Path $target 'sce_sys/param.json'
     foreach($path in @($initializer,$paramPath,(Join-Path $target 'Makefile'))) { if(!(Test-Path $path)) { throw "La copia no contiene el elemento requerido: $path" } }
@@ -495,6 +540,8 @@ function BuildNativeProject([string]$ProjectPath) {
     return @{ok=$false;message='El manifiesto no identifica una plantilla de compilación compatible.';output=$markerPath}
   }
   $template = [string]$meta.template
+  try { $normalizedLineEndings = NormalizeNativeBuildFiles $projectRoot }
+  catch { return @{ok=$false;message='No se pudieron normalizar los finales de línea de los archivos nativos.';output=$_.Exception.Message;templateId=$template} }
   $scriptPath = ''
   if ($template -in @('nativecpp','hui-gl')) {
     if (!(Test-Path (Join-Path $projectRoot 'Makefile')) -or !(Test-Path (Join-Path $projectRoot 'tools/build.sh'))) {
