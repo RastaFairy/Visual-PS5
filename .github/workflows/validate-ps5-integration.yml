@@ -59,8 +59,8 @@ jobs:
             "'/api/package-ultrapack'",
             "function NormalizeNativeBuildFiles",
             "canonical Makefile target",
-            "$makeBuildCall",
-            "$buildText = $buildText.Replace($legacyBuildCall, $makeBuildCall)",
+            '$makeBuildCall',
+            '$buildText = $buildText.Replace($legacyBuildCall, $makeBuildCall)',
             "core.autocrlf=false",
             "*.sha256 text eol=lf"
           )
