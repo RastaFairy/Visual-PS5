@@ -10,7 +10,7 @@ const project = {
   assets: [{ id: 'asset-avatar', fileName: 'avatar.png', mime: 'image/png', dataUrl: 'data:image/png;base64,AA==' }],
   screens: [{ id: 'home', name: 'Inicio' }, { id: 'settings', name: 'Ajustes' }],
   components: [
-    { id: 'heading', screenId: 'home', type: 'title', label: 'Hola "PS5"', x: 80, y: 45, w: 800, h: 100, font: 52, bg: 'transparent', fg: '#ffffff', visible: true },
+    { id: 'heading', screenId: 'home', type: 'title', label: 'Hola "PS5" · áéíóú ÁÉÍÓÚ ñ Ñ ü Ü ¿Qué tal? ¡Funciona! €', x: 80, y: 45, w: 800, h: 100, font: 52, bg: 'transparent', fg: '#ffffff', visible: true },
     { id: 'start', screenId: 'home', type: 'button', label: 'Abrir ajustes', x: 100, y: 190, w: 300, h: 70, font: 24, bg: '#7865f6', fg: '#ffffff', action: 'notify', actionMessage: 'Activado', visible: true },
     { id: 'enabled', screenId: 'settings', type: 'toggle', label: 'Audio', x: 50, y: 80, w: 300, h: 60, font: 20, bg: '#202a40', fg: '#ffffff', checked: true, visible: true },
     { id: 'volume', screenId: 'settings', type: 'slider', label: 'Volumen', x: 50, y: 160, w: 350, h: 70, font: 20, bg: '#202a40', fg: '#ffffff', value: 75, min: 0, max: 100, step: 5, visible: true },
@@ -33,6 +33,7 @@ for (const backend of ['opengl-ui', 'vulkan-ui']) {
   assert.ok(source.length > 5000, `${backend}: source unexpectedly short`);
   assert.ok(source.includes('class GeneratedScreen final : public hui::app::Concept'));
   assert.ok(source.includes('Hola \\"PS5\\"'));
+  assert.ok(source.includes('áéíóú ÁÉÍÓÚ ñ Ñ ü Ü ¿Qué tal? ¡Funciona! €'), `${backend}: UTF-8 European characters must survive C++ generation`);
   assert.ok(source.includes('Estado cambiado'));
   assert.ok(source.includes('widgets_[0].label'));
   assert.ok(source.includes('widgets_[7].value'));
