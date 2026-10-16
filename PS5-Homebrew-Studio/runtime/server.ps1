@@ -571,12 +571,30 @@ function StartNativeBuildJob($Body,[string]$Action='visual') {
   WriteUtf8 (Join-Path $dir 'worker.json') (ConvertTo-Json -InputObject @{pid=$worker.Id})
   return @{ok=$true;jobId=$jobId;message='Compilación iniciada.';pid=$worker.Id}
 }
+function ReadBuildJobLogShared([string]$Path) {
+  if (!(Test-Path -LiteralPath $Path -PathType Leaf)) { return '' }
+  for ($attempt = 0; $attempt -lt 5; $attempt++) {
+    $stream = $null
+    $reader = $null
+    try {
+      $stream = [IO.File]::Open($Path,[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::ReadWrite)
+      $reader = [IO.StreamReader]::new($stream,[Text.Encoding]::UTF8,$true)
+      return $reader.ReadToEnd()
+    } catch [IO.IOException] {
+      if ($attempt -eq 4) { return "[El registro está siendo actualizado; se reintentará en la siguiente consulta.]" }
+      Start-Sleep -Milliseconds (40 * ($attempt + 1))
+    } finally {
+      if ($reader) { $reader.Dispose() } elseif ($stream) { $stream.Dispose() }
+    }
+  }
+  return ''
+}
 function GetNativeBuildJobStatus([string]$JobId) {
   $dir = GetBuildJobDirectory $JobId
   if (!(Test-Path -LiteralPath $dir -PathType Container)) { throw 'No existe esa tarea de compilación.' }
   $logPath = Join-Path $dir 'build.log'
   $resultPath = Join-Path $dir 'result.json'
-  $logText = if (Test-Path -LiteralPath $logPath -PathType Leaf) { [IO.File]::ReadAllText($logPath) } else { '' }
+  $logText = ReadBuildJobLogShared $logPath
   if (Test-Path -LiteralPath $resultPath -PathType Leaf) {
     $result = Get-Content -LiteralPath $resultPath -Raw | ConvertFrom-Json
     return @{ok=$true;done=$true;log=$logText;result=$result}
@@ -874,6 +892,32 @@ function BuildNativeVisualProject($Body) {
 
   $created = $null
   $projectRoot = ''
+  $expectedTemplate = if ($backend -eq 'opengl-ui') { 'hui-gl' } else { 'vulkan-template' }
+  $slugForTarget = Slug $name
+  if ($backend -eq 'opengl-ui') {
+    $suffixForTarget = $slugForTarget.ToUpperInvariant() -replace '[^A-Z0-9]',''
+    $suffixForTarget = ($suffixForTarget + '0000000000000000').Substring(0,16)
+    $targetCandidate = Join-Path $script:Workspace ($suffixForTarget + '-OpenGL-UI')
+  } else { $targetCandidate = Join-Path $script:Workspace ($slugForTarget + '-Vulkan') }
+  if (Test-Path -LiteralPath $targetCandidate -PathType Container) {
+    if (!$Body.overwriteExisting) {
+      return @{ok=$false;message='La carpeta de destino ya existe. Cambia el nombre del título o marca «Sobrescribir» para reemplazar únicamente un proyecto de Homebrew Studio de la misma plantilla.';output=[string]$targetCandidate;path=[string]$targetCandidate;exitCode=2}
+    }
+    $existingMarker = Join-Path $targetCandidate '.ps5hs-project.json'
+    if (!(Test-Path -LiteralPath $existingMarker -PathType Leaf)) {
+      return @{ok=$false;message='No se puede sobrescribir: la carpeta existente no contiene el manifiesto de Homebrew Studio.';output=[string]$targetCandidate;path=[string]$targetCandidate;exitCode=2}
+    }
+    try { $existingMeta = Get-Content -LiteralPath $existingMarker -Raw | ConvertFrom-Json } catch {
+      return @{ok=$false;message='No se puede sobrescribir: el manifiesto existente no se puede leer.';output=$_.Exception.Message;path=[string]$targetCandidate;exitCode=2}
+    }
+    if ($existingMeta.schema -ne 'ps5hs-native-project' -or [string]$existingMeta.template -ne $expectedTemplate) {
+      return @{ok=$false;message='No se puede sobrescribir: el destino no es un proyecto de Homebrew Studio de la misma plantilla.';output=[string]$targetCandidate;path=[string]$targetCandidate;exitCode=2}
+    }
+    try { Remove-Item -LiteralPath $targetCandidate -Recurse -Force -ErrorAction Stop } catch {
+      return @{ok=$false;message='No se pudo sustituir la carpeta existente; puede estar bloqueada o no tener permisos suficientes.';output=$_.Exception.Message;path=[string]$targetCandidate;exitCode=2}
+    }
+    WriteBuildJobLog $script:ActiveBuildLogPath ('Se ha autorizado la sustitución del proyecto existente: ' + $targetCandidate)
+  }
   try {
     if ($backend -eq 'opengl-ui') {
       $created = NewNativeTitle $name $titleId 'game' 'hui-gl'
@@ -1245,8 +1289,8 @@ while ($listener.Server.IsBound) {
                                     SendJson $ctx $result
                                 }
                                 '/api/package-ultrapack' {
-                                    $result = PackageNativeProjectWithUltraPack $body
-                                    SendJson $ctx $result
+                                    try { $result = PackageNativeProjectWithUltraPack $body; SendJson $ctx $result }
+                                    catch { SendJson $ctx @{ok=$false;message=$_.Exception.Message;output=('Error al preparar o ejecutar UltraPack: ' + $_.Exception.ToString());exitCode=1;artifact=''} 200 }
                                 }
                                 '/api/build-native' {
                                     $result = BuildNativeProject ([string]$body.path)
