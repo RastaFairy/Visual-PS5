@@ -202,8 +202,9 @@
           const result=await api('sdk-install',{ids:['ps5-ultrapack']});
           const item=(result.results||[]).find(x=>x.name==='PS5 UltraPack'||x.path);
           if(!item||!item.ok||!item.path)throw new Error(item?.message||result.message||'La descarga no terminó correctamente.');
-          const cli=item.path+'\\backend\\cli.py';
-          const saved=await api('integration-config',{kytyExe:$('#integrationKytyPath').value.trim(),pythonExe:$('#integrationPythonPath').value.trim(),ultraPackCli:cli});
+          const cli=item.cli||item.path+'\\backend\\cli.py';
+          const python=item.pythonExe||$('#integrationPythonPath').value.trim();
+          const saved=await api('integration-config',{kytyExe:$('#integrationKytyPath').value.trim(),pythonExe:python,ultraPackCli:cli});
           log('UltraPack descargado como código fuente: '+item.path,'INFO');
           toast(saved.message||'UltraPack preparado');
           closeModal();await openIntegrationSettings();
@@ -232,7 +233,7 @@
     try{
       const result=await api('run-kyty',{path});
       const box=$('#kytyRunOutput');
-      if(box)box.textContent=(result.message||'Kyty iniciado.')+'\nPID: '+(result.pid??'desconocido')+'\nCarpeta: '+(result.gameFolder||'')+'\neboot.bin: '+(result.eboot||'');
+      if(box)box.textContent=(result.message||'Kyty iniciado.')+'\nPID: '+(result.pid??'desconocido')+'\nCarpeta: '+(result.gameFolder||'')+'\neboot.bin: '+(result.eboot||'')+'\nComando: '+(result.command||'');
       log(result.message||'KytyPS5 iniciado.','INFO');toast('KytyPS5 iniciado');
     }catch(e){
       const box=$('#kytyRunOutput');if(box)box.textContent='No se pudo iniciar KytyPS5.\n'+e.message;
@@ -255,7 +256,7 @@
         const ticker=setInterval(()=>{const out=$('#ultraPackOutput');if(out)out.textContent='UltraPack sigue ejecutándose ('+Math.floor((Date.now()-started)/1000)+' s).\nEl resultado real aparecerá cuando termine.';},1200);
         try{
           const result=await api('package-ultrapack',{path,format});
-          const output=(result.output||result.message||'Proceso finalizado.')+(result.artifact?'\n\nArchivo generado: '+result.artifact:'')+(result.note?'\n\n'+result.note:'');
+          const output=(result.message?'Resultado: '+result.message+'\n\n':'')+(result.output||'El proceso no proporcionó salida estándar ni de error.')+'\n\nCódigo de salida: '+(result.exitCode??'no disponible')+(result.artifact?'\n\nArchivo generado: '+result.artifact:'\n\nNo se ha verificado ningún archivo de salida.')+(result.note?'\n\n'+result.note:'');
           if(box)box.textContent=output;
           if(result.ok){log(result.message||'Empaquetado completado.','INFO');log('Artefacto UltraPack: '+result.artifact,'INFO');toast('Paquete creado con UltraPack');}
           else{log(result.message||'UltraPack no generó el archivo esperado.','ERROR');toast('UltraPack terminó con errores','error');}
@@ -271,18 +272,33 @@
 
   async function buildNativeProject(path){
     if(!path){toast('La ruta del proyecto está vacía.','error');return;}
-    openModal('Compilación nativa C++ / OpenGL / Vulkan',`<p>Se invocará el script de compilación real de la plantilla. En la ruta Vulkan también se preparan PS5_Vulkan y el fork fijado de PS5_PayloadSDK. La salida y los errores proceden de Make/CMake/Ninja del propio repositorio.</p><div class="build-progress"><span></span></div><pre id="nativeBuildOutput" style="font:10px/1.55 Consolas,monospace;color:#aeb8cf;white-space:pre-wrap;word-break:break-word;max-height:46vh;overflow:auto">Preparando compilación… No cierres la consola de servicio.</pre>`,[{text:'Cerrar ventana',class:'ghost',action:closeModal}]);
-    const started=Date.now();
-    const timer=setInterval(()=>{const out=$('#nativeBuildOutput');if(out)out.textContent='La compilación sigue en ejecución. Tiempo transcurrido: '+Math.floor((Date.now()-started)/1000)+' s.\nLa salida real aparecerá cuando termine el proceso upstream.';},1200);
+    openModal('Compilación nativa C++ / OpenGL / Vulkan',`<p>Se invocará el script de compilación real de la plantilla. La salida de Make/CMake/Ninja aparecerá aquí mientras se genera. Cuando termine podrás probar el título en Kyty o empaquetarlo con UltraPack.</p><pre id="nativeBuildOutput" style="font:10px/1.55 Consolas,monospace;color:#aeb8cf;white-space:pre-wrap;word-break:break-word;max-height:46vh;overflow:auto">Preparando compilación…</pre>`,[{text:'Cerrar ventana',class:'ghost',action:closeModal}]);
     log('Inicio del build upstream para proyecto nativo: '+path);
+    let outcome='error';
     try{
-      const result=await api('build-native',{path});
-      const out=$('#nativeBuildOutput');if(out)out.textContent=(result.output||result.message||'Proceso finalizado.')+(result.artifact?'\n\nArtefacto verificado: '+result.artifact:'');
-      if(result.ok){log(result.message||'Build upstream completado.');if(result.artifact)log('Artefacto nativo: '+result.artifact);toast('Compilación nativa completada');}
-      else{log(result.message||'El build nativo ha fallado.','ERROR');toast('La compilación nativa ha fallado. Revisa el log.','error');}
+      const startedJob=await api('build-native/start',{path});
+      if(!startedJob.ok||!startedJob.jobId)throw new Error(startedJob.message||'No se pudo iniciar el trabajador de compilación.');
+      let status=null,lastLog='';
+      while(true){
+        status=await api('build-jobs/'+startedJob.jobId);
+        const currentLog=String(status.log||'');
+        if(currentLog!==lastLog){const out=$('#nativeBuildOutput');if(out){out.textContent=currentLog||'Esperando salida del proceso…';out.scrollTop=out.scrollHeight;}lastLog=currentLog;}
+        if(status.done)break;
+        await new Promise(resolve=>setTimeout(resolve,450));
+      }
+      const result=status.result||{ok:false,message:'El trabajador terminó sin resultado legible.',output:lastLog};
+      const out=$('#nativeBuildOutput');if(out){out.textContent=(result.output||result.message||lastLog||'Proceso finalizado.')+(result.artifact?'\n\nArtefacto verificado: '+result.artifact:'');out.scrollTop=out.scrollHeight;}
+      if(result.ok){
+        outcome='success';setLastPostBuildPath(result.path||path);log(result.message||'Build upstream completado.');if(result.artifact)log('Artefacto nativo: '+result.artifact);toast('Compilación nativa completada');
+        const actions=$('#modalActions');
+        if(actions&&!actions.querySelector('[data-post-build="kyty"]')){
+          const runButton=document.createElement('button');runButton.className='btn secondary';runButton.dataset.postBuild='kyty';runButton.textContent='Probar en Kyty';runButton.onclick=()=>runNativeKyty(path);actions.append(runButton);
+          const packButton=document.createElement('button');packButton.className='btn secondary';packButton.dataset.postBuild='ultrapack';packButton.textContent='Empaquetar con UltraPack';packButton.onclick=()=>packageNativeWithUltraPack(path);actions.append(packButton);
+        }
+      }else{outcome='error';log(result.message||'El build nativo ha fallado.','ERROR');toast('La compilación nativa ha fallado. Revisa el log.','error');}
       if(result.diagnostics){result.diagnostics.forEach(d=>allDiagnostics.push(d));renderDiagnostics();}
     }catch(e){const out=$('#nativeBuildOutput');if(out)out.textContent=e.message;log('Invocación del build nativo: '+e.message,'ERROR');toast('No se pudo ejecutar el build nativo.','error');}
-    finally{clearInterval(timer);await refreshStatus();await renderNativeProjects();}
+    finally{$('#modalTitle').textContent=outcome==='success'?'Compilación completada':outcome==='error'?'Error de compilación':'Compilación nativa';$$('#modalActions button').forEach(b=>b.disabled=false);await refreshStatus();await renderNativeProjects();}
   }
 
   function openNativeBoilerplateCreate(templateId='nativecpp'){
@@ -605,7 +621,7 @@
     const preferredId=String(project.settings?.titleId||'').toUpperCase();
     const titleId=/^PPSA\d{5}$/.test(preferredId)?preferredId:'PPSA'+String(Math.floor(Math.random()*90000)+10000);
     const label=backend==='vulkan-ui'?'Vulkan / RADV':'OpenGL 4.6';
-    openModal('Generar y compilar pantalla nativa',`<p>El modelo visual se convertirá en una clase C++20 que implementa la interfaz real del kit upstream. Homebrew Studio creará un proyecto independiente y ejecutará sus herramientas de compilación; no marcará éxito sin un artefacto verificable.</p><div class="form-field"><label>Nombre del título (ASCII, máximo 40 caracteres)</label><input id="nativeVisualName" maxlength="40" value="${esc(defaultName)}" /></div><div class="form-field"><label>TITLE_ID</label><input id="nativeVisualTitleId" maxlength="9" value="${esc(titleId)}" pattern="PPSA[0-9]{5}" /></div><div class="system-tile"><strong>Backend: ${esc(label)} · C++20</strong><p>${backend==='vulkan-ui'?'Se requiere WSL/Linux, CMake/Ninja, Clang/LLVM, PS5_Vulkan, PS5_Mesa y la revisión fijada del PS5_PayloadSDK. La preparación inicial del driver puede ser intensiva.':'Se requiere WSL/Linux, Clang/LLD, Make, la plantilla Native App Boilerplate y las dependencias OpenGL de upstream.'}</p><p>El código de interfaz se genera desde componentes, temas y flujos. OpenGL y Vulkan empaquetan hasta 16 imágenes RGBA8 de 512×512 y crean sus texturas mediante la API nativa del renderer. Los campos input incluyen teclado en pantalla ASCII navegable con la cruceta.</p></div><div class="build-progress"><span></span></div><pre id="nativeVisualOutput" style="font:10px/1.55 Consolas,monospace;color:#aeb8cf;white-space:pre-wrap;word-break:break-word;max-height:28vh;overflow:auto">Preparado para generar C++20.</pre>`,[
+    openModal('Generar y compilar pantalla nativa',`<p>El modelo visual se convertirá en una clase C++20 que implementa la interfaz real del kit upstream. Homebrew Studio creará un proyecto independiente y ejecutará sus herramientas de compilación; no marcará éxito sin un artefacto verificable.</p><div class="form-field"><label>Nombre del título y carpeta de destino (ASCII, máximo 40 caracteres)</label><input id="nativeVisualName" maxlength="40" value="${esc(defaultName)}" /></div><div class="form-field"><label>TITLE_ID</label><input id="nativeVisualTitleId" maxlength="9" value="${esc(titleId)}" pattern="PPSA[0-9]{5}" /></div><label class="check-row"><input id="nativeVisualOverwrite" type="checkbox" /> Sobrescribir si la carpeta existente pertenece a Homebrew Studio y usa la misma plantilla</label><div class="system-tile"><strong>Backend: ${esc(label)} · C++20</strong><p>${backend==='vulkan-ui'?'Se requiere WSL/Linux, CMake/Ninja, Clang/LLVM, PS5_Vulkan, PS5_Mesa y la revisión fijada del PS5_PayloadSDK. La preparación inicial del driver puede ser intensiva.':'Se requiere WSL/Linux, Clang/LLD, Make, la plantilla Native App Boilerplate y las dependencias OpenGL de upstream.'}</p><p>El código de interfaz se genera desde componentes, temas y flujos. OpenGL y Vulkan empaquetan hasta 16 imágenes RGBA8 de 512×512 y crean sus texturas mediante la API nativa del renderer. Los campos input incluyen teclado en pantalla ASCII navegable con la cruceta.</p></div><div class="build-progress"><span></span></div><pre id="nativeVisualOutput" style="font:10px/1.55 Consolas,monospace;color:#aeb8cf;white-space:pre-wrap;word-break:break-word;max-height:28vh;overflow:auto">Preparado para generar C++20.</pre>`,[
       {text:'Cancelar',class:'ghost',action:closeModal},
       {text:'Generar y compilar',class:'primary',action:async()=>{
         const name=$('#nativeVisualName')?.value.trim()||'';
@@ -614,9 +630,8 @@
         if(!/^PPSA\d{5}$/.test(tid)){toast('TITLE_ID debe tener el formato PPSA12345.','error');return;}
         const output=$('#nativeVisualOutput');const buttons=$$('#modalActions button');buttons.forEach(b=>b.disabled=true);
         buildBusy=true;$('#buildBtn').disabled=true;$('#buildBtn').textContent='⟳ Compilando';setDock('output');
-        const started=Date.now();let timer=null;
+        let buildOutcome='error';
         if(output)output.textContent='Preparando código C++20…';
-        timer=setInterval(()=>{const box=$('#nativeVisualOutput');if(box)box.textContent=`Generación/compilación en curso · ${Math.floor((Date.now()-started)/1000)} s transcurridos.\nEl servidor local devolverá el log real de Make/CMake/Ninja al completar.`;},1200);
         log(`Generación visual nativa ${backend}: ${name} (${tid}).`);
         try{
           project.name=name;project.settings=project.settings||{};project.settings.titleId=tid;
@@ -630,16 +645,31 @@
           // The source model carries names and links, while image pixels travel once as bounded RGBA assets.
           wireProject.assets=(wireProject.assets||[]).map(a=>{const item=Object.assign({},a);delete item.dataUrl;return item;});
           if(output)output.textContent=`Pantalla generada (${code.length.toLocaleString('es-ES')} caracteres). Recursos RGBA preparados: ${nativeAssets.length}. Iniciando pipeline upstream…`;
-          const result=await api('build-visual-native',{project:wireProject,programCode:code,backend,titleId:tid,nativeAssets});
-          const logText=(result.output||result.message||'Proceso finalizado.')+(result.path?'\n\nProyecto: '+result.path:'')+(result.artifact?'\nArtefacto: '+result.artifact:'');
-          const box=$('#nativeVisualOutput');if(box)box.textContent=logText;
-          if(result.ok){log(result.message||'Código visual convertido y compilado.', 'INFO');if(result.artifact)log('Artefacto verificado: '+result.artifact,'INFO');toast('Pantalla nativa compilada correctamente');
+          const startedJob=await api('build-visual-native/start',{project:wireProject,programCode:code,backend,titleId:tid,nativeAssets,overwriteExisting:!!$('#nativeVisualOverwrite')?.checked});
+          if(!startedJob.ok||!startedJob.jobId)throw new Error(startedJob.message||'El servidor no inició la tarea de compilación.');
+          let status=null,lastLog='';
+          while(true){
+            status=await api('build-jobs/'+startedJob.jobId);
+            const currentLog=String(status.log||'');
+            if(currentLog!==lastLog){const box=$('#nativeVisualOutput');if(box){box.textContent=currentLog||'Esperando salida del proceso…';box.scrollTop=box.scrollHeight;}lastLog=currentLog;}
+            if(status.done)break;
+            await new Promise(resolve=>setTimeout(resolve,450));
+          }
+          const result=status.result||{ok:false,message:'El trabajador terminó sin resultado legible.',output:lastLog};
+          const logText=(result.output||result.message||lastLog||'Proceso finalizado.')+(result.path?'\n\nProyecto: '+result.path:'')+(result.artifact?'\nArtefacto: '+result.artifact:'');
+          const box=$('#nativeVisualOutput');if(box){box.textContent=logText;box.scrollTop=box.scrollHeight;}
+          if(result.ok){buildOutcome='success';setLastPostBuildPath(result.path||'');log(result.message||'Código visual convertido y compilado.', 'INFO');if(result.artifact)log('Artefacto verificado: '+result.artifact,'INFO');toast('Pantalla nativa compilada correctamente');
             try{localStorage.setItem(STORAGE_KEY,JSON.stringify(project));savedState();}catch{}
-          }else{log(result.message||'La generación o compilación nativa ha fallado.','ERROR');if(result.path)log('El proyecto upstream se conserva para corrección: '+result.path,'WARN');toast('No se pudo verificar una compilación final. Consulta el log.','error');}
+            const actions=$('#modalActions');
+            if(actions&&!actions.querySelector('[data-post-build="kyty"]')){
+              const runButton=document.createElement('button');runButton.className='btn secondary';runButton.dataset.postBuild='kyty';runButton.textContent='Probar en Kyty';runButton.onclick=()=>runNativeKyty(result.path);actions.append(runButton);
+              const packButton=document.createElement('button');packButton.className='btn secondary';packButton.dataset.postBuild='ultrapack';packButton.textContent='Empaquetar con UltraPack';packButton.onclick=()=>packageNativeWithUltraPack(result.path);actions.append(packButton);
+            }
+          }else{buildOutcome='error';log(result.message||'La generación o compilación nativa ha fallado.','ERROR');if(result.path)log('El proyecto upstream se conserva para corrección: '+result.path,'WARN');toast('Error de compilación. Consulta el registro para ver el diagnóstico.','error');}
           if(result.diagnostics){result.diagnostics.forEach(d=>allDiagnostics.push(d));renderDiagnostics();}
           if(activePanel==='templates')await renderNativeProjects();
         }catch(e){const box=$('#nativeVisualOutput');if(box)box.textContent=e.message;log('Error de generación/compilación nativa: '+e.message,'ERROR');toast('No se completó el build nativo.','error');}
-        finally{clearInterval(timer);buildBusy=false;$('#buildBtn').disabled=false;$('#buildBtn').innerHTML='<span>▶</span> Compilar';await refreshStatus();if(activePanel==='templates')await renderNativeProjects();}
+        finally{buildBusy=false;$('#buildBtn').disabled=false;$('#buildBtn').innerHTML=buildOutcome==='success'?'<span>✓</span> Completado':buildOutcome==='error'?'<span>!</span> Error · Reintentar':'<span>▶</span> Compilar';$$('#modalActions button').forEach(b=>b.disabled=false);await refreshStatus();if(activePanel==='templates')await renderNativeProjects();}
       }}
     ]);
   }
@@ -649,12 +679,16 @@
   function renderAll(){renderSidePanel();renderCanvas();renderInspector();renderHierarchy();renderFlows();renderCode();runAnalysis();setActiveView(activeView);setRightPane(activeRight);}
   function addAsset(file){if(!file)return;const id='asset-'+Date.now().toString(36);const reader=new FileReader();reader.onload=()=>{const dataUrl=reader.result;const asset={id,name:file.name,fileName:slug(file.name.replace(/\.[^.]+$/,''))+file.name.slice(file.name.lastIndexOf('.')),mime:file.type||'application/octet-stream',size:file.size,dataUrl};snapshot();project.assets.push(asset);if(activeAssetId){const c=component(activeAssetId);if(c)c.assetId=id;activeAssetId=null;}else if(file.type.startsWith('image/')){const c=makeComponent('image');c.label=file.name;c.assetId=id;}changed('Recurso importado');renderAssetList();renderCanvas();renderInspector();toast('Recurso importado: '+file.name);log(`Recurso importado: ${file.name} (${formatBytes(file.size)}).`);};reader.onerror=()=>toast('No se pudo leer el archivo.','error');reader.readAsDataURL(file);}
 
+  function getLastPostBuildPath(){try{return localStorage.getItem('ps5hs:last-built-native-path')||'';}catch{return '';}}
+  function setLastPostBuildPath(path){try{if(path)localStorage.setItem('ps5hs:last-built-native-path',path);else localStorage.removeItem('ps5hs:last-built-native-path');}catch{}const ready=!!path;const run=$('#postBuildKytyBtn'),pack=$('#postBuildPackBtn');if(run){run.disabled=!ready;run.title=ready?'Probar el último título nativo compilado':'Compila un título nativo para habilitar esta acción';}if(pack){pack.disabled=!ready;pack.title=ready?'Empaquetar el último título nativo compilado':'Compila un título nativo para habilitar esta acción';}}
+  setLastPostBuildPath(getLastPostBuildPath());
+
   // Events: drag/drop, panels, tabs, keyboard shortcuts and project operations.
   $$('.rail-item').forEach(b=>b.addEventListener('click',()=>setActivePanel(b.dataset.panel)));
   $$('.editor-tab').forEach(b=>b.addEventListener('click',()=>setActiveView(b.dataset.view)));
   $$('.right-tab').forEach(b=>b.addEventListener('click',()=>setRightPane(b.dataset.right)));
   $$('.dock-tab').forEach(b=>b.addEventListener('click',()=>setDock(b.dataset.dock)));
-  $('#newProjectBtn').onclick=newProject;$('#openProjectBtn').onclick=openProject;$('#saveProjectBtn').onclick=saveProject;$('#exportProjectBtn').onclick=exportProject;$('#buildBtn').onclick=buildProject;$('#integrationSettingsBtn')?.addEventListener('click',openIntegrationSettings);$('#previewBtn').onclick=togglePreview;$('#addFlowBtn').onclick=()=>addFlow();$('#recheckBtn').onclick=()=>{runAnalysis();renderDiagnostics();log('Análisis estático ejecutado.');};$('#diagFilter').onchange=renderDiagnostics;
+  $('#newProjectBtn').onclick=newProject;$('#openProjectBtn').onclick=openProject;$('#saveProjectBtn').onclick=saveProject;$('#exportProjectBtn').onclick=exportProject;$('#buildBtn').onclick=buildProject;$('#postBuildKytyBtn').onclick=()=>runNativeKyty(getLastPostBuildPath());$('#postBuildPackBtn').onclick=()=>packageNativeWithUltraPack(getLastPostBuildPath());$('#integrationSettingsBtn')?.addEventListener('click',openIntegrationSettings);$('#previewBtn').onclick=togglePreview;$('#addFlowBtn').onclick=()=>addFlow();$('#recheckBtn').onclick=()=>{runAnalysis();renderDiagnostics();log('Análisis estático ejecutado.');};$('#diagFilter').onchange=renderDiagnostics;
   $('#dismissNotice').onclick=()=>$('#noticeStrip').remove();$('#dockToggle').onclick=()=>{$('.bottom-dock').classList.toggle('collapsed');$('#dockToggle').textContent=$('.bottom-dock').classList.contains('collapsed')?'⌃':'⌄';};$('#gridBtn').onclick=()=>{showGrid=!showGrid;renderCanvas();};$('#fitBtn').onclick=()=>{zoom=100;$('#canvasStage').style.transform='scale(1)';$('#canvasStage').style.transformOrigin='center center';$('#zoomValue').textContent='100%';};$('#centerBtn').onclick=()=>{screenComponents().forEach(c=>{c.x=clamp(c.x,0,1920-c.w);c.y=clamp(c.y,0,1080-c.h);});renderCanvas();changed('Lienzo comprobado');};
   $('#backendSelect').onchange=()=>{const previous=project.backend;project.backend=$('#backendSelect').value;if(previous!==project.backend&&project.manualCode){project.manualCode=false;project.customCode='';toast('Se regenerará el código para el nuevo backend.','warn');}changed('Backend actualizado');renderCode();runAnalysis();};
   $('#projectName').addEventListener('input',()=>{project.name=$('#projectName').value;changed('Nombre del proyecto actualizado');});

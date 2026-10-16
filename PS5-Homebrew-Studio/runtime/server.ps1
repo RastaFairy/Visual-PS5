@@ -142,7 +142,14 @@ function InstallRepo($Entry) {
   if($Entry.method -eq 'git'){
     if($marker -and (Test-Path (Join-Path $dest '.git'))){return @{ok=$true;name=$Entry.name;message='Ya estaba clonado; no se ha sobrescrito.';path=$dest}}
     if(Test-Path $dest){throw "Existe una carpeta incompleta en $dest. Renómbrala o elimínala manualmente y vuelve a clonar para no perder archivos."}
-  } elseif($marker -or (Test-Path (Join-Path $dest 'README.md'))){return @{ok=$true;name=$Entry.name;message='Ya estaba instalado; no se ha sobrescrito.';path=$dest}}
+  } elseif($marker -or (Test-Path (Join-Path $dest 'README.md'))){
+    if($Entry.id -eq 'ps5-ultrapack') {
+      $existingVenvPython = Join-Path $dest '.venv\Scripts\python.exe'
+      if(Test-Path -LiteralPath $existingVenvPython -PathType Leaf) {
+        return @{ok=$true;name=$Entry.name;message='UltraPack ya estaba instalado con su entorno Python aislado.';path=$dest;pythonExe=$existingVenvPython;cli=(Join-Path $dest 'backend\cli.py')}
+      }
+    } else { return @{ok=$true;name=$Entry.name;message='Ya estaba instalado; no se ha sobrescrito.';path=$dest} }
+  }
   $temp=Join-Path $script:Runtime ([guid]::NewGuid().ToString('N'));New-Item -ItemType Directory -Force -Path $temp|Out-Null
   try {
     if($Entry.method -eq 'git'){
@@ -163,6 +170,28 @@ function InstallRepo($Entry) {
     if(!$ok){throw "Descarga fallida de $($Entry.repo): $why"}
     Expand-Archive -LiteralPath $zip -DestinationPath $unpack -Force;$top=Get-ChildItem $unpack -Directory|Select-Object -First 1;if(!$top){throw 'El ZIP no tiene raíz de proyecto.'};if(Test-Path $dest){Remove-Item $dest -Recurse -Force};Move-Item -LiteralPath $top.FullName -Destination $dest;WriteUtf8 (Join-Path $dest '.ps5hs-source.json') (ConvertTo-Json -InputObject @{repository=$Entry.repo;branch=$branch;installedAt=(Get-Date).ToString('o');method='source ZIP'} -Depth 5)
     if($Entry.id -eq 'etahen'){$nid=$script:Catalog|Where-Object id -eq 'nid'|Select-Object -First 1;$nidDir=Join-Path $script:Toolchains $nid.folder;if(!(Test-Path (Join-Path $nidDir 'README.md'))){InstallRepo $nid|Out-Null};$sub=Join-Path $dest 'libNidResolver';if(Test-Path $sub){Remove-Item $sub -Recurse -Force};if(Test-Path $nidDir){Copy-Item -LiteralPath $nidDir -Destination $sub -Recurse}}
+    if($Entry.id -eq 'ps5-ultrapack') {
+      $pythonCmd = CmdInfo 'python.exe'; if(!$pythonCmd.ok){$pythonCmd=CmdInfo 'python'}
+      if($pythonCmd.ok -and $pythonCmd.path) {
+        $venvPath = Join-Path $dest '.venv'
+        $venvPython = Join-Path $venvPath 'Scripts\python.exe'
+        if(!(Test-Path -LiteralPath $venvPython -PathType Leaf)) {
+          $venvOut = @(& $pythonCmd.path -m venv $venvPath 2>&1); $venvExit = $LASTEXITCODE
+          if($venvExit -ne 0 -or !(Test-Path -LiteralPath $venvPython -PathType Leaf)) {
+            $detail = ($venvOut | ForEach-Object { $_.ToString() }) -join "`r`n"
+            throw "UltraPack se descargó en '$dest', pero no se pudo crear su entorno Python. Instala Python 3.10+ y vuelve a intentarlo. $detail"
+          }
+        }
+        $pipOut = @(& $venvPython -m pip install --disable-pip-version-check py7zr rarfile psutil cryptography 2>&1); $pipExit = $LASTEXITCODE
+        if($pipExit -ne 0) {
+          $detail = ($pipOut | ForEach-Object { $_.ToString() }) -join "`r`n"
+          throw "UltraPack se descargó en '$dest', pero falló la instalación de dependencias Python en '$venvPath'. Revisa la conexión y el registro de pip. $detail"
+        }
+        WriteUtf8 (Join-Path $dest '.ps5hs-ultrapack-python.json') (ConvertTo-Json -InputObject @{pythonExe=$venvPython;cli=(Join-Path $dest 'backend\cli.py');installedAt=(Get-Date).ToString('o')} -Depth 4)
+        return @{ok=$true;name=$Entry.name;message="Código fuente descargado y dependencias CLI instaladas en el entorno aislado: $venvPath";path=$dest;pythonExe=$venvPython;cli=(Join-Path $dest 'backend\cli.py')}
+      }
+      return @{ok=$true;name=$Entry.name;message="Código fuente descargado en '$dest'. No se detectó Python; instala Python 3.10+ y configura su ruta en Herramientas. El CLI está en backend\cli.py.";path=$dest;cli=(Join-Path $dest 'backend\cli.py')}
+    }
     return @{ok=$true;name=$Entry.name;message="Descargado de GitHub: $dest";path=$dest}
   } finally {Remove-Item $temp -Recurse -Force -ErrorAction SilentlyContinue}
 }
@@ -370,6 +399,11 @@ function GetIntegrationConfig {
   $python = [string]$stored.pythonExe
   if (!$python -or !(Test-Path -LiteralPath $python -PathType Leaf)) {
     $python = ''
+    $ultraPackVenv = Join-Path (Join-Path $script:Toolchains 'ps5-ultrapack') '.venv\Scripts\python.exe'
+    if (Test-Path -LiteralPath $ultraPackVenv -PathType Leaf) { $python = $ultraPackVenv }
+  }
+  if (!$python -or !(Test-Path -LiteralPath $python -PathType Leaf)) {
+    $python = ''
     foreach ($commandName in @('python.exe','python3.exe','python','python3')) {
       $found = CmdInfo $commandName
       if ($found.ok -and $found.path -and (Test-Path -LiteralPath $found.path -PathType Leaf)) { $python = [string]$found.path; break }
@@ -500,14 +534,18 @@ function RunKytyProject($Body) {
     throw "Kyty no está configurado. Pulsa 'Herramientas' y selecciona kyty_emulator.exe. Descargas oficiales: https://github.com/KytyPS/KytyPS5/releases"
   }
   $title = FindProjectTitleFolder $projectRoot $false
-  $psi = New-Object System.Diagnostics.ProcessStartInfo
+  if (!(Test-Path -LiteralPath ([string]$title.eboot) -PathType Leaf)) { throw "El eboot.bin que se va a ejecutar no existe: $($title.eboot)" }
+  $psi = [System.Diagnostics.ProcessStartInfo]::new()
   $psi.FileName = $emulator
   $psi.WorkingDirectory = Split-Path -Parent $emulator
-  $psi.Arguments = '--game "' + ([string]$title.path).Replace('"','\"') + '"'
   $psi.UseShellExecute = $false
+  $psi.CreateNoWindow = $false
+  $quotedEboot = '"' + ([string]$title.eboot).Replace('"','\"') + '"'
+  $psi.Arguments = '--game ' + $quotedEboot + ' --screen-width 1920 --screen-height 1080'
+  $commandLine = '"' + $emulator + '" ' + $psi.Arguments
   $proc = [System.Diagnostics.Process]::Start($psi)
   if (!$proc) { throw 'Windows no pudo iniciar kyty_emulator.exe.' }
-  return @{ok=$true;message='KytyPS5 se ha iniciado con el directorio compilado del título.';pid=$proc.Id;gameFolder=[string]$title.path;eboot=[string]$title.eboot;path=$projectRoot}
+  return @{ok=$true;message='KytyPS5 se ha iniciado con --game apuntando directamente al eboot.bin compilado (1920×1080). Si el emulador muestra imports sin resolver o un guest fault, es una limitación/error de compatibilidad de Kyty, no un error de lanzamiento del IDE.';pid=$proc.Id;gameFolder=[string]$title.path;eboot=[string]$title.eboot;command=$commandLine;path=$projectRoot}
 }
 function PackageNativeProjectWithUltraPack($Body) {
   $resolved = ResolveNativeProjectRoot ([string]$Body.path)
@@ -517,19 +555,66 @@ function PackageNativeProjectWithUltraPack($Body) {
   $config = GetIntegrationConfig
   $python = [string]$config.pythonExe
   $cli = [string]$config.ultraPackCli
+  if ($cli) {
+    try { $cli = [IO.Path]::GetFullPath($cli) } catch { throw "La ruta configurada de UltraPack no es válida: $cli" }
+    if ([IO.Path]::GetFileName($cli) -ine 'cli.py' -or (Split-Path -Leaf (Split-Path -Parent $cli)) -ine 'backend') {
+      throw "La ruta configurada no apunta a backend\cli.py: $cli. Corrige la ruta en Herramientas."
+    }
+    if (!(Test-Path -LiteralPath $cli -PathType Leaf)) { throw "No existe el CLI configurado de UltraPack: $cli. Vuelve a descargar la fuente desde Herramientas o corrige la ruta." }
+  }
   if (!$python -or !(Test-Path -LiteralPath $python -PathType Leaf)) {
     throw 'No se ha configurado Python. En Herramientas, indica python.exe (Python 3.10 o posterior).'
   }
   if (!$cli -or !(Test-Path -LiteralPath $cli -PathType Leaf)) {
     throw "No se ha encontrado backend\cli.py de UltraPack. Usa 'Descargar UltraPack (fuente)' en Herramientas o indica su ruta manualmente. Repositorio: https://github.com/knutwurst/ps5-ultrapack"
   }
+  if ($format -eq 'pkg') {
+    $backendRoot = Split-Path -Parent $cli
+    $pkgTool = Join-Path $backendRoot 'native\ffpfsc-pkg-tool.exe'
+    if ($env:FFPFSC_PKG_TOOL -and (Test-Path -LiteralPath $env:FFPFSC_PKG_TOOL -PathType Leaf)) { $pkgTool = $env:FFPFSC_PKG_TOOL }
+    if (!(Test-Path -LiteralPath $pkgTool -PathType Leaf)) {
+      throw "UltraPack no dispone del helper nativo de Windows para crear .pkg: $pkgTool. Ejecuta BUILD_PKG_TOOL.ps1 en la raíz del repositorio con .NET SDK 9+ o utiliza .ffpfsc/.ffpfs."
+    }
+  }
   $title = FindProjectTitleFolder $projectRoot $true
   $outputRoot = Join-Path $projectRoot ('packages-ultrapack\' + $format + '\' + (Get-Date -Format 'yyyyMMdd-HHmmss'))
-  New-Item -ItemType Directory -Force -Path $outputRoot | Out-Null
-  $cliArgs = @($cli,[string]$title.path,$outputRoot,'--to',$format,'--force')
-  $logItems = @(& $python @cliArgs 2>&1)
-  $exitCode = $LASTEXITCODE
-  $logText = ($logItems | ForEach-Object { $_.ToString() }) -join [Environment]::NewLine
+  $tempRoot = Join-Path $script:Runtime 'ultrapack-temp'
+  New-Item -ItemType Directory -Force -Path $outputRoot,$tempRoot | Out-Null
+
+  # Invoke the upstream CLI as documented: SOURCE OUTPUT --to FORMAT.
+  # ArgumentList avoids quoting/path-with-spaces bugs; cwd is the CLI directory so
+  # source-checkout imports and relative helper paths resolve consistently on Windows.
+  $psi = [System.Diagnostics.ProcessStartInfo]::new()
+  $psi.FileName = $python
+  $psi.WorkingDirectory = Split-Path -Parent $cli
+  $psi.UseShellExecute = $false
+  $psi.CreateNoWindow = $true
+  $psi.RedirectStandardOutput = $true
+  $psi.RedirectStandardError = $true
+  $psi.Environment['PYTHONUNBUFFERED'] = '1'
+  foreach ($arg in @('-u',$cli,[string]$title.path,$outputRoot,'--to',$format,'--force','--temp-dir',$tempRoot,'--verbose')) {
+    [void]$psi.ArgumentList.Add([string]$arg)
+  }
+  $commandForLog = '"' + $python + '" -u "' + $cli + '" "' + [string]$title.path + '" "' + $outputRoot + '" --to ' + $format + ' --force --temp-dir "' + $tempRoot + '" --verbose'
+  $logText = "CLI configurado: $cli`r`nPython configurado: $python`r`nFormato solicitado: $format`r`nOrigen: $($title.path)`r`nDestino: $outputRoot`r`nComando ejecutado:`r`n$commandForLog`r`nDirectorio de trabajo: $($psi.WorkingDirectory)`r`n`r`n"
+  $process = [System.Diagnostics.Process]::new()
+  $process.StartInfo = $psi
+  try {
+    if (!$process.Start()) { throw 'Windows no pudo iniciar el proceso de Python para UltraPack.' }
+    $stdoutTask = $process.StandardOutput.ReadToEndAsync()
+    $stderrTask = $process.StandardError.ReadToEndAsync()
+    $process.WaitForExit()
+    $stdoutText = $stdoutTask.GetAwaiter().GetResult()
+    $stderrText = $stderrTask.GetAwaiter().GetResult()
+    if (![string]::IsNullOrWhiteSpace($stdoutText)) { $logText += "STDOUT:`r`n$stdoutText`r`n" }
+    if (![string]::IsNullOrWhiteSpace($stderrText)) { $logText += "STDERR:`r`n$stderrText`r`n" }
+    $exitCode = $process.ExitCode
+  } catch {
+    $exitCode = 1
+    $logText += "ERROR AL INICIAR/ESPERAR ULTRAPACK:`r`n$($_.Exception.ToString())"
+  } finally {
+    $process.Dispose()
+  }
   $extension = '.' + $format
   $artifact = ''
   if (Test-Path -LiteralPath $outputRoot -PathType Container) {
@@ -546,6 +631,84 @@ function PackageNativeProjectWithUltraPack($Body) {
     $logText += ([Environment]::NewLine + [Environment]::NewLine + 'Nota: el README de UltraPack documenta actualmente la app empaquetada para macOS. En Windows, el CLI puede requerir ajustes y el ayudante fPKG de .NET no viene precompilado en el repositorio.')
   }
   return @{ok=$false;message="UltraPack terminó con código $exitCode o no generó el archivo .$format esperado.";output=$logText;path=$projectRoot;source=[string]$title.path;artifact=$artifact;format=$format;exitCode=$exitCode}
+}
+
+function WriteBuildJobLog([string]$Path,[string]$Message) {
+  if ([string]::IsNullOrWhiteSpace($Path)) { return }
+  try { [IO.File]::AppendAllText($Path, ([string]$Message + [Environment]::NewLine), $script:Utf8) } catch { }
+}
+function GetBuildJobDirectory([string]$JobId) {
+  if ($JobId -notmatch '^[a-f0-9]{32}$') { throw 'Identificador de compilación no válido.' }
+  $root = Join-Path $script:Runtime 'build-jobs'
+  return (Join-Path $root $JobId)
+}
+function StartNativeBuildJob($Body,[string]$Action='visual') {
+  $jobId = [guid]::NewGuid().ToString('N')
+  $dir = GetBuildJobDirectory $jobId
+  New-Item -ItemType Directory -Force -Path $dir | Out-Null
+  WriteUtf8 (Join-Path $dir 'request.json') (ConvertTo-Json -InputObject @{action=$Action;body=$Body} -Depth 100)
+  WriteBuildJobLog (Join-Path $dir 'build.log') 'Preparando la generación C++20 y la compilación upstream…'
+  $hostPath = (Get-Process -Id $PID -ErrorAction Stop).Path
+  if (!$hostPath -or !(Test-Path -LiteralPath $hostPath -PathType Leaf)) { throw 'No se pudo localizar el ejecutable de PowerShell para iniciar el trabajador de compilación.' }
+  $argumentLine = '-NoProfile -ExecutionPolicy Bypass -File "' + $PSCommandPath + '" --worker "' + $jobId + '"'
+  $worker = Start-Process -FilePath $hostPath -ArgumentList $argumentLine -WorkingDirectory $script:Root -WindowStyle Hidden -PassThru
+  if (!$worker) { throw 'No se pudo iniciar el trabajador de compilación.' }
+  WriteUtf8 (Join-Path $dir 'worker.json') (ConvertTo-Json -InputObject @{pid=$worker.Id})
+  return @{ok=$true;jobId=$jobId;message='Compilación iniciada.';pid=$worker.Id}
+}
+function ReadBuildJobLogShared([string]$Path) {
+  if (!(Test-Path -LiteralPath $Path -PathType Leaf)) { return '' }
+  for ($attempt = 0; $attempt -lt 5; $attempt++) {
+    $stream = $null
+    $reader = $null
+    try {
+      $stream = [IO.File]::Open($Path,[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::ReadWrite)
+      $reader = [IO.StreamReader]::new($stream,[Text.Encoding]::UTF8,$true)
+      return $reader.ReadToEnd()
+    } catch [IO.IOException] {
+      if ($attempt -eq 4) { return "[El registro está siendo actualizado; se reintentará en la siguiente consulta.]" }
+      Start-Sleep -Milliseconds (40 * ($attempt + 1))
+    } finally {
+      if ($reader) { $reader.Dispose() } elseif ($stream) { $stream.Dispose() }
+    }
+  }
+  return ''
+}
+function GetNativeBuildJobStatus([string]$JobId) {
+  $dir = GetBuildJobDirectory $JobId
+  if (!(Test-Path -LiteralPath $dir -PathType Container)) { throw 'No existe esa tarea de compilación.' }
+  $logPath = Join-Path $dir 'build.log'
+  $resultPath = Join-Path $dir 'result.json'
+  $logText = ReadBuildJobLogShared $logPath
+  if (Test-Path -LiteralPath $resultPath -PathType Leaf) {
+    $result = Get-Content -LiteralPath $resultPath -Raw | ConvertFrom-Json
+    return @{ok=$true;done=$true;log=$logText;result=$result}
+  }
+  $workerPath = Join-Path $dir 'worker.json'
+  if (Test-Path -LiteralPath $workerPath -PathType Leaf) {
+    $workerInfo = Get-Content -LiteralPath $workerPath -Raw | ConvertFrom-Json
+    if (!(Get-Process -Id ([int]$workerInfo.pid) -ErrorAction SilentlyContinue)) {
+      $failed = @{ok=$false;message='El trabajador terminó inesperadamente sin entregar un resultado.';output=$logText;exitCode=1}
+      WriteUtf8 $resultPath (ConvertTo-Json -InputObject $failed -Depth 20)
+      return @{ok=$true;done=$true;log=$logText;result=$failed}
+    }
+  }
+  return @{ok=$true;done=$false;log=$logText}
+}
+
+function EnableEuropeanFontAtlas([string]$ProjectRoot) {
+  $fontScript = Join-Path $ProjectRoot 'tools/bake-fonts.sh'
+  if (!(Test-Path -LiteralPath $fontScript -PathType Leaf)) { throw 'No se encuentra tools/bake-fonts.sh para habilitar los glifos europeos.' }
+  $source = [IO.File]::ReadAllText($fontScript)
+  $basic = '"$size" "$range" 1024'
+  $european = '"$size" "$range" 2048 european'
+  if ($source.Contains($basic)) {
+    $source = $source.Replace($basic, $european)
+    [IO.File]::WriteAllText($fontScript, $source, $script:Utf8)
+  } elseif (!$source.Contains($european)) {
+    throw 'La plantilla de fuentes cambió: no se reconoce la invocación de font-baker. Se detiene la compilación para no generar un atlas sin acentos.'
+  }
+  WriteBuildJobLog $script:ActiveBuildLogPath 'Atlas tipográfico europeo habilitado (2048 px; caracteres latinos extendidos).'
 }
 
 function BuildNativeProject([string]$ProjectPath) {
@@ -565,6 +728,7 @@ function BuildNativeProject([string]$ProjectPath) {
     return @{ok=$false;message='El manifiesto no identifica una plantilla de compilación compatible.';output=$markerPath}
   }
   $template = [string]$meta.template
+  if ($template -eq 'hui-gl') { try { EnableEuropeanFontAtlas $projectRoot } catch { return @{ok=$false;message=$_.Exception.Message;output=$_.Exception.Message;path=$projectRoot;templateId=$template} } }
   try { $normalizedLineEndings = NormalizeNativeBuildFiles $projectRoot }
   catch { return @{ok=$false;message='No se pudieron normalizar los finales de línea de los archivos nativos.';output=$_.Exception.Message;templateId=$template} }
   $scriptPath = ''
@@ -606,7 +770,11 @@ function BuildNativeProject([string]$ProjectPath) {
     $ccacheEnabled = (($ccacheProbe -join '').Trim() -eq 'yes')
     $ccacheValue = if ($ccacheEnabled) { '1' } else { '0' }
     if ($template -in @('nativecpp','hui-gl')) {
-      $cmd = 'cd ' + (BashQuote $projectWsl) + ' && USE_CCACHE=' + $ccacheValue + ' make'
+      if ($template -eq 'hui-gl') {
+        $cmd = 'cd ' + (BashQuote $projectWsl) + ' && make deps && bash tools/bake-fonts.sh && USE_CCACHE=' + $ccacheValue + ' make'
+      } else {
+        $cmd = 'cd ' + (BashQuote $projectWsl) + ' && USE_CCACHE=' + $ccacheValue + ' make'
+      }
     } else {
       $vulkanWsl = ConvertToWslPath $vulkanDir
       $payloadSdkWsl = ConvertToWslPath $payloadSdkDir
@@ -623,7 +791,12 @@ function BuildNativeProject([string]$ProjectPath) {
         ' && PS5_PAYLOAD_SDK_FORK=' + (BashQuote $payloadSdkWsl) + ' PS5_MESA_FORK=' + (BashQuote $mesaWsl) + ' bash tools/build-radv.sh release'
       $cmd = $bootstrap + ' && cd ' + (BashQuote $projectWsl) + ' && USE_CCACHE=' + $ccacheValue + ' PS5_VULKAN_DIR=' + (BashQuote $vulkanWsl) + ' PS5_PAYLOAD_SDK_FORK=' + (BashQuote $payloadSdkWsl) + ' bash ' + (BashQuote $buildScriptWsl)
     }
-    $output = @(& $wsl.path -d $dist --exec bash -lc $cmd 2>&1)
+    WriteBuildJobLog $script:ActiveBuildLogPath 'Ejecutando el pipeline real de WSL/Make/CMake/Ninja. La salida se transmite al registro mientras avanza.'
+    $output = @(& $wsl.path -d $dist --exec bash -lc $cmd 2>&1 | ForEach-Object {
+      $line = $_.ToString()
+      WriteBuildJobLog $script:ActiveBuildLogPath $line
+      $line
+    })
     $exit = $LASTEXITCODE
     $buildLog = ($output | ForEach-Object { $_.ToString() }) -join "`r`n"
     if ($dependencyLog.Count) { $buildLog = (($dependencyLog -join "`r`n") + "`r`n" + $buildLog) }
@@ -783,6 +956,7 @@ $pathLiterals
 }
 
 function BuildNativeVisualProject($Body) {
+  WriteBuildJobLog $script:ActiveBuildLogPath 'Validando el modelo visual, el backend y los metadatos del título…'
   $backend = [string]$Body.backend
   if ($backend -notin @('opengl-ui','vulkan-ui')) {
     return @{ok=$false;message='Backend nativo visual desconocido.';output=$backend}
@@ -803,6 +977,32 @@ function BuildNativeVisualProject($Body) {
 
   $created = $null
   $projectRoot = ''
+  $expectedTemplate = if ($backend -eq 'opengl-ui') { 'hui-gl' } else { 'vulkan-template' }
+  $slugForTarget = Slug $name
+  if ($backend -eq 'opengl-ui') {
+    $suffixForTarget = $slugForTarget.ToUpperInvariant() -replace '[^A-Z0-9]',''
+    $suffixForTarget = ($suffixForTarget + '0000000000000000').Substring(0,16)
+    $targetCandidate = Join-Path $script:Workspace ($suffixForTarget + '-OpenGL-UI')
+  } else { $targetCandidate = Join-Path $script:Workspace ($slugForTarget + '-Vulkan') }
+  if (Test-Path -LiteralPath $targetCandidate -PathType Container) {
+    if (!$Body.overwriteExisting) {
+      return @{ok=$false;message='La carpeta de destino ya existe. Cambia el nombre del título o marca «Sobrescribir» para reemplazar únicamente un proyecto de Homebrew Studio de la misma plantilla.';output=[string]$targetCandidate;path=[string]$targetCandidate;exitCode=2}
+    }
+    $existingMarker = Join-Path $targetCandidate '.ps5hs-project.json'
+    if (!(Test-Path -LiteralPath $existingMarker -PathType Leaf)) {
+      return @{ok=$false;message='No se puede sobrescribir: la carpeta existente no contiene el manifiesto de Homebrew Studio.';output=[string]$targetCandidate;path=[string]$targetCandidate;exitCode=2}
+    }
+    try { $existingMeta = Get-Content -LiteralPath $existingMarker -Raw | ConvertFrom-Json } catch {
+      return @{ok=$false;message='No se puede sobrescribir: el manifiesto existente no se puede leer.';output=$_.Exception.Message;path=[string]$targetCandidate;exitCode=2}
+    }
+    if ($existingMeta.schema -ne 'ps5hs-native-project' -or [string]$existingMeta.template -ne $expectedTemplate) {
+      return @{ok=$false;message='No se puede sobrescribir: el destino no es un proyecto de Homebrew Studio de la misma plantilla.';output=[string]$targetCandidate;path=[string]$targetCandidate;exitCode=2}
+    }
+    try { Remove-Item -LiteralPath $targetCandidate -Recurse -Force -ErrorAction Stop } catch {
+      return @{ok=$false;message='No se pudo sustituir la carpeta existente; puede estar bloqueada o no tener permisos suficientes.';output=$_.Exception.Message;path=[string]$targetCandidate;exitCode=2}
+    }
+    WriteBuildJobLog $script:ActiveBuildLogPath ('Se ha autorizado la sustitución del proyecto existente: ' + $targetCandidate)
+  }
   try {
     if ($backend -eq 'opengl-ui') {
       $created = NewNativeTitle $name $titleId 'game' 'hui-gl'
@@ -883,6 +1083,7 @@ std::span<const ConceptFactory> concept_registry() {
     $parts += 'Se conservaron el renderer, los metadatos y el pipeline de compilación del repositorio.'
     if ($backend -eq 'vulkan-ui' -and $assetResult.count -gt 0) { $parts += 'Texturas Vulkan RGBA8 conectadas a VkRenderer::create_texture y registradas en ps5/assets.json.' }
     if ($assetResult.count -gt 0) { $parts += "Recursos RGBA empaquetados: $($assetResult.count) en $($assetResult.manifest)." }
+    WriteBuildJobLog $script:ActiveBuildLogPath 'Código C++20 generado e inyectado. Preparando dependencias y compilación…'
     $build = BuildNativeProject $projectRoot
     if ($build.output) { $parts += [string]$build.output }
     $combined = $parts -join "`r`n"
@@ -956,6 +1157,31 @@ function ServeStatic($C,[string]$UrlPath) {
   SendBytes $C ([IO.File]::ReadAllBytes($full)) $type
 }
 # TCP loopback server, not HttpListener: avoids admin-only URL ACL setup on a fresh Windows install.
+if ($args.Count -ge 2 -and [string]$args[0] -eq '--worker') {
+  $jobId = [string]$args[1]
+  try {
+    $jobDir = GetBuildJobDirectory $jobId
+    $script:ActiveBuildLogPath = Join-Path $jobDir 'build.log'
+    WriteBuildJobLog $script:ActiveBuildLogPath 'Trabajador de compilación iniciado.'
+    $requestPath = Join-Path $jobDir 'request.json'
+    $jobRequest = Get-Content -LiteralPath $requestPath -Raw | ConvertFrom-Json
+    if ([string]$jobRequest.action -eq 'native') { $result = BuildNativeProject ([string]$jobRequest.body.path) }
+    else { $result = BuildNativeVisualProject $jobRequest.body }
+    if ($result.ok) { WriteBuildJobLog $script:ActiveBuildLogPath ('COMPLETADO: ' + [string]$result.message) }
+    else { WriteBuildJobLog $script:ActiveBuildLogPath ('ERROR: ' + [string]$result.message) }
+    if ($result.output) { WriteBuildJobLog $script:ActiveBuildLogPath ([string]$result.output) }
+    WriteUtf8 (Join-Path $jobDir 'result.json') (ConvertTo-Json -InputObject $result -Depth 100)
+    exit 0
+  } catch {
+    $failed = @{ok=$false;message='El trabajador de compilación ha fallado.';output=$_.Exception.Message;exitCode=1}
+    try {
+      WriteBuildJobLog (Join-Path (GetBuildJobDirectory $jobId) 'build.log') ('ERROR FATAL: ' + $_.Exception.Message)
+      WriteUtf8 (Join-Path (GetBuildJobDirectory $jobId) 'result.json') (ConvertTo-Json -InputObject $failed -Depth 20)
+    } catch { }
+    exit 1
+  }
+}
+
 $listener = [Net.Sockets.TcpListener]::new([Net.IPAddress]::Parse('127.0.0.1'),47813)
 try { $listener.Start() } catch { Write-Host "No se pudo iniciar el servicio en $script:Url. Cierra otra instancia. $($_.Exception.Message)" -ForegroundColor Red; Read-Host 'Pulsa Intro'; exit 2 }
 Write-Host 'PS5 Homebrew Studio' -ForegroundColor Cyan
@@ -1085,6 +1311,10 @@ while ($listener.Server.IsBound) {
                         elseif ($method -eq 'GET' -and $path -eq '/api/native-projects') {
                             SendJson $ctx @{ projects = (GetGeneratedProjects) }
                         }
+                        elseif ($method -eq 'GET' -and $path -match '^/api/build-jobs/[a-f0-9]{32}$') {
+                            $jobId = ($path -split '/')[-1]
+                            SendJson $ctx (GetNativeBuildJobStatus $jobId)
+                        }
                         else {
                             $body = ReadBody $ctx
                             switch ($path) {
@@ -1144,12 +1374,18 @@ while ($listener.Server.IsBound) {
                                     SendJson $ctx $result
                                 }
                                 '/api/package-ultrapack' {
-                                    $result = PackageNativeProjectWithUltraPack $body
-                                    SendJson $ctx $result
+                                    try { $result = PackageNativeProjectWithUltraPack $body; SendJson $ctx $result }
+                                    catch { SendJson $ctx @{ok=$false;message=$_.Exception.Message;output=('Error al preparar o ejecutar UltraPack: ' + $_.Exception.ToString());exitCode=1;artifact=''} 200 }
                                 }
                                 '/api/build-native' {
                                     $result = BuildNativeProject ([string]$body.path)
                                     SendJson $ctx $result
+                                }
+                                '/api/build-native/start' {
+                                    SendJson $ctx (StartNativeBuildJob $body 'native')
+                                }
+                                '/api/build-visual-native/start' {
+                                    SendJson $ctx (StartNativeBuildJob $body 'visual')
                                 }
                                 '/api/build-visual-native' {
                                     $result = BuildNativeVisualProject $body

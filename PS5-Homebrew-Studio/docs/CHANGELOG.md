@@ -1,5 +1,35 @@
 # Registro de cambios
 
+## 1.0.9 — 2026-10-16
+
+- Kyty recibe la ruta completa de `eboot.bin` mediante `--game`, con resolución 1920×1080 y registro del comando utilizado.
+- La instalación de UltraPack crea un entorno Python aislado en `toolchains/ps5-ultrapack/.venv` e instala dependencias CLI; Herramientas guarda las rutas exactas de `backend/cli.py` y de ese Python.
+- La ejecución de empaquetado valida la ruta configurada y registra CLI, Python, origen y destino. Si falta el helper nativo de Windows para `.pkg`, devuelve un error explícito antes de ejecutar.
+- Se aclara que los imports sin resolver y los guest faults son fallos de compatibilidad de Kyty, no errores que el IDE pueda solucionar únicamente cambiando argumentos.
+
+## 1.0.8 — 2026-10-16
+
+- La llamada a PS5 UltraPack usa argumentos estructurados de proceso, el directorio de trabajo del CLI y un directorio temporal explícito; registra el comando real y separa STDOUT/STDERR para diagnosticar fallos en Windows.
+
+## 1.0.7 — 2026-10-16
+
+- Las acciones «Probar en Kyty» y «Empaquetar» permanecen en la barra común del IDE y recuerdan la última compilación nativa correcta.
+- La consulta de `build.log` usa lectura compartida con reintentos para evitar que una escritura concurrente interrumpa el seguimiento de una compilación.
+- La compilación visual permite cambiar el nombre/destino y sobrescribir explícitamente solo carpetas con manifiesto de Homebrew Studio y plantilla coincidente.
+- Los fallos de UltraPack muestran diagnóstico, salida del proceso, código de salida y si se verificó un artefacto.
+
+## 1.0.6 — 2026-10-16
+
+- Las compilaciones visuales y los proyectos nativos C++ se ejecutan en un trabajador de fondo y el IDE consulta su estado sin bloquear el servicio local.
+- El registro muestra la salida real de WSL/Make/CMake/Ninja conforme se produce; se elimina el contador ficticio de progreso.
+- El botón termina en un estado explícito: «Completado» o «Error · Reintentar».
+- Tras una compilación visual correcta, se ofrecen acciones directas para probar el título en KytyPS5 o empaquetarlo con UltraPack, con selector `.ffpfs`, `.ffpfsc` y `.pkg`.
+- OpenGL regenera el atlas tipográfico europeo (2048 px) antes de compilar para conservar los acentos españoles.
+- Las pruebas del generador C++ verifican que las cadenas UTF-8 con vocales acentuadas, ñ, ü, signos españoles y euro sobreviven en los backends OpenGL y Vulkan.
+- Se conserva el mensaje de resultado, los diagnósticos, la ruta del proyecto y el artefacto verificable.
+
+# Registro de cambios
+
 ## 1.0.4 — 16 de octubre de 2026
 
 - Corrige el punto de entrada Windows para proyectos C++ nativos generados: `build.ps1` llama al destino `app` del Makefile dentro de WSL en vez de ejecutar `tools/build.sh` directamente.
