@@ -525,11 +525,43 @@ function PackageNativeProjectWithUltraPack($Body) {
   }
   $title = FindProjectTitleFolder $projectRoot $true
   $outputRoot = Join-Path $projectRoot ('packages-ultrapack\' + $format + '\' + (Get-Date -Format 'yyyyMMdd-HHmmss'))
-  New-Item -ItemType Directory -Force -Path $outputRoot | Out-Null
-  $cliArgs = @($cli,[string]$title.path,$outputRoot,'--to',$format,'--force')
-  $logItems = @(& $python @cliArgs 2>&1)
-  $exitCode = $LASTEXITCODE
-  $logText = ($logItems | ForEach-Object { $_.ToString() }) -join [Environment]::NewLine
+  $tempRoot = Join-Path $script:Runtime 'ultrapack-temp'
+  New-Item -ItemType Directory -Force -Path $outputRoot,$tempRoot | Out-Null
+
+  # Invoke the upstream CLI as documented: SOURCE OUTPUT --to FORMAT.
+  # ArgumentList avoids quoting/path-with-spaces bugs; cwd is the CLI directory so
+  # source-checkout imports and relative helper paths resolve consistently on Windows.
+  $psi = [System.Diagnostics.ProcessStartInfo]::new()
+  $psi.FileName = $python
+  $psi.WorkingDirectory = Split-Path -Parent $cli
+  $psi.UseShellExecute = $false
+  $psi.CreateNoWindow = $true
+  $psi.RedirectStandardOutput = $true
+  $psi.RedirectStandardError = $true
+  $psi.Environment['PYTHONUNBUFFERED'] = '1'
+  foreach ($arg in @('-u',$cli,[string]$title.path,$outputRoot,'--to',$format,'--force','--temp-dir',$tempRoot,'--verbose')) {
+    [void]$psi.ArgumentList.Add([string]$arg)
+  }
+  $commandForLog = '"' + $python + '" -u "' + $cli + '" "' + [string]$title.path + '" "' + $outputRoot + '" --to ' + $format + ' --force --temp-dir "' + $tempRoot + '" --verbose'
+  $logText = "Comando ejecutado:`r`n$commandForLog`r`nDirectorio de trabajo: $($psi.WorkingDirectory)`r`n`r`n"
+  $process = [System.Diagnostics.Process]::new()
+  $process.StartInfo = $psi
+  try {
+    if (!$process.Start()) { throw 'Windows no pudo iniciar el proceso de Python para UltraPack.' }
+    $stdoutTask = $process.StandardOutput.ReadToEndAsync()
+    $stderrTask = $process.StandardError.ReadToEndAsync()
+    $process.WaitForExit()
+    $stdoutText = $stdoutTask.GetAwaiter().GetResult()
+    $stderrText = $stderrTask.GetAwaiter().GetResult()
+    if (![string]::IsNullOrWhiteSpace($stdoutText)) { $logText += "STDOUT:`r`n$stdoutText`r`n" }
+    if (![string]::IsNullOrWhiteSpace($stderrText)) { $logText += "STDERR:`r`n$stderrText`r`n" }
+    $exitCode = $process.ExitCode
+  } catch {
+    $exitCode = 1
+    $logText += "ERROR AL INICIAR/ESPERAR ULTRAPACK:`r`n$($_.Exception.ToString())"
+  } finally {
+    $process.Dispose()
+  }
   $extension = '.' + $format
   $artifact = ''
   if (Test-Path -LiteralPath $outputRoot -PathType Container) {
