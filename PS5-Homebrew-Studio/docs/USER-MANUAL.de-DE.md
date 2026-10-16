@@ -1,4 +1,4 @@
-# Benutzerhandbuch — PS5 Homebrew Studio 1.1.3
+# Benutzerhandbuch — PS5 Homebrew Studio 1.1.5
 
 Letzte Aktualisierung: 16. Oktober 2026. Die Anwendungsoberfläche ist weiterhin auf Spanisch. Das übersetzte Handbuch bedeutet nicht, dass die UI bereits lokalisiert ist.
 

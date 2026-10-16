@@ -56,3 +56,26 @@
 .presentation-section-title{font-size:9px;font-weight:750;letter-spacing:.7px;color:#aab5cb;margin:18px 0 8px}
 .presentation-output{font:10px/1.55 Consolas,monospace;white-space:pre-wrap;word-break:break-word;max-height:160px;overflow:auto;color:#9eabc3;background:#0b1019;border:1px solid #293145;border-radius:6px;padding:10px;margin-top:12px}
 @media(max-width:600px){.presentation-status-grid,.presentation-tool-grid{grid-template-columns:1fr}}
+
+
+/* 1.1.4: visible multi-screen design and explicit layer ordering. */
+#screenSwitcher{flex:1;min-width:0;overflow-x:auto;justify-content:flex-start;padding:0 8px;scrollbar-width:thin}
+.screen-switcher .screen-tab{white-space:nowrap;flex-shrink:0;cursor:pointer}
+.screen-switcher .screen-tab.active{font-weight:700}
+.screen-switcher .screen-switcher-action{font-size:9px;border:1px dashed #454e68;border-radius:4px;padding:5px 7px;background:#121824;color:#a7b3cc;white-space:nowrap;flex-shrink:0}
+.screen-switcher .screen-switcher-action:hover{border-color:#8c7cff;color:#e2ddff}
+.layer-row{gap:5px}
+.layer-row .tree-label{min-width:0}
+.layer-order-controls{display:flex;gap:2px;flex-shrink:0}
+.layer-order-controls button{width:22px;height:22px;padding:0;border:1px solid #30384c;border-radius:4px;background:#151b27;color:#a5b0c8;font-size:11px;line-height:1;cursor:pointer}
+.layer-order-controls button:disabled{opacity:.22;cursor:default}
+.layer-order-controls button:not(:disabled):hover{border-color:#8d7dff;color:#eeeaff}
+.layer-front-note{font-size:8px;color:#65718a;margin:-5px 0 8px}
+.screen-manager-row{display:flex;gap:7px;align-items:center;padding:8px 0;border-bottom:1px solid #293144}
+.screen-manager-row input{min-width:0;flex:1}
+.screen-manager-row .btn{flex-shrink:0}
+.presentation-before-build{margin:12px 0;padding:12px;border:1px solid #343c52;border-radius:7px;background:#101621}
+.presentation-before-build h3{font-size:10px;color:#dce4f9;margin:0 0 5px}
+.presentation-before-build p{font-size:9px;color:#8c98b1;margin:0 0 8px;line-height:1.5}
+.presentation-before-build .form-field{margin:9px 0}
+@media(max-width:900px){#screenSwitcher{order:3;flex-basis:100%;height:32px}.canvas-toolbar{height:auto;min-height:40px;flex-wrap:wrap;padding-top:5px;padding-bottom:5px}.canvas-toolbar .canvas-tools{margin-left:auto}}

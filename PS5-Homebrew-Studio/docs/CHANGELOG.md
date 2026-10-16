@@ -1,5 +1,19 @@
 # Registro de cambios
 
+## 1.1.5 — 2026-10-17
+
+- Corrige el botón «Empaquetar» de PS5 UltraPack: el código intentaba iterar el resultado de un selector de elemento único, lanzaba un error antes de iniciar la tarea y dejaba el mensaje «Listo para ejecutar PS5 UltraPack».
+- Corrige el mismo patrón en el botón «Aplicar cambios» de Presentación.
+- Añade versionado a las URL de los scripts para evitar reutilizar una copia en caché de `app.js` o del generador tras actualizar.
+- Validación manual del usuario en Windows/WSL: la compilación nativa vuelve a completarse correctamente y el empaquetado PS5 UltraPack funciona. Las rutas aún no validadas se registran en [Problemas conocidos](KNOWN-ISSUES.es-ES.md).
+
+## 1.1.4 — 2026-10-17
+
+- Corrige la compilación de proyectos UI OpenGL generados por el IDE: ejecuta el `build.ps1` del propio proyecto y reutiliza sus dependencias/SDK locales en vez de bloquearse preparando otra copia compartida del SDK en `toolchains/`.
+- Añade a la generación de títulos visuales los campos opcionales para icono, fondo de selección, fondo de lanzamiento y música antes de compilar; usa el preparador de recursos upstream y valida cada archivo.
+- Añade selector y gestor de pantallas, con creación, cambio, renombrado y eliminación protegida de pantallas.
+- La jerarquía pasa a mostrar las capas por delante/detrás, permite reordenarlas con botones o arrastrando y mantiene el aislamiento por pantalla.
+
 ## 1.1.3 — 2026-10-16
 
 - Detecta de forma preventiva unidades WSL/DrvFS sin `metadata` antes del `make source-fetch` de PS5 OpenGL.

@@ -1,6 +1,17 @@
 # PS5 Homebrew Studio
 
-**Release 1.1.2 · IDE visual local para Windows.** Integra un editor visual 1920×1080, análisis de flujos, generación de código C# para SharpProspero y conversión del modelo visual a pantallas C++20 para los kits nativos OpenGL/Vulkan. Incluye un catálogo verificado por función de boilerplates, UI kits, drivers, complementos gráficos y aplicaciones comunitarias de referencia.
+**Release 1.1.5 · IDE visual local para Windows.** Integra un editor visual 1920×1080, análisis de flujos, generación de código C# para SharpProspero y conversión del modelo visual a pantallas C++20 para los kits nativos OpenGL/Vulkan. Incluye un catálogo verificado por función de boilerplates, UI kits, drivers, complementos gráficos y aplicaciones comunitarias de referencia.
+
+## Corrección urgente 1.1.5
+
+- Se arregla el selector de botones de los diálogos UltraPack y Presentación: ambos quedan operativos en lugar de fallar antes de ejecutar la acción.
+- Se añade versionado a los scripts JavaScript para que el navegador cargue los archivos de la versión instalada.
+
+## Correcciones y mejoras 1.1.4
+
+- La generación OpenGL nativa ejecuta el `build.ps1` del propio proyecto y reutiliza su SDK local. Evita preparar otra copia del SDK en `toolchains/` antes de compilar y muestra la salida real del script.
+- En el diálogo **Generar y compilar pantalla nativa** puedes seleccionar antes del build el icono (`icon0.png`), fondo de selección (`pic0.dds`), fondo de lanzamiento (`pic1.dds`) y música (`snd0.at9`). Los conversores y validaciones siguen siendo los de la plantilla upstream.
+- El selector **Pantallas** permite crear y cambiar entre menús. **Gestionar** permite renombrar o eliminar pantallas; la pestaña **Jerarquía** muestra las capas de la pantalla activa y permite traerlas delante, enviarlas detrás o arrastrarlas para reordenarlas.
 
 ## Inicio en Windows
 
@@ -11,7 +22,7 @@
 
 El servicio escucha únicamente en `127.0.0.1`; no expone el sistema de archivos a la red local. Los proyectos del editor se guardan en `Documentos\PS5HomebrewStudio\Projects`. `Ctrl+S` guarda el modelo visual. El editor puede abrirse y usarse sin descargar ningún toolchain.
 
-## Documentación 1.1.2
+## Documentación 1.1.5
 
 - Manual español: [docs/MANUAL.es-ES.md](docs/MANUAL.es-ES.md)
 - English: [docs/USER-MANUAL.en-GB.md](docs/USER-MANUAL.en-GB.md)
@@ -22,10 +33,11 @@ El servicio escucha únicamente en `127.0.0.1`; no expone el sistema de archivos
 - Русский: [docs/USER-MANUAL.ru-RU.md](docs/USER-MANUAL.ru-RU.md)
 - [Solución de permisos WSL](docs/WSL_PERMISSIONS.md) · [Guía de recursos de presentación](docs/PRESENTATION_ASSETS.md) · [Créditos y atribuciones upstream](docs/CREDITS.md)
 - [Ecosistema de proyectos upstream](docs/PROJECT_ECOSYSTEM.md) · [Matriz de SDK](docs/SDK_MATRIX.md) · [Registro de cambios](docs/CHANGELOG.md)
+- [Problemas conocidos y estado de validación 1.1.5](docs/KNOWN-ISSUES.es-ES.md)
 
 La UI de esta versión todavía está en español; los manuales traducidos no representan una localización completa de la interfaz.
 
-## Mejoras de desarrollo 1.1.2
+## Mejoras de desarrollo 1.1.2 (histórico)
 
 - Los títulos nativos incluyen **Presentación** para sustituir `icon0.png`, los fondos independientes `pic0.dds`/`pic1.dds` y la música `snd0.at9` mediante el conversor upstream.
 - Las imágenes se validan como PNG 512×512 o DDS BC7 3840×2160; el audio debe ser ATRAC9 48 kHz en bucle y ≤2 MiB. El IDE no descarga ni redistribuye el codificador de audio.
