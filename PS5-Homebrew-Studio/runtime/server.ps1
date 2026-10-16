@@ -170,6 +170,28 @@ function InstallRepo($Entry) {
     if(!$ok){throw "Descarga fallida de $($Entry.repo): $why"}
     Expand-Archive -LiteralPath $zip -DestinationPath $unpack -Force;$top=Get-ChildItem $unpack -Directory|Select-Object -First 1;if(!$top){throw 'El ZIP no tiene raíz de proyecto.'};if(Test-Path $dest){Remove-Item $dest -Recurse -Force};Move-Item -LiteralPath $top.FullName -Destination $dest;WriteUtf8 (Join-Path $dest '.ps5hs-source.json') (ConvertTo-Json -InputObject @{repository=$Entry.repo;branch=$branch;installedAt=(Get-Date).ToString('o');method='source ZIP'} -Depth 5)
     if($Entry.id -eq 'etahen'){$nid=$script:Catalog|Where-Object id -eq 'nid'|Select-Object -First 1;$nidDir=Join-Path $script:Toolchains $nid.folder;if(!(Test-Path (Join-Path $nidDir 'README.md'))){InstallRepo $nid|Out-Null};$sub=Join-Path $dest 'libNidResolver';if(Test-Path $sub){Remove-Item $sub -Recurse -Force};if(Test-Path $nidDir){Copy-Item -LiteralPath $nidDir -Destination $sub -Recurse}}
+    if($Entry.id -eq 'ps5-ultrapack') {
+      $pythonCmd = CmdInfo 'python.exe'; if(!$pythonCmd.ok){$pythonCmd=CmdInfo 'python'}
+      if($pythonCmd.ok -and $pythonCmd.path) {
+        $venvPath = Join-Path $dest '.venv'
+        $venvPython = Join-Path $venvPath 'Scripts\python.exe'
+        if(!(Test-Path -LiteralPath $venvPython -PathType Leaf)) {
+          $venvOut = @(& $pythonCmd.path -m venv $venvPath 2>&1); $venvExit = $LASTEXITCODE
+          if($venvExit -ne 0 -or !(Test-Path -LiteralPath $venvPython -PathType Leaf)) {
+            $detail = ($venvOut | ForEach-Object { $_.ToString() }) -join "`r`n"
+            throw "UltraPack se descargó en '$dest', pero no se pudo crear su entorno Python. Instala Python 3.10+ y vuelve a intentarlo. $detail"
+          }
+        }
+        $pipOut = @(& $venvPython -m pip install --disable-pip-version-check py7zr rarfile psutil cryptography 2>&1); $pipExit = $LASTEXITCODE
+        if($pipExit -ne 0) {
+          $detail = ($pipOut | ForEach-Object { $_.ToString() }) -join "`r`n"
+          throw "UltraPack se descargó en '$dest', pero falló la instalación de dependencias Python en '$venvPath'. Revisa la conexión y el registro de pip. $detail"
+        }
+        WriteUtf8 (Join-Path $dest '.ps5hs-ultrapack-python.json') (ConvertTo-Json -InputObject @{pythonExe=$venvPython;cli=(Join-Path $dest 'backend\cli.py');installedAt=(Get-Date).ToString('o')} -Depth 4)
+        return @{ok=$true;name=$Entry.name;message="Código fuente descargado y dependencias CLI instaladas en el entorno aislado: $venvPath";path=$dest;pythonExe=$venvPython;cli=(Join-Path $dest 'backend\cli.py')}
+      }
+      return @{ok=$true;name=$Entry.name;message="Código fuente descargado en '$dest'. No se detectó Python; instala Python 3.10+ y configura su ruta en Herramientas. El CLI está en backend\cli.py.";path=$dest;cli=(Join-Path $dest 'backend\cli.py')}
+    }
     return @{ok=$true;name=$Entry.name;message="Descargado de GitHub: $dest";path=$dest}
   } finally {Remove-Item $temp -Recurse -Force -ErrorAction SilentlyContinue}
 }
@@ -377,6 +399,11 @@ function GetIntegrationConfig {
   $python = [string]$stored.pythonExe
   if (!$python -or !(Test-Path -LiteralPath $python -PathType Leaf)) {
     $python = ''
+    $ultraPackVenv = Join-Path (Join-Path $script:Toolchains 'ps5-ultrapack') '.venv\Scripts\python.exe'
+    if (Test-Path -LiteralPath $ultraPackVenv -PathType Leaf) { $python = $ultraPackVenv }
+  }
+  if (!$python -or !(Test-Path -LiteralPath $python -PathType Leaf)) {
+    $python = ''
     foreach ($commandName in @('python.exe','python3.exe','python','python3')) {
       $found = CmdInfo $commandName
       if ($found.ok -and $found.path -and (Test-Path -LiteralPath $found.path -PathType Leaf)) { $python = [string]$found.path; break }
@@ -507,23 +534,40 @@ function RunKytyProject($Body) {
     throw "Kyty no está configurado. Pulsa 'Herramientas' y selecciona kyty_emulator.exe. Descargas oficiales: https://github.com/KytyPS/KytyPS5/releases"
   }
   $title = FindProjectTitleFolder $projectRoot $false
-  $psi = New-Object System.Diagnostics.ProcessStartInfo
+  if (!(Test-Path -LiteralPath ([string]$title.eboot) -PathType Leaf)) { throw "El eboot.bin que se va a ejecutar no existe: $($title.eboot)" }
+  $psi = [System.Diagnostics.ProcessStartInfo]::new()
   $psi.FileName = $emulator
   $psi.WorkingDirectory = Split-Path -Parent $emulator
-  $psi.Arguments = '--game "' + ([string]$title.path).Replace('"','\"') + '"'
   $psi.UseShellExecute = $false
+  $psi.CreateNoWindow = $false
+  $quotedEboot = '"' + ([string]$title.eboot).Replace('"','\"') + '"'
+  $psi.Arguments = '--game ' + $quotedEboot + ' --screen-width 1920 --screen-height 1080'
+  $commandLine = '"' + $emulator + '" ' + $psi.Arguments
   $proc = [System.Diagnostics.Process]::Start($psi)
   if (!$proc) { throw 'Windows no pudo iniciar kyty_emulator.exe.' }
-  return @{ok=$true;message='KytyPS5 se ha iniciado con el directorio compilado del título.';pid=$proc.Id;gameFolder=[string]$title.path;eboot=[string]$title.eboot;path=$projectRoot}
+  return @{ok=$true;message='KytyPS5 se ha iniciado con --game apuntando directamente al eboot.bin compilado (1920×1080). Si el emulador muestra imports sin resolver o un guest fault, es una limitación/error de compatibilidad de Kyty, no un error de lanzamiento del IDE.';pid=$proc.Id;gameFolder=[string]$title.path;eboot=[string]$title.eboot;command=$commandLine;path=$projectRoot}
 }
 function PackageNativeProjectWithUltraPack($Body) {
   $resolved = ResolveNativeProjectRoot ([string]$Body.path)
   $projectRoot = [string]$resolved.path
   $format = ([string]$Body.format).Trim().ToLowerInvariant()
   if ($format -notin @('ffpfs','ffpfsc','pkg')) { throw 'Formato de salida no válido. Elige .ffpfs, .ffpfsc o .pkg.' }
+  if ($format -eq 'pkg') {
+    $pkgToolCandidates = @((Join-Path (Split-Path -Parent $cli) 'native\ffpfsc-pkg-tool.exe'),(Join-Path (Split-Path -Parent $cli) 'native\ffpfsc-pkg-tool\bin\Release\net9.0\win-x64\ffpfsc-pkg-tool.exe'))
+    $pkgToolFound = $false
+    foreach ($candidate in $pkgToolCandidates) { if (Test-Path -LiteralPath $candidate -PathType Leaf) { $pkgToolFound = $true; break } }
+    if (!$pkgToolFound) { throw 'El repositorio PS5 UltraPack instalado no incluye un ffpfsc-pkg-tool.exe de Windows. La creación de .pkg no puede ejecutarse en esta instalación; compila el helper .NET desde backend/native/src/ffpfsc-pkg-tool o usa .ffpfsc/.ffpfs.' }
+  }
   $config = GetIntegrationConfig
   $python = [string]$config.pythonExe
   $cli = [string]$config.ultraPackCli
+  if ($cli) {
+    try { $cli = [IO.Path]::GetFullPath($cli) } catch { throw "La ruta configurada de UltraPack no es válida: $cli" }
+    if ([IO.Path]::GetFileName($cli) -ine 'cli.py' -or (Split-Path -Leaf (Split-Path -Parent $cli)) -ine 'backend') {
+      throw "La ruta configurada no apunta a backend\cli.py: $cli. Corrige la ruta en Herramientas."
+    }
+    if (!(Test-Path -LiteralPath $cli -PathType Leaf)) { throw "No existe el CLI configurado de UltraPack: $cli. Vuelve a descargar la fuente desde Herramientas o corrige la ruta." }
+  }
   if (!$python -or !(Test-Path -LiteralPath $python -PathType Leaf)) {
     throw 'No se ha configurado Python. En Herramientas, indica python.exe (Python 3.10 o posterior).'
   }
@@ -550,7 +594,7 @@ function PackageNativeProjectWithUltraPack($Body) {
     [void]$psi.ArgumentList.Add([string]$arg)
   }
   $commandForLog = '"' + $python + '" -u "' + $cli + '" "' + [string]$title.path + '" "' + $outputRoot + '" --to ' + $format + ' --force --temp-dir "' + $tempRoot + '" --verbose'
-  $logText = "Comando ejecutado:`r`n$commandForLog`r`nDirectorio de trabajo: $($psi.WorkingDirectory)`r`n`r`n"
+  $logText = "CLI configurado: $cli`r`nPython configurado: $python`r`nFormato solicitado: $format`r`nOrigen: $($title.path)`r`nDestino: $outputRoot`r`nComando ejecutado:`r`n$commandForLog`r`nDirectorio de trabajo: $($psi.WorkingDirectory)`r`n`r`n"
   $process = [System.Diagnostics.Process]::new()
   $process.StartInfo = $psi
   try {
