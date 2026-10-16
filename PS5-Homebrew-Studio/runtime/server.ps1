@@ -568,6 +568,14 @@ function PackageNativeProjectWithUltraPack($Body) {
   if (!$cli -or !(Test-Path -LiteralPath $cli -PathType Leaf)) {
     throw "No se ha encontrado backend\cli.py de UltraPack. Usa 'Descargar UltraPack (fuente)' en Herramientas o indica su ruta manualmente. Repositorio: https://github.com/knutwurst/ps5-ultrapack"
   }
+  if ($format -eq 'pkg') {
+    $backendRoot = Split-Path -Parent $cli
+    $pkgTool = Join-Path $backendRoot 'native\ffpfsc-pkg-tool.exe'
+    if ($env:FFPFSC_PKG_TOOL -and (Test-Path -LiteralPath $env:FFPFSC_PKG_TOOL -PathType Leaf)) { $pkgTool = $env:FFPFSC_PKG_TOOL }
+    if (!(Test-Path -LiteralPath $pkgTool -PathType Leaf)) {
+      throw "UltraPack no dispone del helper nativo de Windows para crear .pkg: $pkgTool. Compila backend\BUILD_PKG_TOOL.ps1 con .NET SDK 9+ o utiliza .ffpfsc/.ffpfs."
+    }
+  }
   $title = FindProjectTitleFolder $projectRoot $true
   $outputRoot = Join-Path $projectRoot ('packages-ultrapack\' + $format + '\' + (Get-Date -Format 'yyyyMMdd-HHmmss'))
   $tempRoot = Join-Path $script:Runtime 'ultrapack-temp'
