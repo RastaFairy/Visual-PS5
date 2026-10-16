@@ -1,4 +1,4 @@
-# 用户手册 — PS5 Homebrew Studio 1.1.2
+# 用户手册 — PS5 Homebrew Studio 1.1.3
 
 最后更新：2026 年 10 月 16 日。应用界面目前仍为西班牙语；手册翻译并不表示 UI 本身已完成本地化。
 
@@ -63,6 +63,18 @@ IDE 会运行真实的上游构建脚本并保留日志。退出代码为 0 并�
 
 若服务无法启动，请保留完整错误并检查 PowerShell 和目录权限。若构建失败，记录后端、上游版本和提交、完整日志及退出代码。若 UltraPack 失败，检查 Python/cli.py 路径、eboot.bin、sce_sys/param.json 和输出目录权限。不要分享密钥或令牌。
 
+
+### WSL 错误：chmod 无法修改 .git/config.lock
+
+如果日志包含 `chmod on /mnt/d/.../.git/config.lock failed: Operation not permitted` 或 `could not set 'core.filemode' to 'false'`，说明 WSL 挂载 Windows 驱动器时没有启用 `metadata`。IDE 会在构建 SDK 前检测此情况并显示修复步骤。
+
+打开相应的 WSL 发行版，运行 IDE 附带的脚本（按实际安装路径修改）：
+
+```bash
+sudo bash /mnt/d/PS5-Homebrew-Studio/runtime/fix-wsl-permissions.sh
+```
+
+脚本会备份 `/etc/wsl.conf` 并更新 `[automount] options`，保留其他设置。关闭 WSL，再从 Windows PowerShell 执行 `wsl --shutdown`，重新启动发行版并再次构建。该命令会停止所有正在运行的 WSL 发行版，请先保存工作。不要以管理员身份运行 Git 或 IDE。详见 [WSL 权限指南](WSL_PERMISSIONS.md) 和 [Microsoft 文档](https://learn.microsoft.com/windows/wsl/file-permissions)。
 ## 8. 许可与范围
 
 SDK、驱动、模板和 UI 工具包均保留各自许可。发布二进制前请检查 LICENSE、COPYING、NOTICE 和再分发条件。Visual-PS5 不是 Sony 官方 SDK，不包含固件、密钥、游戏或 BIOS，也不会自动将标题安装到主机。编辑器预览不是 PS5 模拟器，无法验证运行时、音频、输入或持久化。

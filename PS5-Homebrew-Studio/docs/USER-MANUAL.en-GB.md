@@ -1,4 +1,4 @@
-# User Manual — PS5 Homebrew Studio 1.1.2
+# User Manual — PS5 Homebrew Studio 1.1.3
 
 Last updated: 16 October 2026. The application interface is still in Spanish. Localised manuals do not mean that the UI itself has been translated.
 
@@ -61,6 +61,18 @@ With Node.js installed, run node --check app.js, node --check runtime/native-gen
 
 If the server fails to start, keep the full error and check PowerShell and permissions. For build failures, record the backend, upstream versions and commits, full output and exit code. If UltraPack fails, check Python and cli.py paths, eboot.bin, sce_sys/param.json and output permissions. Never share tokens, keys, protected files or logs containing secrets.
 
+
+### WSL error: chmod on .git/config.lock
+
+If the log contains `chmod on /mnt/d/.../.git/config.lock failed: Operation not permitted` or `could not set 'core.filemode' to 'false'`, WSL has mounted a Windows drive without the `metadata` option. The IDE detects this before the SDK build and shows the repair steps.
+
+Open the WSL distribution and run the helper shipped with the IDE (adjust the path to the actual installation):
+
+```bash
+sudo bash /mnt/d/PS5-Homebrew-Studio/runtime/fix-wsl-permissions.sh
+```
+
+The script backs up `/etc/wsl.conf` and updates `[automount] options` without discarding other settings. Close WSL, run `wsl --shutdown` from Windows PowerShell, start the distribution again, and retry the build. This stops all running WSL distributions, so save work first. Do not run Git or the IDE as administrator. See the [detailed WSL permissions guide](WSL_PERMISSIONS.md) and [Microsoft's documentation](https://learn.microsoft.com/windows/wsl/file-permissions).
 ## 8. Licensing and scope
 
 SDKs, drivers, templates and UI kits retain their own licences. Review LICENSE, COPYING, NOTICE and redistribution requirements before publishing a binary. Visual-PS5 is not an official Sony SDK, includes no firmware, keys, games or BIOS, and does not automatically install titles on a console. The editor preview is not a PS5 emulator and does not validate runtime, audio, input or persistence.
