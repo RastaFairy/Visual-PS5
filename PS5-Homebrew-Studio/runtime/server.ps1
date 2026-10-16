@@ -557,11 +557,11 @@ function GetBuildJobDirectory([string]$JobId) {
   $root = Join-Path $script:Runtime 'build-jobs'
   return (Join-Path $root $JobId)
 }
-function StartNativeBuildJob($Body) {
+function StartNativeBuildJob($Body,[string]$Action='visual') {
   $jobId = [guid]::NewGuid().ToString('N')
   $dir = GetBuildJobDirectory $jobId
   New-Item -ItemType Directory -Force -Path $dir | Out-Null
-  WriteUtf8 (Join-Path $dir 'request.json') (ConvertTo-Json -InputObject $Body -Depth 100)
+  WriteUtf8 (Join-Path $dir 'request.json') (ConvertTo-Json -InputObject @{action=$Action;body=$Body} -Depth 100)
   WriteBuildJobLog (Join-Path $dir 'build.log') 'Preparando la generación C++20 y la compilación upstream…'
   $hostPath = (Get-Process -Id $PID -ErrorAction Stop).Path
   if (!$hostPath -or !(Test-Path -LiteralPath $hostPath -PathType Leaf)) { throw 'No se pudo localizar el ejecutable de PowerShell para iniciar el trabajador de compilación.' }
@@ -1035,8 +1035,9 @@ if ($args.Count -ge 2 -and [string]$args[0] -eq '--worker') {
     $script:ActiveBuildLogPath = Join-Path $jobDir 'build.log'
     WriteBuildJobLog $script:ActiveBuildLogPath 'Trabajador de compilación iniciado.'
     $requestPath = Join-Path $jobDir 'request.json'
-    $body = Get-Content -LiteralPath $requestPath -Raw | ConvertFrom-Json
-    $result = BuildNativeVisualProject $body
+    $jobRequest = Get-Content -LiteralPath $requestPath -Raw | ConvertFrom-Json
+    if ([string]$jobRequest.action -eq 'native') { $result = BuildNativeProject ([string]$jobRequest.body.path) }
+    else { $result = BuildNativeVisualProject $jobRequest.body }
     if ($result.ok) { WriteBuildJobLog $script:ActiveBuildLogPath ('COMPLETADO: ' + [string]$result.message) }
     else { WriteBuildJobLog $script:ActiveBuildLogPath ('ERROR: ' + [string]$result.message) }
     if ($result.output) { WriteBuildJobLog $script:ActiveBuildLogPath ([string]$result.output) }
@@ -1251,8 +1252,11 @@ while ($listener.Server.IsBound) {
                                     $result = BuildNativeProject ([string]$body.path)
                                     SendJson $ctx $result
                                 }
+                                '/api/build-native/start' {
+                                    SendJson $ctx (StartNativeBuildJob $body 'native')
+                                }
                                 '/api/build-visual-native/start' {
-                                    SendJson $ctx (StartNativeBuildJob $body)
+                                    SendJson $ctx (StartNativeBuildJob $body 'visual')
                                 }
                                 '/api/build-visual-native' {
                                     $result = BuildNativeVisualProject $body
