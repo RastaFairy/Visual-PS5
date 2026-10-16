@@ -80,7 +80,7 @@ jobs:
             "*.sha256 text eol=lf",
             '$psi.EnvironmentVariables[',
             '$psi.StandardOutputEncoding = [System.Text.Encoding]::UTF8',
-            "if ($verifyEnabled) { $cliArgs += '--verify' }"
+            'if ($verifyEnabled) { $cliArgs += ''--verify'' }'
           )
           foreach ($needle in $requiredServer) {
             if (-not $server.Contains($needle)) { throw "Missing server integration: $needle" }
