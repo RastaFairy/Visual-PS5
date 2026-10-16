@@ -1,5 +1,12 @@
 # Registro de cambios
 
+## 1.0.4 — 16 de octubre de 2026
+
+- Corrige el punto de entrada Windows para proyectos C++ nativos generados: `build.ps1` llama al destino `app` del Makefile dentro de WSL en vez de ejecutar `tools/build.sh` directamente.
+- El Makefile vuelve a definir los includes obligatorios `src/` y OpenGL, los archivos estáticos y los import stubs que faltaban en el registro de compilación mostrado por el wrapper.
+- El generador parchea la plantilla al copiarla, para que los proyectos nuevos reciban la corrección incluso si el upstream todavía conserva el wrapper antiguo.
+
+
 ## 1.0.3 — 16 de octubre de 2026
 
 - Corrige el empaquetado de imágenes del generador visual: los IDs se gestionan coherentemente como `Map`, sin llamar a `.add()`.
