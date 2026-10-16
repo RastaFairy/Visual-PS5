@@ -80,3 +80,30 @@ jobs:
             throw "Version mismatch: VERSION.txt=$version"
           }
           Write-Host "Version 1.0.3: OK"
+
+      - name: Package Studio release archive
+        if: github.ref == 'refs/heads/main' && success()
+        shell: pwsh
+        run: |
+          $version = (Get-Content PS5-Homebrew-Studio/VERSION.txt | Where-Object { $_ -match '^Version:' }) -replace '^Version:\s*',''
+          $source = (Resolve-Path PS5-Homebrew-Studio).Path
+          $archiveName = "PS5-Homebrew-Studio-v$version.zip"
+          $archive = Join-Path $env:RUNNER_TEMP $archiveName
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          [IO.Compression.ZipFile]::CreateFromDirectory($source, $archive, [IO.Compression.CompressionLevel]::Optimal, $true)
+          $digest = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant()
+          $checksum = "$archive.sha256"
+          [IO.File]::WriteAllText($checksum, "$digest *$archiveName`n", [System.Text.UTF8Encoding]::new($false))
+          "STUDIO_ARCHIVE=$archive" >> $env:GITHUB_ENV
+          "STUDIO_CHECKSUM=$checksum" >> $env:GITHUB_ENV
+
+      - name: Upload Studio release artifact
+        if: github.ref == 'refs/heads/main' && success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: PS5-Homebrew-Studio-v1.0.3
+          path: |
+            ${{ runner.temp }}/PS5-Homebrew-Studio-v1.0.3.zip
+            ${{ runner.temp }}/PS5-Homebrew-Studio-v1.0.3.zip.sha256
+          if-no-files-found: error
+          retention-days: 30
