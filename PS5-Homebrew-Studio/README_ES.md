@@ -1,6 +1,6 @@
 # PS5 Homebrew Studio
 
-**Release 1.1.1 · IDE visual local para Windows.** Integra un editor visual 1920×1080, análisis de flujos, generación de código C# para SharpProspero y conversión del modelo visual a pantallas C++20 para los kits nativos OpenGL/Vulkan. Incluye un catálogo verificado por función de boilerplates, UI kits, drivers, complementos gráficos y aplicaciones comunitarias de referencia.
+**Release 1.1.2 · IDE visual local para Windows.** Integra un editor visual 1920×1080, análisis de flujos, generación de código C# para SharpProspero y conversión del modelo visual a pantallas C++20 para los kits nativos OpenGL/Vulkan. Incluye un catálogo verificado por función de boilerplates, UI kits, drivers, complementos gráficos y aplicaciones comunitarias de referencia.
 
 ## Inicio en Windows
 
@@ -11,7 +11,7 @@
 
 El servicio escucha únicamente en `127.0.0.1`; no expone el sistema de archivos a la red local. Los proyectos del editor se guardan en `Documentos\PS5HomebrewStudio\Projects`. `Ctrl+S` guarda el modelo visual. El editor puede abrirse y usarse sin descargar ningún toolchain.
 
-## Documentación 1.1.0
+## Documentación 1.1.2
 
 - Manual español: [docs/MANUAL.es-ES.md](docs/MANUAL.es-ES.md)
 - English: [docs/USER-MANUAL.en-GB.md](docs/USER-MANUAL.en-GB.md)
@@ -20,10 +20,16 @@ El servicio escucha únicamente en `127.0.0.1`; no expone el sistema de archivos
 - 简体中文: [docs/USER-MANUAL.zh-CN.md](docs/USER-MANUAL.zh-CN.md)
 - 日本語: [docs/USER-MANUAL.ja-JP.md](docs/USER-MANUAL.ja-JP.md)
 - Русский: [docs/USER-MANUAL.ru-RU.md](docs/USER-MANUAL.ru-RU.md)
-- [Créditos y atribuciones upstream](docs/CREDITS.md)
+- [Guía de recursos de presentación](docs/PRESENTATION_ASSETS.md) · [Créditos y atribuciones upstream](docs/CREDITS.md)
 - [Ecosistema de proyectos upstream](docs/PROJECT_ECOSYSTEM.md) · [Matriz de SDK](docs/SDK_MATRIX.md) · [Registro de cambios](docs/CHANGELOG.md)
 
 La UI de esta versión todavía está en español; los manuales traducidos no representan una localización completa de la interfaz.
+
+## Mejoras de desarrollo 1.1.2
+
+- Los títulos nativos incluyen **Presentación** para sustituir `icon0.png`, los fondos independientes `pic0.dds`/`pic1.dds` y la música `snd0.at9` mediante el conversor upstream.
+- Las imágenes se validan como PNG 512×512 o DDS BC7 3840×2160; el audio debe ser ATRAC9 48 kHz en bucle y ≤2 MiB. El IDE no descarga ni redistribuye el codificador de audio.
+- Guía: [recursos de presentación](docs/PRESENTATION_ASSETS.md).
 
 ## Mejoras de desarrollo 1.1.1
 

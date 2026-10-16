@@ -1,4 +1,4 @@
 PS5 Homebrew Studio
-Version: 1.1.1
+Version: 1.1.2
 Release: 2026-10-16
 Platform: Windows 10/11 + PowerShell 5.1 or PowerShell 7; WSL/Linux for native PS5 builds and UltraPack packaging
