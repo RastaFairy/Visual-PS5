@@ -27,8 +27,11 @@ import tempfile
 
 path = Path(sys.argv[1])
 mode = stat.S_IMODE(path.stat().st_mode) if path.exists() else 0o644
-with path.open("r", encoding="utf-8", newline="") as source if path.exists() else __import__("contextlib").nullcontext("") as handle:
-    text = handle.read()
+if path.exists():
+    with path.open("r", encoding="utf-8", newline="") as handle:
+        text = handle.read()
+else:
+    text = ""
 lines = text.splitlines(keepends=True)
 newline = "\r\n" if "\r\n" in text else "\n"
 section_match = re.compile(r"^\s*\[([^\]]+)\]\s*(?:[#;].*)?$")
