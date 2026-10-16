@@ -1,5 +1,13 @@
 # Registro de cambios
 
+## 1.0.3 — 16 de octubre de 2026
+
+- Corrige el empaquetado de imágenes del generador visual: los IDs se gestionan coherentemente como `Map`, sin llamar a `.add()`.
+- Normaliza los finales de línea de archivos de texto críticos para el build nativo al crear el proyecto y justo antes de compilar en WSL; cubre scripts `.sh`, Makefiles, fuentes C/C++, `CMakeLists.txt` y manifiestos `.sha256`.
+- Declara `*.sha256 text eol=lf` en `.gitattributes` del proyecto generado y fija `core.autocrlf=false` para nuevos clones.
+- Mantiene intacta la comprobación SHA-256 del runtime; corrige el formato del manifiesto en vez de desactivar la protección.
+
+
 ## 1.0.0 — Generación visual nativa C++20
 
 - Convierte el lienzo y los flujos visuales en pantallas C++20 compatibles con el contrato `hui::app::Concept` del kit `ps5-homebrew-ui` y su fork Vulkan.
