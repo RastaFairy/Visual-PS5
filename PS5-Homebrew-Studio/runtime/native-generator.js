@@ -42,6 +42,25 @@
       action: String(f.action || 'notify'), message: String(f.message || ''), value: String(f.value ?? ''),
       targetScreen: String(f.targetScreen || 'screen-main')
     }));
+    if (new Set(components.map(c => c.id)).size !== components.length) throw new Error('El modelo contiene identificadores de componente duplicados.');
+    const screenIds = new Set((Array.isArray(p.screens) ? p.screens : []).map(screen => String(screen?.id || '')).filter(Boolean));
+    const validEvents = new Set(['activate', 'change', 'start', 'any']);
+    const validActions = new Set(['notify', 'setText', 'toggleVisibility', 'setValue', 'changeColor', 'navigate']);
+    const requiredTargetActions = new Set(['setText', 'toggleVisibility', 'setValue']);
+    const numericTypes = new Set(['slider', 'stepper', 'select', 'carousel', 'list', 'progress', 'gauge']);
+    for (const flow of flows) {
+      if (!validEvents.has(flow.event)) throw new Error(`Flujo con evento no admitido: ${flow.event}`);
+      if (!validActions.has(flow.action)) throw new Error(`Flujo con acción no admitida: ${flow.action}`);
+      if (flow.event !== 'start' && !indexById.has(flow.componentId)) throw new Error(`El flujo no tiene un componente de origen válido: ${flow.componentId || '(vacío)'}`);
+      if (requiredTargetActions.has(flow.action) && !indexById.has(flow.targetId)) throw new Error(`La acción ${flow.action} requiere un componente de destino válido: ${flow.targetId || '(vacío)'}`);
+      if (flow.action === 'setValue') {
+        const target = components[indexById.get(flow.targetId)];
+        if (target.type !== 'toggle' && !numericTypes.has(target.type)) throw new Error(`No se puede asignar un valor a un componente de tipo ${target.type}: ${target.id}`);
+        if (target.type !== 'toggle' && !Number.isFinite(Number(flow.value))) throw new Error(`El valor de setValue no es numérico para ${target.id}: ${flow.value}`);
+      }
+      if (flow.action === 'navigate' && !screenIds.has(flow.targetScreen)) throw new Error(`La navegación apunta a una pantalla inexistente: ${flow.targetScreen}`);
+      if (flow.action === 'changeColor' && !/^#[0-9a-f]{6}$/i.test(flow.value)) throw new Error(`changeColor requiere un color hexadecimal #RRGGBB; recibido: ${flow.value}`);
+    }
     const ns = isVulkan ? 'hui::screen' : 'hui::concepts';
     const out = [];
     const push = (...lines) => out.push(...lines);
@@ -75,7 +94,7 @@
       '    const hui::app::ConceptInfo &info() const override', '    {',
       '        static constexpr const char *kTechniques[] = {"Generated from a 1920x1080 visual canvas", "Absolute-position layout preserved", "DualSense navigation and value editing", "Visual event flows compiled into native C++", "All screens are embedded in one concept"};',
       `        static const hui::app::ConceptInfo kInfo{"ps5hs-generated", ${cppString(String(p.name || 'Homebrew Screen'))}, "Screen generated from PS5 Homebrew Studio", "generated/ps5hs-screen.cpp", hui::audio::SoundSet::glass, ${colorLiteral(p.theme?.accent || '#7865f6')}, kTechniques};`,
-      '        return kInfo;', '    }', '', '    void enter() override { started_ = false; selected_ = next_interactive(-1, 1); keyboard_open_ = false; load_textures(); }', '',
+      '        return kInfo;', '    }', '', ...(isVulkan ? ['    void enter() override { started_ = false; selected_ = next_interactive(-1, 1); keyboard_open_ = false; }'] : ['    void enter() override { started_ = false; selected_ = next_interactive(-1, 1); keyboard_open_ = false; load_textures(); }']), '',
       '    void update(const hui::InputFrame &input, float /*dt*/, hui::app::Feedback & /*feedback*/) override', '    {',
       '        if (!started_) { started_ = true; run_flows(-1, "start"); }',
       '        if (keyboard_open_) { update_keyboard(input); return; }',
@@ -93,9 +112,7 @@
       '    }', '', 'private:', '    hui::app::Context &context_;', '    std::vector<Widget> widgets_;', '    std::string screen_ = "screen-main";', '    std::string status_ = "Listo · cruceta para navegar · X para activar";', '    Color background_ = Color::rgb(0x101827);', '    Color accent_ = Color::rgb(0x7865f6);', '    int selected_ = -1;', '    bool started_ = false;', '    bool keyboard_open_ = false;', '    int keyboard_widget_ = -1;', '    int keyboard_index_ = 0;', '    std::string keyboard_draft_;',
       '    static constexpr const char *kKeyboardKeys[] = {"A","B","C","D","E","F","G","H","I","J","K","L","M","N","O","P","Q","R","S","T","U","V","W","X","Y","Z","0","1","2","3","4","5","6","7","8","9",".",",","-","_","Espacio","Borrar","Limpiar","Aceptar","Cancelar"};',
       '    static constexpr int kKeyboardKeyCount = 45;', '',
-      ...(isVulkan ? [
-        '    void load_textures() {}',
-      ] : [
+      ...(isVulkan ? [] : [
         '    void load_textures()',
         '    {',
         '        std::size_t loaded = 0;',
@@ -219,10 +236,16 @@
     const v = cppString(flow.value || flow.message || '');
     switch (flow.action) {
       case 'notify': return `status_ = ${cppString(flow.message || 'Acción ejecutada')};`;
-      case 'setText': return i >= 0 ? (components[i].type === 'input' ? `widgets_[${i}].text = ${v};` : `widgets_[${i}].label = ${v};`) : '/* target component was not resolved */';
-      case 'toggleVisibility': return i >= 0 ? `widgets_[${i}].visible = !widgets_[${i}].visible;` : '/* target component was not resolved */';
+      case 'setText': {
+        if (i < 0) throw new Error(`setText tiene un destino inexistente: ${flow.targetId}`);
+        return components[i].type === 'input' ? `widgets_[${i}].text = ${v};` : `widgets_[${i}].label = ${v};`;
+      }
+      case 'toggleVisibility': {
+        if (i < 0) throw new Error(`toggleVisibility tiene un destino inexistente: ${flow.targetId}`);
+        return `widgets_[${i}].visible = !widgets_[${i}].visible;`;
+      }
       case 'setValue': {
-        if (i < 0) return '/* target component was not resolved */';
+        if (i < 0) throw new Error(`setValue tiene un destino inexistente: ${flow.targetId}`);
         const target = components[i];
         if (target.type === 'toggle') return `widgets_[${i}].checked = ${/^(true|1|sí|si|on)$/i.test(String(flow.value)) ? 'true' : 'false'};`;
         if (['select', 'carousel', 'list'].includes(target.type)) return `widgets_[${i}].value = static_cast<float>(std::max(0, std::min(static_cast<int>(widgets_[${i}].items.size()) - 1, ${Math.max(0, Math.trunc(Number(flow.value) || 0))})));`;
@@ -230,7 +253,7 @@
       }
       case 'changeColor': return `background_ = Color::rgb(0x${colorHex(flow.value, 0x7865f6).toString(16).padStart(6, '0')});`;
       case 'navigate': return `screen_ = ${cppString(flow.targetScreen || 'screen-main')}; selected_ = next_interactive(-1, 1); status_ = "Pantalla: " + screen_;`;
-      default: return '/* unsupported visual action */';
+      default: throw new Error(`Acción de flujo sin implementación: ${flow.action}`);
     }
   }
 
