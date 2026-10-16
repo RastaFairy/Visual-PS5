@@ -52,11 +52,11 @@ function WriteUtf8([string]$Path,[string]$Content) { [IO.File]::WriteAllText($Pa
 # This preserves file bytes except CR characters used as line endings and never touches binaries.
 function NormalizeNativeBuildFiles([string]$ProjectRoot) {
   $root = [IO.Path]::GetFullPath($ProjectRoot)
-  $allowedExtensions = @('.sh','.sha256','.c','.cc','.cpp','.h','.hpp','.ld','.mk','.s','.S'.ToLowerInvariant(),'.cmake','.yml','.yaml')
+  $allowedExtensions = @('.sh','.sha256','.c','.cc','.cpp','.h','.hpp','.ld','.mk','.s','.cmake','.yml','.yaml')
   $allowedNames = @('Makefile','GNUmakefile','CMakeLists.txt','.gitattributes')
   $normalized = 0
   foreach ($item in (Get-ChildItem -LiteralPath $root -File -Recurse -ErrorAction Stop)) {
-    $extension = $item.Extension
+    $extension = $item.Extension.ToLowerInvariant()
     if ($item.Name -notin $allowedNames -and $extension -notin $allowedExtensions) { continue }
     $bytes = [IO.File]::ReadAllBytes($item.FullName)
     if ($bytes.Length -eq 0) { continue }
@@ -65,10 +65,10 @@ function NormalizeNativeBuildFiles([string]$ProjectRoot) {
     for ($i = 0; $i -lt $bytes.Length; $i++) {
       if ($bytes[$i] -eq 13) {
         if ($i + 1 -lt $bytes.Length -and $bytes[$i + 1] -eq 10) { $i++ }
-        $output.Add([byte]10)
+        $null = $output.Add([byte]10)
         $changed = $true
       } else {
-        $output.Add($bytes[$i])
+        $null = $output.Add($bytes[$i])
       }
     }
     if ($changed) {
