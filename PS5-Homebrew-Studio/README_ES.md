@@ -1,6 +1,6 @@
 # PS5 Homebrew Studio
 
-**Release 1.0.6 · IDE visual local para Windows.** Integra un editor visual 1920×1080, análisis de flujos, generación de código C# para SharpProspero y conversión del modelo visual a pantallas C++20 para los kits nativos OpenGL/Vulkan. Incluye un catálogo verificado por función de boilerplates, UI kits, drivers, complementos gráficos y aplicaciones comunitarias de referencia.
+**Release 1.0.7 · IDE visual local para Windows.** Integra un editor visual 1920×1080, análisis de flujos, generación de código C# para SharpProspero y conversión del modelo visual a pantallas C++20 para los kits nativos OpenGL/Vulkan. Incluye un catálogo verificado por función de boilerplates, UI kits, drivers, complementos gráficos y aplicaciones comunitarias de referencia.
 
 ## Inicio en Windows
 
@@ -10,6 +10,13 @@
 4. Se abre `http://127.0.0.1:47813/`. Mantén abierta la ventana de PowerShell; cerrarla detiene el servicio.
 
 El servicio escucha únicamente en `127.0.0.1`; no expone el sistema de archivos a la red local. Los proyectos del editor se guardan en `Documentos\PS5HomebrewStudio\Projects`. `Ctrl+S` guarda el modelo visual. El editor puede abrirse y usarse sin descargar ningún toolchain.
+
+## Cambios de 1.0.7
+
+- Las acciones Kyty/UltraPack persisten en la barra superior y recuerdan la última compilación nativa correcta.
+- La lectura concurrente de los registros de compilación ya no interrumpe el seguimiento del build.
+- Se puede cambiar el nombre del destino o autorizar la sustitución de un proyecto propio compatible.
+- Los fallos de UltraPack incluyen salida, código de salida y estado del artefacto.
 
 ## Cambios de 1.0.6
 
