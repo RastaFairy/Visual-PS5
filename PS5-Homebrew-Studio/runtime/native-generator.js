@@ -24,7 +24,7 @@
     const targetBackend = backend || p.backend || 'opengl-ui';
     const isVulkan = targetBackend === 'vulkan-ui';
     const safeAssetId = value => String(value || '').replace(/[^A-Za-z0-9_-]/g, '_').slice(0, 80);
-    const components = (Array.isArray(p.components) ? p.components : []).map((c, i) => ({
+    const components = (Array.isArray(p.components) ? p.components : []).slice().sort((a, b) => (Number.isFinite(Number(a?.zIndex)) ? Number(a.zIndex) : 1) - (Number.isFinite(Number(b?.zIndex)) ? Number(b.zIndex) : 1)).map((c, i) => ({
       id: String(c.id || `widget-${i + 1}`), screenId: String(c.screenId || 'screen-main'),
       type: String(c.type || 'text'), label: String(c.label || c.type || 'Elemento'),
       x: clamp(c.x, 0, 1919), y: clamp(c.y, 0, 1079), w: clamp(c.w || 1, 1, 1920), h: clamp(c.h || 1, 1, 1080),

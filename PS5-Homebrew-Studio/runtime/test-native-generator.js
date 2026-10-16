@@ -63,3 +63,17 @@ const invalidNavigation = JSON.parse(JSON.stringify(project));
 invalidNavigation.flows[0].targetScreen = 'does-not-exist';
 assert.throws(() => codegen.generate(invalidNavigation, 'vulkan-ui'), /pantalla inexistente/);
 console.log('PASS invalid flows: unresolved component targets and navigation screens are rejected before C++ generation');
+
+const layered = {
+  name: 'Capas', theme: { background: '#101827', accent: '#7865f6' },
+  screens: [{ id: 'home', name: 'Inicio' }], currentScreen: 'home', assets: [], flows: [],
+  components: [
+    { id: 'layer-front', screenId: 'home', type: 'panel', label: 'CAPA DELANTE', x: 50, y: 50, w: 400, h: 200, bg: '#222222', fg: '#ffffff', zIndex: 9 },
+    { id: 'layer-back', screenId: 'home', type: 'panel', label: 'CAPA DETRÁS', x: 40, y: 40, w: 400, h: 200, bg: '#111111', fg: '#ffffff', zIndex: 1 },
+  ],
+};
+for (const backend of ['opengl-ui', 'vulkan-ui']) {
+  const source = codegen.generate(layered, backend);
+  assert.ok(source.indexOf('Widget{"layer-back"') < source.indexOf('Widget{"layer-front"'), `${backend}: back-to-front z-order must be preserved in the draw list`);
+}
+console.log('PASS layers: native OpenGL/Vulkan output orders back layers before front layers');
