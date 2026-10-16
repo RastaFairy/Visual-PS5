@@ -139,7 +139,7 @@ jobs:
           "STUDIO_CHECKSUM=$checksum" >> $env:GITHUB_ENV
 
       - name: Upload Studio release artifact
-        if: (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/fix/')) && success()
+        if: (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/fix/') || startsWith(github.ref, 'refs/heads/feat/')) && success()
         uses: actions/upload-artifact@v4
         with:
           name: PS5-Homebrew-Studio-v1.1.1
