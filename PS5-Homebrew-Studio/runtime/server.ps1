@@ -221,6 +221,11 @@ function NewNativeTitle([string]$Name,[string]$TitleId,[string]$Category,[string
       throw "La plantilla upstream no contiene build.ps1: $buildEntrypoint"
     }
     $buildText = [IO.File]::ReadAllText($buildEntrypoint)
+    $oldEnvBlock = '        "APP_STATIC_ARCHIVES",' + "`n" + '        "APP_RUNTIME_MODULES",'
+    $newEnvBlock = '        "APP_STATIC_ARCHIVES",' + "`n" + '        "APP_IMPORT_STUBS",' + "`n" + '        "APP_RUNTIME_MODULES",' + "`n" + '        "PS5_OPENGL_PREFIX",' + "`n" + '        "BUILD_JOBS",' + "`n" + '        "USE_CCACHE",'
+    if ($buildText.Contains($oldEnvBlock)) {
+      $buildText = $buildText.Replace($oldEnvBlock, $newEnvBlock)
+    }
     $legacyBuildCall = '$arguments += @("bash", (Convert-ToWslPath $build))'
     $makeBuildCall = '$arguments += @("make", "-C", (Convert-ToWslPath (Split-Path -Parent $MyInvocation.MyCommand.Path)), "app")'
     if ($buildText.Contains($legacyBuildCall)) {
