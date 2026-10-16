@@ -656,6 +656,6 @@
   try{const stored=localStorage.getItem(STORAGE_KEY);if(stored){const parsed=JSON.parse(stored);if(parsed.format==='ps5vproj'){project=Object.assign(freshProject(),parsed);$('#projectName').value=project.name;$('#backendSelect').value=project.backend;savedState();}}}catch{}
   // Browser recovery autosave is independent from explicit project saving.
   setInterval(()=>{try{localStorage.setItem(STORAGE_KEY,JSON.stringify(project));}catch{}},12000);
-  renderAll();log('PS5 Homebrew Studio v1.0.1 inicializado.');log('Editor visual: lienzo, inspector, jerarquía, flujos y código generado.');log('Backend SharpProspero: C# / NativeAOT. Backend OpenGL/Vulkan: generación C++20 desde el modelo visual y compilación upstream.');log('La compilación requiere dependencias reales; solo se informa éxito cuando el proceso termina correctamente y se verifica el artefacto.');
+  renderAll();log('PS5 Homebrew Studio v1.1.0 inicializado.');log('Editor visual: lienzo, inspector, jerarquía, flujos y código generado.');log('Backend SharpProspero: C# / NativeAOT. Backend OpenGL/Vulkan: generación C++20 desde el modelo visual y compilación upstream.');log('La compilación requiere dependencias reales; solo se informa éxito cuando el proceso termina correctamente y se verifica el artefacto.');
   refreshStatus();
 })();
