@@ -1,5 +1,16 @@
 # Registro de cambios
 
+## 1.0.6 — 2026-10-16
+
+- La compilación visual nativa se ejecuta en un trabajador de fondo y el IDE consulta su estado sin bloquear el servicio local.
+- El registro muestra la salida real de WSL/Make/CMake/Ninja conforme se produce; se elimina el contador ficticio de progreso.
+- El botón termina en un estado explícito: «Completado» o «Error · Reintentar».
+- Tras una compilación visual correcta, se ofrecen acciones directas para probar el título en KytyPS5 o empaquetarlo con UltraPack, con selector `.ffpfs`, `.ffpfsc` y `.pkg`.
+- OpenGL regenera el atlas tipográfico europeo (2048 px) antes de compilar para conservar los acentos españoles.
+- Se conserva el mensaje de resultado, los diagnósticos, la ruta del proyecto y el artefacto verificable.
+
+# Registro de cambios
+
 ## 1.0.4 — 16 de octubre de 2026
 
 - Corrige el punto de entrada Windows para proyectos C++ nativos generados: `build.ps1` llama al destino `app` del Makefile dentro de WSL en vez de ejecutar `tools/build.sh` directamente.

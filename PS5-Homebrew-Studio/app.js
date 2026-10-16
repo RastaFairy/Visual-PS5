@@ -614,9 +614,8 @@
         if(!/^PPSA\d{5}$/.test(tid)){toast('TITLE_ID debe tener el formato PPSA12345.','error');return;}
         const output=$('#nativeVisualOutput');const buttons=$$('#modalActions button');buttons.forEach(b=>b.disabled=true);
         buildBusy=true;$('#buildBtn').disabled=true;$('#buildBtn').textContent='⟳ Compilando';setDock('output');
-        const started=Date.now();let timer=null;
+        let buildOutcome='error';
         if(output)output.textContent='Preparando código C++20…';
-        timer=setInterval(()=>{const box=$('#nativeVisualOutput');if(box)box.textContent=`Generación/compilación en curso · ${Math.floor((Date.now()-started)/1000)} s transcurridos.\nEl servidor local devolverá el log real de Make/CMake/Ninja al completar.`;},1200);
         log(`Generación visual nativa ${backend}: ${name} (${tid}).`);
         try{
           project.name=name;project.settings=project.settings||{};project.settings.titleId=tid;
@@ -630,16 +629,31 @@
           // The source model carries names and links, while image pixels travel once as bounded RGBA assets.
           wireProject.assets=(wireProject.assets||[]).map(a=>{const item=Object.assign({},a);delete item.dataUrl;return item;});
           if(output)output.textContent=`Pantalla generada (${code.length.toLocaleString('es-ES')} caracteres). Recursos RGBA preparados: ${nativeAssets.length}. Iniciando pipeline upstream…`;
-          const result=await api('build-visual-native',{project:wireProject,programCode:code,backend,titleId:tid,nativeAssets});
-          const logText=(result.output||result.message||'Proceso finalizado.')+(result.path?'\n\nProyecto: '+result.path:'')+(result.artifact?'\nArtefacto: '+result.artifact:'');
-          const box=$('#nativeVisualOutput');if(box)box.textContent=logText;
-          if(result.ok){log(result.message||'Código visual convertido y compilado.', 'INFO');if(result.artifact)log('Artefacto verificado: '+result.artifact,'INFO');toast('Pantalla nativa compilada correctamente');
+          const startedJob=await api('build-visual-native/start',{project:wireProject,programCode:code,backend,titleId:tid,nativeAssets});
+          if(!startedJob.ok||!startedJob.jobId)throw new Error(startedJob.message||'El servidor no inició la tarea de compilación.');
+          let status=null,lastLog='';
+          while(true){
+            status=await api('build-jobs/'+startedJob.jobId);
+            const currentLog=String(status.log||'');
+            if(currentLog!==lastLog){const box=$('#nativeVisualOutput');if(box){box.textContent=currentLog||'Esperando salida del proceso…';box.scrollTop=box.scrollHeight;}lastLog=currentLog;}
+            if(status.done)break;
+            await new Promise(resolve=>setTimeout(resolve,450));
+          }
+          const result=status.result||{ok:false,message:'El trabajador terminó sin resultado legible.',output:lastLog};
+          const logText=(result.output||result.message||lastLog||'Proceso finalizado.')+(result.path?'\n\nProyecto: '+result.path:'')+(result.artifact?'\nArtefacto: '+result.artifact:'');
+          const box=$('#nativeVisualOutput');if(box){box.textContent=logText;box.scrollTop=box.scrollHeight;}
+          if(result.ok){buildOutcome='success';log(result.message||'Código visual convertido y compilado.', 'INFO');if(result.artifact)log('Artefacto verificado: '+result.artifact,'INFO');toast('Pantalla nativa compilada correctamente');
             try{localStorage.setItem(STORAGE_KEY,JSON.stringify(project));savedState();}catch{}
-          }else{log(result.message||'La generación o compilación nativa ha fallado.','ERROR');if(result.path)log('El proyecto upstream se conserva para corrección: '+result.path,'WARN');toast('No se pudo verificar una compilación final. Consulta el log.','error');}
+            const actions=$('#modalActions');
+            if(actions&&!actions.querySelector('[data-post-build="kyty"]')){
+              const runButton=document.createElement('button');runButton.className='btn secondary';runButton.dataset.postBuild='kyty';runButton.textContent='Probar en Kyty';runButton.onclick=()=>runNativeKyty(result.path);actions.append(runButton);
+              const packButton=document.createElement('button');packButton.className='btn secondary';packButton.dataset.postBuild='ultrapack';packButton.textContent='Empaquetar con UltraPack';packButton.onclick=()=>packageNativeWithUltraPack(result.path);actions.append(packButton);
+            }
+          }else{buildOutcome='error';log(result.message||'La generación o compilación nativa ha fallado.','ERROR');if(result.path)log('El proyecto upstream se conserva para corrección: '+result.path,'WARN');toast('Error de compilación. Consulta el registro para ver el diagnóstico.','error');}
           if(result.diagnostics){result.diagnostics.forEach(d=>allDiagnostics.push(d));renderDiagnostics();}
           if(activePanel==='templates')await renderNativeProjects();
         }catch(e){const box=$('#nativeVisualOutput');if(box)box.textContent=e.message;log('Error de generación/compilación nativa: '+e.message,'ERROR');toast('No se completó el build nativo.','error');}
-        finally{clearInterval(timer);buildBusy=false;$('#buildBtn').disabled=false;$('#buildBtn').innerHTML='<span>▶</span> Compilar';await refreshStatus();if(activePanel==='templates')await renderNativeProjects();}
+        finally{buildBusy=false;$('#buildBtn').disabled=false;$('#buildBtn').innerHTML=buildOutcome==='success'?'<span>✓</span> Completado':buildOutcome==='error'?'<span>!</span> Error · Reintentar':'<span>▶</span> Compilar';$$('#modalActions button').forEach(b=>b.disabled=false);await refreshStatus();if(activePanel==='templates')await renderNativeProjects();}
       }}
     ]);
   }

@@ -548,6 +548,66 @@ function PackageNativeProjectWithUltraPack($Body) {
   return @{ok=$false;message="UltraPack terminó con código $exitCode o no generó el archivo .$format esperado.";output=$logText;path=$projectRoot;source=[string]$title.path;artifact=$artifact;format=$format;exitCode=$exitCode}
 }
 
+function WriteBuildJobLog([string]$Path,[string]$Message) {
+  if ([string]::IsNullOrWhiteSpace($Path)) { return }
+  try { [IO.File]::AppendAllText($Path, ([string]$Message + [Environment]::NewLine), $script:Utf8) } catch { }
+}
+function GetBuildJobDirectory([string]$JobId) {
+  if ($JobId -notmatch '^[a-f0-9]{32}$') { throw 'Identificador de compilación no válido.' }
+  $root = Join-Path $script:Runtime 'build-jobs'
+  return (Join-Path $root $JobId)
+}
+function StartNativeBuildJob($Body) {
+  $jobId = [guid]::NewGuid().ToString('N')
+  $dir = GetBuildJobDirectory $jobId
+  New-Item -ItemType Directory -Force -Path $dir | Out-Null
+  WriteUtf8 (Join-Path $dir 'request.json') (ConvertTo-Json -InputObject $Body -Depth 100)
+  WriteBuildJobLog (Join-Path $dir 'build.log') 'Preparando la generación C++20 y la compilación upstream…'
+  $hostPath = (Get-Process -Id $PID -ErrorAction Stop).Path
+  if (!$hostPath -or !(Test-Path -LiteralPath $hostPath -PathType Leaf)) { throw 'No se pudo localizar el ejecutable de PowerShell para iniciar el trabajador de compilación.' }
+  $argumentLine = '-NoProfile -ExecutionPolicy Bypass -File "' + $PSCommandPath + '" --worker "' + $jobId + '"'
+  $worker = Start-Process -FilePath $hostPath -ArgumentList $argumentLine -WorkingDirectory $script:Root -WindowStyle Hidden -PassThru
+  if (!$worker) { throw 'No se pudo iniciar el trabajador de compilación.' }
+  WriteUtf8 (Join-Path $dir 'worker.json') (ConvertTo-Json -InputObject @{pid=$worker.Id})
+  return @{ok=$true;jobId=$jobId;message='Compilación iniciada.';pid=$worker.Id}
+}
+function GetNativeBuildJobStatus([string]$JobId) {
+  $dir = GetBuildJobDirectory $JobId
+  if (!(Test-Path -LiteralPath $dir -PathType Container)) { throw 'No existe esa tarea de compilación.' }
+  $logPath = Join-Path $dir 'build.log'
+  $resultPath = Join-Path $dir 'result.json'
+  $logText = if (Test-Path -LiteralPath $logPath -PathType Leaf) { [IO.File]::ReadAllText($logPath) } else { '' }
+  if (Test-Path -LiteralPath $resultPath -PathType Leaf) {
+    $result = Get-Content -LiteralPath $resultPath -Raw | ConvertFrom-Json
+    return @{ok=$true;done=$true;log=$logText;result=$result}
+  }
+  $workerPath = Join-Path $dir 'worker.json'
+  if (Test-Path -LiteralPath $workerPath -PathType Leaf) {
+    $workerInfo = Get-Content -LiteralPath $workerPath -Raw | ConvertFrom-Json
+    if (!(Get-Process -Id ([int]$workerInfo.pid) -ErrorAction SilentlyContinue)) {
+      $failed = @{ok=$false;message='El trabajador terminó inesperadamente sin entregar un resultado.';output=$logText;exitCode=1}
+      WriteUtf8 $resultPath (ConvertTo-Json -InputObject $failed -Depth 20)
+      return @{ok=$true;done=$true;log=$logText;result=$failed}
+    }
+  }
+  return @{ok=$true;done=$false;log=$logText}
+}
+
+function EnableEuropeanFontAtlas([string]$ProjectRoot) {
+  $fontScript = Join-Path $ProjectRoot 'tools/bake-fonts.sh'
+  if (!(Test-Path -LiteralPath $fontScript -PathType Leaf)) { throw 'No se encuentra tools/bake-fonts.sh para habilitar los glifos europeos.' }
+  $source = [IO.File]::ReadAllText($fontScript)
+  $basic = '"$size" "$range" 1024'
+  $european = '"$size" "$range" 2048 european'
+  if ($source.Contains($basic)) {
+    $source = $source.Replace($basic, $european)
+    [IO.File]::WriteAllText($fontScript, $source, $script:Utf8)
+  } elseif (!$source.Contains($european)) {
+    throw 'La plantilla de fuentes cambió: no se reconoce la invocación de font-baker. Se detiene la compilación para no generar un atlas sin acentos.'
+  }
+  WriteBuildJobLog $script:ActiveBuildLogPath 'Atlas tipográfico europeo habilitado (2048 px; caracteres latinos extendidos).'
+}
+
 function BuildNativeProject([string]$ProjectPath) {
   $workspaceRoot = [IO.Path]::GetFullPath($script:Workspace)
   $separator = [string]([IO.Path]::DirectorySeparatorChar)
@@ -565,6 +625,7 @@ function BuildNativeProject([string]$ProjectPath) {
     return @{ok=$false;message='El manifiesto no identifica una plantilla de compilación compatible.';output=$markerPath}
   }
   $template = [string]$meta.template
+  if ($template -eq 'hui-gl') { try { EnableEuropeanFontAtlas $projectRoot } catch { return @{ok=$false;message=$_.Exception.Message;output=$_.Exception.Message;path=$projectRoot;templateId=$template} } }
   try { $normalizedLineEndings = NormalizeNativeBuildFiles $projectRoot }
   catch { return @{ok=$false;message='No se pudieron normalizar los finales de línea de los archivos nativos.';output=$_.Exception.Message;templateId=$template} }
   $scriptPath = ''
@@ -606,7 +667,11 @@ function BuildNativeProject([string]$ProjectPath) {
     $ccacheEnabled = (($ccacheProbe -join '').Trim() -eq 'yes')
     $ccacheValue = if ($ccacheEnabled) { '1' } else { '0' }
     if ($template -in @('nativecpp','hui-gl')) {
-      $cmd = 'cd ' + (BashQuote $projectWsl) + ' && USE_CCACHE=' + $ccacheValue + ' make'
+      if ($template -eq 'hui-gl') {
+        $cmd = 'cd ' + (BashQuote $projectWsl) + ' && make deps && bash tools/bake-fonts.sh && USE_CCACHE=' + $ccacheValue + ' make'
+      } else {
+        $cmd = 'cd ' + (BashQuote $projectWsl) + ' && USE_CCACHE=' + $ccacheValue + ' make'
+      }
     } else {
       $vulkanWsl = ConvertToWslPath $vulkanDir
       $payloadSdkWsl = ConvertToWslPath $payloadSdkDir
@@ -623,7 +688,12 @@ function BuildNativeProject([string]$ProjectPath) {
         ' && PS5_PAYLOAD_SDK_FORK=' + (BashQuote $payloadSdkWsl) + ' PS5_MESA_FORK=' + (BashQuote $mesaWsl) + ' bash tools/build-radv.sh release'
       $cmd = $bootstrap + ' && cd ' + (BashQuote $projectWsl) + ' && USE_CCACHE=' + $ccacheValue + ' PS5_VULKAN_DIR=' + (BashQuote $vulkanWsl) + ' PS5_PAYLOAD_SDK_FORK=' + (BashQuote $payloadSdkWsl) + ' bash ' + (BashQuote $buildScriptWsl)
     }
-    $output = @(& $wsl.path -d $dist --exec bash -lc $cmd 2>&1)
+    WriteBuildJobLog $script:ActiveBuildLogPath 'Ejecutando el pipeline real de WSL/Make/CMake/Ninja. La salida se transmite al registro mientras avanza.'
+    $output = @(& $wsl.path -d $dist --exec bash -lc $cmd 2>&1 | ForEach-Object {
+      $line = $_.ToString()
+      WriteBuildJobLog $script:ActiveBuildLogPath $line
+      $line
+    })
     $exit = $LASTEXITCODE
     $buildLog = ($output | ForEach-Object { $_.ToString() }) -join "`r`n"
     if ($dependencyLog.Count) { $buildLog = (($dependencyLog -join "`r`n") + "`r`n" + $buildLog) }
@@ -783,6 +853,7 @@ $pathLiterals
 }
 
 function BuildNativeVisualProject($Body) {
+  WriteBuildJobLog $script:ActiveBuildLogPath 'Validando el modelo visual, el backend y los metadatos del título…'
   $backend = [string]$Body.backend
   if ($backend -notin @('opengl-ui','vulkan-ui')) {
     return @{ok=$false;message='Backend nativo visual desconocido.';output=$backend}
@@ -883,6 +954,7 @@ std::span<const ConceptFactory> concept_registry() {
     $parts += 'Se conservaron el renderer, los metadatos y el pipeline de compilación del repositorio.'
     if ($backend -eq 'vulkan-ui' -and $assetResult.count -gt 0) { $parts += 'Texturas Vulkan RGBA8 conectadas a VkRenderer::create_texture y registradas en ps5/assets.json.' }
     if ($assetResult.count -gt 0) { $parts += "Recursos RGBA empaquetados: $($assetResult.count) en $($assetResult.manifest)." }
+    WriteBuildJobLog $script:ActiveBuildLogPath 'Código C++20 generado e inyectado. Preparando dependencias y compilación…'
     $build = BuildNativeProject $projectRoot
     if ($build.output) { $parts += [string]$build.output }
     $combined = $parts -join "`r`n"
@@ -956,6 +1028,30 @@ function ServeStatic($C,[string]$UrlPath) {
   SendBytes $C ([IO.File]::ReadAllBytes($full)) $type
 }
 # TCP loopback server, not HttpListener: avoids admin-only URL ACL setup on a fresh Windows install.
+if ($args.Count -ge 2 -and [string]$args[0] -eq '--worker') {
+  $jobId = [string]$args[1]
+  try {
+    $jobDir = GetBuildJobDirectory $jobId
+    $script:ActiveBuildLogPath = Join-Path $jobDir 'build.log'
+    WriteBuildJobLog $script:ActiveBuildLogPath 'Trabajador de compilación iniciado.'
+    $requestPath = Join-Path $jobDir 'request.json'
+    $body = Get-Content -LiteralPath $requestPath -Raw | ConvertFrom-Json
+    $result = BuildNativeVisualProject $body
+    if ($result.ok) { WriteBuildJobLog $script:ActiveBuildLogPath ('COMPLETADO: ' + [string]$result.message) }
+    else { WriteBuildJobLog $script:ActiveBuildLogPath ('ERROR: ' + [string]$result.message) }
+    if ($result.output) { WriteBuildJobLog $script:ActiveBuildLogPath ([string]$result.output) }
+    WriteUtf8 (Join-Path $jobDir 'result.json') (ConvertTo-Json -InputObject $result -Depth 100)
+    exit 0
+  } catch {
+    $failed = @{ok=$false;message='El trabajador de compilación ha fallado.';output=$_.Exception.Message;exitCode=1}
+    try {
+      WriteBuildJobLog (Join-Path (GetBuildJobDirectory $jobId) 'build.log') ('ERROR FATAL: ' + $_.Exception.Message)
+      WriteUtf8 (Join-Path (GetBuildJobDirectory $jobId) 'result.json') (ConvertTo-Json -InputObject $failed -Depth 20)
+    } catch { }
+    exit 1
+  }
+}
+
 $listener = [Net.Sockets.TcpListener]::new([Net.IPAddress]::Parse('127.0.0.1'),47813)
 try { $listener.Start() } catch { Write-Host "No se pudo iniciar el servicio en $script:Url. Cierra otra instancia. $($_.Exception.Message)" -ForegroundColor Red; Read-Host 'Pulsa Intro'; exit 2 }
 Write-Host 'PS5 Homebrew Studio' -ForegroundColor Cyan
@@ -1085,6 +1181,10 @@ while ($listener.Server.IsBound) {
                         elseif ($method -eq 'GET' -and $path -eq '/api/native-projects') {
                             SendJson $ctx @{ projects = (GetGeneratedProjects) }
                         }
+                        elseif ($method -eq 'GET' -and $path -match '^/api/build-jobs/[a-f0-9]{32}$') {
+                            $jobId = ($path -split '/')[-1]
+                            SendJson $ctx (GetNativeBuildJobStatus $jobId)
+                        }
                         else {
                             $body = ReadBody $ctx
                             switch ($path) {
@@ -1150,6 +1250,9 @@ while ($listener.Server.IsBound) {
                                 '/api/build-native' {
                                     $result = BuildNativeProject ([string]$body.path)
                                     SendJson $ctx $result
+                                }
+                                '/api/build-visual-native/start' {
+                                    SendJson $ctx (StartNativeBuildJob $body)
                                 }
                                 '/api/build-visual-native' {
                                     $result = BuildNativeVisualProject $body
