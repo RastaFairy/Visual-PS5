@@ -202,14 +202,15 @@
     if(!path){toast('La ruta del proyecto está vacía.','error');return;}
     const body='<p>Se validará que el título incluya <code>eboot.bin</code> y <code>sce_sys/param.json</code>. El resultado se guardará dentro de <code>packages-ultrapack</code> en la carpeta del proyecto.</p>'+
       '<div class="form-field"><label>Formato de salida</label><select id="ultraPackFormat" class="compact-select" style="width:100%"><option value="ffpfsc">.ffpfsc · PFS comprimido</option><option value="ffpfs">.ffpfs · PFS sin comprimir</option><option value="pkg">.pkg · fPKG (requiere helper Windows)</option></select></div>'+
+      '<div class="form-field"><label style="display:flex;align-items:center;gap:8px"><input id="ultraPackVerify" type="checkbox" checked style="width:auto"> Verificar el contenido contra el origen</label><p class="section-note">Recomendado: comprueba el contenido del paquete frente a los archivos originales. Puede tardar más y consumir más memoria.</p></div>'+
       '<pre id="ultraPackOutput" style="font:10px/1.55 Consolas,monospace;white-space:pre-wrap;word-break:break-word;max-height:40vh;overflow:auto">Listo para ejecutar PS5 UltraPack.</pre>';
     openModal('Empaquetar con PS5 UltraPack',body,[
       {text:'Cerrar',class:'ghost',action:closeModal},
       {text:'Empaquetar',class:'primary',action:async()=>{
-        const format=$('#ultraPackFormat').value,buttons=$$('#modalActions button');buttons.forEach(b=>b.disabled=true);
-        const box=$('#ultraPackOutput');if(box)box.textContent='Preparando el empaquetado '+format+'…';
+        const format=$('#ultraPackFormat').value,verify=$('#ultraPackVerify').checked,buttons=$('#modalActions button');buttons.forEach(b=>b.disabled=true);
+        const box=$('#ultraPackOutput');if(box)box.textContent='Preparando el empaquetado '+format+(verify?' con verificación completa…':'…');
         try{
-          const startedJob=await api('package-ultrapack/start',{path,format});
+          const startedJob=await api('package-ultrapack/start',{path,format,verify});
           if(!startedJob.ok||!startedJob.jobId)throw new Error(startedJob.message||'No se pudo iniciar el trabajo de empaquetado.');
           let status=null,lastLog='';
           while(true){status=await api('build-jobs/'+startedJob.jobId);const currentLog=String(status.log||'');
