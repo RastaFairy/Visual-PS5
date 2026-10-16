@@ -160,119 +160,76 @@
   async function renderNativeProjects(){
     const root=$('#nativeProjectList');if(!root)return;
     try{
-      const result=await api('native-projects');
-      const projects=result.projects||[];
+      const result=await api('native-projects'),projects=result.projects||[];
       if(!projects.length){root.innerHTML='<div class="empty-screen">Todavía no hay proyectos nativos creados desde Homebrew Studio. Usa «Crear base C++», «Crear app UI OpenGL» o «Crear título Vulkan» en una tarjeta compatible.</div>';return;}
-      root.innerHTML=projects.map(p=>`<article class="native-project-card"><div class="native-project-main"><strong>${esc(p.name||p.titleId||'Proyecto nativo')}</strong><span class="native-project-meta">${esc(p.visualBackend||p.templateId||'plantilla')} · ${esc(p.titleId||'sin TITLE_ID')}${p.design?' · diseño '+esc(p.design):''}${p.generatedFromStudio?' · canvas → C++20':''}</span><code title="Ruta del proyecto">${esc(p.path||'')}</code>${p.built?`<span class="native-build-state success">Artefacto: ${esc(p.artifact)}</span>`:'<span class="native-build-state pending">Aún no compilado</span>'}</div><div class="native-project-actions"><button class="btn primary small" data-native-build="${esc(p.path||'')}">Compilar</button><button class="btn ghost small" data-source-open="${p.templateId==='vulkan-template'?'https://github.com/mihawk-99/PS5_VulkanTemplate':p.templateId==='hui-gl'?'https://github.com/blackbearreloaded/ps5-homebrew-ui':'https://github.com/blackbearreloaded/ps5-native-app-boilerplate'}">Upstream ↗</button></div></article>`).join('');
+      root.innerHTML=projects.map(p=>`<article class="native-project-card"><div class="native-project-main"><strong>${esc(p.name||p.titleId||'Proyecto nativo')}</strong><span class="native-project-meta">${esc(p.visualBackend||p.templateId||'plantilla')} · ${esc(p.titleId||'sin TITLE_ID')}${p.design?' · diseño '+esc(p.design):''}${p.generatedFromStudio?' · canvas → C++20':''}</span><code title="Ruta del proyecto">${esc(p.path||'')}</code>${p.built?`<span class="native-build-state success">Título listo: ${esc(p.artifact)}</span>`:'<span class="native-build-state pending">Título no verificado: requiere eboot.bin y sce_sys/param.json</span>'}</div><div class="native-project-actions"><button class="btn primary small" data-native-build="${esc(p.path||'')}">Compilar</button><button class="btn ghost small" data-source-open="${p.templateId==='vulkan-template'?'https://github.com/mihawk-99/PS5_VulkanTemplate':p.templateId==='hui-gl'?'https://github.com/blackbearreloaded/ps5-homebrew-ui':'https://github.com/blackbearreloaded/ps5-native-app-boilerplate'}">Upstream ↗</button></div></article>`).join('');
       root.querySelectorAll('.native-project-card').forEach((card,index)=>{
-        const p=projects[index]||{};
-        const actions=card.querySelector('.native-project-actions');
-        if(!actions)return;
-        const run=document.createElement('button');run.className='btn secondary small';run.textContent='Probar en Kyty';run.disabled=!p.built;run.dataset.nativeRun=p.path||'';run.title='Iniciar el título compilado en KytyPS5';
-        const pack=document.createElement('button');pack.className='btn secondary small';pack.textContent='UltraPack';pack.disabled=!p.built;pack.dataset.nativePackage=p.path||'';pack.title='Crear ffpfs, ffpfsc o pkg con PS5 UltraPack';
-        actions.insertBefore(run,actions.children[1]||null);
-        actions.insertBefore(pack,actions.children[2]||null);
-        run.onclick=()=>runNativeKyty(run.dataset.nativeRun);
-        pack.onclick=()=>packageNativeWithUltraPack(pack.dataset.nativePackage);
+        const p=projects[index]||{},actions=card.querySelector('.native-project-actions');if(!actions)return;
+        const pack=document.createElement('button');pack.className='btn secondary small';pack.textContent='Empaquetar';pack.disabled=!p.built;pack.dataset.nativePackage=p.path||'';pack.title=p.built?'Crear ffpfs, ffpfsc o pkg con PS5 UltraPack':'Compila y verifica el título antes de empaquetarlo';
+        actions.insertBefore(pack,actions.children[1]||null);pack.onclick=()=>packageNativeWithUltraPack(pack.dataset.nativePackage);
       });
-
     }catch(e){root.innerHTML=`<div class="empty-screen">No se pudo consultar el workspace de Windows: ${esc(e.message)}. El servicio local debe estar ejecutándose.</div>`;}
   }
 
-
   async function openIntegrationSettings(){
-    let config={};
-    try{config=await api('integrations');}
-    catch(e){toast('No se pudo leer la configuración: '+e.message,'error');return;}
+    let config={};try{config=await api('integrations');}catch(e){toast('No se pudo leer la configuración: '+e.message,'error');return;}
     const ready=flag=>flag?'<span style="color:var(--green)">Detectado</span>':'<span style="color:var(--yellow)">Pendiente</span>';
-    const body=
-      '<p>Configura ejecutables ya instalados en este PC. Las rutas se guardan localmente en <code>.runtime/integrations.json</code>.</p>'+
-      '<div class="form-field"><label>Ejecutable de KytyPS5 · kyty_emulator.exe</label><input id="integrationKytyPath" spellcheck="false" value="'+esc(config.kytyExe||'')+'" placeholder="D:\\Kyty\\_Build\\windows\\install\\kyty_emulator.exe"></div>'+
-      '<div class="form-field"><label>Ejecutable de Python 3.10 o posterior</label><input id="integrationPythonPath" spellcheck="false" value="'+esc(config.pythonExe||'')+'" placeholder="python.exe o C:\\Python311\\python.exe"></div>'+
-      '<div class="form-field"><label>PS5 UltraPack · archivo backend\\cli.py</label><input id="integrationUltraPackPath" spellcheck="false" value="'+esc(config.ultraPackCli||'')+'" placeholder="D:\\ps5-ultrapack\\backend\\cli.py"></div>'+
-      '<div class="system-tile"><strong>Estado detectado</strong><p>KytyPS5: '+ready(config.kytyReady)+' · Python: '+ready(config.pythonReady)+' · UltraPack: '+ready(config.ultraPackReady)+'</p>'+
-      '<p><a class="repo-link" href="https://github.com/KytyPS5/KytyPS5/releases" target="_blank" rel="noreferrer">Descargas de KytyPS5 ↗</a> · <a class="repo-link" href="https://github.com/knutwurst/ps5-ultrapack" target="_blank" rel="noreferrer">Repositorio UltraPack ↗</a></p></div>'+
-      '<p>UltraPack puede necesitar dependencias adicionales. El soporte de creación de fPKG (.pkg) en Windows no está garantizado. El IDE mostrará el registro real de cada proceso.</p>';
-    openModal('Herramientas externas · KytyPS5 y UltraPack',body,[
+    const body='<p>Configura las herramientas locales de empaquetado. Las rutas se guardan en <code>.runtime/integrations.json</code>.</p>'+
+      '<div class="form-field"><label>Ejecutable de Python 3.10 o posterior</label><input id="integrationPythonPath" spellcheck="false" value="'+esc(config.pythonExe||'')+'" placeholder="python.exe o C:\\\\Python311\\\\python.exe"></div>'+
+      '<div class="form-field"><label>PS5 UltraPack · archivo backend\\\\cli.py</label><input id="integrationUltraPackPath" spellcheck="false" value="'+esc(config.ultraPackCli||'')+'" placeholder="D:\\\\ps5-ultrapack\\\\backend\\\\cli.py"></div>'+
+      '<div class="system-tile"><strong>Estado detectado</strong><p>Python: '+ready(config.pythonReady)+' · UltraPack CLI: '+ready(config.ultraPackReady)+'</p><p><a class="repo-link" href="https://github.com/knutwurst/ps5-ultrapack" target="_blank" rel="noreferrer">Repositorio PS5 UltraPack ↗</a></p></div>'+
+      '<p>El empaquetado .ffpfs/.ffpfsc depende de las bibliotecas Python upstream. La creación de .pkg en Windows requiere el helper nativo de fPKG y sus dependencias.</p>';
+    openModal('Herramientas de empaquetado · PS5 UltraPack',body,[
       {text:'Cerrar',class:'ghost',action:closeModal},
       {text:'Descargar UltraPack (fuente)',class:'secondary',action:async()=>{
-        const button=$('#modalActions button').find(x=>x.textContent==='Descargar UltraPack (fuente)');
-        if(button)button.disabled=true;
-        try{
-          const result=await api('sdk-install',{ids:['ps5-ultrapack']});
-          const item=(result.results||[]).find(x=>x.name==='PS5 UltraPack'||x.path);
+        const button=$$('#modalActions button').find(x=>x.textContent==='Descargar UltraPack (fuente)');if(button)button.disabled=true;
+        try{const result=await api('sdk-install',{ids:['ps5-ultrapack']});const item=(result.results||[]).find(x=>x.name==='PS5 UltraPack'||x.path);
           if(!item||!item.ok||!item.path)throw new Error(item?.message||result.message||'La descarga no terminó correctamente.');
-          const cli=item.cli||item.path+'\\backend\\cli.py';
-          const python=item.pythonExe||$('#integrationPythonPath').value.trim();
-          const saved=await api('integration-config',{kytyExe:$('#integrationKytyPath').value.trim(),pythonExe:python,ultraPackCli:cli});
-          log('UltraPack descargado como código fuente: '+item.path,'INFO');
-          toast(saved.message||'UltraPack preparado');
-          closeModal();await openIntegrationSettings();
-        }catch(e){
-          toast('No se pudo preparar UltraPack: '+e.message,'error');
-          if(button)button.disabled=false;
-        }
+          const cli=item.cli||item.path+'\\\\backend\\\\cli.py',python=item.pythonExe||$('#integrationPythonPath').value.trim();
+          const saved=await api('integration-config',{pythonExe:python,ultraPackCli:cli});
+          log('UltraPack descargado como código fuente: '+item.path,'INFO');toast(saved.message||'UltraPack preparado');closeModal();await openIntegrationSettings();
+        }catch(e){toast('No se pudo preparar UltraPack: '+e.message,'error');if(button)button.disabled=false;}
       }},
       {text:'Guardar configuración',class:'primary',action:async()=>{
-        const data={kytyExe:$('#integrationKytyPath').value.trim(),pythonExe:$('#integrationPythonPath').value.trim(),ultraPackCli:$('#integrationUltraPackPath').value.trim()};
-        try{
-          const result=await api('integration-config',data);
-          closeModal();log(result.message||'Configuración guardada.','INFO');toast('Configuración de herramientas guardada');
-          await renderNativeProjects();
-        }catch(e){toast('No se pudo guardar la configuración: '+e.message,'error');}
+        const data={pythonExe:$('#integrationPythonPath').value.trim(),ultraPackCli:$('#integrationUltraPackPath').value.trim()};
+        try{const result=await api('integration-config',data);closeModal();log(result.message||'Configuración guardada.','INFO');toast('Configuración de empaquetado guardada');await renderNativeProjects();}
+        catch(e){toast('No se pudo guardar la configuración: '+e.message,'error');}
       }}
     ]);
   }
 
-  async function runNativeKyty(path){
-    if(!path){toast('La ruta del proyecto está vacía.','error');return;}
-    const body='<p>Se intentará iniciar Kyty con la carpeta del título compilado. La compatibilidad del emulador es experimental y depende del título.</p>'+
-      '<pre id="kytyRunOutput" style="font:10px/1.55 Consolas,monospace;white-space:pre-wrap;word-break:break-word;max-height:42vh;overflow:auto">Iniciando KytyPS5…</pre>';
-    openModal('Ejecutar en KytyPS5',body,[{text:'Cerrar',class:'ghost',action:closeModal}]);
-    log('Solicitada prueba local de KytyPS5 para '+path,'INFO');
-    try{
-      const result=await api('run-kyty',{path});
-      const box=$('#kytyRunOutput');
-      if(box)box.textContent=(result.message||'Kyty iniciado.')+'\nPID: '+(result.pid??'desconocido')+'\nCarpeta: '+(result.gameFolder||'')+'\neboot.bin: '+(result.eboot||'')+'\nComando: '+(result.command||'');
-      log(result.message||'KytyPS5 iniciado.','INFO');toast('KytyPS5 iniciado');
-    }catch(e){
-      const box=$('#kytyRunOutput');if(box)box.textContent='No se pudo iniciar KytyPS5.\n'+e.message;
-      log('Error de ejecución KytyPS5: '+e.message,'ERROR');toast('No se pudo iniciar KytyPS5','error');
-    }
-  }
-
   async function packageNativeWithUltraPack(path){
     if(!path){toast('La ruta del proyecto está vacía.','error');return;}
-    const body='<p>El título debe incluir <code>eboot.bin</code> y <code>sce_sys/param.json</code>. El resultado se guardará dentro de <code>packages-ultrapack</code> en la carpeta del proyecto.</p>'+
-      '<div class="form-field"><label>Formato de salida</label><select id="ultraPackFormat" class="compact-select" style="width:100%"><option value="ffpfsc">.ffpfsc · PFS comprimido</option><option value="ffpfs">.ffpfs · PFS sin comprimir</option><option value="pkg">.pkg · fPKG (experimental en Windows)</option></select></div>'+
+    const body='<p>Se validará que el título incluya <code>eboot.bin</code> y <code>sce_sys/param.json</code>. El resultado se guardará dentro de <code>packages-ultrapack</code> en la carpeta del proyecto.</p>'+
+      '<div class="form-field"><label>Formato de salida</label><select id="ultraPackFormat" class="compact-select" style="width:100%"><option value="ffpfsc">.ffpfsc · PFS comprimido</option><option value="ffpfs">.ffpfs · PFS sin comprimir</option><option value="pkg">.pkg · fPKG (requiere helper Windows)</option></select></div>'+
       '<pre id="ultraPackOutput" style="font:10px/1.55 Consolas,monospace;white-space:pre-wrap;word-break:break-word;max-height:40vh;overflow:auto">Listo para ejecutar PS5 UltraPack.</pre>';
     openModal('Empaquetar con PS5 UltraPack',body,[
       {text:'Cerrar',class:'ghost',action:closeModal},
       {text:'Empaquetar',class:'primary',action:async()=>{
-        const format=$('#ultraPackFormat').value;
-        const buttons=$('#modalActions button');buttons.forEach(b=>b.disabled=true);
-        const box=$('#ultraPackOutput');if(box)box.textContent='Ejecutando UltraPack en formato '+format+'…\nNo cierres la consola local.';
-        const started=Date.now();
-        const ticker=setInterval(()=>{const out=$('#ultraPackOutput');if(out)out.textContent='UltraPack sigue ejecutándose ('+Math.floor((Date.now()-started)/1000)+' s).\nEl resultado real aparecerá cuando termine.';},1200);
+        const format=$('#ultraPackFormat').value,buttons=$$('#modalActions button');buttons.forEach(b=>b.disabled=true);
+        const box=$('#ultraPackOutput');if(box)box.textContent='Preparando el empaquetado '+format+'…';
         try{
-          const result=await api('package-ultrapack',{path,format});
-          const output=(result.message?'Resultado: '+result.message+'\n\n':'')+(result.output||'El proceso no proporcionó salida estándar ni de error.')+'\n\nCódigo de salida: '+(result.exitCode??'no disponible')+(result.artifact?'\n\nArchivo generado: '+result.artifact:'\n\nNo se ha verificado ningún archivo de salida.')+(result.note?'\n\n'+result.note:'');
+          const startedJob=await api('package-ultrapack/start',{path,format});
+          if(!startedJob.ok||!startedJob.jobId)throw new Error(startedJob.message||'No se pudo iniciar el trabajo de empaquetado.');
+          let status=null,lastLog='';
+          while(true){status=await api('build-jobs/'+startedJob.jobId);const currentLog=String(status.log||'');
+            if(currentLog!==lastLog){const out=$('#ultraPackOutput');if(out){out.textContent=currentLog||'Preparando el proceso…';out.scrollTop=out.scrollHeight;}lastLog=currentLog;}
+            if(status.done)break;await new Promise(resolve=>setTimeout(resolve,450));
+          }
+          const result=status.result||{ok:false,message:'El empaquetador terminó sin entregar un resultado.',output:lastLog,exitCode:1};
+          const output=(result.message?'Resultado: '+result.message+'\\n\\n':'')+(result.output||lastLog||'El proceso no proporcionó salida.')+'\\n\\nCódigo de salida: '+(result.exitCode??'no disponible')+(result.artifact?'\\n\\nArchivo generado: '+result.artifact:'\\n\\nNo se ha verificado ningún archivo de salida.')+(result.note?'\\n\\n'+result.note:'');
           if(box)box.textContent=output;
           if(result.ok){log(result.message||'Empaquetado completado.','INFO');log('Artefacto UltraPack: '+result.artifact,'INFO');toast('Paquete creado con UltraPack');}
           else{log(result.message||'UltraPack no generó el archivo esperado.','ERROR');toast('UltraPack terminó con errores','error');}
-        }catch(e){
-          if(box)box.textContent='No se pudo ejecutar UltraPack.\n'+e.message;
-          log('Error de UltraPack: '+e.message,'ERROR');toast('No se pudo ejecutar UltraPack','error');
-        }finally{
-          clearInterval(ticker);buttons.forEach(b=>b.disabled=false);await renderNativeProjects();
-        }
+        }catch(e){if(box)box.textContent='No se pudo ejecutar UltraPack.\\n'+e.message;log('Error de UltraPack: '+e.message,'ERROR');toast('UltraPack terminó con errores','error');}
+        finally{buttons.forEach(b=>b.disabled=false);await renderNativeProjects();}
       }}
     ]);
   }
 
   async function buildNativeProject(path){
     if(!path){toast('La ruta del proyecto está vacía.','error');return;}
-    openModal('Compilación nativa C++ / OpenGL / Vulkan',`<p>Se invocará el script de compilación real de la plantilla. La salida de Make/CMake/Ninja aparecerá aquí mientras se genera. Cuando termine podrás probar el título en Kyty o empaquetarlo con UltraPack.</p><pre id="nativeBuildOutput" style="font:10px/1.55 Consolas,monospace;color:#aeb8cf;white-space:pre-wrap;word-break:break-word;max-height:46vh;overflow:auto">Preparando compilación…</pre>`,[{text:'Cerrar ventana',class:'ghost',action:closeModal}]);
+    openModal('Compilación nativa C++ / OpenGL / Vulkan',`<p>Se invocará el script de compilación real de la plantilla. La salida de Make/CMake/Ninja aparecerá aquí mientras se genera. Cuando termine podrás empaquetar el título si contiene eboot.bin y sus metadatos.</p><pre id="nativeBuildOutput" style="font:10px/1.55 Consolas,monospace;color:#aeb8cf;white-space:pre-wrap;word-break:break-word;max-height:46vh;overflow:auto">Preparando compilación…</pre>`,[{text:'Cerrar ventana',class:'ghost',action:closeModal}]);
     log('Inicio del build upstream para proyecto nativo: '+path);
     let outcome='error';
     try{
@@ -291,8 +248,7 @@
       if(result.ok){
         outcome='success';setLastPostBuildPath(result.path||path);log(result.message||'Build upstream completado.');if(result.artifact)log('Artefacto nativo: '+result.artifact);toast('Compilación nativa completada');
         const actions=$('#modalActions');
-        if(actions&&!actions.querySelector('[data-post-build="kyty"]')){
-          const runButton=document.createElement('button');runButton.className='btn secondary';runButton.dataset.postBuild='kyty';runButton.textContent='Probar en Kyty';runButton.onclick=()=>runNativeKyty(path);actions.append(runButton);
+        if(actions&&!actions.querySelector('[data-post-build="ultrapack"]')){
           const packButton=document.createElement('button');packButton.className='btn secondary';packButton.dataset.postBuild='ultrapack';packButton.textContent='Empaquetar con UltraPack';packButton.onclick=()=>packageNativeWithUltraPack(path);actions.append(packButton);
         }
       }else{outcome='error';log(result.message||'El build nativo ha fallado.','ERROR');toast('La compilación nativa ha fallado. Revisa el log.','error');}
@@ -661,8 +617,7 @@
           if(result.ok){buildOutcome='success';setLastPostBuildPath(result.path||'');log(result.message||'Código visual convertido y compilado.', 'INFO');if(result.artifact)log('Artefacto verificado: '+result.artifact,'INFO');toast('Pantalla nativa compilada correctamente');
             try{localStorage.setItem(STORAGE_KEY,JSON.stringify(project));savedState();}catch{}
             const actions=$('#modalActions');
-            if(actions&&!actions.querySelector('[data-post-build="kyty"]')){
-              const runButton=document.createElement('button');runButton.className='btn secondary';runButton.dataset.postBuild='kyty';runButton.textContent='Probar en Kyty';runButton.onclick=()=>runNativeKyty(result.path);actions.append(runButton);
+            if(actions&&!actions.querySelector('[data-post-build="ultrapack"]')){
               const packButton=document.createElement('button');packButton.className='btn secondary';packButton.dataset.postBuild='ultrapack';packButton.textContent='Empaquetar con UltraPack';packButton.onclick=()=>packageNativeWithUltraPack(result.path);actions.append(packButton);
             }
           }else{buildOutcome='error';log(result.message||'La generación o compilación nativa ha fallado.','ERROR');if(result.path)log('El proyecto upstream se conserva para corrección: '+result.path,'WARN');toast('Error de compilación. Consulta el registro para ver el diagnóstico.','error');}
@@ -680,7 +635,7 @@
   function addAsset(file){if(!file)return;const id='asset-'+Date.now().toString(36);const reader=new FileReader();reader.onload=()=>{const dataUrl=reader.result;const asset={id,name:file.name,fileName:slug(file.name.replace(/\.[^.]+$/,''))+file.name.slice(file.name.lastIndexOf('.')),mime:file.type||'application/octet-stream',size:file.size,dataUrl};snapshot();project.assets.push(asset);if(activeAssetId){const c=component(activeAssetId);if(c)c.assetId=id;activeAssetId=null;}else if(file.type.startsWith('image/')){const c=makeComponent('image');c.label=file.name;c.assetId=id;}changed('Recurso importado');renderAssetList();renderCanvas();renderInspector();toast('Recurso importado: '+file.name);log(`Recurso importado: ${file.name} (${formatBytes(file.size)}).`);};reader.onerror=()=>toast('No se pudo leer el archivo.','error');reader.readAsDataURL(file);}
 
   function getLastPostBuildPath(){try{return localStorage.getItem('ps5hs:last-built-native-path')||'';}catch{return '';}}
-  function setLastPostBuildPath(path){try{if(path)localStorage.setItem('ps5hs:last-built-native-path',path);else localStorage.removeItem('ps5hs:last-built-native-path');}catch{}const ready=!!path;const run=$('#postBuildKytyBtn'),pack=$('#postBuildPackBtn');if(run){run.disabled=!ready;run.title=ready?'Probar el último título nativo compilado':'Compila un título nativo para habilitar esta acción';}if(pack){pack.disabled=!ready;pack.title=ready?'Empaquetar el último título nativo compilado':'Compila un título nativo para habilitar esta acción';}}
+  function setLastPostBuildPath(path){try{if(path)localStorage.setItem('ps5hs:last-built-native-path',path);else localStorage.removeItem('ps5hs:last-built-native-path');}catch{}const pack=$('#postBuildPackBtn');if(pack){pack.disabled=!path;pack.title=path?'Empaquetar el último título nativo compilado':'Compila un título nativo para habilitar esta acción';}}
   setLastPostBuildPath(getLastPostBuildPath());
 
   // Events: drag/drop, panels, tabs, keyboard shortcuts and project operations.
@@ -688,7 +643,7 @@
   $$('.editor-tab').forEach(b=>b.addEventListener('click',()=>setActiveView(b.dataset.view)));
   $$('.right-tab').forEach(b=>b.addEventListener('click',()=>setRightPane(b.dataset.right)));
   $$('.dock-tab').forEach(b=>b.addEventListener('click',()=>setDock(b.dataset.dock)));
-  $('#newProjectBtn').onclick=newProject;$('#openProjectBtn').onclick=openProject;$('#saveProjectBtn').onclick=saveProject;$('#exportProjectBtn').onclick=exportProject;$('#buildBtn').onclick=buildProject;$('#postBuildKytyBtn').onclick=()=>runNativeKyty(getLastPostBuildPath());$('#postBuildPackBtn').onclick=()=>packageNativeWithUltraPack(getLastPostBuildPath());$('#integrationSettingsBtn')?.addEventListener('click',openIntegrationSettings);$('#previewBtn').onclick=togglePreview;$('#addFlowBtn').onclick=()=>addFlow();$('#recheckBtn').onclick=()=>{runAnalysis();renderDiagnostics();log('Análisis estático ejecutado.');};$('#diagFilter').onchange=renderDiagnostics;
+  $('#newProjectBtn').onclick=newProject;$('#openProjectBtn').onclick=openProject;$('#saveProjectBtn').onclick=saveProject;$('#exportProjectBtn').onclick=exportProject;$('#buildBtn').onclick=buildProject;$('#postBuildPackBtn').onclick=()=>packageNativeWithUltraPack(getLastPostBuildPath());$('#integrationSettingsBtn')?.addEventListener('click',openIntegrationSettings);$('#previewBtn').onclick=togglePreview;$('#addFlowBtn').onclick=()=>addFlow();$('#recheckBtn').onclick=()=>{runAnalysis();renderDiagnostics();log('Análisis estático ejecutado.');};$('#diagFilter').onchange=renderDiagnostics;
   $('#dismissNotice').onclick=()=>$('#noticeStrip').remove();$('#dockToggle').onclick=()=>{$('.bottom-dock').classList.toggle('collapsed');$('#dockToggle').textContent=$('.bottom-dock').classList.contains('collapsed')?'⌃':'⌄';};$('#gridBtn').onclick=()=>{showGrid=!showGrid;renderCanvas();};$('#fitBtn').onclick=()=>{zoom=100;$('#canvasStage').style.transform='scale(1)';$('#canvasStage').style.transformOrigin='center center';$('#zoomValue').textContent='100%';};$('#centerBtn').onclick=()=>{screenComponents().forEach(c=>{c.x=clamp(c.x,0,1920-c.w);c.y=clamp(c.y,0,1080-c.h);});renderCanvas();changed('Lienzo comprobado');};
   $('#backendSelect').onchange=()=>{const previous=project.backend;project.backend=$('#backendSelect').value;if(previous!==project.backend&&project.manualCode){project.manualCode=false;project.customCode='';toast('Se regenerará el código para el nuevo backend.','warn');}changed('Backend actualizado');renderCode();runAnalysis();};
   $('#projectName').addEventListener('input',()=>{project.name=$('#projectName').value;changed('Nombre del proyecto actualizado');});
