@@ -1,4 +1,4 @@
-# PS5 Homebrew Studio · Windows local service (PowerShell 5.1+)
+﻿# PS5 Homebrew Studio · Windows local service (PowerShell 5.1+)
 # Localhost only: project filesystem and process execution are not exposed to the LAN.
 $ErrorActionPreference = 'Stop'
 $script:Root = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
