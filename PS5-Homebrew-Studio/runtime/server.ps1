@@ -143,12 +143,33 @@ function InstallRepo($Entry) {
     if($marker -and (Test-Path (Join-Path $dest '.git'))){return @{ok=$true;name=$Entry.name;message='Ya estaba clonado; no se ha sobrescrito.';path=$dest}}
     if(Test-Path $dest){throw "Existe una carpeta incompleta en $dest. Renómbrala o elimínala manualmente y vuelve a clonar para no perder archivos."}
   } elseif($marker -or (Test-Path (Join-Path $dest 'README.md'))){
-    if($Entry.id -eq 'ps5-ultrapack') {
-      $existingVenvPython = Join-Path $dest '.venv\Scripts\python.exe'
-      if(Test-Path -LiteralPath $existingVenvPython -PathType Leaf) {
-        return @{ok=$true;name=$Entry.name;message='UltraPack ya estaba instalado con su entorno Python aislado.';path=$dest;pythonExe=$existingVenvPython;cli=(Join-Path $dest 'backend\cli.py')}
+    if($Entry.id -ne 'ps5-ultrapack') { return @{ok=$true;name=$Entry.name;message='Ya estaba instalado; no se ha sobrescrito.';path=$dest} }
+  }
+  # Repair an existing UltraPack checkout in place. Never delete a user's checkout or
+  # custom native helper merely because its virtual environment is missing.
+  if ($Entry.id -eq 'ps5-ultrapack' -and (Test-Path -LiteralPath $dest -PathType Container)) {
+    $existingCli = Join-Path $dest 'backend\cli.py'
+    if (!(Test-Path -LiteralPath $existingCli -PathType Leaf)) {
+      throw "Existe una carpeta UltraPack incompleta en '$dest' sin backend\cli.py. No se ha sobrescrito para proteger archivos locales; renómbrala manualmente si deseas volver a descargar el repositorio."
+    }
+    $pythonCmd = CmdInfo 'python.exe'; if (!$pythonCmd.ok) { $pythonCmd = CmdInfo 'python' }
+    if (!$pythonCmd.ok -or !$pythonCmd.path) { throw "La copia de UltraPack ya existe en '$dest'. Instala Python 3.10+ para reparar su entorno virtual sin reemplazar la carpeta." }
+    $venvPath = Join-Path $dest '.venv'
+    $venvPython = Join-Path $venvPath 'Scripts\python.exe'
+    if (!(Test-Path -LiteralPath $venvPython -PathType Leaf)) {
+      $venvOut = @(& $pythonCmd.path -m venv $venvPath 2>&1); $venvExit = $LASTEXITCODE
+      if ($venvExit -ne 0 -or !(Test-Path -LiteralPath $venvPython -PathType Leaf)) {
+        $detail = ($venvOut | ForEach-Object { $_.ToString() }) -join "`r`n"
+        throw "No se pudo crear el entorno virtual de UltraPack en '$venvPath'. $detail"
       }
-    } else { return @{ok=$true;name=$Entry.name;message='Ya estaba instalado; no se ha sobrescrito.';path=$dest} }
+    }
+    $pipOut = @(& $venvPython -m pip install --disable-pip-version-check py7zr rarfile psutil cryptography 2>&1); $pipExit = $LASTEXITCODE
+    if ($pipExit -ne 0) {
+      $detail = ($pipOut | ForEach-Object { $_.ToString() }) -join "`r`n"
+      throw "No se pudieron instalar las dependencias CLI en '$venvPath'. La carpeta de fuentes se ha conservado. $detail"
+    }
+    WriteUtf8 (Join-Path $dest '.ps5hs-ultrapack-python.json') (ConvertTo-Json -InputObject @{pythonExe=$venvPython;cli=$existingCli;installedAt=(Get-Date).ToString('o')} -Depth 4)
+    return @{ok=$true;name=$Entry.name;message="Entorno Python de UltraPack reparado sin reemplazar fuentes ni helpers locales: $venvPath";path=$dest;pythonExe=$venvPython;cli=$existingCli}
   }
   $temp=Join-Path $script:Runtime ([guid]::NewGuid().ToString('N'));New-Item -ItemType Directory -Force -Path $temp|Out-Null
   try {
