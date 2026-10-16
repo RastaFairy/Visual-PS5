@@ -27,6 +27,10 @@ jobs:
         shell: pwsh
         run: node PS5-Homebrew-Studio/runtime/test-native-generator.js
 
+      - name: Validate WSL repair helper syntax
+        shell: bash
+        run: bash -n PS5-Homebrew-Studio/runtime/fix-wsl-permissions.sh
+
       - name: Parse PowerShell server
         shell: pwsh
         run: |

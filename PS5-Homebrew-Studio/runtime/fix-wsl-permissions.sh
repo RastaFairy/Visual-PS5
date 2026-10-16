@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-CONF=/etc/wsl.conf
+CONF="${WSL_CONF_PATH:-/etc/wsl.conf}"
 if [[ "$EUID" -ne 0 ]]; then
   echo "Este ajuste modifica /etc/wsl.conf. Ejecuta: sudo bash \"$0\"" >&2
   exit 2
@@ -21,11 +21,14 @@ python3 - "$CONF" <<'PY'
 from pathlib import Path
 import os
 import re
+import stat
 import sys
 import tempfile
 
 path = Path(sys.argv[1])
-text = path.read_text(encoding="utf-8") if path.exists() else ""
+mode = stat.S_IMODE(path.stat().st_mode) if path.exists() else 0o644
+with path.open("r", encoding="utf-8", newline="") as source if path.exists() else __import__("contextlib").nullcontext("") as handle:
+    text = handle.read()
 lines = text.splitlines(keepends=True)
 newline = "\r\n" if "\r\n" in text else "\n"
 section_match = re.compile(r"^\s*\[([^\]]+)\]\s*(?:[#;].*)?$")
@@ -87,6 +90,7 @@ fd, temp_name = tempfile.mkstemp(prefix="wsl.conf.", dir=str(path.parent))
 try:
     with os.fdopen(fd, "w", encoding="utf-8", newline="") as out:
         out.write(new_text)
+    os.chmod(temp_name, mode)
     os.replace(temp_name, path)
 finally:
     if os.path.exists(temp_name):
