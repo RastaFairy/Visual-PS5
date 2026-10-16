@@ -1,21 +1,32 @@
-# Registro de cambios — Visual-PS5 / PS5 Homebrew Studio
+# Changelog / Registro de cambios
 
 ## 1.1.0 — 16 de octubre de 2026
 
-- Retirada la integración activa de lanzamiento mediante Kyty; el flujo se centra en títulos compilados y pruebas en hardware.
-- Corregidos los selectores de interfaz que impedían activar acciones de UltraPack.
-- Empaquetado como tarea en segundo plano con registro consultable, código de salida y ruta del artefacto.
-- Añadida verificación opcional del contenido contra el origen mediante --verify; la casilla está activada por defecto.
-- Aplicada codificación UTF-8 a las salidas Python/CLI para conservar caracteres no ASCII en los registros.
-- Conservada la compatibilidad con Windows PowerShell 5.1, validación de Python 3.10+ y reparación de UltraPack sin reemplazar el checkout ni el helper local.
-- La preparación de empaquetado exige eboot.bin y sce_sys/param.json; los ZIP/PKG residuales no se consideran prueba de título válido.
-- Eliminados stubs vacíos del generador Vulkan y rechazados flujos con destinos inexistentes.
-- Añadidos manuales completos en español, inglés, francés, alemán, chino simplificado, japonés y ruso, junto con créditos de upstream.
+- Eliminada la integración activa de lanzamiento mediante Kyty.
+- Corregido el flujo de empaquetado UltraPack: trabajo en segundo plano, logs consultables y verificación opcional del contenido mediante `--verify` (activada de forma predeterminada).
+- Forzada la codificación UTF-8 en la salida Python/CLI y mantenida la compatibilidad con Windows PowerShell 5.1.
+- Exigidos `eboot.bin` y `sce_sys/param.json` para habilitar el empaquetado de títulos nativos.
+- Retirados stubs vacíos del generador Vulkan y rechazadas referencias de flujo no válidas.
+- Actualizados los manuales a 1.1.0 y añadidos documentos en español, inglés, francés, alemán, chino simplificado, japonés y ruso.
+- Añadida atribución enlazada a proyectos y cuentas GitHub upstream.
 
-### Validación
+El mantenedor informa de que una imagen `.ffpfsc` generada se probó correctamente en hardware real. Es una prueba concreta, no una garantía de compatibilidad universal.
 
-La CI cubre sintaxis JavaScript, pruebas del generador, parsers PowerShell 7 y Windows PowerShell 5.1, contratos de integración, versión y creación del ZIP. El mantenedor comunicó una prueba satisfactoria de empaquetado .ffpfsc en hardware real; no implica compatibilidad universal.
+## Historial anterior
 
-## Historial
+## 1.0.1 — 16 October 2026
 
-Los cambios de las versiones 1.0.x permanecen en el historial Git.
+- Fixed PowerShell parsing in SaveProject by delimiting the sourceName variable as \${sourceName} before a colon.
+- Updated visible application version strings.
+- Re-ran JavaScript syntax checks and native-generator tests.
+- Archive integrity was checked with unzip; this is not a substitute for the official PowerShell parser, the full PS5 SDK build or a physical-console test.
+
+## 1.0.0 — initial release
+
+- Visual editor, project model, save/open/export, diagnostics and a catalogue of community repositories.
+- C++20 UI generation for the native OpenGL and Vulkan/RADV backends.
+- Image resource handling, visual flows and build orchestration delegated to upstream toolchains.
+
+## Validation policy
+
+Never describe static generator tests as a successful target build. Record the operating system, PowerShell version, backend, upstream commit IDs, full logs and target firmware when reproducing a build issue.

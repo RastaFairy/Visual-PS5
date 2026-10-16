@@ -1,19 +1,103 @@
-# Changelog — PS5 Homebrew Studio
+# Registro de cambios
 
 ## 1.1.0 — 2026-10-16
 
-- Removed the Kyty launch integration from active UI, configuration and routes; the workflow focuses on built titles and hardware testing.
-- Fixed the UltraPack UI selector bug and moved packaging into a pollable background job.
-- Added a source-content verification option that passes --verify to UltraPack; enabled by default.
-- Forced UTF-8 for Python/CLI output to preserve non-ASCII characters in logs.
-- Preserved Windows PowerShell 5.1 compatibility and added Python 3.10+ validation.
-- UltraPack repair preserves the existing checkout and local native helper.
-- Native-title readiness requires eboot.bin and sce_sys/param.json.
-- Removed empty Vulkan texture-loader stubs and reject invalid flow targets before C++ generation.
-- Added user manuals in Spanish, English, French, German, Simplified Chinese, Japanese and Russian, plus upstream credits.
+- Se retiró Kyty de las acciones, la configuración y las rutas activas del IDE.
+- El empaquetado UltraPack se ejecuta como tarea independiente y muestra su salida, código de salida y artefacto.
+- Se corrigió el uso de colecciones de botones en el frontend y la compatibilidad de ProcessStartInfo con Windows PowerShell 5.1.
+- La compilación nativa ya no considera un ZIP/PKG residual como prueba de título; se exige `eboot.bin` y `sce_sys/param.json`.
+- El generador Vulkan ya no emite un cargador de texturas vacío y rechaza flujos con destinos o pantallas inexistentes.
+- La reparación de la instalación de UltraPack conserva el checkout y los helpers locales.
 
-### Validation notes
+## 1.0.9 — 2026-10-16
 
-Automated checks cover JavaScript syntax, generator tests, PowerShell 7 and Windows PowerShell 5.1 parsing, integration hooks, version metadata and ZIP packaging. The maintainer reports successful .ffpfsc packaging tested on real hardware. This is a specific test, not a universal compatibility guarantee.
+- Kyty recibe la ruta completa de `eboot.bin` mediante `--game`, con resolución 1920×1080 y registro del comando utilizado.
+- La instalación de UltraPack crea un entorno Python aislado en `toolchains/ps5-ultrapack/.venv` e instala dependencias CLI; Herramientas guarda las rutas exactas de `backend/cli.py` y de ese Python.
+- La ejecución de empaquetado valida la ruta configurada y registra CLI, Python, origen y destino. Si falta el helper nativo de Windows para `.pkg`, devuelve un error explícito antes de ejecutar.
+- Se aclara que los imports sin resolver y los guest faults son fallos de compatibilidad de Kyty, no errores que el IDE pueda solucionar únicamente cambiando argumentos.
 
-Earlier 1.0.x release notes remain in Git history.
+## 1.0.8 — 2026-10-16
+
+- La llamada a PS5 UltraPack usa argumentos estructurados de proceso, el directorio de trabajo del CLI y un directorio temporal explícito; registra el comando real y separa STDOUT/STDERR para diagnosticar fallos en Windows.
+
+## 1.0.7 — 2026-10-16
+
+- Las acciones «Probar en Kyty» y «Empaquetar» permanecen en la barra común del IDE y recuerdan la última compilación nativa correcta.
+- La consulta de `build.log` usa lectura compartida con reintentos para evitar que una escritura concurrente interrumpa el seguimiento de una compilación.
+- La compilación visual permite cambiar el nombre/destino y sobrescribir explícitamente solo carpetas con manifiesto de Homebrew Studio y plantilla coincidente.
+- Los fallos de UltraPack muestran diagnóstico, salida del proceso, código de salida y si se verificó un artefacto.
+
+## 1.0.6 — 2026-10-16
+
+- Las compilaciones visuales y los proyectos nativos C++ se ejecutan en un trabajador de fondo y el IDE consulta su estado sin bloquear el servicio local.
+- El registro muestra la salida real de WSL/Make/CMake/Ninja conforme se produce; se elimina el contador ficticio de progreso.
+- El botón termina en un estado explícito: «Completado» o «Error · Reintentar».
+- Tras una compilación visual correcta, se ofrecen acciones directas para probar el título en KytyPS5 o empaquetarlo con UltraPack, con selector `.ffpfs`, `.ffpfsc` y `.pkg`.
+- OpenGL regenera el atlas tipográfico europeo (2048 px) antes de compilar para conservar los acentos españoles.
+- Las pruebas del generador C++ verifican que las cadenas UTF-8 con vocales acentuadas, ñ, ü, signos españoles y euro sobreviven en los backends OpenGL y Vulkan.
+- Se conserva el mensaje de resultado, los diagnósticos, la ruta del proyecto y el artefacto verificable.
+
+# Registro de cambios
+
+## 1.0.4 — 16 de octubre de 2026
+
+- Corrige el punto de entrada Windows para proyectos C++ nativos generados: `build.ps1` llama al destino `app` del Makefile dentro de WSL en vez de ejecutar `tools/build.sh` directamente.
+- El Makefile vuelve a definir los includes obligatorios `src/` y OpenGL, los archivos estáticos y los import stubs que faltaban en el registro de compilación mostrado por el wrapper.
+- El generador parchea la plantilla al copiarla, para que los proyectos nuevos reciban la corrección incluso si el upstream todavía conserva el wrapper antiguo.
+
+
+## 1.0.3 — 16 de octubre de 2026
+
+- Corrige el empaquetado de imágenes del generador visual: los IDs se gestionan coherentemente como `Map`, sin llamar a `.add()`.
+- Normaliza los finales de línea de archivos de texto críticos para el build nativo al crear el proyecto y justo antes de compilar en WSL; cubre scripts `.sh`, Makefiles, fuentes C/C++, `CMakeLists.txt` y manifiestos `.sha256`.
+- Declara `*.sha256 text eol=lf` en `.gitattributes` del proyecto generado y fija `core.autocrlf=false` para nuevos clones.
+- Mantiene intacta la comprobación SHA-256 del runtime; corrige el formato del manifiesto en vez de desactivar la protección.
+
+
+## 1.0.0 — Generación visual nativa C++20
+
+- Convierte el lienzo y los flujos visuales en pantallas C++20 compatibles con el contrato `hui::app::Concept` del kit `ps5-homebrew-ui` y su fork Vulkan.
+- Añade un flujo de interfaz para generar y compilar diseños nativos: selección de nombre/TITLE_ID, creación en un directorio separado, log en vivo y validación del artefacto real de salida.
+- Backend OpenGL: carga RGBA8 desde `assets/ps5hs`, después de decodificar las imágenes en el navegador y reducirlas a un máximo de 512×512. Limita a 16 recursos únicos y registra hash/procedencia de los ficheros en el manifiesto.
+- Backend Vulkan: inyecta la pantalla generada en el título creado por `PS5_VulkanTemplate` y usa CMake/Ninja/RADV. Las imágenes RGBA8 se registran en `ps5/assets.json`, se empaquetan en `/app0/assets/ps5hs/` y se suben con `VkRenderer::create_texture`; añade además un aviso de licencia para recursos aportados por el usuario.
+- Expone `visualBackend` y `generatedFromStudio` en el registro de proyectos nativos, incluye tests Node.js de los generadores y actualiza avisos de uso/licencias.
+- Añade teclado nativo en pantalla para `input` en ambos generadores C++: navegación con cruceta, letras ASCII, dígitos, puntuación básica, espacio, borrar, limpiar, aceptar/cancelar y disparo del evento `change`. No se presenta como IME multilingüe del sistema.
+
+- Se añade verificación del contenido de UltraPack contra el origen mediante `--verify`, activada por defecto en la interfaz.
+- Se fijan las salidas Python/CLI en UTF-8 para preservar caracteres no ASCII.
+- Se publican manuales actualizados en siete idiomas y créditos con enlaces a los repositorios y cuentas upstream. La UI permanece en español hasta una fase de localización independiente.
+
+### Validación
+
+`node --check app.js`, `node --check runtime/native-generator.js` y `node runtime/test-native-generator.js` pasan. Clang también ha comprobado el código C++ generado para ambas rutas contra interfaces de prueba locales; esto no sustituye la compilación con los headers/SDK completos ni una prueba en PS5. El entorno no dispone de PowerShell ni del toolchain PS5 completo, por lo que el parser oficial de PowerShell y el build final deben ejecutarse en Windows/WSL, donde `start.bat` analiza `runtime/server.ps1` antes de arrancar.
+
+## 0.2.0 — Ecosistema de proyectos nativos
+
+- Amplía el panel Proyectos a 34 repositorios: boilerplates C++20, OpenGL 4.6, kits UI, Vulkan/RADV, Mesa/winsys, Aurora/WebGPU, upscaling experimental y aplicaciones completas de referencia.
+- Distingue bases de proyecto, renderers, drivers, dependencias y aplicaciones de referencia. Los repositorios grandes no se presentan como boilerplates universales.
+- Añade inicializadores reales upstream para Native App Boilerplate, ps5-homebrew-ui y PS5 Vulkan Template; crea proyectos independientes fuera del canvas C#.
+- Añade un listado de proyectos nativos creados, entradas Compilar, logs del proceso upstream y criterio de éxito basado en el código de salida y un artefacto real.
+- Añade preparación del stack Vulkan con los scripts upstream de PS5_Vulkan, su SDK compañero y PS5_Mesa, conservando historial Git completo donde se necesitan commits fijados.
+- En la revisión del stack Vulkan consultada se detectó que dos helpers referenciados por el build no estaban presentes. Si faltan, el IDE restaura los archivos reales de `blackbearreloaded/ps5-native-app-boilerplate` y registra hashes/procedencia en `.ps5hs-compatibility.json`.
+- Identifica como IA declarada únicamente proyectos que documentan el uso explícito de estas herramientas; AGENTS.md/CLAUDE.md no se tratan como prueba de generación de código.
+- Conserva el parser PowerShell de arranque y el límite de servicio `127.0.0.1`.
+
+### Validación
+
+`app.js` ha pasado `node --check`. La comprobación estática de PowerShell encontró delimitadores equilibrados y 18 bloques `try` asociados a `catch`/`finally`. En el entorno de preparación no está instalado PowerShell, por lo que no se ejecutó el parser real ni se realizó una compilación de PS5. El paquete usa `runtime/check-syntax.ps1` para hacer la validación sintáctica real en Windows antes de iniciar el servicio.
+
+
+## 1.0.1 — 16 de octubre de 2026
+
+- Corregida la interpolación PowerShell de `$sourceName:` en `runtime/server.ps1` para evitar que el parser interprete el colon como una referencia cualificada inválida.
+- Actualizados los identificadores de versión visibles en la UI.
+- Esta corrección no implica que se haya ejecutado el parser oficial en el entorno de preparación ni una build real de SDK/hardware.
+
+
+## 1.0.2 — 16 de octubre de 2026
+
+- Añadidas rutas de configuración locales para KytyPS5, Python y PS5 UltraPack.
+- Añadida la acción «Probar en Kyty» para lanzar un título compilado desde su carpeta.
+- Añadido el empaquetado UltraPack a `.ffpfs`, `.ffpfsc` o `.pkg`, con registro y verificación del archivo de salida.
+- Añadida guía en `docs/INTEGRACIONES-KYTY-ULTRAPACK.es-ES.md`.
+- La integración no distribuye binarios ni garantiza compatibilidad de emulación o soporte de fPKG en Windows.
