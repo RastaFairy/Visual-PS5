@@ -51,27 +51,38 @@ jobs:
           $requiredServer = @(
             "function GetIntegrationConfig",
             "function SetIntegrationConfig",
-            "function RunKytyProject",
             "function PackageNativeProjectWithUltraPack",
+            "function InstallVulkanTextureRuntime",
+            "function GetProjectEbootFolders",
             "'/api/integrations'",
             "'/api/integration-config'",
-            "'/api/run-kyty'",
-            "'/api/package-ultrapack'",
+            "'/api/package-ultrapack/start'",
             "function NormalizeNativeBuildFiles",
             "canonical Makefile target",
             '$makeBuildCall',
             '$buildText = $buildText.Replace($legacyBuildCall, $makeBuildCall)',
             "core.autocrlf=false",
-            "*.sha256 text eol=lf"
+            "*.sha256 text eol=lf",
+            '$psi.EnvironmentVariables['
           )
           foreach ($needle in $requiredServer) {
             if (-not $server.Contains($needle)) { throw "Missing server integration: $needle" }
           }
-          foreach ($needle in @("api('integrations')", "api('run-kyty'", "api('package-ultrapack'", "function openIntegrationSettings")) {
+          foreach ($needle in @("api('integrations')", "api('package-ultrapack/start'", "function openIntegrationSettings", "const buttons=$('#modalActions button')")) {
             if (-not $app.Contains($needle)) { throw "Missing UI integration: $needle" }
+          }
+          if ($server -match 'RunKytyProject|kytyExe|/api/run-kyty' -or $app -match 'runNativeKyty|postBuildKyty|kyty_emulator|/api/run-kyty') {
+            throw "The retired emulator integration remains in active runtime code."
+          }
+          if ($app.Contains("const buttons=$('#modalActions button')") -or $app.Contains("$('#modalActions button').find")) {
+            throw "A single querySelector result is being used as a collection."
           }
           if ($app.Contains("safeIds.add(")) { throw "Image asset IDs must be managed with Map.set, not Set.add." }
           if (-not $app.Contains("safeIds.set(id,rawId)")) { throw "Missing image asset ID Map registration." }
+          $generator = Get-Content -Raw PS5-Homebrew-Studio/runtime/native-generator.js
+          if ($generator.Contains("void load_textures() {}") -or $generator.Contains("target component was not resolved") -or $generator.Contains("unsupported visual action")) {
+            throw "The native generator still contains empty texture stubs or orphan flow fallbacks."
+          }
           Write-Host "Integration server/UI contract: OK"
 
       - name: Check version metadata
@@ -79,13 +90,13 @@ jobs:
         run: |
           $version = (Get-Content PS5-Homebrew-Studio/VERSION.txt | Where-Object { $_ -match '^Version:' }) -replace '^Version:\s*',''
           $html = Get-Content -Raw PS5-Homebrew-Studio/index.html
-          if ($version -ne '1.0.9' -or -not $html.Contains('VERSION 1.0.9')) {
+          if ($version -ne '1.1.0' -or -not $html.Contains('VERSION 1.1.0')) {
             throw "Version mismatch: VERSION.txt=$version"
           }
-          Write-Host "Version 1.0.9: OK"
+          Write-Host "Version 1.1.0: OK"
 
       - name: Package Studio release archive
-        if: github.ref == 'refs/heads/main' && success()
+        if: (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/fix/')) && success()
         shell: pwsh
         run: |
           $version = (Get-Content PS5-Homebrew-Studio/VERSION.txt | Where-Object { $_ -match '^Version:' }) -replace '^Version:\s*',''
@@ -101,10 +112,10 @@ jobs:
           "STUDIO_CHECKSUM=$checksum" >> $env:GITHUB_ENV
 
       - name: Upload Studio release artifact
-        if: github.ref == 'refs/heads/main' && success()
+        if: (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/fix/')) && success()
         uses: actions/upload-artifact@v4
         with:
-          name: PS5-Homebrew-Studio-v1.0.9
+          name: PS5-Homebrew-Studio-v1.1.0
           path: |
             ${{ runner.temp }}/PS5-Homebrew-Studio-v*.zip
             ${{ runner.temp }}/PS5-Homebrew-Studio-v*.zip.sha256
