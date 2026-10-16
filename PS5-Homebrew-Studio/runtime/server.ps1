@@ -1245,6 +1245,10 @@ function BuildNativeProject([string]$ProjectPath,[bool]$CleanBeforeBuild=$false,
       $openglDir = Join-Path $script:Toolchains $openglEntry.folder
       $openglSdkDir = Join-Path $openglDir 'build/sdk/ps5-opengl-gl46'
       if (!(Test-Path -LiteralPath $openglSdkDir -PathType Container)) {
+        $mountState = GetWslDrvFsMetadataState $dist $openglDir
+        if ($mountState.applicable -and !$mountState.metadata) {
+          throw (GetWslPermissionRepairInstructions $dist $openglDir)
+        }
         $openglWsl = ConvertToWslPath $openglDir
         $nativeWsl = ConvertToWslPath $nativeDir
         $sdkGlPattern = BashQuote '^[[:space:]]*sdk-gl46[[:space:]]*:'
@@ -1253,7 +1257,13 @@ function BuildNativeProject([string]$ProjectPath,[bool]$CleanBeforeBuild=$false,
         WriteBuildJobLog $script:ActiveBuildLogPath 'Preparando las dependencias del backend OpenGL y compilando su SDK upstream si falta.'
         $sdkOutput = @(& $wsl.path -d $dist --exec bash -lc $sdkCmd 2>&1 | ForEach-Object { $line=$_.ToString(); WriteBuildJobLog $script:ActiveBuildLogPath $line; $line })
         $sdkExit = $LASTEXITCODE
-        if ($sdkExit -ne 0 -or !(Test-Path -LiteralPath $openglSdkDir -PathType Container)) { throw "No se pudo generar PS5 OpenGL SDK (código $sdkExit). Revisa el log anterior." }
+        if ($sdkExit -ne 0 -or !(Test-Path -LiteralPath $openglSdkDir -PathType Container)) {
+          $sdkLogText = ($sdkOutput | ForEach-Object { [string]$_ }) -join [Environment]::NewLine
+          if ($sdkLogText -match 'chmod on .+\.git/config\.lock failed: Operation not permitted|could not set .core\.filemode.') {
+            throw (GetWslPermissionRepairInstructions $dist $openglDir)
+          }
+          throw "No se pudo generar PS5 OpenGL SDK (código $sdkExit). Revisa el log anterior."
+        }
       }
       $openglPrefix = ConvertToWslPath $openglSdkDir
       $nativeWsl = ConvertToWslPath $nativeDir
@@ -1303,7 +1313,10 @@ function BuildNativeProject([string]$ProjectPath,[bool]$CleanBeforeBuild=$false,
     }
     return @{ok=$false;message="El build upstream terminó con código $exit o no produjo un título actual verificable (eboot.bin + sce_sys/param.json).";output=$buildLog;path=$projectRoot;artifact=$artifact;templateId=$template;titleId=[string]$meta.titleId;exitCode=$exit;diagnostics=@(@{severity='error';title='Título nativo incompleto';message='Se requiere un eboot.bin generado en esta compilación y metadatos sce_sys/param.json. Los ZIP/PKG residuales no se consideran ejecutables.';location=$template})}
   } catch {
-    return @{ok=$false;message=$_.Exception.Message;output=($dependencyLog -join "`r`n");path=$projectRoot;templateId=$template;titleId=[string]$meta.titleId}
+    $failure = [string]$_.Exception.Message
+    $failureOutput = (@($dependencyLog) + @($failure) | Where-Object { $_ }) -join [Environment]::NewLine
+    if ($script:ActiveBuildLogPath) { WriteBuildJobLog $script:ActiveBuildLogPath $failure }
+    return @{ok=$false;message=$failure;output=$failureOutput;path=$projectRoot;templateId=$template;titleId=[string]$meta.titleId}
   }
 }
 function WriteNativeVisualAssets($Body,[string]$ProjectRoot) {
