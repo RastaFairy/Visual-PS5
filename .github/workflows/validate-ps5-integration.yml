@@ -79,10 +79,10 @@ jobs:
         run: |
           $version = (Get-Content PS5-Homebrew-Studio/VERSION.txt | Where-Object { $_ -match '^Version:' }) -replace '^Version:\s*',''
           $html = Get-Content -Raw PS5-Homebrew-Studio/index.html
-          if ($version -ne '1.0.4' -or -not $html.Contains('VERSION 1.0.4')) {
+          if ($version -ne '1.0.6' -or -not $html.Contains('VERSION 1.0.6')) {
             throw "Version mismatch: VERSION.txt=$version"
           }
-          Write-Host "Version 1.0.4: OK"
+          Write-Host "Version 1.0.6: OK"
 
       - name: Package Studio release archive
         if: github.ref == 'refs/heads/main' && success()
@@ -104,7 +104,7 @@ jobs:
         if: github.ref == 'refs/heads/main' && success()
         uses: actions/upload-artifact@v4
         with:
-          name: PS5-Homebrew-Studio-v1.0.4
+          name: PS5-Homebrew-Studio-v1.0.6
           path: |
             ${{ runner.temp }}/PS5-Homebrew-Studio-v*.zip
             ${{ runner.temp }}/PS5-Homebrew-Studio-v*.zip.sha256
