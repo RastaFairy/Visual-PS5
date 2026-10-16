@@ -552,12 +552,6 @@ function PackageNativeProjectWithUltraPack($Body) {
   $projectRoot = [string]$resolved.path
   $format = ([string]$Body.format).Trim().ToLowerInvariant()
   if ($format -notin @('ffpfs','ffpfsc','pkg')) { throw 'Formato de salida no válido. Elige .ffpfs, .ffpfsc o .pkg.' }
-  if ($format -eq 'pkg') {
-    $pkgToolCandidates = @((Join-Path (Split-Path -Parent $cli) 'native\ffpfsc-pkg-tool.exe'),(Join-Path (Split-Path -Parent $cli) 'native\ffpfsc-pkg-tool\bin\Release\net9.0\win-x64\ffpfsc-pkg-tool.exe'))
-    $pkgToolFound = $false
-    foreach ($candidate in $pkgToolCandidates) { if (Test-Path -LiteralPath $candidate -PathType Leaf) { $pkgToolFound = $true; break } }
-    if (!$pkgToolFound) { throw 'El repositorio PS5 UltraPack instalado no incluye un ffpfsc-pkg-tool.exe de Windows. La creación de .pkg no puede ejecutarse en esta instalación; compila el helper .NET desde backend/native/src/ffpfsc-pkg-tool o usa .ffpfsc/.ffpfs.' }
-  }
   $config = GetIntegrationConfig
   $python = [string]$config.pythonExe
   $cli = [string]$config.ultraPackCli
