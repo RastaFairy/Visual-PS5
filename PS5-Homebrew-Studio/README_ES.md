@@ -1,6 +1,6 @@
 # PS5 Homebrew Studio
 
-**Release 1.0.2 · IDE visual local para Windows.** Integra un editor visual 1920×1080, análisis de flujos, generación de código C# para SharpProspero y conversión del modelo visual a pantallas C++20 para los kits nativos OpenGL/Vulkan. Incluye un catálogo verificado por función de boilerplates, UI kits, drivers, complementos gráficos y aplicaciones comunitarias de referencia.
+**Release 1.0.3 · IDE visual local para Windows.** Integra un editor visual 1920×1080, análisis de flujos, generación de código C# para SharpProspero y conversión del modelo visual a pantallas C++20 para los kits nativos OpenGL/Vulkan. Incluye un catálogo verificado por función de boilerplates, UI kits, drivers, complementos gráficos y aplicaciones comunitarias de referencia.
 
 ## Inicio en Windows
 
@@ -11,7 +11,12 @@
 
 El servicio escucha únicamente en `127.0.0.1`; no expone el sistema de archivos a la red local. Los proyectos del editor se guardan en `Documentos\PS5HomebrewStudio\Projects`. `Ctrl+S` guarda el modelo visual. El editor puede abrirse y usarse sin descargar ningún toolchain.
 
-## Qué incluye 1.0.2
+## Qué incluye 1.0.3
+
+- Corrige la generación de recursos visuales: elimina el uso de `.add()` sobre el mapa de IDs y conserva la detección de colisiones mediante `Map`.
+- Normaliza a LF los scripts, Makefiles, fuentes nativos y manifiestos `.sha256` de cada proyecto nativo generado, antes de inicializarlo y antes de compilarlo en WSL.
+- Añade `*.sha256 text eol=lf` a `.gitattributes` del proyecto generado y usa `core.autocrlf=false` al clonar fuentes para evitar que Windows cambie los finales de línea de manifiestos de integridad.
+- La validación del hash de `libc.prx` permanece habilitada; no se omite ni se debilita la comprobación de integridad.
 
 - Catálogo de 34 repositorios reales clasificados como bases, renderers, kits de UI, drivers, dependencias, complementos gráficos y aplicaciones de referencia. Los repositorios con asistencia de IA solo se etiquetan como tal cuando lo declaran explícitamente.
 - Inicializadores upstream para Native App Boilerplate, PS5 Homebrew UI y PS5 Vulkan Template. El IDE conserva los repositorios originales, sus licencias y los scripts de compilación.
