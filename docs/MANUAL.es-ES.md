@@ -1,102 +1,56 @@
-# Manual de uso — PS5 Homebrew Studio
+# Manual de usuario — PS5 Homebrew Studio 1.1.0
 
-Este manual corresponde a la distribución 1.0.0. Los nombres de botones y APIs pueden aparecer en inglés porque son los identificadores originales de la aplicación o de sus dependencias.
+Última actualización: 16 de octubre de 2026. La interfaz de la aplicación continúa en español; estos manuales localizados no significan que la UI ya se haya traducido.
 
 ## 1. Requisitos
 
-**Para abrir el editor:** Windows 10/11, permisos de lectura y escritura en la carpeta de la aplicación, y PowerShell 7 recomendado (Windows PowerShell 5.1 como alternativa).
+Para abrir el IDE: Windows 10/11, permisos de lectura y escritura en la carpeta de la aplicación y PowerShell 7 recomendado. El lanzador también admite Windows PowerShell 5.1.
 
-**Para compilar:** se necesitan además Git, WSL/Linux y las dependencias específicas de la plantilla seleccionada. Los requisitos exactos dependen de SharpProspero/.NET, OpenGL o Vulkan/RADV. La primera compilación Vulkan puede compilar RADV desde fuentes y consumir bastante tiempo y espacio en disco.
+Para compilar: Git, WSL/Linux y las dependencias upstream del backend elegido. SharpProspero/C# requiere la versión de .NET indicada por su revisión. Los títulos C++ necesitan toolchains compatibles con su plantilla. UltraPack requiere Python 3.10 o posterior y un checkout de [PS5 UltraPack](https://github.com/knutwurst/ps5-ultrapack).
 
 ## 2. Instalación y arranque
 
-1. Descarga el ZIP desde la entrega o reconstruye el paquete indicado por el README.
-2. Verifica el SHA-256 publicado para ese archivo.
-3. Extrae el ZIP en una carpeta con permisos de escritura. Evita ubicaciones protegidas por Windows.
-4. Ejecuta \`start.bat\`.
-5. Si el navegador no se abre, visita \`http://127.0.0.1:47813/\`.
-6. Mantén abierta la ventana PowerShell que ejecuta el servicio.
+1. Descarga o genera el paquete de la rama que quieras probar.
+2. Extrae la carpeta en una ubicación con permisos de escritura; evita directorios protegidos por Windows.
+3. Ejecuta start.bat y deja abierta la ventana de PowerShell del servidor.
+4. Si el navegador no se abre automáticamente, visita http://127.0.0.1:47813/.
+5. Para detener el servicio, cierra su ventana o utiliza STOP.bat.
 
-El lanzador ejecuta \`runtime/check-syntax.ps1\` antes de iniciar el servidor. Este script pide al parser de PowerShell que compruebe \`runtime/server.ps1\`. Si la validación falla, se aborta el arranque. Para detener el servicio, cierra su ventana o usa el mecanismo \`STOP.bat\` disponible en la distribución. No publiques el puerto en la red ni cambies la escucha a \`0.0.0.0\`.
+El servidor escucha únicamente en 127.0.0.1. No lo expongas a la red ni cambies la escucha a 0.0.0.0. Los proyectos del editor se guardan por defecto en Documentos/PS5HomebrewStudio/Projects.
 
-## 3. Partes de la interfaz
+## 3. Interfaz y proyectos visuales
 
-- **Lienzo:** superficie virtual de 1920×1080 para colocar y dimensionar elementos. No es una captura exacta del sistema PS5.
-- **Panel de componentes:** inserta los controles que conoce el modelo del editor.
-- **Inspector de propiedades:** ajusta posición, tamaño, texto, color, valor y visibilidad.
-- **Jerarquía y pantallas:** organiza componentes en pantallas. La navegación tiene que enlazarse a través de flujos/acciones.
-- **Editor de flujos:** conecta eventos con acciones, por ejemplo mostrar una notificación, cambiar texto o valor, alternar visibilidad, cambiar color o navegar.
-- **Vista previa:** muestra una aproximación del modelo en el editor. No emula la PS5 ni valida el código que ejecutará el dispositivo.
-- **Panel de código y diagnósticos:** enseña código generado y advertencias. El análisis estático no sustituye al compilador ni las pruebas en tiempo de ejecución.
+El lienzo representa un área virtual de 1920×1080; no es una captura exacta de la interfaz del sistema PS5. Usa el panel de componentes para añadir controles, el inspector para editar geometría y propiedades, la jerarquía para ordenarlos y el gestor de pantallas para dividir la UI. El editor de flujos conecta eventos con acciones como notify, setText, toggleVisibility, setValue, changeColor y navigate cuando el componente, el evento y el backend admiten esa combinación.
 
-## 4. Crear una interfaz
+Crea el proyecto, elige el backend antes de preparar dependencias, añade componentes y recursos, usa identificadores únicos y configura las pantallas. Ejecuta los diagnósticos y corrige los destinos que apunten a elementos inexistentes. Guarda con Ctrl+S. Exportar un modelo o ZIP no equivale a compilar un título nativo.
 
-1. Selecciona **Nuevo proyecto** y asigna un nombre descriptivo.
-2. Elige el backend apropiado antes de configurar dependencias.
-3. Añade controles al lienzo. Arrástralos para cambiar su posición y utiliza el inspector para ajustar dimensiones y apariencia.
-4. Crea las pantallas necesarias. Mantén IDs/nombres únicos y estables.
-5. Establece valores iniciales y revisa las propiedades del componente.
-6. Define flujos. Comprueba que cada destino referencia un ID válido y que la acción es compatible con el backend.
-7. Importa imágenes desde el área de recursos y asígnalas a componentes. Importar un archivo no significa que el código nativo sepa decodificarlo: esa integración depende del backend.
-8. Ejecuta el análisis estático. Corrige errores y examina especialmente IDs, textos escapados, valores máximos/mínimos y pantallas de destino.
-9. Guarda con **Ctrl+S** o el botón Guardar.
+## 4. Backends y compilación
 
-La ubicación de trabajo por defecto en Windows es \`Documentos\\PS5HomebrewStudio\\Projects\`. Si el servidor no responde, el navegador puede mantener una copia del modelo en \`localStorage\`; esta copia solo pertenece a ese navegador y no reemplaza una exportación de seguridad.
+**SharpProspero / C#:** utiliza el pipeline real upstream y .NET/NativeAOT. Comprueba la versión de .NET que necesita el commit instalado.
 
-## 5. Guardar, abrir y exportar
+**OpenGL nativo / C++20:** genera una pantalla compatible con el contrato de ps5-homebrew-ui. Las imágenes seleccionadas se convierten a RGBA8, con límite de 512×512 píxeles y hasta 16 identificadores de textura únicos por pantalla.
 
-- **Guardar:** guarda el modelo y los fuentes asociados en el workspace local si el servicio está activo.
-- **Abrir:** carga proyectos del workspace o modelos compatibles \`.ps5vproj\`/JSON.
-- **Exportar ZIP:** crea un archivo de proyecto. Si no se puede exportar con el servicio, puede descargarse un modelo \`.ps5vproj\`.
-- **Exportar no es compilar:** el ZIP de proyecto no debe suponerse que contenga \`eboot.bin\`. El binario se obtiene mediante el proceso de compilación de la plantilla.
+**Vulkan/RADV / C++20:** crea un título mediante PS5_VulkanTemplate e integra la UI en el módulo Vulkan compatible. Requiere revisiones compatibles de PS5_Vulkan, PS5_Mesa/RADV, PS5_PayloadSDK y PS5_VKHomebrewUI.
 
-Haz una copia de seguridad antes de cambiar de backend o ejecutar herramientas upstream que modifiquen fuentes.
+El IDE ejecuta scripts upstream reales y conserva los logs. El código de salida cero no basta: el empaquetado de títulos nativos requiere eboot.bin y sce_sys/param.json. El IDE no distribuye SDK propietarios de Sony ni garantiza compatibilidad con todos los firmwares.
 
-## 6. Elegir el backend
+## 5. Empaquetar con UltraPack
 
-### SharpProspero / C#
-Utiliza el pipeline C# upstream y NativeAOT. Requiere la versión compatible de .NET y del SDK según la revisión instalada. Los payloads, plugins y aplicaciones gráficas son tipos de proyecto diferentes: no los trates como intercambiables.
+1. Abre Herramientas y configura Python 3.10 o posterior y el archivo backend/cli.py de UltraPack.
+2. Guarda la configuración. Las rutas quedan localmente en .runtime/integrations.json.
+3. Selecciona un proyecto nativo compilado y pulsa Empaquetar.
+4. Elige .ffpfs, .ffpfsc o .pkg. En Windows, .pkg depende de un helper nativo y de sus dependencias.
+5. Mantén activada la casilla «Verificar el contenido contra el origen» para pasar --verify a UltraPack. La verificación puede aumentar el tiempo de ejecución y el uso de memoria.
+6. Revisa el log final, el código de salida, la ruta del archivo y los avisos. Un artefacto antiguo no demuestra que la ejecución actual haya tenido éxito.
 
-### OpenGL nativo / C++20
-Genera la pantalla de UI usando el contrato \`hui::app::Concept\` del kit OpenGL upstream y la integra en una plantilla nativa. Las imágenes se convierten a RGBA8, con tamaño máximo de 512×512 píxeles y un máximo de 16 IDs únicos de textura por pantalla. El build llama a los scripts reales del upstream; no es una compilación simulada.
+Las salidas se guardan bajo packages-ultrapack por formato y fecha/hora. Cada empaquetado se ejecuta en segundo plano para mantener operativo el editor. El mantenedor ha informado de una imagen .ffpfsc generada y probada correctamente en hardware real; esto no garantiza cualquier título, firmware o backend.
 
-### Vulkan/RADV nativo / C++20
-Integra la pantalla en PS5 Vulkan Template con el módulo UI Vulkan esperado. Las imágenes RGBA8 se registran como recursos del título y se cargan mediante el contrato \`VkRenderer::create_texture\` del kit correspondiente. Las revisiones de plantilla, Mesa/RADV y PS5_PayloadSDK deben ser compatibles.
+## 6. Pruebas y diagnóstico
 
-Las acciones visuales documentadas incluyen \`notify\`, \`setText\`, \`toggleVisibility\`, \`setValue\`, \`changeColor\` y \`navigate\`. La disponibilidad depende del componente/evento y backend. El teclado nativo para controles de entrada es un teclado ASCII básico (A–Z, números, puntuación básica, espacio, borrar, limpiar, aceptar y cancelar); no es un teclado multilingüe ni un IME del sistema.
+Con Node.js instalado, ejecuta desde la carpeta PS5-Homebrew-Studio: node --check app.js, node --check runtime/native-generator.js y node runtime/test-native-generator.js. Estas pruebas revisan sintaxis JavaScript y casos del generador; no sustituyen la compilación con la toolchain completa de PS5 ni una prueba en consola.
 
-## 7. Compilación
+Si el servidor no arranca, conserva el error completo y comprueba PowerShell y los permisos. Si falla el build, registra backend, versiones y commits upstream, salida íntegra y código de salida. Si falla UltraPack, revisa las rutas de Python y cli.py, la presencia de eboot.bin y sce_sys/param.json y los permisos del destino. No compartas tokens, claves, ficheros protegidos ni logs con secretos.
 
-1. Inicializa o selecciona una plantilla upstream y revisa su documentación y licencia.
-2. Comprueba Git/submódulos, WSL/Linux, rutas, herramientas del host, versiones de SDK y dependencias.
-3. Corrige los errores estáticos relevantes antes de pulsar **Compilar**.
-4. Lee el log completo. Conserva código de salida, ruta y versiones de dependencias si falla.
-5. El IDE solo informa de éxito si el proceso upstream termina con código cero y se encuentra un artefacto verificable, como \`eboot.bin\` o un ZIP.
-6. Prueba el resultado por separado en un entorno y equipo autorizado.
+## 7. Licencias y alcance
 
-El éxito del build no prueba la ejecución en consola, compatibilidad con todos los firmwares, rendimiento, entrada, audio, persistencia o comportamiento de todos los recursos.
-
-## 8. Ejecutar las pruebas del generador
-
-Con Node.js instalado, desde la carpeta extraída:
-
-\`\`\`powershell
-node --check app.js
-node --check runtime/native-generator.js
-node runtime/test-native-generator.js
-\`\`\`
-
-Las pruebas comprueban casos del generador OpenGL, Vulkan y modelo vacío. No ejecutan una PS5 ni sustituyen una compilación upstream.
-
-## 9. Solución de problemas
-
-- **El servidor no arranca:** conserva todo el error de \`start.bat\`; comprueba PowerShell, permisos y sintaxis. Si se informa de una variable de PowerShell mal formada, consulta [la corrección de la línea 627](patches/FIX-POWERSHELL-627.es-ES.md).
-- **El navegador no conecta:** confirma que la ventana del servidor sigue activa y usa exactamente la URL local.
-- **No guarda:** revisa permisos del directorio Documentos, espacio en disco y estado del servicio.
-- **El build falla:** revisa el log íntegro, Git, submódulos, WSL y las versiones de las toolchains. No sustituyas scripts upstream por ficheros vacíos.
-- **No aparece una textura:** comprueba el vínculo del recurso, dimensiones, límite de 16 IDs y soporte del backend.
-- **Falla en consola:** registra firmware, revisiones de dependencias, artefacto, pasos y log. El editor no garantiza compatibilidad universal.
-
-## 10. Informar de un fallo
-
-Incluye versión del IDE, Windows/PowerShell, backend, pasos mínimos, salida completa sin secretos y commit de las dependencias. Indica si falla al arrancar, editar, generar, compilar o ejecutar. No adjuntes claves, tokens, datos privados ni archivos de juegos protegidos.
+Los SDK, drivers, plantillas y kits conservan sus licencias propias. Revisa LICENSE, COPYING, NOTICE y las condiciones de redistribución antes de publicar un binario. Visual-PS5 no es un SDK oficial de Sony, no incluye firmware, claves, juegos ni BIOS y no instala automáticamente títulos en la consola. La vista previa no es un emulador de PS5 ni valida runtime, audio, entrada o persistencia.

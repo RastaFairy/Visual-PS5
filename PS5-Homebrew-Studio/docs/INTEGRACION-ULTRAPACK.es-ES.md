@@ -1,35 +1,35 @@
-# Empaquetado de títulos con PS5 UltraPack
+# Empaquetado con PS5 UltraPack
 
-PS5 Homebrew Studio integra la CLI de PS5 UltraPack para convertir un directorio de título nativo en `.ffpfs`, `.ffpfsc` o `.pkg`. El IDE no intenta inferir que un título funciona a partir de la existencia de cualquier ZIP: antes de habilitar el empaquetado exige un `eboot.bin` y `sce_sys/param.json`.
+PS5 Homebrew Studio integra la CLI de [PS5 UltraPack](https://github.com/knutwurst/ps5-ultrapack) para crear imágenes .ffpfs y .ffpfsc y, si el entorno dispone del helper, paquetes .pkg. UltraPack es un proyecto externo y conserva sus propios requisitos y licencias.
 
 ## Configuración
 
-1. Inicia el IDE con `start.bat`.
-2. Pulsa **Herramientas**.
-3. Configura Python 3.10 o posterior y el archivo `backend\\cli.py` del repositorio local de [PS5 UltraPack](https://github.com/knutwurst/ps5-ultrapack).
-4. Usa **Descargar UltraPack (fuente)** para obtener el repositorio y preparar el entorno virtual local, o instala el checkout por separado y configura sus rutas.
-5. Pulsa **Guardar configuración**. Las rutas quedan en `.runtime\\integrations.json`, no en el repositorio.
+1. Inicia el IDE con start.bat.
+2. Abre Herramientas.
+3. Configura Python 3.10 o posterior y la ruta del archivo backend/cli.py del checkout de UltraPack.
+4. Utiliza la instalación integrada o configura un checkout existente. La reparación del entorno Python no debe borrar las fuentes existentes ni sobrescribir el helper nativo local.
+5. Guarda la configuración. Las rutas quedan en .runtime/integrations.json y no deben añadirse al repositorio.
 
-## Generar paquetes
+## Crear una imagen
 
-1. Compila una base C++ nativa o un título visual OpenGL/Vulkan.
-2. Comprueba que la compilación haya terminado con código cero y que el registro confirme `eboot.bin` y `sce_sys/param.json`.
-3. Pulsa **Empaquetar** en la barra superior para el último título compilado o en la tarjeta del proyecto correspondiente.
-4. Selecciona el formato y revisa el registro final, el código de salida y la ruta del artefacto.
+1. Compila un proyecto nativo.
+2. Comprueba que el origen contenga eboot.bin y sce_sys/param.json. Un ZIP/PKG antiguo no sirve como prueba.
+3. Pulsa Empaquetar y selecciona .ffpfs, .ffpfsc o .pkg.
+4. Mantén activa la casilla «Verificar el contenido contra el origen» para pasar --verify a la CLI. La comprobación puede consumir más tiempo y memoria.
+5. Revisa el registro final, el código de salida, la ruta del resultado y los mensajes del verificador.
 
-El resultado se guarda dentro de `packages-ultrapack/<formato>/<fecha-hora>` en el proyecto. Cada ejecución usa un directorio distinto para no mezclar artefactos anteriores. El trabajo de empaquetado se ejecuta en un proceso independiente: el servidor HTTP sigue respondiendo y el IDE consulta el registro del trabajo hasta que termina.
+El resultado se guarda en packages-ultrapack/<formato>/<fecha-hora>. Cada ejecución usa una carpeta distinta para evitar confundir los resultados nuevos con artefactos previos. La tarea se ejecuta en segundo plano para que la interfaz continúe respondiendo.
 
-## Estructura del título y formatos
+## Interpretación del resultado
 
-El origen debe contener `eboot.bin` y `sce_sys/param.json`. Si el ejecutable se encuentra en `dist` y los metadatos están en la raíz del proyecto, Homebrew Studio prepara una carpeta temporal para reunir el ejecutable, los metadatos y los recursos habituales encontrados. Revisa el contenido antes de distribuirlo, porque proyectos concretos pueden necesitar archivos adicionales.
+Un código de salida cero, un archivo presente y una estructura válida son señales distintas. Cuando se activa --verify, UltraPack compara el contenido con el origen según las capacidades de la CLI utilizada. Si el log indica que se omitió la verificación o que se comprobaron cero hashes, no describas ese resultado como una verificación íntegra de contenido.
 
-- `.ffpfs`: imagen PFS sin compresión.
-- `.ffpfsc`: imagen PFS comprimida.
-- `.pkg`: fPKG experimental. En Windows exige el helper nativo `backend\\native\\ffpfsc-pkg-tool.exe` y sus dependencias. Si falta, el IDE lo comunica antes de iniciar el empaquetado.
+El mantenedor ha informado de que una imagen .ffpfsc generada funciona en hardware real. Es una validación específica y no garantiza todos los títulos, firmwares ni formatos. En Windows, .pkg requiere un helper nativo y dependencias compatibles.
 
-## Diagnóstico y límites
+## Diagnóstico
 
-- El registro muestra el comando invocado, el directorio de trabajo, la salida estándar/error, el código de salida y el artefacto encontrado.
-- La presencia del CLI o del helper no garantiza que sus dependencias estén completas. Revisa el error concreto que devuelve UltraPack.
-- Una compilación no se declara lista solo por producir un ZIP/PKG residual. El IDE necesita un `eboot.bin` y metadatos de título para habilitar las acciones de empaquetado.
-- UltraPack y sus dependencias son proyectos externos. Instálalos por separado, revisa las instrucciones y licencias upstream y aporta únicamente recursos que tengas derecho a utilizar.
+- Comprueba que Python sea 3.10+ y que las rutas de Python y cli.py sean correctas.
+- Conserva el log, el código de salida y la ruta del artefacto.
+- Revisa los permisos y que el archivo no esté bloqueado.
+- Empaqueta únicamente contenido que tengas derecho a utilizar; no redistribuyas recursos protegidos.
+- No incluyas tokens, claves o credenciales en logs públicos.

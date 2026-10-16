@@ -36,3 +36,7 @@ Incluye versión, sistema operativo, versión de PowerShell, backend, commit de 
 ## Validación conocida
 
 Durante la preparación se ejecutaron comprobaciones de sintaxis JS y pruebas del generador; se validó la sintaxis C++ generada contra interfaces de prueba. No se dispuso del parser oficial de PowerShell, de toda la toolchain PS5 ni de hardware físico. Por ello no se declara completada una compilación real con el SDK final.
+
+## Validación posterior comunicada por el mantenedor
+
+El mantenedor informó de que una imagen .ffpfsc funcionó en hardware real. Esta prueba específica no sustituye una auditoría de seguridad ni garantiza la compatibilidad de todos los títulos y firmwares.

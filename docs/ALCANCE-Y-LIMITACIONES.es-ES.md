@@ -1,4 +1,4 @@
-# Alcance y limitaciones — versión 1.0.0
+# Alcance y limitaciones — versión 1.1.0
 
 Este documento establece qué funciones proporciona el IDE, qué depende de herramientas externas y qué no se debe asumir.
 
@@ -31,7 +31,7 @@ Acciones visuales documentadas: \`notify\`, \`setText\`, \`toggleVisibility\`, \
 - No garantiza que audio, vídeo, JSON o binarios importados se puedan consumir automáticamente desde la aplicación nativa.
 - No garantiza que un repositorio tercero siga disponible, sea compatible o compile en el futuro.
 - No proporciona auditoría formal de seguridad, verificación automática de licencias ni asesoramiento jurídico.
-- No se ha validado esta entrega con una PS5 física ni con el SDK/toolchain completo. La comprobación del C++ generado contra interfaces de prueba no equivale a una compilación con el SDK final.
+- La validación de la CI y una prueba en hardware físico son cosas distintas. El mantenedor confirmó posteriormente una prueba específica de empaquetado .ffpfsc en una PS5 real; no equivale a validar todos los títulos, firmwares, backends o funciones del IDE.
 
 ## Qué significa «compilación correcta»
 
@@ -45,3 +45,7 @@ El IDE exige que el proceso upstream termine con código cero y que se encuentre
 - **Prueba en consola:** debe documentarse con firmware, entorno, revisiones, pasos y evidencias reproducibles.
 
 El catálogo apunta a terceros cuyas ramas, dependencias y licencias pueden cambiar. Registra sus commits, revisa licencias/avisos upstream y comprueba la compatibilidad antes de distribuir software.
+
+## Validación comunicada por el mantenedor — 16 de octubre de 2026
+
+Se informó de que un título empaquetado como .ffpfsc funcionó en hardware real. Es una prueba concreta del artefacto y el entorno utilizados; no debe interpretarse como compatibilidad universal ni como prueba de todos los backends o firmwares.
