@@ -7,6 +7,7 @@
 - El botón termina en un estado explícito: «Completado» o «Error · Reintentar».
 - Tras una compilación visual correcta, se ofrecen acciones directas para probar el título en KytyPS5 o empaquetarlo con UltraPack, con selector `.ffpfs`, `.ffpfsc` y `.pkg`.
 - OpenGL regenera el atlas tipográfico europeo (2048 px) antes de compilar para conservar los acentos españoles.
+- Las pruebas del generador C++ verifican que las cadenas UTF-8 con vocales acentuadas, ñ, ü, signos españoles y euro sobreviven en los backends OpenGL y Vulkan.
 - Se conserva el mensaje de resultado, los diagnósticos, la ruta del proyecto y el artefacto verificable.
 
 # Registro de cambios
