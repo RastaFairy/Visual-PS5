@@ -324,12 +324,17 @@ function GetGeneratedProjects {
       $meta = Get-Content -LiteralPath $markerPath -Raw | ConvertFrom-Json
       if ($meta.schema -ne 'ps5hs-native-project') { continue }
       $artifact = ''
-      $distPath = Join-Path $dir.FullName 'dist'
-      if (Test-Path $distPath -PathType Container) {
-        $candidate = Get-ChildItem -LiteralPath $distPath -Recurse -File -ErrorAction SilentlyContinue |
-          Where-Object { $_.Name -eq 'eboot.bin' -or $_.Extension -in @('.zip', '.pkg') } |
-          Sort-Object LastWriteTime -Descending | Select-Object -First 1
-        if ($candidate) { $artifact = $candidate.FullName }
+      $built = $false
+      $eboots = @(GetProjectEbootFolders $dir.FullName)
+      if ($eboots.Count -gt 0) {
+        $eboot = $eboots[0]
+        $ebootFolder = Split-Path -Parent $eboot.FullName
+        $adjacentParam = Join-Path $ebootFolder 'sce_sys\\param.json'
+        $rootParam = Join-Path $dir.FullName 'sce_sys\\param.json'
+        if ((Test-Path -LiteralPath $adjacentParam -PathType Leaf) -or (Test-Path -LiteralPath $rootParam -PathType Leaf)) {
+          $artifact = $eboot.FullName
+          $built = $true
+        }
       }
       $items += @{
         name = [string]$meta.name
@@ -340,7 +345,7 @@ function GetGeneratedProjects {
         design = [string]$meta.design
         path = $dir.FullName
         artifact = $artifact
-        built = [bool]$artifact
+        built = $built
         initializedAt = [string]$meta.initializedAt
       }
     } catch { }
@@ -739,6 +744,12 @@ function BuildNativeProject([string]$ProjectPath) {
         ' && PS5_PAYLOAD_SDK_FORK=' + (BashQuote $payloadSdkWsl) + ' PS5_MESA_FORK=' + (BashQuote $mesaWsl) + ' bash tools/build-radv.sh release'
       $cmd = $bootstrap + ' && cd ' + (BashQuote $projectWsl) + ' && USE_CCACHE=' + $ccacheValue + ' PS5_VULKAN_DIR=' + (BashQuote $vulkanWsl) + ' PS5_PAYLOAD_SDK_FORK=' + (BashQuote $payloadSdkWsl) + ' bash ' + (BashQuote $buildScriptWsl)
     }
+    # Remove previous eboot outputs before this build so an old binary cannot make a failed build look successful.
+    $previousEboots = @(GetProjectEbootFolders $projectRoot)
+    foreach ($oldEboot in $previousEboots) {
+      Remove-Item -LiteralPath $oldEboot.FullName -Force -ErrorAction Stop
+      WriteBuildJobLog $script:ActiveBuildLogPath ('Eliminado eboot.bin previo para evitar validar un artefacto obsoleto: ' + $oldEboot.FullName)
+    }
     WriteBuildJobLog $script:ActiveBuildLogPath 'Ejecutando el pipeline real de WSL/Make/CMake/Ninja. La salida se transmite al registro mientras avanza.'
     $output = @(& $wsl.path -d $dist --exec bash -lc $cmd 2>&1 | ForEach-Object {
       $line = $_.ToString()
@@ -749,17 +760,18 @@ function BuildNativeProject([string]$ProjectPath) {
     $buildLog = ($output | ForEach-Object { $_.ToString() }) -join "`r`n"
     if ($dependencyLog.Count) { $buildLog = (($dependencyLog -join "`r`n") + "`r`n" + $buildLog) }
     $artifact = ''
-    $distPath = Join-Path $projectRoot 'dist'
-    if (Test-Path $distPath -PathType Container) {
-      $candidate = Get-ChildItem -LiteralPath $distPath -Recurse -File -ErrorAction SilentlyContinue |
-        Where-Object { $_.Name -eq 'eboot.bin' -or $_.Extension -in @('.zip', '.pkg') } |
-        Sort-Object LastWriteTime -Descending | Select-Object -First 1
-      if ($candidate) { $artifact = $candidate.FullName }
+    $eboots = @(GetProjectEbootFolders $projectRoot)
+    if ($eboots.Count -gt 0) {
+      $candidate = $eboots[0]
+      $titleFolder = Split-Path -Parent $candidate.FullName
+      $paramPath = Join-Path $titleFolder 'sce_sys\\param.json'
+      if (!(Test-Path -LiteralPath $paramPath -PathType Leaf)) { $paramPath = Join-Path $projectRoot 'sce_sys\\param.json' }
+      if (Test-Path -LiteralPath $paramPath -PathType Leaf) { $artifact = $candidate.FullName }
     }
     if ($exit -eq 0 -and $artifact) {
-      return @{ok=$true;message='El build upstream finalizó correctamente y existe un artefacto de título verificable.';output=$buildLog;path=$projectRoot;artifact=$artifact;templateId=$template;titleId=[string]$meta.titleId;exitCode=$exit}
+      return @{ok=$true;message='El build upstream finalizó correctamente: eboot.bin y sce_sys/param.json verificados.';output=$buildLog;path=$projectRoot;artifact=$artifact;templateId=$template;titleId=[string]$meta.titleId;exitCode=$exit}
     }
-    return @{ok=$false;message="El build upstream terminó con código $exit o no dejó un ZIP/eboot.bin verificable.";output=$buildLog;path=$projectRoot;artifact=$artifact;templateId=$template;titleId=[string]$meta.titleId;exitCode=$exit;diagnostics=@(@{severity='error';title='Compilación C++ upstream fallida';message='Consulta el log real de Make/CMake/Ninja del repositorio.';location=$template})}
+    return @{ok=$false;message="El build upstream terminó con código $exit o no produjo un título actual verificable (eboot.bin + sce_sys/param.json).";output=$buildLog;path=$projectRoot;artifact=$artifact;templateId=$template;titleId=[string]$meta.titleId;exitCode=$exit;diagnostics=@(@{severity='error';title='Título nativo incompleto';message='Se requiere un eboot.bin generado en esta compilación y metadatos sce_sys/param.json. Los ZIP/PKG residuales no se consideran ejecutables.';location=$template})}
   } catch {
     return @{ok=$false;message=$_.Exception.Message;output=($dependencyLog -join "`r`n");path=$projectRoot;templateId=$template;titleId=[string]$meta.titleId}
   }
