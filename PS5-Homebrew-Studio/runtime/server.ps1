@@ -538,10 +538,211 @@ function GetGeneratedProjects {
       repository = [string]$profile.repository
       artifact = $artifact
       built = $built
+      presentation = (GetNativePresentationState $dir.FullName)
       initializedAt = ''
     }
   }
   return ,@($items | Sort-Object name)
+}
+
+function GetNativePresentationState([string]$ProjectRoot) {
+  $sceSys = Join-Path $ProjectRoot 'sce_sys'
+  $paramPath = Join-Path $sceSys 'param.json'
+  $assetScript = Join-Path $ProjectRoot 'tools\prepare-assets.ps1'
+  if (!(Test-Path -LiteralPath $assetScript -PathType Leaf)) {
+    $assetScript = Join-Path $script:Toolchains 'ps5-native-app-boilerplate\tools\prepare-assets.ps1'
+  }
+  $texconv = CmdInfo 'texconv.exe'
+  if (!$texconv.ok) { $texconv = CmdInfo 'texconv' }
+  $ffmpeg = CmdInfo 'ffmpeg.exe'
+  if (!$ffmpeg.ok) { $ffmpeg = CmdInfo 'ffmpeg' }
+  $at9 = CmdInfo 'ps4_at9tool.exe'
+  return @{
+    editable = [bool](Test-Path -LiteralPath $paramPath -PathType Leaf)
+    icon = [bool](Test-Path -LiteralPath (Join-Path $sceSys 'icon0.png') -PathType Leaf)
+    selectionBackground = [bool](Test-Path -LiteralPath (Join-Path $sceSys 'pic0.dds') -PathType Leaf)
+    launchBackground = [bool](Test-Path -LiteralPath (Join-Path $sceSys 'pic1.dds') -PathType Leaf)
+    music = [bool](Test-Path -LiteralPath (Join-Path $sceSys 'snd0.at9') -PathType Leaf)
+    conversionScript = [bool](Test-Path -LiteralPath $assetScript -PathType Leaf)
+    texconv = [bool]$texconv.ok
+    ffmpeg = [bool]$ffmpeg.ok
+    at9Encoder = [bool]$at9.ok
+  }
+}
+
+function ResolveNativePresentationProject([string]$RequestedPath) {
+  if ([string]::IsNullOrWhiteSpace($RequestedPath)) { throw 'La ruta del proyecto está vacía.' }
+  $workspaceRoot = [IO.Path]::GetFullPath($script:Workspace).TrimEnd([char[]]@([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar))
+  $prefix = $workspaceRoot + [IO.Path]::DirectorySeparatorChar
+  $full = [IO.Path]::GetFullPath($RequestedPath)
+  if (!$full.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase)) {
+    throw 'Solo se pueden editar recursos de proyectos dentro del workspace PS5 Homebrew Studio.'
+  }
+  if (!(Test-Path -LiteralPath $full -PathType Container)) { throw 'No se encuentra la carpeta del proyecto.' }
+  $projectItem = Get-Item -LiteralPath $full -Force
+  if (($projectItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+    throw 'No se permite editar recursos a través de una carpeta de proyecto enlazada.'
+  }
+  $sceSys = Join-Path $full 'sce_sys'
+  if (!(Test-Path -LiteralPath $sceSys -PathType Container)) { throw 'Este proyecto no contiene sce_sys/ en la raíz.' }
+  $sceItem = Get-Item -LiteralPath $sceSys -Force
+  if (($sceItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+    throw 'No se permite editar recursos a través de un enlace sce_sys.'
+  }
+  $paramPath = Join-Path $sceSys 'param.json'
+  if (!(Test-Path -LiteralPath $paramPath -PathType Leaf)) {
+    throw 'Falta sce_sys/param.json. Inicializa primero el título PS5 antes de personalizar su presentación.'
+  }
+  try { $null = Get-Content -LiteralPath $paramPath -Raw | ConvertFrom-Json }
+  catch { throw 'sce_sys/param.json no es JSON válido; no se han cambiado recursos.' }
+  return @{ path = $full; sceSys = $sceSys }
+}
+
+function WriteNativePresentationUpload($Upload, [string]$Prefix, [string]$InputDirectory, [string[]]$AllowedExtensions, [long]$MaxBytes) {
+  if ($null -eq $Upload) { return '' }
+  $name = [IO.Path]::GetFileName([string]$Upload.name)
+  $extension = [IO.Path]::GetExtension($name).ToLowerInvariant()
+  if (!$name -or $extension -notin $AllowedExtensions) {
+    throw "${Prefix}: formato de archivo no permitido. Extensiones aceptadas: $($AllowedExtensions -join ', ')."
+  }
+  $encoded = [string]$Upload.data
+  if ([string]::IsNullOrWhiteSpace($encoded)) { throw "${Prefix}: el archivo está vacío o no se pudo leer." }
+  $encodedLimit = [long][Math]::Ceiling($MaxBytes * 4.0 / 3.0) + 8
+  if ($encoded.Length -gt $encodedLimit) { throw "${Prefix}: el archivo supera el límite de $([Math]::Round($MaxBytes / 1MB)) MiB." }
+  try { $bytes = [Convert]::FromBase64String($encoded) }
+  catch { throw "${Prefix}: los datos del archivo no son Base64 válido." }
+  if ($bytes.Length -lt 1 -or $bytes.LongLength -gt $MaxBytes) { throw "${Prefix}: tamaño de archivo no válido o superior al límite de $([Math]::Round($MaxBytes / 1MB)) MiB." }
+  $destination = Join-Path $InputDirectory ($Prefix + $extension)
+  [IO.File]::WriteAllBytes($destination, $bytes)
+  return $destination
+}
+
+function UpdateNativePresentationAssets($Body) {
+  $project = ResolveNativePresentationProject ([string]$Body.path)
+  $hasIcon = $null -ne $Body.icon
+  $hasSelectionBackground = $null -ne $Body.selectionBackground
+  $hasLaunchBackground = $null -ne $Body.launchBackground
+  $hasAudio = $null -ne $Body.audio
+  if (!$hasIcon -and !$hasSelectionBackground -and !$hasLaunchBackground -and !$hasAudio) { throw 'Selecciona al menos un recurso para sustituir.' }
+  $state = GetNativePresentationState $project.path
+  if (!$state.conversionScript) {
+    throw 'No se encuentra tools/prepare-assets.ps1 en el proyecto ni en la fuente Native App Boilerplate. Instala/actualiza esa fuente desde el panel SDKs e inténtalo de nuevo.'
+  }
+  if (!$hasIcon -and !$state.icon) {
+    throw 'El título todavía no tiene sce_sys/icon0.png. Selecciona un icono para crear el conjunto de presentación inicial.'
+  }
+  if (($hasSelectionBackground -or $hasLaunchBackground) -and (!$state.selectionBackground -or !$state.launchBackground)) {
+    if (!$hasSelectionBackground -or !$hasLaunchBackground) {
+      throw 'Este título aún no tiene ambos fondos. Selecciona a la vez el fondo de selección y el de lanzamiento para crear el par pic0.dds/pic1.dds.'
+    }
+  }
+
+  $tempRoot = Join-Path $script:Runtime ('presentation-' + [Guid]::NewGuid().ToString('N'))
+  $inputDir = Join-Path $tempRoot 'inputs'
+  $stageDir = Join-Path $tempRoot 'sce_sys'
+  $backupDir = Join-Path $tempRoot 'backup'
+  New-Item -ItemType Directory -Force -Path $inputDir,$stageDir,$backupDir | Out-Null
+  $changedFiles = @()
+  try {
+    # Copy only assets consumed or updated by the upstream preparation script.
+    # Never recurse through unrelated project files or user-controlled links.
+    foreach ($filename in @('param.json','icon0.png','pic0.dds','pic1.dds','snd0.at9','background-source.png','launch-background-source.png')) {
+      $source = Join-Path $project.sceSys $filename
+      if (!(Test-Path -LiteralPath $source -PathType Leaf)) { continue }
+      $sourceItem = Get-Item -LiteralPath $source -Force
+      if (($sourceItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+        throw "No se prepararán recursos a través del archivo enlazado $filename."
+      }
+      Copy-Item -LiteralPath $source -Destination (Join-Path $stageDir $filename) -Force
+    }
+
+    $imageExtensions = @('.png','.jpg','.jpeg','.bmp','.tif','.tiff','.dds')
+    $audioExtensions = @('.at9','.mp3','.wav','.ogg','.m4a','.aac','.flac')
+    $iconPath = ''
+    $selectionBackgroundPath = ''
+    $launchBackgroundPath = ''
+    $audioPath = ''
+    if ($hasIcon) {
+      $iconPath = WriteNativePresentationUpload $Body.icon 'icon' $inputDir $imageExtensions (10MB)
+    }
+    if ($hasSelectionBackground) {
+      $selectionBackgroundPath = WriteNativePresentationUpload $Body.selectionBackground 'selection-background' $inputDir $imageExtensions (24MB)
+    }
+    if ($hasLaunchBackground) {
+      $launchBackgroundPath = WriteNativePresentationUpload $Body.launchBackground 'launch-background' $inputDir $imageExtensions (24MB)
+    }
+    if ($hasAudio) {
+      $audioPath = WriteNativePresentationUpload $Body.audio 'audio' $inputDir $audioExtensions (24MB)
+    }
+
+    $helper = Join-Path $project.path 'tools\prepare-assets.ps1'
+    if (!(Test-Path -LiteralPath $helper -PathType Leaf)) {
+      $helper = Join-Path $script:Toolchains 'ps5-native-app-boilerplate\tools\prepare-assets.ps1'
+    }
+    $arguments = @{ OutputDirectory = $stageDir }
+    if ($iconPath) { $arguments['Icon'] = $iconPath }
+    if ($selectionBackgroundPath) { $arguments['SelectionBackground'] = $selectionBackgroundPath }
+    if ($launchBackgroundPath) { $arguments['LaunchBackground'] = $launchBackgroundPath }
+    if ($audioPath) { $arguments['Audio'] = $audioPath }
+    $toolOutput = @()
+    try {
+      $toolOutput = @(& $helper @arguments 2>&1 | ForEach-Object { [string]$_ })
+    }
+    catch {
+      $detail = (@($toolOutput) + @([string]$_.Exception.Message) | Where-Object { $_ }) -join "`n"
+      throw ('No se pudieron preparar los recursos. Comprueba las herramientas indicadas en el manual.' + "`n" + $detail)
+    }
+
+    $commitNames = @()
+    if ($hasIcon) { $commitNames += 'icon0.png' }
+    if ($hasSelectionBackground) { $commitNames += @('pic0.dds','background-source.png') }
+    if ($hasLaunchBackground) { $commitNames += @('pic1.dds','launch-background-source.png') }
+    if ($hasAudio) { $commitNames += @('snd0.at9','param.json') }
+    foreach ($filename in $commitNames) {
+      $source = Join-Path $stageDir $filename
+      if (!(Test-Path -LiteralPath $source -PathType Leaf)) { throw "El proceso de conversión no produjo el archivo esperado: $filename" }
+      $destination = Join-Path $project.sceSys $filename
+      if (Test-Path -LiteralPath $destination) {
+        $existing = Get-Item -LiteralPath $destination -Force
+        if (($existing.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+          throw "No se sobrescribirá el archivo enlazado $filename."
+        }
+        [IO.File]::Copy($destination, (Join-Path $backupDir $filename), $true)
+      }
+      $changedFiles += $filename
+      [IO.File]::Copy($source, $destination, $true)
+    }
+    $finalState = GetNativePresentationState $project.path
+    $summary = @()
+    if ($hasIcon) { $summary += 'icono 512×512 PNG' }
+    if ($hasSelectionBackground) { $summary += 'fondo de selección 3840×2160 BC7 DDS' }
+    if ($hasLaunchBackground) { $summary += 'fondo de lanzamiento 3840×2160 BC7 DDS' }
+    if ($hasAudio) { $summary += 'música de selección ATRAC9' }
+    return @{
+      ok = $true
+      message = 'Presentación actualizada: ' + ($summary -join ', ') + '.'
+      output = (@($toolOutput) -join "`n")
+      path = $project.path
+      presentation = $finalState
+    }
+  }
+  catch {
+    for ($index = $changedFiles.Count - 1; $index -ge 0; $index--) {
+      $filename = [string]$changedFiles[$index]
+      $destination = Join-Path $project.sceSys $filename
+      $backup = Join-Path $backupDir $filename
+      try {
+        if (Test-Path -LiteralPath $backup -PathType Leaf) { [IO.File]::Copy($backup, $destination, $true) }
+        elseif (Test-Path -LiteralPath $destination -PathType Leaf) { Remove-Item -LiteralPath $destination -Force }
+      } catch { }
+    }
+    throw
+  }
+  finally {
+    if (Test-Path -LiteralPath $tempRoot -PathType Container) {
+      try { Remove-Item -LiteralPath $tempRoot -Recurse -Force } catch { }
+    }
+  }
 }
 
 function EnsureVulkanBuildSupport([string]$VulkanDir) {
@@ -1632,6 +1833,14 @@ while ($listener.Server.IsBound) {
                                 }
                                 '/api/package-ultrapack/start' {
                                     SendJson $ctx (StartNativeBuildJob $body 'package')
+                                }
+                                '/api/native-presentation-assets' {
+                                    try {
+                                        SendJson $ctx (UpdateNativePresentationAssets $body)
+                                    }
+                                    catch {
+                                        SendJson $ctx @{ ok = $false; error = $_.Exception.Message } 400
+                                    }
                                 }
                                 '/api/build-native' {
                                     $result = BuildNativeProject ([string]$body.path)

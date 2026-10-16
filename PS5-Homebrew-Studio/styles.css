@@ -45,3 +45,14 @@
 .source-profile-note{font-size:11px;line-height:1.45;margin:7px 0 3px;padding:8px 10px;border-left:2px solid var(--line);color:var(--muted);background:rgba(255,255,255,.025);border-radius:0 6px 6px 0}
 .native-dependency-warning{display:block;margin-top:7px;padding:7px 9px;border-radius:6px;background:rgba(238,183,83,.09);color:var(--yellow);font-size:11px;line-height:1.4}
 .native-project-reason{margin:7px 0;color:var(--muted);font-size:11px;line-height:1.45}
+
+/* Native title presentation asset editor (1.1.2). */
+.presentation-status-grid,.presentation-tool-grid{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin:11px 0 16px}
+.presentation-file-status,.presentation-tool-status{display:flex;align-items:center;justify-content:space-between;gap:8px;min-width:0;padding:8px 9px;border:1px solid #30394c;border-radius:6px;background:#101621;font-size:10px}
+.presentation-file-status span,.presentation-tool-status span{color:#a4afc5;line-height:1.4}
+.presentation-file-status b,.presentation-tool-status b{flex-shrink:0;font-size:9px;font-weight:650}
+.presentation-file-status.present b,.presentation-tool-status.present b{color:var(--green)}
+.presentation-file-status.missing b,.presentation-tool-status.missing b{color:var(--yellow)}
+.presentation-section-title{font-size:9px;font-weight:750;letter-spacing:.7px;color:#aab5cb;margin:18px 0 8px}
+.presentation-output{font:10px/1.55 Consolas,monospace;white-space:pre-wrap;word-break:break-word;max-height:160px;overflow:auto;color:#9eabc3;background:#0b1019;border:1px solid #293145;border-radius:6px;padding:10px;margin-top:12px}
+@media(max-width:600px){.presentation-status-grid,.presentation-tool-grid{grid-template-columns:1fr}}

@@ -183,9 +183,59 @@
       root.querySelectorAll('.native-project-card').forEach((card,index)=>{
         const p=projects[index]||{},actions=card.querySelector('.native-project-actions');if(!actions)return;
         const pack=document.createElement('button');pack.className='btn secondary small';pack.textContent='Empaquetar';pack.disabled=!p.built;pack.dataset.nativePackage=p.path||'';pack.title=p.built?'Crear ffpfs, ffpfsc o pkg con PS5 UltraPack':'Compila y verifica el título antes de empaquetarlo';
+        const presentation=document.createElement('button');presentation.className='btn ghost small';presentation.textContent='Presentación';presentation.disabled=!p.presentation?.editable;presentation.title=presentation.disabled?'Inicializa primero el título y genera sce_sys/param.json':'Cambiar icono, fondo y música de presentación';presentation.onclick=()=>openNativePresentationEditor(p);actions.insertBefore(presentation,actions.children[1]||null);
         actions.insertBefore(pack,actions.children[1]||null);pack.onclick=()=>packageNativeWithUltraPack(pack.dataset.nativePackage);
       });
     }catch(e){root.innerHTML='<div class="empty-screen">No se pudo consultar el workspace de Windows: '+esc(e.message)+'. El servicio local debe estar ejecutándose.</div>';}
+  }
+
+
+  function presentationStatusRows(state){
+    const entries=[['Icono de inicio','icon'],['Fondo al seleccionar','selectionBackground'],['Fondo de lanzamiento','launchBackground'],['Música al seleccionar','music']];
+    return entries.map(([label,key])=>'<div class="presentation-file-status '+(state?.[key]?'present':'missing')+'"><span>'+esc(label)+'</span><b>'+(state?.[key]?'Detectado':'No instalado')+'</b></div>').join('');
+  }
+  function presentationToolRows(state){
+    const entries=[['Conversor de recursos upstream','conversionScript'],['DirectXTex texconv','texconv'],['FFmpeg (solo si conviertes audio)','ffmpeg'],['ATRAC9 ps4_at9tool (solo audio comprimido)','at9Encoder']];
+    return entries.map(([label,key])=>'<div class="presentation-tool-status '+(state?.[key]?'present':'missing')+'"><span>'+esc(label)+'</span><b>'+(state?.[key]?'Detectado':'Pendiente')+'</b></div>').join('');
+  }
+  function encodePresentationFile(file){
+    return new Promise((resolve,reject)=>{const reader=new FileReader();reader.onerror=()=>reject(new Error('No se pudo leer '+file.name));reader.onload=()=>{const value=String(reader.result||''),comma=value.indexOf(',');if(comma<0){reject(new Error('Formato de lectura inesperado para '+file.name));return;}resolve({name:file.name,type:file.type||'',data:value.slice(comma+1)});};reader.readAsDataURL(file);});
+  }
+  async function openNativePresentationEditor(nativeProject){
+    const state=nativeProject.presentation||{};
+    const body='<p>Modifica los recursos <code>sce_sys</code> que aparecen en la tarjeta de esta aplicación en PS5. Puedes cambiar una o varias cosas; los campos vacíos se conservan.</p>'+
+      '<div class="presentation-status-grid">'+presentationStatusRows(state)+'</div>'+
+      '<div class="form-field"><label>Icono de la aplicación · PNG/JPEG/BMP/TIFF</label><input id="presentationIconFile" type="file" accept=".png,.jpg,.jpeg,.bmp,.tif,.tiff,.dds"><small>Se convierte a <code>icon0.png</code> de 512×512.</small></div>'+
+      '<div class="form-field"><label>Fondo al seleccionar la app · imagen</label><input id="presentationSelectionFile" type="file" accept=".png,.jpg,.jpeg,.bmp,.tif,.tiff,.dds"><small>Genera <code>pic0.dds</code>, 3840×2160 BC7. Si aún no existe el par de fondos, selecciona también el de lanzamiento.</small></div>'+
+      '<div class="form-field"><label>Fondo durante el lanzamiento · imagen</label><input id="presentationLaunchFile" type="file" accept=".png,.jpg,.jpeg,.bmp,.tif,.tiff,.dds"><small>Genera <code>pic1.dds</code>, 3840×2160 BC7. Puede ser diferente del fondo de selección.</small></div>'+
+      '<div class="form-field"><label>Música al seleccionar la app · AT9/MP3/WAV/OGG/M4A/AAC/FLAC</label><input id="presentationAudioFile" type="file" accept=".at9,.mp3,.wav,.ogg,.m4a,.aac,.flac,audio/*"><small>El resultado es <code>snd0.at9</code> (ATRAC9, 48 kHz, en bucle y máximo 2 MiB). La conversión de audio convencional necesita FFmpeg y un codificador ATRAC9 compatible.</small></div>'+
+      '<div class="presentation-section-title">Herramientas detectadas</div><div class="presentation-tool-grid">'+presentationToolRows(state)+'</div>'+
+      '<p class="section-note">La conversión de imágenes necesita DirectXTex texconv. Se acepta un archivo AT9 ya codificado sin instalar el codificador. Los fondos y la música de aquí son específicos de esta app; no cambian el tema global ni el sonido de encendido de la consola.</p>'+
+      '<pre id="presentationAssetOutput" class="presentation-output">Esperando archivos. No se ha modificado ningún recurso.</pre>';
+    openModal('Presentación · '+(nativeProject.name||nativeProject.titleId||'Título nativo'),body,[
+      {text:'Cerrar',class:'ghost',action:closeModal},
+      {text:'Aplicar cambios',class:'primary',action:async()=>{
+        const iconFile=$('#presentationIconFile')?.files?.[0]||null,selectionFile=$('#presentationSelectionFile')?.files?.[0]||null,launchFile=$('#presentationLaunchFile')?.files?.[0]||null,audioFile=$('#presentationAudioFile')?.files?.[0]||null;
+        if(!iconFile&&!selectionFile&&!launchFile&&!audioFile){toast('Selecciona al menos un recurso.','warn');return;}
+        if(!state.icon&&!iconFile){toast('Este título aún no tiene icono. Selecciona uno antes de cambiar los fondos o la música.','warn');return;}
+        if((!state.selectionBackground||!state.launchBackground)&&((selectionFile&&!launchFile)||(!selectionFile&&launchFile))){toast('Este título aún no tiene ambos fondos. Selecciona los dos para crear pic0.dds y pic1.dds.','warn');return;}
+        const max={icon:10*1024*1024,selection:24*1024*1024,launch:24*1024*1024,audio:24*1024*1024};
+        for(const [file,label,limit] of [[iconFile,'Icono',max.icon],[selectionFile,'Fondo de selección',max.selection],[launchFile,'Fondo de lanzamiento',max.launch],[audioFile,'Audio',max.audio]]){if(file&&file.size>limit){toast(label+' supera el máximo de '+Math.round(limit/1024/1024)+' MiB.','error');return;}}
+        const buttons=$('#modalActions button');buttons.forEach(button=>button.disabled=true);
+        const output=$('#presentationAssetOutput');if(output)output.textContent='Preparando recursos en una carpeta temporal y validando formatos…';
+        try{
+          const payload={path:nativeProject.path};
+          if(iconFile)payload.icon=await encodePresentationFile(iconFile);
+          if(selectionFile)payload.selectionBackground=await encodePresentationFile(selectionFile);
+          if(launchFile)payload.launchBackground=await encodePresentationFile(launchFile);
+          if(audioFile)payload.audio=await encodePresentationFile(audioFile);
+          const result=await api('native-presentation-assets',payload);
+          if(output)output.textContent=(result.message||'Recursos actualizados.')+(result.output?'\n\n'+result.output:'');
+          log(result.message||'Presentación actualizada.','INFO');toast('Presentación de la app actualizada');
+          closeModal();await renderNativeProjects();
+        }catch(error){if(output)output.textContent='No se aplicaron los cambios.\n'+error.message;toast('No se pudo cambiar la presentación: '+error.message,'error');buttons.forEach(button=>button.disabled=false);}
+      }}
+    ]);
   }
 
   async function openIntegrationSettings(){
@@ -719,6 +769,6 @@
   try{const stored=localStorage.getItem(STORAGE_KEY);if(stored){const parsed=JSON.parse(stored);if(parsed.format==='ps5hs-closed'&&parsed.closed){project=freshProject();project.name='';isProjectOpen=false;$('#projectName').value='';$('#projectName').placeholder='Sin proyecto abierto';setProjectOpenState(false);}else if(parsed.format==='ps5vproj'){project=Object.assign(freshProject(),parsed);isProjectOpen=true;setProjectOpenState(true);$('#projectName').value=project.name;$('#projectName').placeholder='Nombre del proyecto';$('#backendSelect').value=project.backend;savedState();}}}catch{}
   // Browser recovery autosave is independent from explicit project saving.
   setInterval(()=>{if(!isProjectOpen)return;try{localStorage.setItem(STORAGE_KEY,JSON.stringify(project));}catch{}},12000);
-  setProjectOpenState(isProjectOpen);renderAll();if(!isProjectOpen){$('#dirtyPill').textContent='SIN PROYECTO';$('#canvasState').textContent='No hay proyecto visual abierto. Las carpetas nativas y sus artefactos se conservan.';}log('PS5 Homebrew Studio v1.1.1 inicializado.');log('Editor visual: lienzo, inspector, jerarquía, flujos y código generado.');log('Backend SharpProspero: C# / NativeAOT. Backend OpenGL/Vulkan: generación C++20 desde el modelo visual y compilación upstream.');log('La compilación requiere dependencias reales; solo se informa éxito cuando el proceso termina correctamente y se verifica el artefacto.');
+  setProjectOpenState(isProjectOpen);renderAll();if(!isProjectOpen){$('#dirtyPill').textContent='SIN PROYECTO';$('#canvasState').textContent='No hay proyecto visual abierto. Las carpetas nativas y sus artefactos se conservan.';}log('PS5 Homebrew Studio v1.1.2 inicializado.');log('Editor visual: lienzo, inspector, jerarquía, flujos y código generado.');log('Backend SharpProspero: C# / NativeAOT. Backend OpenGL/Vulkan: generación C++20 desde el modelo visual y compilación upstream.');log('La compilación requiere dependencias reales; solo se informa éxito cuando el proceso termina correctamente y se verifica el artefacto.');
   refreshStatus();
 })();
