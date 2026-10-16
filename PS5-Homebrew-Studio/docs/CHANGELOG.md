@@ -2,7 +2,7 @@
 
 ## 1.0.6 — 2026-10-16
 
-- La compilación visual nativa se ejecuta en un trabajador de fondo y el IDE consulta su estado sin bloquear el servicio local.
+- Las compilaciones visuales y los proyectos nativos C++ se ejecutan en un trabajador de fondo y el IDE consulta su estado sin bloquear el servicio local.
 - El registro muestra la salida real de WSL/Make/CMake/Ninja conforme se produce; se elimina el contador ficticio de progreso.
 - El botón termina en un estado explícito: «Completado» o «Error · Reintentar».
 - Tras una compilación visual correcta, se ofrecen acciones directas para probar el título en KytyPS5 o empaquetarlo con UltraPack, con selector `.ffpfs`, `.ffpfsc` y `.pkg`.
