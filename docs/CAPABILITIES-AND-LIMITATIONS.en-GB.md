@@ -1,4 +1,4 @@
-# Capabilities and limitations — version 1.0.0
+# Capabilities and limitations — version 1.1.0
 
 This document distinguishes what the IDE provides, what depends on external tooling, and what must not be assumed.
 
@@ -31,7 +31,7 @@ Documented visual actions include \`notify\`, \`setText\`, \`toggleVisibility\`,
 - It does not guarantee that imported audio, video, JSON or binary assets can automatically be consumed by native code.
 - It does not guarantee that third-party repositories remain available, compatible or buildable in future.
 - It does not provide formal security audits, automated licence clearance or legal advice.
-- This delivery has not been validated on a physical PS5 or with the complete SDK/toolchain. Checking generated C++ against test interfaces is not equivalent to compiling against the final SDK.
+- CI validation and physical-console testing are separate. The maintainer later confirmed a specific .ffpfsc packaging test on a real PS5; this does not validate every title, firmware, backend or IDE feature.
 
 ## Meaning of “build succeeded”
 
@@ -45,3 +45,7 @@ The IDE requires the upstream process to exit with code zero and a verifiable ar
 - **Console test:** document firmware, environment, revisions, steps and reproducible evidence.
 
 The catalogue links to third parties whose branches, dependencies and licences can change. Record their commits, check upstream licences/notices and verify compatibility before distributing software.
+
+## Hardware test reported by the maintainer — 16 October 2026
+
+The maintainer reported that a title packaged as .ffpfsc worked on real hardware. This is a specific test of the artefact and environment used, not a universal compatibility claim or validation of every backend and firmware.

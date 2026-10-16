@@ -1,6 +1,6 @@
-# Catálogo upstream — matriz de orientación (versión 1.0.0)
+# Catálogo upstream — matriz de orientación (PS5 Homebrew Studio 1.1.0)
 
-Este documento resume el catálogo integrado en la versión 1.0.0. Es una guía de navegación, no una auditoría actual de cada repositorio ni una garantía de compilación. Las ramas, commits, licencias y dependencias externas pueden cambiar. Antes de ejecutar o redistribuir software, inspecciona el repositorio y registra el commit utilizado.
+Este documento resume el catálogo upstream integrado en la versión 1.1.0. Se actualizan los enlaces de documentación y se añade el empaquetador PS5 UltraPack como dependencia externa. Es una guía de navegación, no una auditoría actual de cada repositorio ni una garantía de compilación. Las ramas, commits, licencias y dependencias externas pueden cambiar. Antes de ejecutar o redistribuir software, inspecciona el repositorio y registra el commit utilizado.
 
 ## Claves de lectura
 
@@ -47,7 +47,7 @@ Este documento resume el catálogo integrado en la versión 1.0.0. Es una guía 
 | Aurora | [encounter/aurora](https://github.com/encounter/aurora) | Capa de compatibilidad GX/WebGPU | Dependencias y licencia propias |
 | PS5 Quake3e | [griches/PS5_Quake3e](https://github.com/griches/PS5_Quake3e) | Motor/port Vulkan-RADV | Requiere datos del juego |
 | PS5 RetroArch | [mihawk-99/PS5_RetroArch](https://github.com/mihawk-99/PS5_RetroArch) | Frontend de emulación | Licencias por core; sin ROMs/BIOS |
-| X360PS5 (asistencia IA declarada) | [polarco/X360PS5](https://github.com/polarco/X360PS5) | Prototipo Xenia/Vulkan experimental | No asumir que esté probado en consola |
+| X360PS5 (asistencia IA declarada) | [polarco/X360PS5](https://github.com/polarco/X360PS5) | Prototipo Xenia/Vulkan experimental | No asumir que esté probado en consola |\n| PS5 UltraPack | [knutwurst/ps5-ultrapack](https://github.com/knutwurst/ps5-ultrapack) | CLI externa para imágenes PFS/FFPFSC y paquetes fPKG | Consultar requisitos, licencia y limitaciones de la plataforma upstream |
 
 El catálogo es heterogéneo. Sus 34 elementos no son SDKs equivalentes ni se compilan desde una interfaz única. Categoría, rama, submódulos, commits y dependencias importan.
 
@@ -61,4 +61,4 @@ El catálogo es heterogéneo. Sus 34 elementos no son SDKs equivalentes ni se co
 
 ## Referencias externas
 
-La matriz procede del catálogo de la aplicación en versión 1.0.0. Debe verificarse antes de cada release. Consulta [ps5-homebrew-ui](https://github.com/blackbearreloaded/ps5-homebrew-ui), [native-app-boilerplate](https://github.com/blackbearreloaded/ps5-native-app-boilerplate) y [PS5_VulkanTemplate](https://github.com/mihawk-99/PS5_VulkanTemplate) para la documentación y licencias upstream.
+La matriz procede del catálogo upstream de PS5 Homebrew Studio 1.1.0 y no constituye una auditoría de cada repo. Debe verificarse antes de cada release. Consulta [ps5-homebrew-ui](https://github.com/blackbearreloaded/ps5-homebrew-ui), [native-app-boilerplate](https://github.com/blackbearreloaded/ps5-native-app-boilerplate) y [PS5_VulkanTemplate](https://github.com/mihawk-99/PS5_VulkanTemplate) para la documentación y licencias upstream.

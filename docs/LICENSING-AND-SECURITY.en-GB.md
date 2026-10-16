@@ -36,3 +36,7 @@ Include version, operating system, PowerShell version, backend, dependency commi
 ## Known validation status
 
 Preparation included JavaScript syntax checks and generator tests; generated C++ syntax was checked against test interfaces. The official PowerShell parser, complete PS5 toolchain and physical hardware were unavailable. A real build with the final SDK is therefore not claimed.
+
+## Subsequent hardware test reported by the maintainer
+
+The maintainer reported that a generated .ffpfsc image worked on real hardware. This specific test is not a security audit and does not guarantee compatibility across all titles or firmware versions.

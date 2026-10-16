@@ -1,41 +1,30 @@
-# Visual-PS5 — PS5 Homebrew Studio
+# Visual-PS5 — PS5 Homebrew Studio 1.1.0
 
-**Version 1.0.1 · 16 October 2026**
+A local visual IDE for Windows for interface design, project management, code inspection, C++20 UI generation and build orchestration through community PS5 toolchains.
 
-Visual-PS5 is a local visual IDE for designing interfaces, saving projects, inspecting generated code and coordinating builds through community PlayStation 5 toolchains.
+## Languages and documentation
+
+- [User manual — English (UK)](docs/USER-MANUAL.en-GB.md)
+- [Manual de usuario — español](docs/MANUAL.es-ES.md)
+- [Manuel utilisateur — français](docs/USER-MANUAL.fr-FR.md)
+- [Benutzerhandbuch — Deutsch](docs/USER-MANUAL.de-DE.md)
+- [用户手册 — 简体中文](docs/USER-MANUAL.zh-CN.md)
+- [ユーザーマニュアル — 日本語](docs/USER-MANUAL.ja-JP.md)
+- [Руководство пользователя — русский](docs/USER-MANUAL.ru-RU.md)
+- [Credits and upstream attribution](docs/CREDITS.md)
+- [Architecture and toolchains](docs/ARCHITECTURE-AND-TOOLCHAINS.en-GB.md)
+- [Licensing and security](docs/LICENSING-AND-SECURITY.en-GB.md)
+- [Upstream SDK/repository matrix](release/UPSTREAM-SDK-MATRIX.md)
+- [Changelog](docs/CHANGELOG.md)
 
 ## Quick start
 
-1. Clone or download this repository.
-2. The complete source tree is already committed under `PS5-Homebrew-Studio/`. To reconstruct the verified backup copy instead, run `.\scripts\Restore-SourceArchive.ps1` from the repository root. The script decodes the segments, verifies SHA-256 and extracts `PS5-Homebrew-Studio`.
-3. Enter the extracted directory and run `start.bat` on Windows 10/11. PowerShell 7 is recommended; the launcher also supports Windows PowerShell 5.1 as a fallback.
-4. Open `http://127.0.0.1:47813/` if the browser does not open automatically.
+1. Download or build the package for the branch you want to test.
+2. Extract it to a writable folder on Windows 10/11.
+3. Run start.bat. If the browser does not open, visit http://127.0.0.1:47813/.
 
-On Linux/WSL, use `sh scripts/restore-source-archive.sh`.
+PowerShell 7 is recommended; Windows PowerShell 5.1 is also supported. Native builds require Git, WSL/Linux and the dependencies of the selected template. The service listens only on 127.0.0.1.
 
-## Documentation
+The UI remains in Spanish while localisation is prepared. The maintainer reports that a generated .ffpfsc image was tested successfully on real hardware; this does not guarantee compatibility across all titles or firmware versions.
 
-- [User manual](docs/USER-MANUAL.en-GB.md)
-- [Capabilities and limitations](docs/CAPABILITIES-AND-LIMITATIONS.en-GB.md)
-- [Architecture and toolchains](docs/ARCHITECTURE-AND-TOOLCHAINS.en-GB.md)
-- [Licensing and security](docs/LICENSING-AND-SECURITY.en-GB.md)
-- [Documentation en español de España](README.es-ES.md)
-- [Manual de uso en español](docs/MANUAL.es-ES.md)
-- [Upstream SDK/repository matrix](release/UPSTREAM-SDK-MATRIX.md)
-- [Changelog](docs/CHANGELOG.md)
-- [Release publication instructions](docs/RELEASING.en-GB.md)
-- [PowerShell line 627 hotfix](docs/patches/FIX-POWERSHELL-627.en-GB.md)
-
-## What it does
-
-The editor provides a 1920×1080 canvas, property inspector, hierarchy, screens, visual flows, asset management, diagnostics, export and C++20 UI generation for OpenGL/Vulkan-RADV. It integrates community templates and a SharpProspero C# workflow. Builds are delegated to the actual upstream scripts.
-
-**It is not an official Sony SDK**, includes no proprietary files, firmware, keys, games or BIOS, does not jailbreak a console, and does not install titles on hardware automatically or guarantee compatibility across firmware versions.
-
-## Integrity and validation
-
-The reconstructed source archive must have this SHA-256: `f6aa6aae6d5d58a1e5e2e3582d168f0e97f67e1d105938ed6039ba963b329d13`. Reconstruction from the twenty segments committed to GitHub has been verified and matches that hash exactly.
-
-JavaScript and generator tests were run. The preparation environment did not have the official PowerShell parser, the complete PS5 toolchains or a physical console, so no final SDK/hardware validation is claimed.
-
-The binary ZIP is not yet attached as a GitHub Release asset; the linked instructions explain how to attach it through GitHub.
+Visual-PS5 is not an official Sony SDK and includes no proprietary Sony files, firmware, keys, games or BIOS. Each upstream project retains its own licence and notices; see [Credits](docs/CREDITS.md) before redistribution.

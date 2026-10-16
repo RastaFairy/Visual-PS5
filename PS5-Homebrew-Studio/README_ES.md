@@ -1,6 +1,6 @@
 # PS5 Homebrew Studio
 
-**Release 1.0.9 · IDE visual local para Windows.** Integra un editor visual 1920×1080, análisis de flujos, generación de código C# para SharpProspero y conversión del modelo visual a pantallas C++20 para los kits nativos OpenGL/Vulkan. Incluye un catálogo verificado por función de boilerplates, UI kits, drivers, complementos gráficos y aplicaciones comunitarias de referencia.
+**Release 1.1.0 · IDE visual local para Windows.** Integra un editor visual 1920×1080, análisis de flujos, generación de código C# para SharpProspero y conversión del modelo visual a pantallas C++20 para los kits nativos OpenGL/Vulkan. Incluye un catálogo verificado por función de boilerplates, UI kits, drivers, complementos gráficos y aplicaciones comunitarias de referencia.
 
 ## Inicio en Windows
 
@@ -10,6 +10,30 @@
 4. Se abre `http://127.0.0.1:47813/`. Mantén abierta la ventana de PowerShell; cerrarla detiene el servicio.
 
 El servicio escucha únicamente en `127.0.0.1`; no expone el sistema de archivos a la red local. Los proyectos del editor se guardan en `Documentos\PS5HomebrewStudio\Projects`. `Ctrl+S` guarda el modelo visual. El editor puede abrirse y usarse sin descargar ningún toolchain.
+
+## Documentación 1.1.0
+
+- Manual español: [docs/MANUAL.es-ES.md](docs/MANUAL.es-ES.md)
+- English: [docs/USER-MANUAL.en-GB.md](docs/USER-MANUAL.en-GB.md)
+- Français: [docs/USER-MANUAL.fr-FR.md](docs/USER-MANUAL.fr-FR.md)
+- Deutsch: [docs/USER-MANUAL.de-DE.md](docs/USER-MANUAL.de-DE.md)
+- 简体中文: [docs/USER-MANUAL.zh-CN.md](docs/USER-MANUAL.zh-CN.md)
+- 日本語: [docs/USER-MANUAL.ja-JP.md](docs/USER-MANUAL.ja-JP.md)
+- Русский: [docs/USER-MANUAL.ru-RU.md](docs/USER-MANUAL.ru-RU.md)
+- [Créditos y atribuciones upstream](docs/CREDITS.md)
+- [Ecosistema de proyectos upstream](docs/PROJECT_ECOSYSTEM.md) · [Matriz de SDK](docs/SDK_MATRIX.md) · [Registro de cambios](docs/CHANGELOG.md)
+
+La UI de esta versión todavía está en español; los manuales traducidos no representan una localización completa de la interfaz.
+
+## Cambios de 1.1.0
+
+- Se retiró la integración de lanzamiento mediante emulador para mantener el IDE centrado en títulos comprobables en hardware real.
+- Se corrigieron los selectores de la interfaz que impedían iniciar las acciones de UltraPack.
+- El empaquetado se ejecuta como trabajo independiente con registro consultable sin bloquear el servidor local.
+- Se valida Python 3.10+, se mantiene compatibilidad de argumentos con PowerShell 5.1 y se verifica el artefacto final.
+- La compilación nativa solo se considera lista para empaquetar cuando hay un `eboot.bin` y `sce_sys/param.json`.
+- El backend Vulkan instala un runtime de búsqueda/carga de texturas incluso cuando el proyecto no incluye imágenes; el generador ya no emite funciones vacías.
+- Los flujos con destinos, acciones o pantallas inexistentes se rechazan antes de generar C++.
 
 ## Cambios de 1.0.9
 
@@ -54,9 +78,12 @@ El servicio escucha únicamente en `127.0.0.1`; no expone el sistema de archivos
 - La compilación solo se marca correcta si el proceso upstream termina con código cero y existe un `eboot.bin` o ZIP verificable. Los logs reales y la ruta del proyecto permanecen disponibles cuando el build falla.
 - Reparación acotada de la cadena Vulkan: si la revisión de PS5_Vulkan descargada no contiene `tools/ninja-build.sh` o `tools/build-host-tools.sh` que el build referencia, el IDE restaura los scripts reales del boilerplate compañero y registra su hash y procedencia. No genera stubs vacíos.
 
-## Herramientas externas: KytyPS5 y UltraPack
+## Empaquetado con PS5 UltraPack
 
-La barra superior incluye **Herramientas** para configurar el ejecutable local de KytyPS5, Python 3.10+ y la CLI `backend\\cli.py` de PS5 UltraPack. En las tarjetas de proyectos nativos compilados aparecen **Probar en Kyty** y **UltraPack**. El empaquetado permite elegir `.ffpfs`, `.ffpfsc` o `.pkg`; esta última opción depende del helper fPKG y puede no funcionar en Windows. La configuración se guarda dentro de `.runtime`, no en el repositorio. Consulta [la guía de integraciones](docs/INTEGRACIONES-KYTY-ULTRAPACK.es-ES.md).
+La barra superior y las tarjetas de proyectos nativos ofrecen **Empaquetar** cuando el título se ha verificado con `eboot.bin` y `sce_sys/param.json`. En **Herramientas** se configura Python 3.10+ y la CLI `backend\\cli.py` de PS5 UltraPack. El IDE permite crear `.ffpfs`, `.ffpfsc` y `.pkg`; el último formato requiere el helper nativo de fPKG y sus dependencias para Windows. Los trabajos se ejecutan fuera del bucle HTTP principal y su salida se consulta desde el IDE. La configuración queda en `.runtime/integrations.json`. Consulta [la guía de UltraPack](docs/INTEGRACION-ULTRAPACK.es-ES.md).
+
+
+La casilla **Verificar el contenido contra el origen** está activada por defecto y pasa `--verify` a UltraPack. La verificación puede requerir más tiempo y memoria. Si el log indica que se omitió o que se comprobaron cero hashes, no describas el resultado como una verificación íntegra del contenido. El mantenedor comunicó que un artefacto `.ffpfsc` concreto se generó y funcionó en hardware real; esto no garantiza compatibilidad universal.
 
 ## Editor visual y compilación
 

@@ -1,102 +1,56 @@
-# User Manual — PS5 Homebrew Studio
+# User Manual — PS5 Homebrew Studio 1.1.0
 
-This manual applies to distribution 1.0.0. Button labels and API names may remain in English because they are the application's or upstream dependencies' original identifiers.
+Last updated: 16 October 2026. The application interface is still in Spanish. Localised manuals do not mean that the UI itself has been translated.
 
 ## 1. Requirements
 
-**To open the editor:** Windows 10/11, read/write access to the application directory, and PowerShell 7 recommended (Windows PowerShell 5.1 is the fallback).
+To launch the IDE: Windows 10/11, read/write access to the application folder, and PowerShell 7 recommended. The launcher also supports Windows PowerShell 5.1.
 
-**To build:** Git, WSL/Linux and the dependencies required by the chosen template are also needed. Exact requirements vary between SharpProspero/.NET, OpenGL and Vulkan/RADV. The first Vulkan build may compile RADV from source and consume considerable time and disk space.
+To build: Git, WSL/Linux and the upstream dependencies for the selected backend. SharpProspero/C# requires the .NET version specified by the installed revision. Native C++ templates need compatible toolchains. UltraPack requires Python 3.10 or later and a checkout of [PS5 UltraPack](https://github.com/knutwurst/ps5-ultrapack).
 
-## 2. Installation and launch
+## 2. Install and launch
 
-1. Download the ZIP from the release or reconstruct the package referenced by the README.
-2. Verify the SHA-256 published for that file.
-3. Extract it to a writable directory. Avoid Windows-protected locations.
-4. Run \`start.bat\`.
-5. If the browser does not open, visit \`http://127.0.0.1:47813/\`.
-6. Keep the PowerShell server window open while using the editor.
+1. Download or build the package for the branch you intend to test.
+2. Extract it to a writable folder; avoid Windows-protected directories.
+3. Run start.bat and keep the PowerShell server window open.
+4. If the browser does not open automatically, visit http://127.0.0.1:47813/.
+5. Close the server window or use STOP.bat to stop the service.
 
-The launcher runs \`runtime/check-syntax.ps1\` before starting the service. That script asks PowerShell's parser to validate \`runtime/server.ps1\`; startup aborts if validation fails. Close the server window or use the supplied \`STOP.bat\` mechanism to stop the service. Do not expose the port to a network or bind the service to \`0.0.0.0\`.
+The service binds only to 127.0.0.1. Do not expose it to a network or change the bind address to 0.0.0.0. Projects are saved by default under Documents/PS5HomebrewStudio/Projects.
 
-## 3. Interface areas
+## 3. Interface and visual projects
 
-- **Canvas:** a 1920×1080 virtual surface for positioning and sizing elements. It is not an exact screenshot of the PS5 system interface.
-- **Components panel:** inserts controls supported by the editor model.
-- **Property inspector:** edits position, size, text, colour, value and visibility.
-- **Hierarchy and screens:** organises components across screens. Navigation must be connected through flows/actions.
-- **Flow editor:** connects events to actions, such as displaying a notification, changing text or value, toggling visibility, changing colour or navigating.
-- **Preview:** approximates the model inside the editor. It is not a PS5 emulator and does not validate code running on the device.
-- **Code and diagnostics panel:** shows generated source and warnings. Static analysis is not a substitute for a compiler or runtime testing.
+The 1920×1080 canvas is a virtual work area, not an exact screenshot of the PS5 system interface. Use the components panel to add controls, the inspector to edit geometry and properties, the hierarchy to organise elements, and the screens manager to structure the UI. The flow editor connects events to actions such as notify, setText, toggleVisibility, setValue, changeColor and navigate when the selected component, event and backend support that combination.
 
-## 4. Create an interface
+Create a project, choose its backend before preparing dependencies, add components and assets, keep IDs unique, and configure screens. Run diagnostics and fix references to missing elements. Save with Ctrl+S. Exporting a model or ZIP is not the same as compiling a native title.
 
-1. Choose **New project** and provide a meaningful name.
-2. Select the appropriate backend before configuring dependencies.
-3. Add controls to the canvas. Drag to reposition them and use the inspector to refine size and appearance.
-4. Create the required screens. Keep IDs/names unique and stable.
-5. Set initial values and review component properties.
-6. Define flows. Confirm that each target points to a valid ID and each action is supported by the backend.
-7. Import images in the assets area and assign them to components. Importing a file does not guarantee native code can decode it; integration depends on the backend.
-8. Run static analysis. Fix errors and inspect IDs, escaped strings, value bounds and destination screens.
-9. Save with **Ctrl+S** or the Save button.
+## 4. Backends and builds
 
-The default Windows workspace is \`Documents\\PS5HomebrewStudio\\Projects\`. If the service does not respond, the browser may retain the model in \`localStorage\`; that copy belongs only to that browser and is not a replacement for an exported backup.
+**SharpProspero / C#:** uses the real upstream build pipeline and .NET/NativeAOT. Check the .NET version required by your installed commit.
 
-## 5. Save, open and export
+**Native OpenGL / C++20:** generates a screen compatible with the ps5-homebrew-ui contract. Selected images are converted to RGBA8, limited to 512×512 pixels and up to 16 unique texture IDs per screen.
 
-- **Save:** stores the model and associated source in the local workspace when the service is running.
-- **Open:** loads projects from the workspace or compatible \`.ps5vproj\`/JSON models.
-- **Export ZIP:** creates a project archive. If server-side export is unavailable, a \`.ps5vproj\` model may be downloaded.
-- **Export is not a build:** do not assume a project ZIP contains \`eboot.bin\`. The binary artefact comes from the template's build process.
+**Vulkan/RADV / C++20:** creates a title through PS5_VulkanTemplate and integrates UI into a compatible Vulkan module. Compatible revisions of PS5_Vulkan, PS5_Mesa/RADV, PS5_PayloadSDK and PS5_VKHomebrewUI are required.
 
-Back up your project before switching backend or running upstream tools that modify generated files.
+The IDE runs real upstream scripts and preserves build logs. Exit code zero alone is not sufficient: native-title packaging requires eboot.bin and sce_sys/param.json. The IDE does not distribute Sony proprietary SDKs and does not guarantee universal firmware compatibility.
 
-## 6. Choosing a backend
+## 5. Packaging with UltraPack
 
-### SharpProspero / C#
-Uses the upstream C# and NativeAOT pipeline. It requires the .NET and SDK versions compatible with the installed revision. Payloads, plugins and graphical applications are different project types and must not be treated as interchangeable.
+1. Open Tools and configure Python 3.10+ and the UltraPack backend/cli.py file.
+2. Save settings. Paths are stored locally in .runtime/integrations.json.
+3. Select a built native project and choose Package.
+4. Select .ffpfs, .ffpfsc or .pkg. On Windows, .pkg requires a native helper and its dependencies.
+5. Leave “Verify content against source” checked to pass --verify to UltraPack. Verification can increase runtime and memory use.
+6. Review the final log, exit code, output path and warnings. An old artefact does not prove that the current run succeeded.
 
-### Native OpenGL / C++20
-Generates a UI screen using the upstream OpenGL kit's \`hui::app::Concept\` contract and integrates it into a native template. Images are converted to RGBA8, up to 512×512 pixels, with no more than 16 unique texture IDs per screen. The build invokes the real upstream scripts; it is not a simulated compilation.
+Outputs are stored under packages-ultrapack, grouped by format and timestamp. Packaging runs in the background so the editor remains responsive. The maintainer has reported a generated .ffpfsc image successfully tested on real hardware; that does not guarantee every title, firmware or backend.
 
-### Native Vulkan/RADV / C++20
-Integrates the generated screen into PS5 Vulkan Template and the expected Vulkan UI module. RGBA8 images are registered as title assets and loaded through the matching kit's \`VkRenderer::create_texture\` contract. Template, Mesa/RADV and PS5_PayloadSDK revisions must be compatible.
+## 6. Tests and troubleshooting
 
-Documented visual actions include \`notify\`, \`setText\`, \`toggleVisibility\`, \`setValue\`, \`changeColor\` and \`navigate\`. Availability depends on component/event and backend. The native input keyboard is basic ASCII (A–Z, digits, basic punctuation, space, backspace, clear, accept and cancel); it is not a multilingual keyboard or system IME.
+With Node.js installed, run node --check app.js, node --check runtime/native-generator.js and node runtime/test-native-generator.js from the PS5-Homebrew-Studio folder. These tests check JavaScript syntax and generator cases; they do not replace a complete PS5 toolchain build or a console test.
 
-## 7. Building
+If the server fails to start, keep the full error and check PowerShell and permissions. For build failures, record the backend, upstream versions and commits, full output and exit code. If UltraPack fails, check Python and cli.py paths, eboot.bin, sce_sys/param.json and output permissions. Never share tokens, keys, protected files or logs containing secrets.
 
-1. Initialise/select an upstream template and review its documentation and licence.
-2. Check Git/submodules, WSL/Linux, paths, host tools, SDK versions and dependencies.
-3. Resolve relevant static-analysis errors before pressing **Build**.
-4. Read the full log. Record exit code, project path and dependency versions on failure.
-5. The IDE reports success only when the upstream process exits with code zero and a verifiable artefact, such as \`eboot.bin\` or a ZIP, is found.
-6. Test the result separately in an environment and on equipment you are authorised to use.
+## 7. Licensing and scope
 
-Build success does not prove console execution, all-firmware compatibility, performance, input, audio, persistence or correct behaviour for every asset.
-
-## 8. Run generator tests
-
-With Node.js installed, run from the extracted directory:
-
-\`\`\`powershell
-node --check app.js
-node --check runtime/native-generator.js
-node runtime/test-native-generator.js
-\`\`\`
-
-These tests cover OpenGL, Vulkan and empty-model generator cases. They do not run on a PS5 and do not replace an upstream build.
-
-## 9. Troubleshooting
-
-- **Server does not start:** retain the complete \`start.bat\` error output; check PowerShell, permissions and syntax. For malformed PowerShell variable errors, see [the line 627 fix](patches/FIX-POWERSHELL-627.es-ES.md).
-- **Browser cannot connect:** confirm the server window remains open and use the exact local URL.
-- **Saving fails:** check Documents folder permissions, free disk space and service status.
-- **Build fails:** inspect the complete log, Git, submodules, WSL and toolchain versions. Do not replace upstream scripts with empty files.
-- **Texture missing:** check the asset link, dimensions, 16-ID limit and backend support.
-- **Fails on console:** record firmware, dependency revisions, artefact, steps and logs. The editor does not guarantee universal compatibility.
-
-## 10. Reporting a fault
-
-Include IDE version, Windows/PowerShell, backend, minimal reproduction steps, complete output with secrets removed and dependency commits. State whether it failed during launch, editing, generation, building or execution. Do not attach keys, tokens, private data or protected game files.
+SDKs, drivers, templates and UI kits retain their own licences. Review LICENSE, COPYING, NOTICE and redistribution requirements before publishing a binary. Visual-PS5 is not an official Sony SDK, includes no firmware, keys, games or BIOS, and does not automatically install titles on a console. The editor preview is not a PS5 emulator and does not validate runtime, audio, input or persistence.

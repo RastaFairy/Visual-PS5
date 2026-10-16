@@ -1,54 +1,32 @@
-# Visual-PS5 — PS5 Homebrew Studio
+# Visual-PS5 — PS5 Homebrew Studio 1.1.0
 
-**Version 1.0.1 · Hotfix date: 16 October 2026**
+Local visual IDE for Windows to design interfaces, manage projects, generate native UI code and orchestrate PS5 homebrew builds with community toolchains.
 
-A local visual IDE for designing interfaces, saving projects, inspecting generated code and coordinating builds through community PlayStation 5 toolchains.
+## Choose your language
 
-**Languages / Idiomas**
-- [Español (España)](README.es-ES.md)
-- [English (United Kingdom)](README.en-GB.md)
+- [Español](README.es-ES.md) · [English (UK)](README.en-GB.md) · [Français](README.fr-FR.md) · [Deutsch](README.de-DE.md) · [简体中文](README.zh-CN.md) · [日本語](README.ja-JP.md) · [Русский](README.ru-RU.md)
 
-## Start here / Para empezar
+## Start here
 
-- [Manual de uso (es-ES)](docs/MANUAL.es-ES.md)
-- [User manual (en-GB)](docs/USER-MANUAL.en-GB.md)
-- [Alcance y limitaciones](docs/ALCANCE-Y-LIMITACIONES.es-ES.md)
-- [Capabilities and limitations](docs/CAPABILITIES-AND-LIMITATIONS.en-GB.md)
-- [Arquitectura y toolchains](docs/ARQUITECTURA-Y-TOOLCHAINS.es-ES.md)
-- [Architecture and toolchains](docs/ARCHITECTURE-AND-TOOLCHAINS.en-GB.md)
-- [Licencias y seguridad](docs/LICENCIAS-Y-SEGURIDAD.es-ES.md)
-- [Licensing and security](docs/LICENSING-AND-SECURITY.en-GB.md)
-- [Catálogo de SDKs y proyectos upstream](release/UPSTREAM-SDK-MATRIX.md)
+- [User manuals in seven languages](docs/)
+- [Credits and upstream attribution](docs/CREDITS.md)
+- [Distribution README](PS5-Homebrew-Studio/README_ES.md)
+- [UltraPack integration guide](PS5-Homebrew-Studio/docs/INTEGRACION-ULTRAPACK.es-ES.md)
+- [Upstream SDK and project matrix](release/UPSTREAM-SDK-MATRIX.md)
 - [Changelog](docs/CHANGELOG.md)
-- [Publicar la release](docs/PUBLICACION-DE-RELEASE.es-ES.md)
-- [Publish a GitHub release](docs/RELEASING.en-GB.md)
-- [Hotfix de PowerShell, español](docs/patches/FIX-POWERSHELL-627.es-ES.md)
-- [PowerShell hotfix, British English](docs/patches/FIX-POWERSHELL-627.en-GB.md)
 
-## Qué es el proyecto
+## Quick start
 
-Visual-PS5 (nombre de aplicación: **PS5 Homebrew Studio**) es una capa de edición y orquestación. Incluye un lienzo virtual 1920×1080, inspector de propiedades, jerarquía, pantallas, flujos visuales, gestión de recursos, diagnósticos y generación de UI C++20 para los backends visuales OpenGL y Vulkan/RADV. También coordina plantillas comunitarias y un flujo C# para SharpProspero.
+1. Download or build the package for the intended branch.
+2. Extract it to a writable folder on Windows 10/11.
+3. Run start.bat. If the browser does not open automatically, visit http://127.0.0.1:47813/.
 
-**No es un SDK oficial de Sony.** No incluye archivos propietarios, firmware, claves, juegos o BIOS de Sony; tampoco desbloquea la consola, elude protecciones ni garantiza compatibilidad con todos los firmwares. La compilación real depende de toolchains y dependencias upstream compatibles.
+PowerShell 7 is recommended; Windows PowerShell 5.1 is supported. Native builds require Git, WSL/Linux and the dependencies specified by the selected upstream template. The service binds only to 127.0.0.1.
 
-## Instalación
+## Project status
 
-En Windows 10/11, extrae la distribución en una carpeta con permisos de escritura y ejecuta `start.bat`. Se recomienda PowerShell 7. El servicio local escucha en `http://127.0.0.1:47813/`. Para compilar también necesitas WSL/Linux y las herramientas requeridas por la plantilla elegida.
+The maintained source tree is under PS5-Homebrew-Studio/. The segments under release/source-archive/ are a historical backup of version 1.0.1, not the canonical source for 1.1.0; do not use them to restore the current source.
 
-## Código fuente corregido en este repositorio
+The interface is still in Spanish while UI localisation is prepared. The maintainer reports that a generated .ffpfsc image was tested successfully on real hardware. This specific result does not guarantee compatibility for every title or firmware.
 
-El árbol de código corregido de la versión 1.0.1 ya está publicado directamente en [`PS5-Homebrew-Studio/`](PS5-Homebrew-Studio/). También se conserva una copia exacta del mismo código en un archivo TAR con XZ, codificado en veinte segmentos Base64 en [`release/source-archive/`](release/source-archive/README.md), para poder reconstruirlo y verificarlo de forma independiente. Si necesitas reconstruir esa copia desde el archivo de respaldo, ejecuta desde la raíz del repositorio:
-
-```powershell
-.\scripts\Restore-SourceArchive.ps1
-```
-
-El script reúne los segmentos, comprueba el SHA-256 y extrae el árbol del proyecto. En Linux/WSL puedes usar `sh scripts/restore-source-archive.sh`.
-
-SHA-256 del archivo reconstruido: `f6aa6aae6d5d58a1e5e2e3582d168f0e97f67e1d105938ed6039ba963b329d13`. El contenido remoto de los veinte segmentos se ha descargado y reconstruido durante la verificación; el hash coincide con el del archivo fuente preparado.
-
-El ZIP binario todavía no está adjunto como activo de GitHub Release. Para publicar también el ZIP descargable desde la página Releases, sigue la [guía de publicación](docs/PUBLICACION-DE-RELEASE.es-ES.md).
-
-## Validación
-
-Se ejecutaron comprobaciones de sintaxis de JavaScript y pruebas del generador OpenGL/Vulkan. El entorno de preparación no disponía del parser oficial de PowerShell, de todas las toolchains PS5 ni de una consola física; no se afirma una compilación final con el SDK ni una prueba en hardware.
+Visual-PS5 is not an official Sony SDK and includes no proprietary Sony files, firmware, keys, games or BIOS. Upstream projects retain their licences and notices; see [Credits](docs/CREDITS.md).
