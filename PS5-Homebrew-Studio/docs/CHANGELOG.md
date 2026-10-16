@@ -1,5 +1,12 @@
 # Registro de cambios
 
+## 1.0.7 — 2026-10-16
+
+- Las acciones «Probar en Kyty» y «Empaquetar» permanecen en la barra común del IDE y recuerdan la última compilación nativa correcta.
+- La consulta de `build.log` usa lectura compartida con reintentos para evitar que una escritura concurrente interrumpa el seguimiento de una compilación.
+- La compilación visual permite cambiar el nombre/destino y sobrescribir explícitamente solo carpetas con manifiesto de Homebrew Studio y plantilla coincidente.
+- Los fallos de UltraPack muestran diagnóstico, salida del proceso, código de salida y si se verificó un artefacto.
+
 ## 1.0.6 — 2026-10-16
 
 - Las compilaciones visuales y los proyectos nativos C++ se ejecutan en un trabajador de fondo y el IDE consulta su estado sin bloquear el servicio local.
