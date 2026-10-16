@@ -78,7 +78,7 @@ jobs:
             "function GetWslDrvFsMetadataState",
             "function GetWslPermissionRepairInstructions",
             "fix-wsl-permissions.sh",
-            "core.filemode",
+            "Operation not permitted",
             "wsl --shutdown",
             "function NormalizeNativeBuildFiles",
             "canonical Makefile target",
