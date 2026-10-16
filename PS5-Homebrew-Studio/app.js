@@ -217,11 +217,11 @@
             if(status.done)break;await new Promise(resolve=>setTimeout(resolve,450));
           }
           const result=status.result||{ok:false,message:'El empaquetador terminó sin entregar un resultado.',output:lastLog,exitCode:1};
-          const output=(result.message?'Resultado: '+result.message+'\\n\\n':'')+(result.output||lastLog||'El proceso no proporcionó salida.')+'\\n\\nCódigo de salida: '+(result.exitCode??'no disponible')+(result.artifact?'\\n\\nArchivo generado: '+result.artifact:'\\n\\nNo se ha verificado ningún archivo de salida.')+(result.note?'\\n\\n'+result.note:'');
+          const output=(result.message?'Resultado: '+result.message+'\n\n':'')+(result.output||lastLog||'El proceso no proporcionó salida.')+'\n\nCódigo de salida: '+(result.exitCode??'no disponible')+(result.artifact?'\n\nArchivo generado: '+result.artifact:'\n\nNo se ha verificado ningún archivo de salida.')+(result.note?'\n\n'+result.note:'');
           if(box)box.textContent=output;
           if(result.ok){log(result.message||'Empaquetado completado.','INFO');log('Artefacto UltraPack: '+result.artifact,'INFO');toast('Paquete creado con UltraPack');}
           else{log(result.message||'UltraPack no generó el archivo esperado.','ERROR');toast('UltraPack terminó con errores','error');}
-        }catch(e){if(box)box.textContent='No se pudo ejecutar UltraPack.\\n'+e.message;log('Error de UltraPack: '+e.message,'ERROR');toast('UltraPack terminó con errores','error');}
+        }catch(e){if(box)box.textContent='No se pudo ejecutar UltraPack.\n'+e.message;log('Error de UltraPack: '+e.message,'ERROR');toast('UltraPack terminó con errores','error');}
         finally{buttons.forEach(b=>b.disabled=false);await renderNativeProjects();}
       }}
     ]);
