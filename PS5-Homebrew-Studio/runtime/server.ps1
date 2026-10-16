@@ -765,12 +765,8 @@ function BuildNativeProject([string]$ProjectPath) {
         ' && PS5_PAYLOAD_SDK_FORK=' + (BashQuote $payloadSdkWsl) + ' PS5_MESA_FORK=' + (BashQuote $mesaWsl) + ' bash tools/build-radv.sh release'
       $cmd = $bootstrap + ' && cd ' + (BashQuote $projectWsl) + ' && USE_CCACHE=' + $ccacheValue + ' PS5_VULKAN_DIR=' + (BashQuote $vulkanWsl) + ' PS5_PAYLOAD_SDK_FORK=' + (BashQuote $payloadSdkWsl) + ' bash ' + (BashQuote $buildScriptWsl)
     }
-    # Remove previous eboot outputs before this build so an old binary cannot make a failed build look successful.
-    $previousEboots = @(GetProjectEbootFolders $projectRoot)
-    foreach ($oldEboot in $previousEboots) {
-      Remove-Item -LiteralPath $oldEboot.FullName -Force -ErrorAction Stop
-      WriteBuildJobLog $script:ActiveBuildLogPath ('Eliminado eboot.bin previo para evitar validar un artefacto obsoleto: ' + $oldEboot.FullName)
-    }
+    # Preserve the last usable title if a rebuild fails. A successful build is accepted only
+    # when the pipeline exits zero and an eboot.bin plus title metadata can be verified.
     WriteBuildJobLog $script:ActiveBuildLogPath 'Ejecutando el pipeline real de WSL/Make/CMake/Ninja. La salida se transmite al registro mientras avanza.'
     $output = @(& $wsl.path -d $dist --exec bash -lc $cmd 2>&1 | ForEach-Object {
       $line = $_.ToString()
