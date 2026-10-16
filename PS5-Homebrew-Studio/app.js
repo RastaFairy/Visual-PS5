@@ -134,7 +134,7 @@
       renderSourceCatalog('');
       $('#sourceSearch').addEventListener('input',e=>renderSourceCatalog(e.target.value));
       $$('.source-filter').forEach(b=>b.onclick=()=>{$$('.source-filter').forEach(x=>x.classList.toggle('active',x===b));renderSourceCatalog($('#sourceSearch').value,b.dataset.sourceFilter);});
-      $('#sourceCatalog').addEventListener('click',async e=>{const nativeBuild=e.target.closest('[data-native-build]');if(nativeBuild){buildNativeProject(nativeBuild.dataset.nativeBuild);return;}if(e.target.closest('[data-refresh-native-projects]')){renderNativeProjects();return;}const install=e.target.closest('[data-source-install]');if(install){installSdks([install.dataset.sourceInstall]);return;}const create=e.target.closest('[data-source-create]');if(create){if(create.dataset.sourceCreate==='vulkan-template')openVulkanTemplateCreate();else openNativeBoilerplateCreate(create.dataset.sourceCreate);return;}const open=e.target.closest('[data-source-open]');if(open){window.open(open.dataset.sourceOpen,'_blank','noopener,noreferrer');}});
+      $('#sourceCatalog').addEventListener('click',async e=>{const nativeBuild=e.target.closest('[data-native-build]');if(nativeBuild){buildNativeProject(nativeBuild.dataset.nativeBuild,nativeBuild.dataset.nativeTitleId||'',nativeBuild.dataset.nativeName||'',nativeBuild.dataset.nativeNeedsInit==='true',nativeBuild.dataset.nativeSupportsClean==='true');return;}if(e.target.closest('[data-refresh-native-projects]')){renderNativeProjects();return;}const install=e.target.closest('[data-source-install]');if(install){installSdks([install.dataset.sourceInstall]);return;}const create=e.target.closest('[data-source-create]');if(create){if(create.dataset.sourceCreate==='vulkan-template')openVulkanTemplateCreate();else openNativeBoilerplateCreate(create.dataset.sourceCreate);return;}const open=e.target.closest('[data-source-open]');if(open){window.open(open.dataset.sourceOpen,'_blank','noopener,noreferrer');}});
     }else if(activePanel==='docs'){
       root.innerHTML=`<div class="system-tile"><strong>SharpProspero</strong><p>Aplicaciones nativas, payloads, bibliotecas y toolkit visual C#. Requiere .NET 10 y WSL en Windows.</p><a class="repo-link" href="https://github.com/SvenGDK/SharpProspero" target="_blank" rel="noreferrer">Repositorio y documentación ↗</a></div><div class="system-tile"><strong>PS5SDK</strong><p>Headers/CRT y payloads ELF; upstream indica que no construye títulos completos.</p><a class="repo-link" href="https://github.com/PS5Dev/PS5SDK" target="_blank" rel="noreferrer">Repositorio ↗</a></div><div class="system-tile"><strong>ps5link-sdk</strong><p>Enlazador nativo de títulos y examples de gráficos/entrada, necesita prospero-clang.</p><a class="repo-link" href="https://github.com/Rufidj/ps5link-sdk" target="_blank" rel="noreferrer">Repositorio ↗</a></div><div class="system-tile"><strong>etaHEN-Plugins</strong><p>SDK para plugins y daemons cargados por etaHEN; requiere Johns SDK.</p><a class="repo-link" href="https://github.com/etaHEN/etaHEN-Plugins" target="_blank" rel="noreferrer">Repositorio ↗</a></div><div class="panel-info">Consulta <a class="repo-link" href="/docs/SDK_MATRIX.md" target="_blank" rel="noreferrer">Matriz de SDKs ↗</a> y <a class="repo-link" href="/docs/PROJECT_ECOSYSTEM.md" target="_blank" rel="noreferrer">Estudio de proyectos, UI, OpenGL, Vulkan e IA ↗</a>.</div>`;
     }
@@ -150,10 +150,11 @@
       const canCreate=!!x.generator||x.id==='nativecpp'||x.id==='hui-gl';const action=canCreate?`<button class="btn primary small" data-source-create="${esc(x.id)}">${x.id==='vulkan-template'?'Crear título Vulkan':x.id==='hui-gl'?'Crear app UI OpenGL':'Crear base C++'}</button>`:'';
       const state=installed?'<span class="source-state installed">CLONADO</span>':'<span class="source-state">NO CLONADO</span>';
       const ai=x.aiDeclared?'<span class="source-ai declared">IA declarada</span>':x.ai&&/documentación para agentes|documentación de trabajo para agentes|AGENTS\.md|CLAUDE\.md/i.test(x.ai)?'<span class="source-ai">Guías para agentes</span>':'';
-      return `<article class="source-card"><div class="source-card-top"><span class="source-kind">${esc(kindLabel)}</span>${state}</div><h3>${esc(x.name)}</h3><div class="source-repo">${esc(x.repo)}</div><p>${esc(x.description)}</p><div class="source-tags"><span>${esc(x.license)}</span>${ai}</div><details><summary>Requisitos y uso</summary><p>${esc(x.requires)}</p><p><strong>Nota de procedencia:</strong> ${esc(x.ai)}</p></details><div class="source-card-actions"><button class="btn ${installed?'secondary':'primary'} small" data-source-install="${esc(x.id)}">${installed?'Ver fuente instalada':'Clonar desde GitHub'}</button>${action}<button class="btn ghost small" data-source-open="${esc(x.href)}">GitHub ↗</button></div></article>`;
+      const buildNote=({nativecpp:'Perfil de título nativo C/C++: Makefile + inicializador upstream.',opengl:'SDK/renderer; debe compilarse como dependencia antes de usar una UI OpenGL.', 'hui-gl':'Aplicación UI OpenGL: necesita Native App Boilerplate y el SDK OpenGL compilado.', 'vulkan-template':'Plantilla generadora: primero crea un título y prepara PS5_Vulkan, PS5_PayloadSDK y PS5_Mesa.', 'vulkan-radv':'Dependencia del stack Vulkan/RADV; no es un título independiente.', 'vulkan-sdk':'Dependencia de SDK; requiere la revisión fijada por la plantilla Vulkan.', 'ps5-mesa':'Dependencia Mesa/RADV compilada desde una revisión upstream compatible.', 'hui-vk':'Kit UI Vulkan; requiere la plantilla y la revisión RADV compatibles.'})[x.id]||(['renderer','driver','dependency','graphics-addon'].includes(x.kind)?'Componente de toolchain o renderer; no se compila como título genérico.':'Proyecto de referencia: consulta su build guide y dependencias upstream; el IDE no supone que un make genérico produzca un título PS5.');
+      return '<article class="source-card"><div class="source-card-top"><span class="source-kind">'+esc(kindLabel)+'</span>'+state+'</div><h3>'+esc(x.name)+'</h3><div class="source-repo">'+esc(x.repo)+'</div><p>'+esc(x.description)+'</p><p class="source-profile-note">'+esc(buildNote)+'</p><div class="source-tags"><span>'+esc(x.license)+'</span>'+ai+'</div><details><summary>Requisitos y uso</summary><p>'+esc(x.requires)+'</p><p><strong>Nota de procedencia:</strong> '+esc(x.ai)+'</p></details><div class="source-card-actions"><button class="btn '+(installed?'secondary':'primary')+' small" data-source-install="'+esc(x.id)+'">'+(installed?'Ver fuente instalada':'Clonar desde GitHub')+'</button>'+action+'<button class="btn ghost small" data-source-open="'+esc(x.href)+'">GitHub ↗</button></div></article>';
     }).join('');
     root.innerHTML=(cards||'<div class="empty-screen">No hay repositorios que coincidan con esa búsqueda.</div>')+
-      `<section class="native-projects-panel"><div class="native-projects-head"><div><strong>PROYECTOS NATIVOS CREADOS</strong><p>Proyectos C++ generados desde plantillas upstream. Compilar invoca Make/CMake/Ninja del repositorio y solo marca éxito si aparece un eboot.bin o ZIP real.</p></div><button class="btn secondary small" data-refresh-native-projects>Actualizar</button></div><div id="nativeProjectList"><div class="empty-screen">Consultando el espacio de trabajo de Windows…</div></div></section>`;
+      `<section class="native-projects-panel"><div class="native-projects-head"><div><strong>PROYECTOS NATIVOS Y UPSTREAM DETECTADOS</strong><p>Proyectos y checkouts detectados en el workspace. El perfil identifica el tipo, las dependencias y si hay una receta de título compatible; los repositorios de referencia no se compilan con un make genérico.</p></div><button class="btn secondary small" data-refresh-native-projects>Actualizar</button></div><div id="nativeProjectList"><div class="empty-screen">Consultando el espacio de trabajo de Windows…</div></div></section>`;
     renderNativeProjects();
   }
 
@@ -161,14 +162,23 @@
     const root=$('#nativeProjectList');if(!root)return;
     try{
       const result=await api('native-projects'),projects=result.projects||[];
-      if(!projects.length){root.innerHTML='<div class="empty-screen">Todavía no hay proyectos nativos creados desde Homebrew Studio. Usa «Crear base C++», «Crear app UI OpenGL» o «Crear título Vulkan» en una tarjeta compatible.</div>';return;}
-      root.innerHTML=projects.map(p=>`<article class="native-project-card"><div class="native-project-main"><strong>${esc(p.name||p.titleId||'Proyecto nativo')}</strong><span class="native-project-meta">${esc(p.visualBackend||p.templateId||'plantilla')} · ${esc(p.titleId||'sin TITLE_ID')}${p.design?' · diseño '+esc(p.design):''}${p.generatedFromStudio?' · canvas → C++20':''}</span><code title="Ruta del proyecto">${esc(p.path||'')}</code>${p.built?`<span class="native-build-state success">Título listo: ${esc(p.artifact)}</span>`:'<span class="native-build-state pending">Título no verificado: requiere eboot.bin y sce_sys/param.json</span>'}</div><div class="native-project-actions"><button class="btn primary small" data-native-build="${esc(p.path||'')}">Compilar</button><button class="btn ghost small" data-source-open="${p.templateId==='vulkan-template'?'https://github.com/mihawk-99/PS5_VulkanTemplate':p.templateId==='hui-gl'?'https://github.com/blackbearreloaded/ps5-homebrew-ui':'https://github.com/blackbearreloaded/ps5-native-app-boilerplate'}">Upstream ↗</button></div></article>`).join('');
+      if(!projects.length){root.innerHTML='<div class="empty-screen">No se han detectado proyectos nativos o repositorios upstream en el workspace. Clona una fuente desde el catálogo o crea una base C++, una app UI OpenGL o un título Vulkan.</div>';return;}
+      root.innerHTML=projects.map(p=>{
+        const template=String(p.templateId||'');
+        const upstream=template==='vulkan-template'?'https://github.com/mihawk-99/PS5_VulkanTemplate':template==='hui-gl'?'https://github.com/blackbearreloaded/ps5-homebrew-ui':template==='nativecpp'?'https://github.com/blackbearreloaded/ps5-native-app-boilerplate':p.repository?'https://github.com/'+p.repository:'https://github.com';
+        const missing=Array.isArray(p.missingDependencies)?p.missingDependencies:[];
+        const missingBlock=missing.length?'<span class="native-dependency-warning">Dependencias pendientes: '+esc(missing.join(', '))+'</span>':'';
+        const reason=p.buildReason?'<p class="native-project-reason">'+esc(p.buildReason)+'</p>':'';
+        const buildLabel=p.needsInit?'Inicializar y compilar':'Compilar';
+        const disabled=p.buildable?'':' disabled title="'+esc(p.buildReason||'No hay un perfil de título compatible')+'"';
+        return '<article class="native-project-card"><div class="native-project-main"><strong>'+esc(p.name||p.titleId||'Proyecto upstream')+'</strong><span class="native-project-meta">'+esc(p.typeLabel||p.visualBackend||template||'Proyecto detectado')+' · '+esc(p.buildSystem||'Build upstream')+' · '+esc(p.titleId||'sin TITLE_ID')+(p.design?' · diseño '+esc(p.design):'')+(p.generatedFromStudio?' · canvas → C++20':'')+'</span><code title="Ruta del proyecto">'+esc(p.path||'')+'</code>'+missingBlock+reason+(p.built?'<span class="native-build-state success">Título detectado: '+esc(p.artifact)+'</span>':'<span class="native-build-state pending">Título todavía sin artefacto validado</span>')+'</div><div class="native-project-actions"><button class="btn primary small" data-native-build="'+esc(p.path||'')+'" data-native-title-id="'+esc(p.titleId||'')+'" data-native-name="'+esc(p.name||'')+'" data-native-needs-init="'+String(!!p.needsInit)+'" data-native-supports-clean="'+String(!!p.supportsClean)+'"'+disabled+'>'+buildLabel+'</button><button class="btn ghost small" data-source-open="'+esc(upstream)+'">Upstream ↗</button></div></article>';
+      }).join('');
       root.querySelectorAll('.native-project-card').forEach((card,index)=>{
         const p=projects[index]||{},actions=card.querySelector('.native-project-actions');if(!actions)return;
         const pack=document.createElement('button');pack.className='btn secondary small';pack.textContent='Empaquetar';pack.disabled=!p.built;pack.dataset.nativePackage=p.path||'';pack.title=p.built?'Crear ffpfs, ffpfsc o pkg con PS5 UltraPack':'Compila y verifica el título antes de empaquetarlo';
         actions.insertBefore(pack,actions.children[1]||null);pack.onclick=()=>packageNativeWithUltraPack(pack.dataset.nativePackage);
       });
-    }catch(e){root.innerHTML=`<div class="empty-screen">No se pudo consultar el workspace de Windows: ${esc(e.message)}. El servicio local debe estar ejecutándose.</div>`;}
+    }catch(e){root.innerHTML='<div class="empty-screen">No se pudo consultar el workspace de Windows: '+esc(e.message)+'. El servicio local debe estar ejecutándose.</div>';}
   }
 
   async function openIntegrationSettings(){
@@ -202,15 +212,14 @@
     if(!path){toast('La ruta del proyecto está vacía.','error');return;}
     const body='<p>Se validará que el título incluya <code>eboot.bin</code> y <code>sce_sys/param.json</code>. El resultado se guardará dentro de <code>packages-ultrapack</code> en la carpeta del proyecto.</p>'+
       '<div class="form-field"><label>Formato de salida</label><select id="ultraPackFormat" class="compact-select" style="width:100%"><option value="ffpfsc">.ffpfsc · PFS comprimido</option><option value="ffpfs">.ffpfs · PFS sin comprimir</option><option value="pkg">.pkg · fPKG (requiere helper Windows)</option></select></div>'+
-      '<div class="form-field"><label style="display:flex;align-items:center;gap:8px"><input id="ultraPackVerify" type="checkbox" checked style="width:auto"> Verificar el contenido contra el origen</label><p class="section-note">Recomendado: comprueba el contenido del paquete frente a los archivos originales. Puede tardar más y consumir más memoria.</p></div>'+
       '<pre id="ultraPackOutput" style="font:10px/1.55 Consolas,monospace;white-space:pre-wrap;word-break:break-word;max-height:40vh;overflow:auto">Listo para ejecutar PS5 UltraPack.</pre>';
     openModal('Empaquetar con PS5 UltraPack',body,[
       {text:'Cerrar',class:'ghost',action:closeModal},
       {text:'Empaquetar',class:'primary',action:async()=>{
-        const format=$('#ultraPackFormat').value,verify=$('#ultraPackVerify').checked,buttons=$('#modalActions button');buttons.forEach(b=>b.disabled=true);
-        const box=$('#ultraPackOutput');if(box)box.textContent='Preparando el empaquetado '+format+(verify?' con verificación completa…':'…');
+        const format=$('#ultraPackFormat').value,buttons=$('#modalActions button');buttons.forEach(b=>b.disabled=true);
+        const box=$('#ultraPackOutput');if(box)box.textContent='Preparando el empaquetado '+format+'…';
         try{
-          const startedJob=await api('package-ultrapack/start',{path,format,verify});
+          const startedJob=await api('package-ultrapack/start',{path,format});
           if(!startedJob.ok||!startedJob.jobId)throw new Error(startedJob.message||'No se pudo iniciar el trabajo de empaquetado.');
           let status=null,lastLog='';
           while(true){status=await api('build-jobs/'+startedJob.jobId);const currentLog=String(status.log||'');
@@ -228,34 +237,52 @@
     ]);
   }
 
-  async function buildNativeProject(path){
+  async function buildNativeProject(path,titleId='',name='',needsInit=false,supportsClean=true){
     if(!path){toast('La ruta del proyecto está vacía.','error');return;}
-    openModal('Compilación nativa C++ / OpenGL / Vulkan',`<p>Se invocará el script de compilación real de la plantilla. La salida de Make/CMake/Ninja aparecerá aquí mientras se genera. Cuando termine podrás empaquetar el título si contiene eboot.bin y sus metadatos.</p><pre id="nativeBuildOutput" style="font:10px/1.55 Consolas,monospace;color:#aeb8cf;white-space:pre-wrap;word-break:break-word;max-height:46vh;overflow:auto">Preparando compilación…</pre>`,[{text:'Cerrar ventana',class:'ghost',action:closeModal}]);
-    log('Inicio del build upstream para proyecto nativo: '+path);
-    let outcome='error';
-    try{
-      const startedJob=await api('build-native/start',{path});
-      if(!startedJob.ok||!startedJob.jobId)throw new Error(startedJob.message||'No se pudo iniciar el trabajador de compilación.');
-      let status=null,lastLog='';
-      while(true){
-        status=await api('build-jobs/'+startedJob.jobId);
-        const currentLog=String(status.log||'');
-        if(currentLog!==lastLog){const out=$('#nativeBuildOutput');if(out){out.textContent=currentLog||'Esperando salida del proceso…';out.scrollTop=out.scrollHeight;}lastLog=currentLog;}
-        if(status.done)break;
-        await new Promise(resolve=>setTimeout(resolve,450));
-      }
-      const result=status.result||{ok:false,message:'El trabajador terminó sin resultado legible.',output:lastLog};
-      const out=$('#nativeBuildOutput');if(out){out.textContent=(result.output||result.message||lastLog||'Proceso finalizado.')+(result.artifact?'\n\nArtefacto verificado: '+result.artifact:'');out.scrollTop=out.scrollHeight;}
-      if(result.ok){
-        outcome='success';setLastPostBuildPath(result.path||path);log(result.message||'Build upstream completado.');if(result.artifact)log('Artefacto nativo: '+result.artifact);toast('Compilación nativa completada');
-        const actions=$('#modalActions');
-        if(actions&&!actions.querySelector('[data-post-build="ultrapack"]')){
-          const packButton=document.createElement('button');packButton.className='btn secondary';packButton.dataset.postBuild='ultrapack';packButton.textContent='Empaquetar con UltraPack';packButton.onclick=()=>packageNativeWithUltraPack(path);actions.append(packButton);
-        }
-      }else{outcome='error';log(result.message||'El build nativo ha fallado.','ERROR');toast('La compilación nativa ha fallado. Revisa el log.','error');}
-      if(result.diagnostics){result.diagnostics.forEach(d=>allDiagnostics.push(d));renderDiagnostics();}
-    }catch(e){const out=$('#nativeBuildOutput');if(out)out.textContent=e.message;log('Invocación del build nativo: '+e.message,'ERROR');toast('No se pudo ejecutar el build nativo.','error');}
-    finally{$('#modalTitle').textContent=outcome==='success'?'Compilación completada':outcome==='error'?'Error de compilación':'Compilación nativa';$$('#modalActions button').forEach(b=>b.disabled=false);await refreshStatus();await renderNativeProjects();}
+    const safeTitle=/^PPSA\d{5}$/.test(String(titleId||''))?String(titleId):'';
+    const safeName=String(name||'').trim();
+    const form='<p>El IDE detecta el tipo y ejecuta la receta upstream validada para ese perfil. Si la plantilla no tiene un perfil compatible, la compilación se deshabilita en la lista. Los archivos del proyecto no se eliminan por conjetura.</p>'+
+      '<div class="form-field"><label>Nombre de título (solo necesario al inicializar)</label><input id="nativeBuildName" maxlength="40" value="'+esc(safeName)+'" '+(needsInit?'':'disabled')+'></div>'+
+      '<div class="form-field"><label>TITLE_ID (solo necesario al inicializar)</label><input id="nativeBuildTitleId" maxlength="9" value="'+esc(safeTitle)+'" pattern="PPSA[0-9]{5}" '+(needsInit?'':'disabled')+'></div>'+
+      '<label class="check-row"><input id="nativeCleanBeforeBuild" type="checkbox" checked> Limpiar antes de compilar: ejecutar make clean solo si el Makefile declara ese target</label>'+
+      '<p class="section-note">'+(supportsClean?'El proyecto declara un target clean.':'La detección no encontró un target clean; el IDE lo volverá a comprobar y no borrará artefactos si no existe.')+' Para las plantillas cuyo pipeline no usa Make en la raíz, se conserva el build upstream sin limpieza automática.</p>'+
+      '<pre id="nativeBuildOutput" style="font:10px/1.55 Consolas,monospace;color:#aeb8cf;white-space:pre-wrap;word-break:break-word;max-height:42vh;overflow:auto">Listo para iniciar la compilación…</pre>';
+    openModal('Compilación nativa · perfil detectado',form,[
+      {text:'Cancelar',class:'ghost',action:closeModal},
+      {text:'Compilar',class:'primary',action:async()=>{
+        const requestedName=String($('#nativeBuildName')?.value||'').trim();
+        const requestedTitleId=String($('#nativeBuildTitleId')?.value||'').trim().toUpperCase();
+        const cleanBeforeBuild=!!$('#nativeCleanBeforeBuild')?.checked;
+        if(needsInit&&(!/^[A-Za-z0-9][A-Za-z0-9 ._-]{0,39}$/.test(requestedName)||!/^PPSA\d{5}$/.test(requestedTitleId)||requestedTitleId==='PPSA00000')){toast('Para inicializar la plantilla introduce un nombre ASCII válido y un TITLE_ID PPSA12345.','error');return;}
+        const output=$('#nativeBuildOutput');if(output)output.textContent='Preparando perfil, dependencias y compilación…';
+        const actions=$$('#modalActions button');actions.forEach(b=>{if(b.textContent.trim()==='Compilar')b.disabled=true;});
+        log('Inicio de compilación: '+path+(cleanBeforeBuild?' (clean solicitado)':''));
+        let outcome='error';
+        try{
+          const startedJob=await api('build-native/start',{path,cleanBeforeBuild,titleId:requestedTitleId||safeTitle,name:requestedName||safeName});
+          if(!startedJob.ok||!startedJob.jobId)throw new Error(startedJob.message||'No se pudo iniciar el trabajador de compilación.');
+          let status=null,lastLog='';
+          while(true){
+            status=await api('build-jobs/'+startedJob.jobId);
+            const currentLog=String(status.log||'');
+            if(currentLog!==lastLog){const out=$('#nativeBuildOutput');if(out){out.textContent=currentLog||'Esperando salida del proceso…';out.scrollTop=out.scrollHeight;}lastLog=currentLog;}
+            if(status.done)break;
+            await new Promise(resolve=>setTimeout(resolve,450));
+          }
+          const result=status.result||{ok:false,message:'El trabajador terminó sin resultado legible.',output:lastLog};
+          const out=$('#nativeBuildOutput');if(out){out.textContent=(result.output||result.message||lastLog||'Proceso finalizado.')+(result.artifact?'\n\nArtefacto verificado: '+result.artifact:'');out.scrollTop=out.scrollHeight;}
+          if(result.ok){
+            outcome='success';setLastPostBuildPath(result.path||path);log(result.message||'Build upstream completado.');if(result.artifact)log('Artefacto nativo: '+result.artifact);toast('Compilación nativa completada');
+            const modalActions=$('#modalActions');
+            if(modalActions&&!modalActions.querySelector('[data-post-build="ultrapack"]')){
+              const packButton=document.createElement('button');packButton.className='btn secondary';packButton.dataset.postBuild='ultrapack';packButton.textContent='Empaquetar con UltraPack';packButton.onclick=()=>packageNativeWithUltraPack(result.path||path);modalActions.append(packButton);
+            }
+          }else{outcome='error';log(result.message||'El build nativo ha fallado.','ERROR');toast('La compilación nativa ha fallado. Revisa el log.','error');}
+          if(result.diagnostics){result.diagnostics.forEach(d=>allDiagnostics.push(d));renderDiagnostics();}
+        }catch(e){const out=$('#nativeBuildOutput');if(out)out.textContent=e.message;log('Invocación del build nativo: '+e.message,'ERROR');toast('No se pudo ejecutar el build nativo.','error');}
+        finally{const title=$('#modalTitle');if(title)title.textContent=outcome==='success'?'Compilación completada':'Error de compilación';$$('#modalActions button').forEach(b=>b.disabled=false);await refreshStatus();await renderNativeProjects();}
+      }}
+    ]);
   }
 
   function openNativeBoilerplateCreate(templateId='nativecpp'){
