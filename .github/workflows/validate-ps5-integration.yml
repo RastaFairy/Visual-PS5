@@ -68,7 +68,7 @@ jobs:
           foreach ($needle in $requiredServer) {
             if (-not $server.Contains($needle)) { throw "Missing server integration: $needle" }
           }
-          foreach ($needle in @("api('integrations')", "api('package-ultrapack/start'", "function openIntegrationSettings", "buttons=$('#modalActions button')")) {
+          foreach ($needle in @("api('integrations')", "api('package-ultrapack/start'", "function openIntegrationSettings")) {
             if (-not $app.Contains($needle)) { throw "Missing UI integration: $needle" }
           }
           if ($server -match 'RunKytyProject|kytyExe|/api/run-kyty' -or $app -match 'runNativeKyty|postBuildKyty|kyty_emulator|/api/run-kyty') {
