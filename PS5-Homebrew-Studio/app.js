@@ -271,18 +271,33 @@
 
   async function buildNativeProject(path){
     if(!path){toast('La ruta del proyecto está vacía.','error');return;}
-    openModal('Compilación nativa C++ / OpenGL / Vulkan',`<p>Se invocará el script de compilación real de la plantilla. En la ruta Vulkan también se preparan PS5_Vulkan y el fork fijado de PS5_PayloadSDK. La salida y los errores proceden de Make/CMake/Ninja del propio repositorio.</p><div class="build-progress"><span></span></div><pre id="nativeBuildOutput" style="font:10px/1.55 Consolas,monospace;color:#aeb8cf;white-space:pre-wrap;word-break:break-word;max-height:46vh;overflow:auto">Preparando compilación… No cierres la consola de servicio.</pre>`,[{text:'Cerrar ventana',class:'ghost',action:closeModal}]);
-    const started=Date.now();
-    const timer=setInterval(()=>{const out=$('#nativeBuildOutput');if(out)out.textContent='La compilación sigue en ejecución. Tiempo transcurrido: '+Math.floor((Date.now()-started)/1000)+' s.\nLa salida real aparecerá cuando termine el proceso upstream.';},1200);
+    openModal('Compilación nativa C++ / OpenGL / Vulkan',`<p>Se invocará el script de compilación real de la plantilla. La salida de Make/CMake/Ninja aparecerá aquí mientras se genera. Cuando termine podrás probar el título en Kyty o empaquetarlo con UltraPack.</p><pre id="nativeBuildOutput" style="font:10px/1.55 Consolas,monospace;color:#aeb8cf;white-space:pre-wrap;word-break:break-word;max-height:46vh;overflow:auto">Preparando compilación…</pre>`,[{text:'Cerrar ventana',class:'ghost',action:closeModal}]);
     log('Inicio del build upstream para proyecto nativo: '+path);
+    let outcome='error';
     try{
-      const result=await api('build-native',{path});
-      const out=$('#nativeBuildOutput');if(out)out.textContent=(result.output||result.message||'Proceso finalizado.')+(result.artifact?'\n\nArtefacto verificado: '+result.artifact:'');
-      if(result.ok){log(result.message||'Build upstream completado.');if(result.artifact)log('Artefacto nativo: '+result.artifact);toast('Compilación nativa completada');}
-      else{log(result.message||'El build nativo ha fallado.','ERROR');toast('La compilación nativa ha fallado. Revisa el log.','error');}
+      const startedJob=await api('build-native/start',{path});
+      if(!startedJob.ok||!startedJob.jobId)throw new Error(startedJob.message||'No se pudo iniciar el trabajador de compilación.');
+      let status=null,lastLog='';
+      while(true){
+        status=await api('build-jobs/'+startedJob.jobId);
+        const currentLog=String(status.log||'');
+        if(currentLog!==lastLog){const out=$('#nativeBuildOutput');if(out){out.textContent=currentLog||'Esperando salida del proceso…';out.scrollTop=out.scrollHeight;}lastLog=currentLog;}
+        if(status.done)break;
+        await new Promise(resolve=>setTimeout(resolve,450));
+      }
+      const result=status.result||{ok:false,message:'El trabajador terminó sin resultado legible.',output:lastLog};
+      const out=$('#nativeBuildOutput');if(out){out.textContent=(result.output||result.message||lastLog||'Proceso finalizado.')+(result.artifact?'\n\nArtefacto verificado: '+result.artifact:'');out.scrollTop=out.scrollHeight;}
+      if(result.ok){
+        outcome='success';log(result.message||'Build upstream completado.');if(result.artifact)log('Artefacto nativo: '+result.artifact);toast('Compilación nativa completada');
+        const actions=$('#modalActions');
+        if(actions&&!actions.querySelector('[data-post-build="kyty"]')){
+          const runButton=document.createElement('button');runButton.className='btn secondary';runButton.dataset.postBuild='kyty';runButton.textContent='Probar en Kyty';runButton.onclick=()=>runNativeKyty(path);actions.append(runButton);
+          const packButton=document.createElement('button');packButton.className='btn secondary';packButton.dataset.postBuild='ultrapack';packButton.textContent='Empaquetar con UltraPack';packButton.onclick=()=>packageNativeWithUltraPack(path);actions.append(packButton);
+        }
+      }else{outcome='error';log(result.message||'El build nativo ha fallado.','ERROR');toast('La compilación nativa ha fallado. Revisa el log.','error');}
       if(result.diagnostics){result.diagnostics.forEach(d=>allDiagnostics.push(d));renderDiagnostics();}
     }catch(e){const out=$('#nativeBuildOutput');if(out)out.textContent=e.message;log('Invocación del build nativo: '+e.message,'ERROR');toast('No se pudo ejecutar el build nativo.','error');}
-    finally{clearInterval(timer);await refreshStatus();await renderNativeProjects();}
+    finally{$('#modalTitle').textContent=outcome==='success'?'Compilación completada':outcome==='error'?'Error de compilación':'Compilación nativa';$$('#modalActions button').forEach(b=>b.disabled=false);await refreshStatus();await renderNativeProjects();}
   }
 
   function openNativeBoilerplateCreate(templateId='nativecpp'){
