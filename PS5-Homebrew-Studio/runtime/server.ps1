@@ -565,12 +565,21 @@ function PackageNativeProjectWithUltraPack($Body) {
   $psi.CreateNoWindow = $true
   $psi.RedirectStandardOutput = $true
   $psi.RedirectStandardError = $true
+  # Decode UltraPack's UTF-8 output explicitly. Without this, Windows PowerShell can
+  # display Unicode symbols (for example, the source-to-output arrow) as mojibake.
+  $psi.StandardOutputEncoding = [System.Text.Encoding]::UTF8
+  $psi.StandardErrorEncoding = [System.Text.Encoding]::UTF8
   $psi.EnvironmentVariables['PYTHONUNBUFFERED'] = '1'
+  $psi.EnvironmentVariables['PYTHONIOENCODING'] = 'utf-8'
+  $psi.EnvironmentVariables['PYTHONUTF8'] = '1'
+  $verifyEnabled = [bool]$Body.verify
   $cliArgs = @('-u',$cli,[string]$title.path,$outputRoot,'--to',$format,'--force','--temp-dir',$tempRoot,'--verbose')
+  if ($verifyEnabled) { $cliArgs += '--verify' }
   $psi.Arguments = (($cliArgs | ForEach-Object { '"' + ([string]$_).Replace('"','\\"') + '"' }) -join ' ')
   $commandForLog = '"' + $python + '" ' + $psi.Arguments
-  $logText = "CLI configurado: $cli`r`nPython configurado: $python ($versionText)`r`nFormato solicitado: $format`r`nOrigen: $($title.path)`r`nDestino: $outputRoot`r`nComando ejecutado:`r`n$commandForLog`r`nDirectorio de trabajo: $($psi.WorkingDirectory)`r`n`r`n"
-  WriteBuildJobLog $script:ActiveBuildLogPath "UltraPack: iniciando $format; origen $($title.path); destino $outputRoot"
+  $logText = "CLI configurado: $cli`r`nPython configurado: $python ($versionText)`r`nFormato solicitado: $format`r
+Verificación contra el origen: $verifyEnabled`r`nOrigen: $($title.path)`r`nDestino: $outputRoot`r`nComando ejecutado:`r`n$commandForLog`r`nDirectorio de trabajo: $($psi.WorkingDirectory)`r`n`r`n"
+  WriteBuildJobLog $script:ActiveBuildLogPath "UltraPack: iniciando $format; verificación=$verifyEnabled; origen $($title.path); destino $outputRoot"
   $process = [System.Diagnostics.Process]::new()
   $process.StartInfo = $psi
   try {
