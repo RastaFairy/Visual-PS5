@@ -573,7 +573,7 @@ function PackageNativeProjectWithUltraPack($Body) {
     $pkgTool = Join-Path $backendRoot 'native\ffpfsc-pkg-tool.exe'
     if ($env:FFPFSC_PKG_TOOL -and (Test-Path -LiteralPath $env:FFPFSC_PKG_TOOL -PathType Leaf)) { $pkgTool = $env:FFPFSC_PKG_TOOL }
     if (!(Test-Path -LiteralPath $pkgTool -PathType Leaf)) {
-      throw "UltraPack no dispone del helper nativo de Windows para crear .pkg: $pkgTool. Compila backend\BUILD_PKG_TOOL.ps1 con .NET SDK 9+ o utiliza .ffpfsc/.ffpfs."
+      throw "UltraPack no dispone del helper nativo de Windows para crear .pkg: $pkgTool. Ejecuta BUILD_PKG_TOOL.ps1 en la raíz del repositorio con .NET SDK 9+ o utiliza .ffpfsc/.ffpfs."
     }
   }
   $title = FindProjectTitleFolder $projectRoot $true
