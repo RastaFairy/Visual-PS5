@@ -202,8 +202,9 @@
           const result=await api('sdk-install',{ids:['ps5-ultrapack']});
           const item=(result.results||[]).find(x=>x.name==='PS5 UltraPack'||x.path);
           if(!item||!item.ok||!item.path)throw new Error(item?.message||result.message||'La descarga no terminó correctamente.');
-          const cli=item.path+'\\backend\\cli.py';
-          const saved=await api('integration-config',{kytyExe:$('#integrationKytyPath').value.trim(),pythonExe:$('#integrationPythonPath').value.trim(),ultraPackCli:cli});
+          const cli=item.cli||item.path+'\\backend\\cli.py';
+          const python=item.pythonExe||$('#integrationPythonPath').value.trim();
+          const saved=await api('integration-config',{kytyExe:$('#integrationKytyPath').value.trim(),pythonExe:python,ultraPackCli:cli});
           log('UltraPack descargado como código fuente: '+item.path,'INFO');
           toast(saved.message||'UltraPack preparado');
           closeModal();await openIntegrationSettings();
@@ -232,7 +233,7 @@
     try{
       const result=await api('run-kyty',{path});
       const box=$('#kytyRunOutput');
-      if(box)box.textContent=(result.message||'Kyty iniciado.')+'\nPID: '+(result.pid??'desconocido')+'\nCarpeta: '+(result.gameFolder||'')+'\neboot.bin: '+(result.eboot||'');
+      if(box)box.textContent=(result.message||'Kyty iniciado.')+'\nPID: '+(result.pid??'desconocido')+'\nCarpeta: '+(result.gameFolder||'')+'\neboot.bin: '+(result.eboot||'')+'\nComando: '+(result.command||'');
       log(result.message||'KytyPS5 iniciado.','INFO');toast('KytyPS5 iniciado');
     }catch(e){
       const box=$('#kytyRunOutput');if(box)box.textContent='No se pudo iniciar KytyPS5.\n'+e.message;
