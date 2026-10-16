@@ -1,6 +1,6 @@
 # PS5 Homebrew Studio
 
-**Release 1.1.0 · IDE visual local para Windows.** Integra un editor visual 1920×1080, análisis de flujos, generación de código C# para SharpProspero y conversión del modelo visual a pantallas C++20 para los kits nativos OpenGL/Vulkan. Incluye un catálogo verificado por función de boilerplates, UI kits, drivers, complementos gráficos y aplicaciones comunitarias de referencia.
+**Release 1.1.1 · IDE visual local para Windows.** Integra un editor visual 1920×1080, análisis de flujos, generación de código C# para SharpProspero y conversión del modelo visual a pantallas C++20 para los kits nativos OpenGL/Vulkan. Incluye un catálogo verificado por función de boilerplates, UI kits, drivers, complementos gráficos y aplicaciones comunitarias de referencia.
 
 ## Inicio en Windows
 
@@ -24,6 +24,15 @@ El servicio escucha únicamente en `127.0.0.1`; no expone el sistema de archivos
 - [Ecosistema de proyectos upstream](docs/PROJECT_ECOSYSTEM.md) · [Matriz de SDK](docs/SDK_MATRIX.md) · [Registro de cambios](docs/CHANGELOG.md)
 
 La UI de esta versión todavía está en español; los manuales traducidos no representan una localización completa de la interfaz.
+
+## Mejoras de desarrollo 1.1.1
+
+- El panel de proyectos detecta checkouts Git existentes, proyectos nativos y plantillas Vulkan, muestra el perfil de compilación y separa títulos compilables de SDKs, drivers y referencias.
+- Las plantillas compatibles pueden inicializarse mediante `tools/init-project.sh` o `make init`; los proyectos sin perfil seguro muestran el motivo y no ejecutan un `make` genérico.
+- La compilación OpenGL prepara Native App Boilerplate y PS5 OpenGL, compila el SDK si falta y configura `PS5_NATIVE_APP_TEMPLATE` y `PS5_OPENGL_PREFIX`.
+- El formulario de compilación permite ejecutar `make clean` antes de `make`, pero solo si el Makefile declara el target; no se borran artefactos por conjetura. Vulkan conserva su pipeline upstream si no hay un clean validado.
+- «Cerrar proyecto» descarga el modelo visual y deja el editor en blanco; ofrece guardar o descartar cambios y conserva las carpetas nativas, compilaciones y paquetes.
+- Se conserva la invocación de UltraPack que funciona en el entorno probado; la interfaz no añade `--verify` automáticamente.
 
 ## Cambios de 1.1.0
 

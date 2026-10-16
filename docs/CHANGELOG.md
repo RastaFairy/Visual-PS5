@@ -1,5 +1,14 @@
 # Changelog / Registro de cambios
 
+## 1.1.1 — 16 de octubre de 2026
+
+- Detección y clasificación del workspace: distingue títulos compilables, plantillas, SDKs/drivers y proyectos de referencia; muestra dependencias pendientes.
+- Reconocimiento seguro de clones Git existentes y soporte de inicialización mediante `tools/init-project.sh` o `make init`.
+- Preparación explícita de dependencias y SDK para el backend OpenGL UI.
+- Limpieza previa con `make clean` solo cuando se detecta un target declarado.
+- Cierre del modelo visual sin borrar proyectos nativos ni artefactos.
+- UltraPack conserva la invocación CLI probada, sin forzar `--verify`.
+
 ## 1.1.0 — 16 de octubre de 2026
 
 - Eliminada la integración activa de lanzamiento mediante Kyty.

@@ -387,6 +387,10 @@ function GetProjectProfile([string]$ProjectRoot) {
   $hasParam = Test-Path -LiteralPath (Join-Path $ProjectRoot 'sce_sys/param.json') -PathType Leaf
   $hasMainCpp = Test-Path -LiteralPath (Join-Path $ProjectRoot 'src/main.cpp') -PathType Leaf
   $hasLegacyInit = Test-Path -LiteralPath (Join-Path $ProjectRoot 'tools/init-project.sh') -PathType Leaf
+  $makeText = ''
+  if ($hasMakefile) { try { $makeText = Get-Content -LiteralPath (Join-Path $ProjectRoot 'Makefile') -Raw } catch { $makeText = '' } }
+  $hasMakeInit = [bool]($makeText -match '(?m)^\s*init\s*:')
+
   $hasVulkanGenerator = Test-Path -LiteralPath (Join-Path $ProjectRoot 'ps5/tools/new-title.py') -PathType Leaf
   $hasVulkanBuild = Test-Path -LiteralPath (Join-Path $ProjectRoot 'ps5/tools/build.sh') -PathType Leaf
   $hasUiFontTool = Test-Path -LiteralPath (Join-Path $ProjectRoot 'tools/bake-fonts.sh') -PathType Leaf
@@ -399,7 +403,7 @@ function GetProjectProfile([string]$ProjectRoot) {
     $template = 'vulkan-template-source'
   } elseif ($remote -eq 'blackbearreloaded/ps5-homebrew-ui' -or ($hasMakefile -and $hasUiFontTool)) {
     $template = 'hui-gl'
-  } elseif ($remote -eq 'blackbearreloaded/ps5-native-app-boilerplate' -or ($hasMakefile -and $hasMainCpp -and $hasLegacyInit)) {
+  } elseif ($remote -eq 'blackbearreloaded/ps5-native-app-boilerplate' -or ($hasMakefile -and $hasMainCpp -and ($hasLegacyInit -or $hasMakeInit))) {
     $template = 'nativecpp'
   }
   $titleId = ''

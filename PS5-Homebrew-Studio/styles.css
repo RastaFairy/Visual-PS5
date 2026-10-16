@@ -40,3 +40,8 @@
 .native-build-state.pending{color:#ffc76a}
 .native-project-actions{display:flex;gap:5px;flex-wrap:wrap;justify-content:flex-end;flex-shrink:0}
 @media(max-width:720px){.native-project-card{align-items:flex-start;flex-direction:column}.native-project-actions{justify-content:flex-start;width:100%}.native-project-actions .btn{flex:1}}
+
+/* Native workspace profiles and dependency diagnostics (1.1.1). */
+.source-profile-note{font-size:11px;line-height:1.45;margin:7px 0 3px;padding:8px 10px;border-left:2px solid var(--line);color:var(--muted);background:rgba(255,255,255,.025);border-radius:0 6px 6px 0}
+.native-dependency-warning{display:block;margin-top:7px;padding:7px 9px;border-radius:6px;background:rgba(238,183,83,.09);color:var(--yellow);font-size:11px;line-height:1.4}
+.native-project-reason{margin:7px 0;color:var(--muted);font-size:11px;line-height:1.45}
