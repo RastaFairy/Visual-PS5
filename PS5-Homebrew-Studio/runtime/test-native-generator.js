@@ -43,7 +43,9 @@ for (const backend of ['opengl-ui', 'vulkan-ui']) {
   assert.ok(source.includes('Teclado de pantalla'));
   assert.ok(source.includes('w.max > w.min ? clamp_value((w.value - w.min) / (w.max - w.min)'));
   if (backend === 'opengl-ui') { assert.ok(source.includes('glTexImage2D')); assert.ok(source.includes('ps5hs/asset-avatar.rgba')); assert.ok(source.includes('draw.image(w.texture')); }
-  else { assert.ok(source.includes('void load_textures() {}')); assert.ok(source.includes('ps5ui::ps5hs_texture_for(w.asset_path)')); assert.ok(source.includes('ps5hs/asset-avatar.rgba')); assert.ok(source.includes('Imagen no disponible')); }
+  else { assert.ok(!source.includes('void load_textures() {}'), `${backend}: Vulkan must not emit an empty texture stub`); assert.ok(source.includes('ps5ui::ps5hs_texture_for(w.asset_path)')); assert.ok(source.includes('ps5hs/asset-avatar.rgba')); assert.ok(source.includes('Imagen no disponible')); }
+  assert.ok(!source.includes('target component was not resolved'), `${backend}: generated flows must not contain unresolved-target placeholders`);
+  assert.ok(!source.includes('unsupported visual action'), `${backend}: generated flows must not contain unsupported-action placeholders`);
   assert.ok(source.includes('Audio'));
   if (backend === 'opengl-ui') assert.ok(source.includes('make_ps5hs_generated'));
   else assert.ok(source.includes('namespace ps5ui') && source.includes('make_screen'));
@@ -53,3 +55,11 @@ for (const backend of ['opengl-ui', 'vulkan-ui']) {
 const empty = codegen.generate({ name: 'Vacío', components: [], flows: [], screens: [{ id: 'screen-main' }] }, 'opengl-ui');
 assert.ok(empty.includes('widgets_ = {\n        };'));
 console.log('PASS empty model: compiles to a valid empty component list');
+
+const orphanFlow = JSON.parse(JSON.stringify(project));
+orphanFlow.flows.push({ id: 'orphan', componentId: 'start', event: 'activate', action: 'setText', targetId: 'missing-target', value: 'bad', enabled: true });
+assert.throws(() => codegen.generate(orphanFlow, 'opengl-ui'), /destino válido/);
+const invalidNavigation = JSON.parse(JSON.stringify(project));
+invalidNavigation.flows[0].targetScreen = 'does-not-exist';
+assert.throws(() => codegen.generate(invalidNavigation, 'vulkan-ui'), /pantalla inexistente/);
+console.log('PASS invalid flows: unresolved component targets and navigation screens are rejected before C++ generation');
