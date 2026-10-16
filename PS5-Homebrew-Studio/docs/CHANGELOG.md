@@ -1,5 +1,12 @@
 # Registro de cambios
 
+## 1.0.9 — 2026-10-16
+
+- Kyty recibe la ruta completa de `eboot.bin` mediante `--game`, con resolución 1920×1080 y registro del comando utilizado.
+- La instalación de UltraPack crea un entorno Python aislado en `toolchains/ps5-ultrapack/.venv` e instala dependencias CLI; Herramientas guarda las rutas exactas de `backend/cli.py` y de ese Python.
+- La ejecución de empaquetado valida la ruta configurada y registra CLI, Python, origen y destino. Si falta el helper nativo de Windows para `.pkg`, devuelve un error explícito antes de ejecutar.
+- Se aclara que los imports sin resolver y los guest faults son fallos de compatibilidad de Kyty, no errores que el IDE pueda solucionar únicamente cambiando argumentos.
+
 ## 1.0.8 — 2026-10-16
 
 - La llamada a PS5 UltraPack usa argumentos estructurados de proceso, el directorio de trabajo del CLI y un directorio temporal explícito; registra el comando real y separa STDOUT/STDERR para diagnosticar fallos en Windows.
