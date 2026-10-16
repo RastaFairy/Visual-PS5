@@ -1,5 +1,9 @@
 # Registro de cambios
 
+## 1.0.8 — 2026-10-16
+
+- La llamada a PS5 UltraPack usa argumentos estructurados de proceso, el directorio de trabajo del CLI y un directorio temporal explícito; registra el comando real y separa STDOUT/STDERR para diagnosticar fallos en Windows.
+
 ## 1.0.7 — 2026-10-16
 
 - Las acciones «Probar en Kyty» y «Empaquetar» permanecen en la barra común del IDE y recuerdan la última compilación nativa correcta.
