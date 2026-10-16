@@ -20,7 +20,7 @@ El servicio escucha únicamente en `127.0.0.1`; no expone el sistema de archivos
 - 简体中文: [docs/USER-MANUAL.zh-CN.md](docs/USER-MANUAL.zh-CN.md)
 - 日本語: [docs/USER-MANUAL.ja-JP.md](docs/USER-MANUAL.ja-JP.md)
 - Русский: [docs/USER-MANUAL.ru-RU.md](docs/USER-MANUAL.ru-RU.md)
-- [Guía de recursos de presentación](docs/PRESENTATION_ASSETS.md) · [Créditos y atribuciones upstream](docs/CREDITS.md)
+- [Solución de permisos WSL](docs/WSL_PERMISSIONS.md) · [Guía de recursos de presentación](docs/PRESENTATION_ASSETS.md) · [Créditos y atribuciones upstream](docs/CREDITS.md)
 - [Ecosistema de proyectos upstream](docs/PROJECT_ECOSYSTEM.md) · [Matriz de SDK](docs/SDK_MATRIX.md) · [Registro de cambios](docs/CHANGELOG.md)
 
 La UI de esta versión todavía está en español; los manuales traducidos no representan una localización completa de la interfaz.

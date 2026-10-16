@@ -1,4 +1,4 @@
-# Benutzerhandbuch — PS5 Homebrew Studio 1.1.2
+# Benutzerhandbuch — PS5 Homebrew Studio 1.1.3
 
 Letzte Aktualisierung: 16. Oktober 2026. Die Anwendungsoberfläche ist weiterhin auf Spanisch. Das übersetzte Handbuch bedeutet nicht, dass die UI bereits lokalisiert ist.
 
@@ -63,6 +63,18 @@ Führe mit installiertem Node.js im Anwendungsordner node --check app.js, node -
 
 Wenn der Server nicht startet, sichere die Fehlermeldung und prüfe PowerShell und Berechtigungen. Bei Build-Fehlern notiere Backend, Upstream-Versionen und Commits, vollständige Ausgabe und Exit-Code. Bei UltraPack prüfe Python/cli.py, eboot.bin, sce_sys/param.json und Schreibrechte. Teile keine Geheimnisse.
 
+
+### WSL-Fehler: chmod auf .git/config.lock
+
+Wenn das Protokoll `chmod on /mnt/d/.../.git/config.lock failed: Operation not permitted` oder `could not set 'core.filemode' to 'false'` enthält, wurde ein Windows-Laufwerk in WSL ohne die Option `metadata` eingebunden. Die IDE erkennt dies vor dem SDK-Build und zeigt die Reparaturschritte an.
+
+Öffne die WSL-Distribution und führe das mit der IDE gelieferte Skript aus (Pfad an den tatsächlichen Installationsort anpassen):
+
+```bash
+sudo bash /mnt/d/PS5-Homebrew-Studio/runtime/fix-wsl-permissions.sh
+```
+
+Das Skript sichert `/etc/wsl.conf` und aktualisiert `[automount] options`, ohne andere Einstellungen zu entfernen. Beende WSL, führe in der Windows-PowerShell `wsl --shutdown` aus, starte die Distribution erneut und wiederhole den Build. Der Befehl beendet alle laufenden WSL-Distributionen; speichere vorher deine Arbeit. Starte Git oder die IDE nicht als Administrator. Siehe die [ausführliche WSL-Berechtigungsanleitung](WSL_PERMISSIONS.md) und die [Microsoft-Dokumentation](https://learn.microsoft.com/windows/wsl/file-permissions).
 ## 8. Lizenzen und Grenzen
 
 SDKs, Treiber, Vorlagen und UI-Kits behalten ihre eigenen Lizenzen. Prüfe LICENSE, COPYING, NOTICE und die Weitergabebedingungen vor der Veröffentlichung. Visual-PS5 ist kein offizielles Sony-SDK, enthält keine Firmware, Schlüssel, Spiele oder BIOS und installiert Titel nicht automatisch. Die Vorschau ist kein PS5-Emulator und validiert weder Laufzeit noch Audio, Eingabe oder Persistenz.

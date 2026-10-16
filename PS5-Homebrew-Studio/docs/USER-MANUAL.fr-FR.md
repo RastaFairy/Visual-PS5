@@ -1,4 +1,4 @@
-# Manuel utilisateur — PS5 Homebrew Studio 1.1.2
+# Manuel utilisateur — PS5 Homebrew Studio 1.1.3
 
 Dernière mise à jour : 16 octobre 2026. L’interface de l’application reste en espagnol ; ce manuel traduit ne signifie pas que l’interface soit déjà localisée.
 
@@ -63,6 +63,18 @@ Avec Node.js, lancez node --check app.js, node --check runtime/native-generator.
 
 Si le serveur ne démarre pas, conservez l’erreur complète et vérifiez PowerShell et les droits. En cas d’échec du build, notez le backend, les versions/commits upstream, la sortie et le code de sortie. Pour UltraPack, vérifiez les chemins Python/cli.py, eboot.bin, sce_sys/param.json et les droits du dossier de sortie. Ne partagez pas de secrets.
 
+
+### Erreur WSL : chmod sur .git/config.lock
+
+Si le journal affiche `chmod on /mnt/d/.../.git/config.lock failed: Operation not permitted` ou `could not set 'core.filemode' to 'false'`, WSL monte un lecteur Windows sans l’option `metadata`. L’IDE détecte ce cas avant la compilation du SDK et affiche la marche à suivre.
+
+Ouvrez la distribution WSL et lancez le script fourni avec l’IDE (adaptez le chemin à son emplacement réel) :
+
+```bash
+sudo bash /mnt/d/PS5-Homebrew-Studio/runtime/fix-wsl-permissions.sh
+```
+
+Le script sauvegarde `/etc/wsl.conf` et met à jour `[automount] options` sans supprimer les autres réglages. Fermez WSL, exécutez `wsl --shutdown` dans PowerShell Windows, relancez la distribution et réessayez. Cette commande arrête toutes les distributions WSL actives : sauvegardez votre travail avant. N’exécutez pas Git ni l’IDE en administrateur. Consultez le [guide détaillé des permissions WSL](WSL_PERMISSIONS.md) et la [documentation Microsoft](https://learn.microsoft.com/windows/wsl/file-permissions).
 ## 8. Licences et limites
 
 Les SDK, pilotes, modèles et kits UI gardent leurs propres licences. Lisez LICENSE, COPYING, NOTICE et les conditions de redistribution avant toute publication. Visual-PS5 n’est pas un SDK officiel Sony, ne contient ni firmware, ni clés, ni jeux, ni BIOS et n’installe pas automatiquement un titre sur console. L’aperçu n’émule pas la PS5 et ne valide pas l’exécution, le son, les entrées ou la persistance.

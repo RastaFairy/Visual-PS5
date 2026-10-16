@@ -233,6 +233,45 @@ function ConvertToWslPath([string]$Path) {
   $drive=$Matches[1].ToLowerInvariant();$rest=$Matches[2] -replace '\\','/'
   return "/mnt/$drive/$rest"
 }
+function GetWslDrvFsMetadataState([string]$Distribution,[string]$WindowsPath) {
+  # DrvFS without metadata cannot perform the chmod Git uses while creating .git/config.lock.
+  try {
+    $wslTarget = ConvertToWslPath $WindowsPath
+    $wsl = CmdInfo 'wsl.exe'
+    if (!$wsl.ok) { return @{ applicable = $false; metadata = $true; detail = 'wsl.exe unavailable' } }
+    $probeCommand = 'target=' + (BashQuote $wslTarget) + '; if command -v findmnt >/dev/null 2>&1; then findmnt -n -o FSTYPE,OPTIONS -T "$target" 2>/dev/null | head -n1; else echo unknown; fi'
+    $probe = @(& $wsl.path -d $Distribution --exec bash -lc $probeCommand 2>$null)
+    if ($LASTEXITCODE -ne 0 -or !$probe.Count) { return @{ applicable = $false; metadata = $true; detail = 'Mount probe unavailable' } }
+    $line = ([string]$probe[-1]).Trim()
+    $parts = $line -split '\s+', 2
+    if ($parts.Count -lt 2) { return @{ applicable = $false; metadata = $true; detail = $line } }
+    $fsType = [string]$parts[0]
+    $options = [string]$parts[1]
+    $windowsMount = ($wslTarget -match '^/mnt/[a-z]/') -and (($fsType -match '^(drvfs|9p)') -or ($options -match 'aname=drvfs'))
+    $hasMetadata = ($options -split ',') -contains 'metadata'
+    return @{ applicable = $windowsMount; metadata = (!$windowsMount -or $hasMetadata); target = $wslTarget; fileSystem = $fsType; options = $options }
+  } catch { return @{ applicable = $false; metadata = $true; detail = $_.Exception.Message } }
+}
+function GetWslPermissionRepairInstructions([string]$Distribution,[string]$WindowsPath) {
+  $target = $WindowsPath
+  $helper = Join-Path $script:Root 'runtime\fix-wsl-permissions.sh'
+  try { $target = ConvertToWslPath $WindowsPath } catch { }
+  try { $helper = ConvertToWslPath $helper } catch { $helper = '' }
+  $lines = @(
+    'WSL no puede cambiar los permisos POSIX de Git en una unidad Windows montada sin la opción DrvFS metadata.',
+    ('Ruta que falla: ' + $target),
+    '',
+    'Reparación segura:',
+    ('1. Abre la distribución con: wsl.exe -d "' + $Distribution + '"'),
+    $(if ($helper) { '2. En la terminal Linux ejecuta: sudo bash ' + (BashQuote $helper) } else { '2. Ejecuta runtime/fix-wsl-permissions.sh desde la terminal Linux mediante sudo bash.' }),
+    '3. Cierra WSL y desde PowerShell de Windows ejecuta: wsl --shutdown',
+    '4. Inicia WSL de nuevo y vuelve a compilar desde el IDE.',
+    '',
+    'El script conserva la configuración existente y crea una copia de seguridad de /etc/wsl.conf. No ejecutes Git ni el IDE como root.',
+    'Si metadata ya está habilitado, comprueba los permisos de modificación NTFS de tu usuario de Windows sobre el IDE y sus toolchains.'
+  )
+  return ($lines -join [Environment]::NewLine)
+}
 function CopyProjectTree([string]$Source,[string]$Destination,[bool]$IsRoot=$true) {
   $alwaysExclude=@('.git','.deps','.cache','node_modules','__pycache__','.venv','.ps5hs-source.json')
   $rootExclude=@('build','dist','out','obj','.runtime')
@@ -1206,6 +1245,10 @@ function BuildNativeProject([string]$ProjectPath,[bool]$CleanBeforeBuild=$false,
       $openglDir = Join-Path $script:Toolchains $openglEntry.folder
       $openglSdkDir = Join-Path $openglDir 'build/sdk/ps5-opengl-gl46'
       if (!(Test-Path -LiteralPath $openglSdkDir -PathType Container)) {
+        $mountState = GetWslDrvFsMetadataState $dist $openglDir
+        if ($mountState.applicable -and !$mountState.metadata) {
+          throw (GetWslPermissionRepairInstructions $dist $openglDir)
+        }
         $openglWsl = ConvertToWslPath $openglDir
         $nativeWsl = ConvertToWslPath $nativeDir
         $sdkGlPattern = BashQuote '^[[:space:]]*sdk-gl46[[:space:]]*:'
@@ -1214,7 +1257,13 @@ function BuildNativeProject([string]$ProjectPath,[bool]$CleanBeforeBuild=$false,
         WriteBuildJobLog $script:ActiveBuildLogPath 'Preparando las dependencias del backend OpenGL y compilando su SDK upstream si falta.'
         $sdkOutput = @(& $wsl.path -d $dist --exec bash -lc $sdkCmd 2>&1 | ForEach-Object { $line=$_.ToString(); WriteBuildJobLog $script:ActiveBuildLogPath $line; $line })
         $sdkExit = $LASTEXITCODE
-        if ($sdkExit -ne 0 -or !(Test-Path -LiteralPath $openglSdkDir -PathType Container)) { throw "No se pudo generar PS5 OpenGL SDK (código $sdkExit). Revisa el log anterior." }
+        if ($sdkExit -ne 0 -or !(Test-Path -LiteralPath $openglSdkDir -PathType Container)) {
+          $sdkLogText = ($sdkOutput | ForEach-Object { [string]$_ }) -join [Environment]::NewLine
+          if ($sdkLogText -match 'chmod on .+\.git/config\.lock failed: Operation not permitted|could not set .core\.filemode.') {
+            throw (GetWslPermissionRepairInstructions $dist $openglDir)
+          }
+          throw "No se pudo generar PS5 OpenGL SDK (código $sdkExit). Revisa el log anterior."
+        }
       }
       $openglPrefix = ConvertToWslPath $openglSdkDir
       $nativeWsl = ConvertToWslPath $nativeDir
@@ -1264,7 +1313,10 @@ function BuildNativeProject([string]$ProjectPath,[bool]$CleanBeforeBuild=$false,
     }
     return @{ok=$false;message="El build upstream terminó con código $exit o no produjo un título actual verificable (eboot.bin + sce_sys/param.json).";output=$buildLog;path=$projectRoot;artifact=$artifact;templateId=$template;titleId=[string]$meta.titleId;exitCode=$exit;diagnostics=@(@{severity='error';title='Título nativo incompleto';message='Se requiere un eboot.bin generado en esta compilación y metadatos sce_sys/param.json. Los ZIP/PKG residuales no se consideran ejecutables.';location=$template})}
   } catch {
-    return @{ok=$false;message=$_.Exception.Message;output=($dependencyLog -join "`r`n");path=$projectRoot;templateId=$template;titleId=[string]$meta.titleId}
+    $failure = [string]$_.Exception.Message
+    $failureOutput = (@($dependencyLog) + @($failure) | Where-Object { $_ }) -join [Environment]::NewLine
+    if ($script:ActiveBuildLogPath) { WriteBuildJobLog $script:ActiveBuildLogPath $failure }
+    return @{ok=$false;message=$failure;output=$failureOutput;path=$projectRoot;templateId=$template;titleId=[string]$meta.titleId}
   }
 }
 function WriteNativeVisualAssets($Body,[string]$ProjectRoot) {

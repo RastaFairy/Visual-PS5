@@ -1,4 +1,4 @@
-# Manual de usuario — PS5 Homebrew Studio 1.1.2
+# Manual de usuario — PS5 Homebrew Studio 1.1.3
 
 Última actualización: 16 de octubre de 2026. La interfaz de la aplicación continúa en español; estos manuales localizados no significan que la UI ya se haya traducido.
 
@@ -69,6 +69,18 @@ Con Node.js instalado, ejecuta desde la carpeta PS5-Homebrew-Studio: node --chec
 
 Si el servidor no arranca, conserva el error completo y comprueba PowerShell y los permisos. Si falla el build, registra backend, versiones y commits upstream, salida íntegra y código de salida. Si falla UltraPack, revisa las rutas de Python y cli.py, la presencia de eboot.bin y sce_sys/param.json y los permisos del destino. No compartas tokens, claves, ficheros protegidos ni logs con secretos.
 
+
+### Error WSL: chmod sobre .git/config.lock
+
+Si el registro muestra `chmod on /mnt/d/.../.git/config.lock failed: Operation not permitted` o `could not set 'core.filemode' to 'false'`, WSL está montando una unidad de Windows sin la opción `metadata`. El IDE detecta esa condición antes de compilar y proporciona las instrucciones.
+
+Abre la distribución WSL y ejecuta el script que incluye el IDE (ajusta la ruta a su ubicación real):
+
+```bash
+sudo bash /mnt/d/PS5-Homebrew-Studio/runtime/fix-wsl-permissions.sh
+```
+
+El script respalda `/etc/wsl.conf` y actualiza `[automount] options` sin sobrescribir las demás opciones. Después cierra WSL y ejecuta desde PowerShell de Windows `wsl --shutdown`; inicia de nuevo la distribución y vuelve a compilar. El comando detiene todas las distribuciones WSL activas, así que guarda primero tu trabajo. No ejecutes Git ni el IDE como administrador. Consulta [la guía detallada de permisos WSL](WSL_PERMISSIONS.md) y la [documentación de Microsoft](https://learn.microsoft.com/windows/wsl/file-permissions).
 ## 8. Licencias y alcance
 
 Los SDK, drivers, plantillas y kits conservan sus licencias propias. Revisa LICENSE, COPYING, NOTICE y las condiciones de redistribución antes de publicar un binario. Visual-PS5 no es un SDK oficial de Sony, no incluye firmware, claves, juegos ni BIOS y no instala automáticamente títulos en la consola. La vista previa no es un emulador de PS5 ni valida runtime, audio, entrada o persistencia.

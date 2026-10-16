@@ -1,4 +1,4 @@
-# ユーザーマニュアル — PS5 Homebrew Studio 1.1.2
+# ユーザーマニュアル — PS5 Homebrew Studio 1.1.3
 
 最終更新：2026年10月16日。アプリの UI は現在スペイン語です。マニュアルの翻訳は UI 自体のローカライズ完了を意味しません。
 
@@ -63,6 +63,18 @@ Node.js をインストールし、アプリフォルダーで node --check app.
 
 サーバーが起動しない場合はエラー全文を保存し、PowerShell と権限を確認します。ビルドに失敗した場合はバックエンド、upstream のバージョン/コミット、全ログと終了コードを記録します。UltraPack では Python/cli.py、eboot.bin、sce_sys/param.json、出力先の権限を確認します。秘密情報を共有しないでください。
 
+
+### WSL エラー：.git/config.lock の chmod に失敗する
+
+ログに `chmod on /mnt/d/.../.git/config.lock failed: Operation not permitted` または `could not set 'core.filemode' to 'false'` が出る場合、WSL が `metadata` オプションなしで Windows ドライブをマウントしています。IDE は SDK のビルド前にこの状態を検出し、修正手順を表示します。
+
+WSL ディストリビューションを開き、IDE に同梱されたスクリプトを実行してください（実際のインストール先に合わせてパスを変更します）。
+
+```bash
+sudo bash /mnt/d/PS5-Homebrew-Studio/runtime/fix-wsl-permissions.sh
+```
+
+スクリプトは `/etc/wsl.conf` のバックアップを作成し、ほかの設定を残したまま `[automount] options` を更新します。WSL を終了し、Windows PowerShell で `wsl --shutdown` を実行してからディストリビューションを再起動し、再ビルドしてください。このコマンドは実行中のすべての WSL ディストリビューションを停止するため、先に作業を保存します。Git や IDE を管理者として実行しないでください。[WSL 権限ガイド](WSL_PERMISSIONS.md) と [Microsoft の資料](https://learn.microsoft.com/windows/wsl/file-permissions)も参照してください。
 ## 8. ライセンスと制限
 
 SDK、ドライバー、テンプレート、UI キットには個別のライセンスがあります。公開前に LICENSE、COPYING、NOTICE と再配布条件を確認してください。Visual-PS5 は Sony 公式 SDK ではなく、ファームウェア、キー、ゲーム、BIOS を含まず、タイトルを自動インストールしません。プレビューは PS5 エミュレーターではなく、実行時、音声、入力、永続化を検証しません。
