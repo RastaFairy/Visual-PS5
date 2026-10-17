@@ -5,6 +5,7 @@ IDE visual local para Windows que permite diseñar interfaces, administrar proye
 ## Novedades de 1.1.6
 
 - Añade la pestaña **Estructura** para distinguir las pantallas editables del modelo visual de los estados de menú detectados en C++ nativo. Incluye árbol con búsqueda, mapa de transiciones, etiquetas detectadas y salto a líneas de código. Las rutas C++ se infieren estáticamente y conviene revisarlas.
+- Añade la pestaña **Estructura** para distinguir las pantallas editables del modelo visual de los estados de menú detectados en C++ nativo. Incluye árbol con búsqueda, mapa de transiciones, etiquetas detectadas y salto a líneas de código. Las rutas C++ se infieren estáticamente y conviene revisarlas.
 - Corregidos los botones de los diálogos UltraPack y Presentación.
 - La compilación OpenGL de proyectos visuales generados por el IDE usa el `build.ps1` y las dependencias locales del proyecto para evitar la preparación redundante del SDK compartido que puede fallar en WSL/DrvFS sin `metadata`.
 - Se pueden seleccionar icono, fondos y música antes de compilar; también hay gestor de pantallas y jerarquía de capas por pantalla.
