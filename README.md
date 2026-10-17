@@ -4,7 +4,7 @@ Local visual IDE for Windows to design interfaces, manage projects, generate nat
 
 ## Release 1.1.6
 
-- Adds an **Structure** view to inspect editable visual screens separately from native C++ menu states, with a searchable tree, transition map, detected menu labels and source-line navigation. C++ routes are inferred statically and may need manual verification.
+- Adds the **Structure** view to inspect editable visual screens separately from native C++ menu states, with a searchable tree, transition map, detected menu labels and source-line navigation. C++ routes are inferred statically and may need manual verification.
 - Fixes the action-button selector that prevented the PS5 UltraPack and Presentation dialogs from running.
 - Native OpenGL builds for IDE-generated projects use the project's own `build.ps1` and local SDK/dependencies, avoiding the redundant shared-SDK preparation step that can fail on WSL/DrvFS mounts without `metadata`.
 - Adds pre-build selectors for application icon, selection background, launch background and music, plus screen management and per-screen layer ordering.
