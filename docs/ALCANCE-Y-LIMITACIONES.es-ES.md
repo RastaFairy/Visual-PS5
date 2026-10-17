@@ -1,6 +1,14 @@
-# Alcance y limitaciones — versión 1.1.0
+# Alcance y limitaciones — versión 1.1.5
 
 Este documento establece qué funciones proporciona el IDE, qué depende de herramientas externas y qué no se debe asumir.
+
+
+## Estado de la versión 1.1.5
+
+- Las acciones de los diálogos UltraPack y Presentación funcionan tras corregir el selector de botones.
+- La compilación OpenGL de los proyectos visuales creados por el IDE ejecuta el `build.ps1` local y reutiliza sus dependencias.
+- El editor incluye recursos de presentación previos al build, gestión de pantallas y jerarquía de capas por pantalla.
+- La compilación OpenGL y el empaquetado UltraPack están confirmados en el entorno Windows/WSL del mantenedor. No se considera verificado el build Vulkan completo, el flujo ATRAC9 ni la ejecución en consola PS5 física. Consulta [problemas conocidos](../PS5-Homebrew-Studio/docs/KNOWN-ISSUES.es-ES.md).
 
 ## Funciones disponibles
 

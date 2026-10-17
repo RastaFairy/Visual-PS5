@@ -1,5 +1,24 @@
 # Changelog / Registro de cambios
 
+## 1.1.5 — 17 de octubre de 2026
+
+- Corrige los selectores de botones de UltraPack y Presentación, que lanzaban un error antes de iniciar la acción.
+- La compilación OpenGL de proyectos visuales generados por el IDE usa el `build.ps1` del proyecto y su SDK local, evitando la preparación redundante del SDK compartido en rutas WSL/DrvFS sin `metadata`.
+- Añade selección previa al build de icono, fondos de selección/lanzamiento y audio; administración de pantallas y capas independientes por pantalla.
+- Actualiza los README de portada, los manuales y la documentación de validación.
+- Confirmación manual del usuario: compilación OpenGL y empaquetado UltraPack correctos. Vulkan completo, conversión ATRAC9 y ejecución en PS5 física siguen sin verificar; véase `PS5-Homebrew-Studio/docs/KNOWN-ISSUES.es-ES.md`.
+
+## 1.1.4 — 17 de octubre de 2026
+
+- Añade gestión de pantallas y reordenación de capas, con comprobación de orden de dibujo del generador nativo.
+- Permite seleccionar recursos de presentación en el diálogo de compilación de una pantalla nativa.
+- Para proyectos OpenGL generados por el IDE, reutiliza el script de build y las dependencias locales del proyecto.
+
+## 1.1.3 — 16 de octubre de 2026
+
+- Añade detección preventiva del problema de permisos Git/DrvFS cuando una unidad WSL carece de `metadata`.
+- Incorpora el script de reparación de permisos y documentación de diagnóstico; esto no soluciona automáticamente todos los checkouts del SDK compartido.
+
 ## 1.1.1 — 16 de octubre de 2026
 
 - Detección y clasificación del workspace: distingue títulos compilables, plantillas, SDKs/drivers y proyectos de referencia; muestra dependencias pendientes.
@@ -12,7 +31,7 @@
 ## 1.1.0 — 16 de octubre de 2026
 
 - Eliminada la integración activa de lanzamiento mediante Kyty.
-- Corregido el flujo de empaquetado UltraPack: trabajo en segundo plano, logs consultables y verificación opcional del contenido mediante `--verify` (activada de forma predeterminada).
+- Corregido el flujo de empaquetado UltraPack: trabajo en segundo plano, logs consultables y verificación del contenido mediante `--verify` solo cuando se solicita explícitamente; la interfaz no añade ese argumento de forma implícita.
 - Forzada la codificación UTF-8 en la salida Python/CLI y mantenida la compatibilidad con Windows PowerShell 5.1.
 - Exigidos `eboot.bin` y `sce_sys/param.json` para habilitar el empaquetado de títulos nativos.
 - Retirados stubs vacíos del generador Vulkan y rechazadas referencias de flujo no válidas.
