@@ -140,3 +140,6 @@ button.structure-detail-item:hover{border-color:#7465d8;color:#e2ddff}
 @media(max-width:1200px){.structure-view-layout{grid-template-columns:175px minmax(0,1fr) 225px}.structure-node{width:185px}}
 @media(max-width:1000px){.structure-view-layout{grid-template-columns:150px minmax(0,1fr);grid-template-rows:minmax(280px,1fr) 155px}.structure-details{grid-column:1/-1;grid-row:2;border-left:0;border-top:1px solid var(--line)}.structure-browser{grid-column:1;grid-row:1}.structure-map-panel{grid-column:2;grid-row:1}.structure-summary{display:none}}
 @media(max-width:730px){.structure-view-layout{grid-template-columns:132px minmax(0,1fr);grid-template-rows:minmax(260px,1fr) 145px}.structure-browser{padding:8px 5px}.structure-map-toolbar{align-items:flex-start;flex-direction:column}.structure-map-toolbar #structureMapHint{text-align:left}.structure-details{padding:10px}.structure-node{width:174px}.structure-scope-tabs button{font-size:8px;padding:5px 6px}}
+
+/* Keep SVG transition arrowheads filled while transition paths remain unfilled. */
+.structure-map-edges marker path{fill:#8290b2;stroke:none}
