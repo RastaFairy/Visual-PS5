@@ -1,5 +1,12 @@
 # Changelog / Registro de cambios
 
+## 1.1.6 — 17 de octubre de 2026
+
+- Añade la vista **Estructura**: explora en paralelo las pantallas editables del modelo visual y los estados de interfaz encontrados en código C++ nativo.
+- Incluye árbol con búsqueda, mapa de transiciones, etiquetas de menú y enlaces directos a las líneas del renderizador y de declaración.
+- Señala que las transiciones del C++ proceden de análisis estático; no presenta los estados dibujados a mano como componentes visuales editables ni garantiza que todas las rutas dinámicas se detecten.
+- Añade pruebas de regresión para detección de estados, renderizadores, textos y transiciones.
+
 ## 1.1.5 — 17 de octubre de 2026
 
 - Corrige los selectores de botones de UltraPack y Presentación, que lanzaban un error antes de iniciar la acción.

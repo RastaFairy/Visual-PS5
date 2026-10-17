@@ -1,8 +1,10 @@
-# User Manual — PS5 Homebrew Studio 1.1.5
+# User Manual — PS5 Homebrew Studio 1.1.6
 
 Last updated: 17 October 2026. The application interface is still in Spanish. Localised manuals do not mean that the UI itself has been translated.
 
-## Version 1.1.5 updates and validation
+## Version 1.1.6 updates and validation
+
+- The **Estructura** tab separates editable visual-model screens from states detected in native C++. It provides search, an inferred transition map, detected labels and jumps to declaration/rendering lines. Static analysis can miss complex routes; hand-drawn C++ menus do not become editable visual components.
 
 - Fixed the action-button selector in the UltraPack and Presentation dialogs.
 - Native OpenGL builds for IDE-generated visual projects now run the project's own `build.ps1` and reuse its local SDK/dependencies.
