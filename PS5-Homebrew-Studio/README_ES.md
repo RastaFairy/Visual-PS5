@@ -1,6 +1,12 @@
 # PS5 Homebrew Studio
 
-**Release 1.1.6 · IDE visual local para Windows.** Integra un editor visual 1920×1080, análisis de flujos, generación de código C# para SharpProspero y conversión del modelo visual a pantallas C++20 para los kits nativos OpenGL/Vulkan. Incluye un catálogo verificado por función de boilerplates, UI kits, drivers, complementos gráficos y aplicaciones comunitarias de referencia.
+**Release 1.1.7 · IDE visual local para Windows.** Integra un editor visual 1920×1080, análisis de flujos, generación de código C# para SharpProspero y conversión del modelo visual a pantallas C++20 para los kits nativos OpenGL/Vulkan. Incluye un catálogo verificado por función de boilerplates, UI kits, drivers, complementos gráficos y aplicaciones comunitarias de referencia.
+
+## Fuentes Unicode · 1.1.7
+
+- Permite importar una fuente TrueType (`.ttf`) y seleccionarla para hornear atlas SDF Unicode específicos del proyecto en los generadores OpenGL y Vulkan.
+- La compilación se detiene con un diagnóstico de codepoint si la fuente no contiene un carácter requerido. Las pruebas incluyen cirílico, griego, japonés, chino y coreano.
+- La interfaz del IDE sigue en español; el teclado nativo continúa limitado a ASCII y no se incluye shaping RTL completo. Consulta la [guía de fuentes Unicode](docs/UNICODE-FONTS.es-ES.md).
 
 ## Nueva vista Estructura · 1.1.6
 

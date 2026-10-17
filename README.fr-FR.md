@@ -1,10 +1,14 @@
-# Visual-PS5 — PS5 Homebrew Studio 1.1.6
+# Visual-PS5 — PS5 Homebrew Studio 1.1.7
 
 IDE visuel local pour Windows : conception d’interfaces, gestion de projets, inspection du code, génération d’UI C++20 et orchestration des compilations avec des toolchains communautaires PS5.
 
 **État linguistique :** l’interface reste en espagnol. Le manuel français est disponible ; la traduction de l’interface sera réalisée séparément.
 
-## Nouveautés de la version 1.1.6
+## Nouveautés de la version 1.1.7
+
+- Importez une police TrueType (`.ttf`) et sélectionnez-la pour un projet natif. Des atlas SDF Unicode spécifiques sont générés pour OpenGL et Vulkan ; la compilation signale le point de code manquant si la police ne contient pas un glyphe requis.
+- Les tests couvrent le cyrillique, le grec, le japonais, le chinois simplifié/traditionnel et le coréen. Cela ne traduit pas l’interface espagnole de l’IDE et n’ajoute ni IME CJK ni façonnage RTL complet.
+- [Guide des polices Unicode](docs/UNICODE-FONTS.en-GB.md)
 
 - Ajoute la vue **Structure** pour distinguer les écrans visuels modifiables des états de menus détectés dans le C++ natif : arbre avec recherche, graphe de transitions, libellés repérés et accès direct aux lignes du code source. Les transitions C++ sont déduites statiquement et doivent être vérifiées.
 - Ajoute la vue **Structure** pour distinguer les écrans visuels modifiables des états de menus détectés dans le C++ natif : arbre avec recherche, graphe de transitions, libellés repérés et accès direct aux lignes du code source. Les transitions C++ sont déduites statiquement et doivent être vérifiées.

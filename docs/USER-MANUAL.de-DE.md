@@ -1,8 +1,10 @@
-# Benutzerhandbuch — PS5 Homebrew Studio 1.1.6
+# Benutzerhandbuch — PS5 Homebrew Studio 1.1.7
 
 Letzte Aktualisierung: 17. Oktober 2026. Die Anwendungsoberfläche ist weiterhin auf Spanisch. Das übersetzte Handbuch bedeutet nicht, dass die UI bereits lokalisiert ist.
 
-## Neuerungen und Prüfstatus in Version 1.1.6
+## Neuerungen und Prüfstatus in Version 1.1.7
+
+- Unterstützt ausgewählte TrueType-Schriften (`.ttf`) für Unicode-Text in OpenGL und Vulkan. Die IDE bäckt Atlas für die im Projekt verwendeten Zeichen und stoppt den Build, wenn eine benötigte Glyphe fehlt. Tests decken Kyrillisch, Griechisch, Japanisch, Chinesisch und Koreanisch ab; CJK-IME und vollständiges RTL-Shaping sind nicht enthalten. [Unicode-Schriftanleitung](UNICODE-FONTS.en-GB.md).
 
 - Die Registerkarte **Estructura** trennt bearbeitbare Bildschirme des visuellen Modells von Zuständen, die im nativen C++ erkannt werden. Sie bietet Suche, eine abgeleitete Übergangskarte, erkannte Beschriftungen und Sprünge zu Deklarations- und Renderzeilen. Die statische Analyse kann komplexe Pfade übersehen; manuell gezeichnete C++-Menüs werden dadurch nicht zu bearbeitbaren UI-Komponenten.
 

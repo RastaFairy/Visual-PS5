@@ -70,7 +70,7 @@
 
   ];
   const STORAGE_KEY = 'ps5-homebrew-studio-state-v1';
-  const freshProject = () => ({format:'ps5vproj',formatVersion:1,name:'MiHomebrew',backend:'sharp',resolution:{width:1920,height:1080},theme:{background:'#101827',accent:'#7865f6',text:'#f0f3ff'},components:[],flows:[],assets:[],screens:[{id:'screen-main',name:'Pantalla principal'}],currentScreen:'screen-main',settings:{titleId:'PPSA'+String(Math.floor(Math.random()*90000)+10000),firmware:'12.00',moduleKind:'app'},customCode:'',manualCode:false,updatedAt:new Date().toISOString()});
+  const freshProject = () => ({format:'ps5vproj',formatVersion:1,name:'MiHomebrew',backend:'sharp',resolution:{width:1920,height:1080},theme:{background:'#101827',accent:'#7865f6',text:'#f0f3ff'},components:[],flows:[],assets:[],fontAssetId:'',screens:[{id:'screen-main',name:'Pantalla principal'}],currentScreen:'screen-main',settings:{titleId:'PPSA'+String(Math.floor(Math.random()*90000)+10000),firmware:'12.00',moduleKind:'app'},customCode:'',manualCode:false,updatedAt:new Date().toISOString()});
   let project = freshProject();
   let isProjectOpen = true;
   let selectedId = null, activePanel = 'components', activeView='design', activeRight='inspector', activeDock='output';
@@ -919,8 +919,22 @@
 
   function renderDock(){const root=$('#dockContent');if(activeDock==='output'){root.innerHTML=outputLines.slice(-90).map(l=>`<div class="output-line"><span class="output-time">${l.time}</span><span class="${l.level==='ERROR'?'output-error':l.level==='WARN'?'output-warn':'output-ok'}">${esc(l.level)}</span><span>${esc(l.text)}</span></div>`).join('')||'<div class="output-line">Sin mensajes.</div>';root.scrollTop=root.scrollHeight;}else if(activeDock==='problems'){const d=allDiagnostics.filter(x=>x.severity==='error'||x.severity==='warning');root.innerHTML=d.length?d.map(x=>`<div class="output-line"><span class="output-time">${x.severity.toUpperCase()}</span><span class="${x.severity==='error'?'output-error':'output-warn'}">${esc(x.title)}</span><span>${esc(x.message)} · ${esc(x.location)}</span></div>`).join(''):'<div class="output-line"><span class="output-ok">✓</span><span>No hay errores ni advertencias del analizador visual.</span></div>';}else{root.innerHTML=sdkStatus?`<div class="output-line"><span class="output-ok">ROOT</span><span>${esc(sdkStatus.root||'')}</span></div><div class="output-line"><span class="output-ok">WORKSPACE</span><span>${esc(sdkStatus.workspace||'')}</span></div>${(sdkStatus.prerequisites?.items||[]).map(x=>`<div class="output-line"><span class="${x.ok?'output-ok':'output-warn'}">${x.ok?'OK':'MISSING'}</span><span>${esc(x.name)}${x.version?' · '+esc(x.version):''}</span></div>`).join('')}${(sdkStatus.sdks||[]).map(x=>`<div class="output-line"><span class="${x.installed?'output-ok':'output-warn'}">${x.installed?'FOUND':'ABSENT'}</span><span>${esc(x.name)} · ${esc(x.folder)}</span></div>`).join('')}`:'El estado del entorno todavía no está disponible.';}}
 
-  function renderAssetList(){const root=$('#assetList');if(!root)return;if(!project.assets.length){root.innerHTML='<div class="empty-screen">No hay recursos importados.<br>Usa «Importar recurso» para añadir imágenes, audio o datos al proyecto.</div>';return;}root.innerHTML=project.assets.map(a=>`<div class="asset-row"><div class="asset-preview">${a.dataUrl?.startsWith('data:image/')?`<img alt="" src="${a.dataUrl}">`:'◈'}</div><span class="asset-name" title="${esc(a.name)}">${esc(a.name)}</span><span class="asset-size">${formatBytes(a.size||0)}</span><button class="tree-eye" data-asset-remove="${a.id}" title="Quitar recurso">×</button></div>`).join('');root.querySelectorAll('[data-asset-remove]').forEach(el=>el.onclick=()=>{snapshot();project.assets=project.assets.filter(a=>a.id!==el.dataset.assetRemove);project.components.forEach(c=>{if(c.assetId===el.dataset.assetRemove)c.assetId=null;});changed('Recurso eliminado');renderAssetList();renderCanvas();renderInspector();});}
+  function renderAssetList(){const root=$('#assetList');if(!root)return;if(!project.assets.length){root.innerHTML='<div class="empty-screen">No hay recursos importados.<br>Usa «Importar recurso» para añadir imágenes, audio o datos al proyecto.</div>';return;}root.innerHTML=project.assets.map(a=>`<div class="asset-row"><div class="asset-preview">${a.dataUrl?.startsWith('data:image/')?`<img alt="" src="${a.dataUrl}">`:'◈'}</div><span class="asset-name" title="${esc(a.name)}">${esc(a.name)}</span><span class="asset-size">${formatBytes(a.size||0)}</span><button class="tree-eye" data-asset-remove="${a.id}" title="Quitar recurso">×</button></div>`).join('');root.querySelectorAll('[data-asset-remove]').forEach(el=>el.onclick=()=>{snapshot();project.assets=project.assets.filter(a=>a.id!==el.dataset.assetRemove);project.components.forEach(c=>{if(c.assetId===el.dataset.assetRemove)c.assetId=null;});changed('Recurso eliminado');renderAssetList();renderCanvas();renderInspector();});renderUnicodeFontPicker();}
   function formatBytes(bytes){return bytes<1024?`${bytes} B`:bytes<1024*1024?`${(bytes/1024).toFixed(1)} KB`:`${(bytes/1024/1024).toFixed(1)} MB`;}
+  function renderUnicodeFontPicker(){
+    const root=$('#assetList');if(!root)return;
+    const fontAssets=project.assets.filter(a=>/\.ttf$/i.test(String(a.fileName||a.name||''))&&String(a.dataUrl||'').startsWith('data:'));
+    if(project.fontAssetId&&!fontAssets.some(a=>a.id===project.fontAssetId))project.fontAssetId='';
+    const picker=document.createElement('div');picker.className='form-field';picker.style.marginBottom='12px';
+    const label=document.createElement('label');label.textContent='Fuente Unicode para compilación nativa (TTF)';
+    const select=document.createElement('select');select.id='nativeFontAssetSelect';select.style.width='100%';select.style.marginTop='6px';
+    const defaultOption=document.createElement('option');defaultOption.value='';defaultOption.textContent='Fuente predeterminada del backend';select.append(defaultOption);
+    for(const asset of fontAssets){const option=document.createElement('option');option.value=asset.id;option.textContent=asset.name||asset.fileName;option.selected=asset.id===project.fontAssetId;select.append(option);}
+    const help=document.createElement('small');help.textContent='Importa un .ttf con «Importar recurso». Se hornean los glifos usados por el proyecto en OpenGL y Vulkan. Si la fuente no contiene un carácter requerido, la compilación mostrará el codepoint ausente.';
+    picker.append(label,select,help);root.prepend(picker);
+    select.onchange=event=>{snapshot();project.fontAssetId=event.target.value||'';changed('Fuente de compilación actualizada');toast(project.fontAssetId?'Fuente Unicode seleccionada':'Se usará la fuente predeterminada');};
+  }
+
   function renderSdkSideStatus(){const root=$('#sdkSideStatus');if(!root)return;root.innerHTML=REPO_CATALOG.map(s=>{const found=sdkStatus?.sdks?.find(x=>x.id===s.id);return `<div style="padding:8px 2px;border-bottom:1px solid #242b3b;display:flex;gap:8px;align-items:center"><span style="color:${found?.installed?'var(--green)':'var(--dim)'}">${found?.installed?'●':'○'}</span><div style="min-width:0;flex:1"><div style="font-size:10px;color:#d7dced">${esc(s.name)}</div><div style="font-size:8px;color:#6d7892;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(s.role)}</div></div><span style="font-size:8px;color:${found?.installed?'var(--green)':'var(--muted)'}">${found?.installed?'INSTALADO':'NO INSTALADO'}</span></div>`;}).join('');}
   async function refreshStatus(){try{sdkStatus=await api('status');renderSdkSideStatus();if(activePanel==='templates')renderSourceCatalog($('#sourceSearch')?.value||'', $('.source-filter.active')?.dataset.sourceFilter||'all');else await renderNativeProjects();scheduleAnalysis();renderDock();log('Entorno actualizado.','INFO');}catch(e){log('No se pudo consultar el estado del entorno: '+e.message,'WARN');}}
 
@@ -1024,6 +1038,13 @@
           const code=data.manualCode?$('#codeEditor').value:nativeCodegen.generate(data,backend);
           if(!code||code.length<2000){throw new Error('El generador no produjo una pantalla C++20 válida. Regenera el código e inténtalo de nuevo.');}
           const nativeAssets=await prepareNativeImageAssets(data,backend);
+          let nativeFont=null;
+          if(data.fontAssetId){
+            const selectedFont=(data.assets||[]).find(asset=>asset.id===data.fontAssetId);
+            if(!selectedFont)throw new Error('La fuente seleccionada ya no está en la lista de recursos.');
+            nativeFont=window.PS5HSUnicodeFonts.prepareFontAsset(selectedFont);
+            nativeFont.codepoints=window.PS5HSUnicodeFonts.collectCodepoints(data);
+          }
           const presentationFiles={icon:$('#nativeVisualIcon')?.files?.[0]||null,selectionBackground:$('#nativeVisualSelectionBg')?.files?.[0]||null,launchBackground:$('#nativeVisualLaunchBg')?.files?.[0]||null,audio:$('#nativeVisualAudio')?.files?.[0]||null};
           const presentationLimits={icon:8*1024*1024,selectionBackground:20*1024*1024,launchBackground:20*1024*1024,audio:20*1024*1024};
           for(const [key,file] of Object.entries(presentationFiles)){if(file&&file.size>presentationLimits[key])throw new Error(`${file.name} supera el máximo permitido de ${Math.round(presentationLimits[key]/1024/1024)} MiB.`);}
@@ -1032,7 +1053,7 @@
           // The source model carries names and links, while image pixels travel once as bounded RGBA assets.
           wireProject.assets=(wireProject.assets||[]).map(a=>{const item=Object.assign({},a);delete item.dataUrl;return item;});
           if(output)output.textContent=`Pantalla generada (${code.length.toLocaleString('es-ES')} caracteres). Recursos RGBA preparados: ${nativeAssets.length}. Iniciando pipeline upstream…`;
-          const startedJob=await api('build-visual-native/start',Object.assign({project:wireProject,programCode:code,backend,titleId:tid,nativeAssets,overwriteExisting:!!$('#nativeVisualOverwrite')?.checked},wirePresentation));
+          const startedJob=await api('build-visual-native/start',Object.assign({project:wireProject,programCode:code,backend,titleId:tid,nativeAssets,overwriteExisting:!!$('#nativeVisualOverwrite')?.checked,nativeFont},wirePresentation));
           if(!startedJob.ok||!startedJob.jobId)throw new Error(startedJob.message||'El servidor no inició la tarea de compilación.');
           let status=null,lastLog='';
           while(true){

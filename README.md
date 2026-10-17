@@ -1,8 +1,12 @@
-# Visual-PS5 — PS5 Homebrew Studio 1.1.6
+# Visual-PS5 — PS5 Homebrew Studio 1.1.7
 
 Local visual IDE for Windows to design interfaces, manage projects, generate native UI code and orchestrate PS5 homebrew builds with community toolchains.
 
-## Release 1.1.6
+## Release 1.1.7
+
+- Adds project-selected TrueType fonts and script-specific Unicode SDF atlases for native OpenGL and Vulkan builds. The IDE collects the glyphs used by the project and stops with the missing codepoint if the chosen font lacks coverage.
+- Adds multilingual regression cases for Cyrillic, Greek, Japanese, Simplified/Traditional Chinese and Korean, plus validation for font type and size. This extends game-text rendering; it does not translate the Spanish IDE UI or add CJK input-method support or complete right-to-left shaping.
+- [Unicode font setup guide](docs/UNICODE-FONTS.en-GB.md)
 
 - Adds the **Structure** view to inspect editable visual screens separately from native C++ menu states, with a searchable tree, transition map, detected menu labels and source-line navigation. C++ routes are inferred statically and may need manual verification.
 - Fixes the action-button selector that prevented the PS5 UltraPack and Presentation dialogs from running.

@@ -1,5 +1,12 @@
 # Changelog / Registro de cambios
 
+## 1.1.7 — 17 de octubre de 2026
+
+- Añade fuentes TrueType seleccionables por proyecto y horneado de atlas Unicode con codepoints extraídos del contenido visual.
+- Genera los atlas para OpenGL y Vulkan; valida cobertura de glifos y falla con un diagnóstico explícito si la fuente seleccionada no contiene un carácter requerido.
+- Amplía las pruebas de generación de C++20 a español, francés, alemán, ruso, griego, japonés, chino simplificado/tradicional y coreano.
+- La vista previa del IDE usa el fallback tipográfico del navegador. La localización de la interfaz, los IME de CJK y el shaping RTL son funciones distintas y no se declaran resueltos.
+
 ## 1.1.6 — 17 de octubre de 2026
 
 - Añade la vista **Estructura**: explora en paralelo las pantallas editables del modelo visual y los estados de interfaz encontrados en código C++ nativo.

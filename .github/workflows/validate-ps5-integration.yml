@@ -22,6 +22,7 @@ jobs:
         run: |
           node --check PS5-Homebrew-Studio/app.js
           node --check PS5-Homebrew-Studio/runtime/native-generator.js
+          node --check PS5-Homebrew-Studio/runtime/unicode-fonts.js
 
       - name: Test native code generator
         shell: pwsh

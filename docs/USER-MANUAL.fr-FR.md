@@ -1,8 +1,10 @@
-# Manuel utilisateur — PS5 Homebrew Studio 1.1.6
+# Manuel utilisateur — PS5 Homebrew Studio 1.1.7
 
 Dernière mise à jour : 17 octobre 2026. L’interface de l’application reste en espagnol ; ce manuel traduit ne signifie pas que l’interface soit déjà localisée.
 
-## Nouveautés et validation de la version 1.1.6
+## Nouveautés et validation de la version 1.1.7
+
+- Ajoute des polices TrueType (`.ttf`) sélectionnables pour le texte Unicode sous OpenGL et Vulkan. L’IDE génère des atlas pour les points de code employés par le projet et arrête le build si un glyphe requis manque. Les tests couvrent le cyrillique, le grec, le japonais, le chinois et le coréen ; aucun IME CJK ni façonnage RTL complet n’est inclus. [Guide des polices Unicode](UNICODE-FONTS.en-GB.md).
 
 - L’onglet **Estructura** sépare les écrans modifiables du modèle visuel des états détectés dans le C++ natif. Il propose une recherche, une carte de transitions inférées, les libellés détectés et des liens vers les lignes de déclaration et de rendu. L’analyse statique peut manquer des chemins complexes ; les menus dessinés en C++ ne deviennent pas des composants visuels modifiables.
 

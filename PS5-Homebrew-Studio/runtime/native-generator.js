@@ -1,4 +1,5 @@
 /* PS5 Homebrew Studio native UI code generator.
+ * UTF-8 source strings are preserved; an optional project TTF is baked into script-specific SDF atlases before compilation.
  * Generates a C++20 concept for the published ps5-homebrew-ui DrawList/Concept API.
  * Both backends use bounded, predecoded RGBA assets; Vulkan textures are resolved through the title's VkRenderer registry.
  */

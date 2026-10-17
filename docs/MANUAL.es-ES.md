@@ -1,8 +1,10 @@
-# Manual de usuario — PS5 Homebrew Studio 1.1.6
+# Manual de usuario — PS5 Homebrew Studio 1.1.7
 
 Última actualización: 17 de octubre de 2026. La interfaz de la aplicación continúa en español; estos manuales localizados no significan que la UI ya se haya traducido.
 
-## Novedades y validación de 1.1.6
+## Novedades y validación de 1.1.7
+
+- Añade la selección de una fuente TrueType (`.ttf`) para compilar texto Unicode en OpenGL y Vulkan. El IDE hornea atlas con los caracteres usados por el proyecto y detiene el build si falta un glifo requerido. Incluye cobertura de prueba para cirílico, griego, japonés, chino y coreano; no añade IME CJK ni shaping RTL completo. [Guía de fuentes Unicode](UNICODE-FUENTES.es-ES.md).
 
 - La pestaña **Estructura** separa las pantallas editables del modelo visual de los estados detectados en C++ nativo. Permite buscar estados, consultar el mapa de transiciones, ver etiquetas detectadas y saltar a las líneas de declaración o renderizado. Las rutas C++ se infieren estáticamente, pueden faltar transiciones complejas y no convierten un menú dibujado a mano en componentes editables.
 

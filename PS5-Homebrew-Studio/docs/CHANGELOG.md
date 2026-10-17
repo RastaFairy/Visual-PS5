@@ -1,5 +1,12 @@
 # Registro de cambios
 
+## 1.1.7 — 2026-10-17
+
+- Permite importar una fuente TrueType (.ttf) desde Recursos y seleccionarla como fuente Unicode del proyecto nativo.
+- Hornea seis atlas SDF con los glifos usados realmente por el proyecto para OpenGL y Vulkan; la compilación se detiene con el codepoint exacto cuando falta un glifo.
+- Conserva la fuente y la lista de codepoints para reconstruir el título, valida archivos TTF de hasta 20 MiB y amplía las pruebas de regresión a cirílico, griego, japonés, chino simplificado/tradicional y coreano.
+- Documenta límites: la entrada virtual sigue siendo ASCII y no se incluye shaping completo para árabe u otras escrituras complejas de derecha a izquierda.
+
 ## 1.1.5 — 2026-10-17
 
 - Corrige el botón «Empaquetar» de PS5 UltraPack: el código intentaba iterar el resultado de un selector de elemento único, lanzaba un error antes de iniciar la tarea y dejaba el mensaje «Listo para ejecutar PS5 UltraPack».

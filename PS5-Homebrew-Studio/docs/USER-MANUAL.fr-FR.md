@@ -1,6 +1,12 @@
-# Manuel utilisateur — PS5 Homebrew Studio 1.1.5
+# Manuel utilisateur — PS5 Homebrew Studio 1.1.7
 
-Dernière mise à jour : 16 octobre 2026. L’interface de l’application reste en espagnol ; ce manuel traduit ne signifie pas que l’interface soit déjà localisée.
+Dernière mise à jour : 17 octobre 2026. L’interface de l’application reste en espagnol ; ce manuel traduit ne signifie pas que l’interface soit déjà localisée.
+
+## Texte Unicode et polices personnalisées (1.1.7)
+
+Pour afficher du texte natif multilingue, importe dans **Ressources** une police TrueType `.ttf` (20 Mio maximum), puis sélectionne-la comme police Unicode native. Avant la compilation, l’IDE crée des atlas SDF contenant les points de code utilisés par le projet, pour OpenGL et Vulkan. Si la police ne contient pas un glyphe requis, la compilation s’arrête en indiquant le point de code manquant. Le cyrillique, le grec, le japonais, le chinois et le coréen sont rendus lorsque la police comprend les glyphes nécessaires.
+
+Cela ne traduit pas l’interface espagnole de l’IDE. Le clavier virtuel généré reste limité à ASCII ; aucun IME CJK ni façonnage RTL complet n’est fourni. Consulte le [guide des polices Unicode](UNICODE-FONTS.en-GB.md).
 
 ## 1. Prérequis
 

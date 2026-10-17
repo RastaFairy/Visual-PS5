@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const codegen = require('./native-generator.js');
+const unicodeFonts = require('./unicode-fonts.js');
 
 const project = {
   name: 'Studio "Prueba"', backend: 'opengl-ui', currentScreen: 'home',
@@ -10,7 +11,7 @@ const project = {
   assets: [{ id: 'asset-avatar', fileName: 'avatar.png', mime: 'image/png', dataUrl: 'data:image/png;base64,AA==' }],
   screens: [{ id: 'home', name: 'Inicio' }, { id: 'settings', name: 'Ajustes' }],
   components: [
-    { id: 'heading', screenId: 'home', type: 'title', label: 'Hola "PS5" · áéíóú ÁÉÍÓÚ ñ Ñ ü Ü ¿Qué tal? ¡Funciona! €', x: 80, y: 45, w: 800, h: 100, font: 52, bg: 'transparent', fg: '#ffffff', visible: true },
+    { id: 'heading', screenId: 'home', type: 'title', label: 'Hola "PS5" · áéíóú ÁÉÍÓÚ ñ Ñ ü Ü ¿Qué tal? ¡Funciona! € · Русский язык · Ελληνικά · 日本語かな漢字 · 简体中文繁體中文 · 한국어 · français Grüße', x: 80, y: 45, w: 800, h: 100, font: 52, bg: 'transparent', fg: '#ffffff', visible: true },
     { id: 'start', screenId: 'home', type: 'button', label: 'Abrir ajustes', x: 100, y: 190, w: 300, h: 70, font: 24, bg: '#7865f6', fg: '#ffffff', action: 'notify', actionMessage: 'Activado', visible: true },
     { id: 'enabled', screenId: 'settings', type: 'toggle', label: 'Audio', x: 50, y: 80, w: 300, h: 60, font: 20, bg: '#202a40', fg: '#ffffff', checked: true, visible: true },
     { id: 'volume', screenId: 'settings', type: 'slider', label: 'Volumen', x: 50, y: 160, w: 350, h: 70, font: 20, bg: '#202a40', fg: '#ffffff', value: 75, min: 0, max: 100, step: 5, visible: true },
@@ -47,6 +48,7 @@ for (const backend of ['opengl-ui', 'vulkan-ui']) {
   assert.ok(!source.includes('target component was not resolved'), `${backend}: generated flows must not contain unresolved-target placeholders`);
   assert.ok(!source.includes('unsupported visual action'), `${backend}: generated flows must not contain unsupported-action placeholders`);
   assert.ok(source.includes('Audio'));
+  assert.ok(source.includes('Русский язык · Ελληνικά · 日本語かな漢字 · 简体中文繁體中文 · 한국어 · français Grüße'), `${backend}: Unicode scripts must survive C++ source generation`);
   if (backend === 'opengl-ui') assert.ok(source.includes('make_ps5hs_generated'));
   else assert.ok(source.includes('namespace ps5ui') && source.includes('make_screen'));
   console.log(`PASS ${backend}: ${source.length} bytes, screens/components/flows encoded`);
@@ -77,3 +79,18 @@ for (const backend of ['opengl-ui', 'vulkan-ui']) {
   assert.ok(source.indexOf('Widget{"layer-back"') < source.indexOf('Widget{"layer-front"'), `${backend}: back-to-front z-order must be preserved in the draw list`);
 }
 console.log('PASS layers: native OpenGL/Vulkan output orders back layers before front layers');
+
+const multilingualModel = {
+  name: 'Unicode',
+  components: [{ label: 'Español áéíóú ñ · Русский язык · Ελληνικά · 日本語かな漢字 · 简体中文繁體中文 · 한국어 · français Grüße' }],
+  screens: [{ name: '日本語 設定' }],
+  flows: [{ message: '中文提示', value: 'Тест' }]
+};
+const codepoints = unicodeFonts.collectCodepoints(multilingualModel);
+for (const character of 'Русский язык Ελληνικά 日本語かな漢字 简体中文繁體中文 한국어 áéíóú ñ') {
+  assert.ok(codepoints.includes(character.codePointAt(0)), 'Unicode codepoint missing for ' + character);
+}
+assert.deepEqual(codepoints, [...new Set(codepoints)].sort((a, b) => a - b), 'codepoint list must be unique and sorted');
+assert.throws(() => unicodeFonts.prepareFontAsset({ name: 'font.otf', dataUrl: 'data:font/otf;base64,AA==', size: 2 }), /\.ttf/);
+assert.throws(() => unicodeFonts.prepareFontAsset({ name: 'font.ttf', dataUrl: 'data:font/ttf;base64,AA==', size: 25 * 1024 * 1024 }), /20 MiB/);
+console.log('PASS Unicode fonts: multilingual codepoints collected; TTF type and size validated');

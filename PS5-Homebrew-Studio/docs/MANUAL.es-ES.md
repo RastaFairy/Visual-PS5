@@ -1,6 +1,12 @@
-# Manual de usuario — PS5 Homebrew Studio 1.1.5
+# Manual de usuario — PS5 Homebrew Studio 1.1.7
 
-Última actualización: 16 de octubre de 2026. La interfaz de la aplicación continúa en español; estos manuales localizados no significan que la UI ya se haya traducido.
+Última actualización: 17 de octubre de 2026. La interfaz de la aplicación continúa en español; estos manuales localizados no significan que la UI ya se haya traducido.
+
+## Compatibilidad de texto Unicode (1.1.7)
+
+Para texto nativo multilingüe, importa un archivo TrueType `.ttf` (máximo 20 MiB) desde **Recursos** y selecciónalo en «Fuente Unicode para compilación nativa». Antes de compilar, el IDE genera atlas SDF con los caracteres usados por el proyecto para OpenGL y Vulkan. Si la fuente no contiene un glifo requerido, el build se detiene e indica el codepoint ausente. Se admiten escrituras como cirílico, griego, japonés, chino y coreano siempre que la fuente contenga los glifos.
+
+Esta opción no traduce la interfaz española del IDE. El teclado virtual nativo sigue siendo ASCII y no se ofrece shaping RTL completo ni IME de entrada CJK. Consulta la [guía de fuentes Unicode](UNICODE-FONTS.es-ES.md).
 
 ## 1. Requisitos
 
