@@ -1,6 +1,13 @@
-# 用户手册 — PS5 Homebrew Studio 1.1.0
+# 用户手册 — PS5 Homebrew Studio 1.1.5
 
 最后更新：2026 年 10 月 17 日。应用界面目前仍为西班牙语；手册翻译并不表示 UI 本身已完成本地化。
+
+## 1.1.5 版本更新与验证状态
+
+- 修复了 UltraPack 和“演示资源”对话框中的操作按钮。
+- IDE 生成的 OpenGL 项目使用项目本地的 `build.ps1` 和依赖项进行编译。
+- 原生编译对话框支持选择应用图标、选择背景、启动背景和音乐；编辑器支持屏幕管理及每个屏幕独立的图层排序。
+- 维护者已在 Windows/WSL 测试环境确认 OpenGL 编译和 UltraPack 打包可用。完整 Vulkan 编译、ATRAC9 转换以及实体 PS5 运行仍未验证。请参阅[已知问题](../PS5-Homebrew-Studio/docs/KNOWN-ISSUES.es-ES.md)。
 
 ## 1. 环境要求
 
