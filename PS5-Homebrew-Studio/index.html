@@ -46,6 +46,7 @@
       <section class="editor-area">
         <div class="editor-tabs">
           <button class="editor-tab active" data-view="design">Diseño <span class="tab-status"></span></button>
+          <button class="editor-tab" data-view="structure">Estructura</button>
           <button class="editor-tab" data-view="logic">Flujos</button>
           <button class="editor-tab" data-view="code">Código</button>
           <button class="editor-tab" data-view="diagnostics">Diagnósticos <span class="count-badge" id="diagCount">0</span></button>
@@ -58,6 +59,31 @@
           <div class="canvas-toolbar"><div class="breadcrumbs"><span>Proyecto</span><i>/</i><b id="canvasBreadcrumb">Pantalla principal</b></div><div id="screenSwitcher" class="screen-switcher" aria-label="Pantallas del proyecto"></div><div class="canvas-tools"><span class="viewport-label">1920 × 1080</span><button id="gridBtn" class="icon-button toggled" title="Mostrar cuadrícula">▦</button><button id="fitBtn" class="icon-button" title="Ajustar al espacio">⤢</button><button id="centerBtn" class="icon-button" title="Centrar elementos">⊙</button></div></div>
           <div class="canvas-stage-wrap"><div id="canvasStage" class="canvas-stage" aria-label="Lienzo de diseño"><div class="safe-area"></div><div class="canvas-watermark">PS5 HOMEbrew STUDIO</div><div id="canvasElements" class="canvas-elements"></div><div id="dropHint" class="drop-hint"><div class="drop-illustration">＋</div><strong>Construye tu pantalla</strong><span>Arrastra componentes desde el panel izquierdo o pulsa sobre uno para añadirlo.</span></div></div></div>
           <div class="canvas-status"><span><i class="status-led green"></i><span id="canvasState">Diseño listo</span></span><span id="selectionPosition">Sin selección</span><span>Escala <b id="zoomValue">100%</b></span></div>
+        </div>
+
+        <div class="view-container hidden" id="structureView">
+          <div class="canvas-toolbar">
+            <div class="breadcrumbs"><span>Proyecto</span><i>/</i><b>Estructura de interfaz</b></div>
+            <div class="canvas-tools"><span id="structureSummary" class="structure-summary">Analizando estructura…</span><button id="structureRefreshBtn" class="btn secondary small">↻ Analizar código</button></div>
+          </div>
+          <div class="structure-view-layout">
+            <aside class="structure-browser">
+              <div class="structure-browser-head"><strong>EXPLORADOR</strong><span id="structureTreeCount" class="pill">0</span></div>
+              <input id="structureSearch" class="structure-search" type="search" placeholder="Buscar menú o pantalla…" aria-label="Buscar en la estructura" />
+              <div id="structureTree" class="structure-tree"></div>
+            </aside>
+            <section class="structure-map-panel">
+              <div class="structure-map-toolbar">
+                <div class="structure-scope-tabs" role="group" aria-label="Origen de la estructura">
+                  <button type="button" id="structureScopeNative" data-structure-scope="native">Código C++</button>
+                  <button type="button" id="structureScopeVisual" data-structure-scope="visual">Modelo visual</button>
+                </div>
+                <span id="structureMapHint">Estados y transiciones</span>
+              </div>
+              <div class="structure-map-scroll"><div id="structureMapCanvas" class="structure-map-canvas" aria-label="Mapa de menús, pantallas y transiciones"></div></div>
+            </section>
+            <aside id="structureDetails" class="structure-details" aria-live="polite"></aside>
+          </div>
         </div>
 
         <div class="view-container hidden" id="logicView"><div class="canvas-toolbar"><div class="breadcrumbs"><span>Proyecto</span><i>/</i><b>Lógica visual</b></div><div class="canvas-tools"><button id="addFlowBtn" class="btn primary small">＋ Añadir flujo</button></div></div><div id="logicCanvas" class="logic-canvas"></div></div>
