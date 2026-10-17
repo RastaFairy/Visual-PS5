@@ -1,8 +1,10 @@
-# Manual de usuario — PS5 Homebrew Studio 1.1.5
+# Manual de usuario — PS5 Homebrew Studio 1.1.6
 
 Última actualización: 17 de octubre de 2026. La interfaz de la aplicación continúa en español; estos manuales localizados no significan que la UI ya se haya traducido.
 
-## Novedades y validación de 1.1.5
+## Novedades y validación de 1.1.6
+
+- La pestaña **Estructura** separa las pantallas editables del modelo visual de los estados detectados en C++ nativo. Permite buscar estados, consultar el mapa de transiciones, ver etiquetas detectadas y saltar a las líneas de declaración o renderizado. Las rutas C++ se infieren estáticamente, pueden faltar transiciones complejas y no convierten un menú dibujado a mano en componentes editables.
 
 - Los botones de acción de UltraPack y Presentación ya no fallan por el selector del diálogo.
 - La compilación OpenGL de proyectos visuales generados por el IDE ejecuta el `build.ps1` local y reutiliza el SDK/dependencias del propio proyecto.
