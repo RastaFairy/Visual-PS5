@@ -1,6 +1,13 @@
-# Manual de usuario — PS5 Homebrew Studio 1.1.0
+# Manual de usuario — PS5 Homebrew Studio 1.1.5
 
-Última actualización: 16 de octubre de 2026. La interfaz de la aplicación continúa en español; estos manuales localizados no significan que la UI ya se haya traducido.
+Última actualización: 17 de octubre de 2026. La interfaz de la aplicación continúa en español; estos manuales localizados no significan que la UI ya se haya traducido.
+
+## Novedades y validación de 1.1.5
+
+- Los botones de acción de UltraPack y Presentación ya no fallan por el selector del diálogo.
+- La compilación OpenGL de proyectos visuales generados por el IDE ejecuta el `build.ps1` local y reutiliza el SDK/dependencias del propio proyecto.
+- El diálogo de compilación nativa permite seleccionar icono, fondos de selección/lanzamiento y música. El gestor de pantallas y la jerarquía permiten organizar menús y capas.
+- El mantenedor ha confirmado la compilación OpenGL y el empaquetado UltraPack en Windows/WSL. Vulkan completo, conversión ATRAC9 y ejecución en hardware PS5 no están verificados. Consulta [problemas conocidos](../PS5-Homebrew-Studio/docs/KNOWN-ISSUES.es-ES.md).
 
 ## 1. Requisitos
 
