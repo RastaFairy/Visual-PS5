@@ -112,7 +112,7 @@
     const c={id:`${type}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2,5)}`,screenId:project.currentScreen||'screen-main',type,label:({title:'Título de pantalla',text:'Texto informativo',button:'Botón nuevo',toggle:'Activar opción',slider:'Volumen',stepper:'Cantidad',select:'Dificultad',carousel:'Selecciona una opción',list:'Elementos',progress:'Progreso',badge:'Estado',image:'Imagen',input:'Introduce texto',gauge:'75%',separator:'',panel:'Panel principal',card:'Tarjeta'})[type]||spec.name,x:cx,y:cy,w:ww,h:hh,bg:spec.bg,fg:spec.fg,font:spec.font,visible:true,opacity:100,value:type==='slider'?70:type==='progress'?65:type==='gauge'?75:type==='stepper'?3:0,min:0,max:100,step:5,checked:type==='toggle',items:['Opción 1','Opción 2','Opción 3'],assetId:null,action:'none',actionMessage:'Acción completada',targetId:'',custom:{}};
     snapshot();project.components.push(c);changed('Componente añadido');selectComponent(c.id);return c;
   }
-  function setActiveView(view){activeView=view;$('.editor-tab').forEach(el=>el.classList.toggle('active',el.dataset.view===view));['design','structure','logic','code','diagnostics'].forEach(v=>$('#'+v+'View').classList.toggle('hidden',v!==view));if(view==='structure')renderStructure();if(view==='logic')renderFlows();if(view==='code')renderCode();if(view==='diagnostics')renderDiagnostics();}
+  function setActiveView(view){activeView=view;$$('.editor-tab').forEach(el=>el.classList.toggle('active',el.dataset.view===view));['design','structure','logic','code','diagnostics'].forEach(v=>$('#'+v+'View').classList.toggle('hidden',v!==view));if(view==='structure')renderStructure();if(view==='logic')renderFlows();if(view==='code')renderCode();if(view==='diagnostics')renderDiagnostics();}
   function setActivePanel(panel){activePanel=panel;$$('.rail-item').forEach(el=>el.classList.toggle('active',el.dataset.panel===panel));renderSidePanel();}
   function setRightPane(pane){activeRight=pane;$$('.right-tab').forEach(el=>el.classList.toggle('active',el.dataset.right===pane));$('#inspectorPane').classList.toggle('hidden',pane!=='inspector');$('#hierarchyPane').classList.toggle('hidden',pane!=='hierarchy');if(pane==='hierarchy')renderHierarchy();else renderInspector();}
   function setDock(dock){activeDock=dock;$$('.dock-tab').forEach(el=>el.classList.toggle('active',el.dataset.dock===dock));renderDock();}
@@ -372,27 +372,15 @@
     for(const screen of project.screens){const rows=project.components.map((component,index)=>({component,index,z:Number(component.zIndex)})).filter(row=>row.component.screenId===screen.id);rows.sort((a,b)=>(Number.isFinite(a.z)?a.z:a.index+1)-(Number.isFinite(b.z)?b.z:b.index+1)||a.index-b.index);rows.forEach((row,index)=>{row.component.zIndex=index+1;});}
   }
 
-  // Native and visual UI-structure explorer. C++-drawn states are inspected statically;
-  // they are never misrepresented as editable canvas widgets.
+  // Explores visual screens separately from native code states.
   function structureLineAt(source,index){return String(source||'').slice(0,Math.max(0,index)).split('\n').length;}
-  function structureEscapeRegExp(value){return String(value).replace(/[-/\\^$*+?.()|[\]{}]/g,'\\  function selectScreen(id){');}
   function structureHumanize(value){
-    const key=String(value||'').trim(),known={
-      title:'Inicio',main:'Inicio',main_menu:'Menú principal',mainmenu:'Menú principal',
-      missions:'Misiones',mission_select:'Selección de misiones',play:'Juego',gameplay:'Juego',
-      result:'Resultados',results:'Resultados',manual:'Manual',settings:'Ajustes',options:'Opciones',
-      saves:'Partidas guardadas',save_data:'Partidas guardadas',confirm_delete:'Confirmar eliminación',
-      confirm_new_game:'Confirmar nueva partida',pause:'Pausa',paused:'Pausa',loading:'Carga',
-      game_over:'Fin de partida',credits:'Créditos',inventory:'Inventario',controls:'Controles',
-      audio:'Audio',video:'Vídeo'
-    };
-    if(known[key.toLowerCase()])return known[key.toLowerCase()];
+    const key=String(value||'').trim(),names={title:'Inicio',main:'Inicio',main_menu:'Menú principal',mainmenu:'Menú principal',missions:'Misiones',mission_select:'Selección de misiones',play:'Juego',gameplay:'Juego',result:'Resultados',results:'Resultados',manual:'Manual',settings:'Ajustes',options:'Opciones',saves:'Partidas guardadas',save_data:'Partidas guardadas',confirm_delete:'Confirmar eliminación',confirm_new_game:'Confirmar nueva partida',pause:'Pausa',paused:'Pausa',loading:'Carga',game_over:'Fin de partida',credits:'Créditos',inventory:'Inventario',controls:'Controles',audio:'Audio',video:'Vídeo'};
+    if(names[key.toLowerCase()])return names[key.toLowerCase()];
     return key.replace(/([a-z0-9])([A-Z])/g,'$1 $2').replace(/[_-]+/g,' ').replace(/\b[a-z]/g,ch=>ch.toUpperCase());
   }
   function structureEnumMembers(raw){
-    return String(raw||'').replace(/\/\*[\s\S]*?\*\//g,'').split(',')
-      .map(part=>part.replace(/\/\/.*$/,'').trim().match(/^[A-Za-z_]\w*/))
-      .filter(Boolean).map(match=>match[0]).filter(name=>!['count','Count','COUNT','size','SIZE','total','TOTAL'].includes(name));
+    return String(raw||'').replace(/\/\*[\s\S]*?\*\//g,'').split(',').map(part=>part.replace(/\/\/.*$/,'').trim().match(/^[A-Za-z_]\w*/)).filter(Boolean).map(match=>match[0]).filter(name=>!['count','Count','COUNT','size','SIZE','total','TOTAL'].includes(name));
   }
   function structureMatchingBrace(source,start){
     let depth=0,quote='',escaped=false,lineComment=false,blockComment=false;
@@ -404,157 +392,122 @@
       if(ch==='/'&&next==='/'){lineComment=true;i++;continue;}
       if(ch==='/'&&next==='*'){blockComment=true;i++;continue;}
       if(ch==='"'||ch==="'"){quote=ch;continue;}
-      if(ch==='{')depth++;
-      else if(ch==='}'){depth--;if(depth===0)return i;}
+      if(ch==='{')depth++;else if(ch==='}'&&--depth===0)return i;
     }
     return -1;
   }
-  function structureDecodeLiteral(literal){
-    try{return JSON.parse(literal);}catch{return String(literal||'').slice(1,-1).replace(/\\(["'\\])/g,'$1').replace(/\\n/g,'\n').replace(/\\t/g,'\t');}
-  }
+  function structureDecodeLiteral(value){try{return JSON.parse(value);}catch{return String(value||'').slice(1,-1).replace(/\\(["'\\])/g,'$1').replace(/\\n/g,'\n').replace(/\\t/g,'\t');}}
   function structureUiTextLabels(source){
-    const labels={},enumMatch=source.match(/\benum\s+(?:class\s+)?UiText\s*(?::\s*[^{}]+)?\s*\{([^{}]*)\}/);
-    if(!enumMatch)return labels;
-    const keys=structureEnumMembers(enumMatch[1]),tableIndex=source.indexOf('kUiStrings');
-    if(tableIndex<0)return labels;
-    const assignment=source.indexOf('=',tableIndex),tableOpen=source.indexOf('{',assignment);
-    if(tableOpen<0)return labels;
-    const tableEnd=structureMatchingBrace(source,tableOpen);
-    if(tableEnd<0)return labels;
-    const rowOpen=source.indexOf('{',tableOpen+1);
-    if(rowOpen<0||rowOpen>=tableEnd)return labels;
+    const out={},em=source.match(/\benum\s+(?:class\s+)?UiText\s*(?::\s*[^{}]+)?\s*\{([^{}]*)\}/);
+    if(!em)return out;
+    const keys=structureEnumMembers(em[1]),ix=source.indexOf('kUiStrings');
+    if(ix<0)return out;
+    const eq=source.indexOf('=',ix),open=source.indexOf('{',eq),end=open<0?-1:structureMatchingBrace(source,open);
+    if(open<0||end<0)return out;
+    const rowOpen=source.indexOf('{',open+1);
+    if(rowOpen<0||rowOpen>=end)return out;
     const rowEnd=structureMatchingBrace(source,rowOpen);
-    if(rowEnd<0)return labels;
+    if(rowEnd<0)return out;
     const literals=source.slice(rowOpen+1,rowEnd).match(/"(?:\\.|[^"\\])*"/g)||[];
-    keys.forEach((key,index)=>{if(literals[index])labels[key]=structureDecodeLiteral(literals[index]);});
-    return labels;
+    keys.forEach((key,i)=>{if(literals[i])out[key]=structureDecodeLiteral(literals[i]);});
+    return out;
   }
   function structureFunction(source,name){
     if(!name)return null;
-    const rx=new RegExp('\\b'+structureEscapeRegExp(name)+'\\s*\\([^;{}]*\\)\\s*(?:(?:const|noexcept|override)\\s*)*\\{','m');
-    const match=rx.exec(source);if(!match)return null;
+    const match=new RegExp('\\b'+name+'\\s*\\([^;{}]*\\)\\s*(?:(?:const|noexcept|override)\\s*)*\\{','m').exec(source);
+    if(!match)return null;
     const open=source.indexOf('{',match.index+match[0].length-1),end=structureMatchingBrace(source,open);
     if(open<0||end<0)return null;
-    return {name:name,index:match.index,line:structureLineAt(source,match.index),body:source.slice(open+1,end),bodyIndex:open+1};
+    return {name:name,line:structureLineAt(source,match.index),body:source.slice(open+1,end),bodyIndex:open+1};
   }
-  function structureFindAssignments(block,states,absoluteIndex,rootSource){
-    const result=[],ids=states.map(state=>state.id);
-    if(!ids.length)return result;
-    const alternatives=ids.map(structureEscapeRegExp).join('|');
-    const rx=new RegExp('\\b(?:screen_|screen|current_screen_|currentScreen)\\s*=\\s*(?:[A-Za-z_]\\w*::)?('+alternatives+')\\b','g');
-    let match;
-    while((match=rx.exec(block))!==null){
-      result.push({to:match[1],index:absoluteIndex+match.index,line:structureLineAt(rootSource||block,absoluteIndex+match.index)});
-    }
-    return result;
+  function structureAssignments(block,states,offset,fullSource){
+    if(!states.length)return [];
+    const ids=states.map(state=>state.id).join('|');
+    const re=new RegExp('\\b(?:screen_|screen|current_screen_|currentScreen)\\s*=\\s*(?:[A-Za-z_]\\w*::)?('+ids+')\\b','g'),found=[];
+    let m;
+    while((m=re.exec(block))!==null)found.push({to:m[1],index:offset+m.index,line:structureLineAt(fullSource,offset+m.index)});
+    return found;
   }
-  function scanNativeStructure(rawSource){
-    const source=String(rawSource||''),discovered=[],knownIds=new Set();
-    const enumRx=/\benum\s+(?:class\s+)?([A-Za-z_]\w*)\s*(?::\s*[\w:<>]+)?\s*\{([^{}]*)\}/g;
-    let enumMatch;
-    while((enumMatch=enumRx.exec(source))!==null){
-      if(!/(screen|view|page|scene|menu|state)/i.test(enumMatch[1]))continue;
-      const members=structureEnumMembers(enumMatch[2]);
-      members.forEach(value=>{
-        if(knownIds.has(value))return;
-        knownIds.add(value);
-        const relative=enumMatch[2].indexOf(value),offset=enumMatch.index+enumMatch[0].indexOf(enumMatch[2])+relative;
-        discovered.push({id:value,label:structureHumanize(value),enumName:enumMatch[1],enumLine:structureLineAt(source,offset),caseLine:0,renderer:'',rendererLine:0,items:[]});
+  function scanNativeStructure(source){
+    source=String(source||'');
+    const states=[],seen=new Set(),enumRx=/\benum\s+(?:class\s+)?([A-Za-z_]\w*)\s*(?::\s*[\w:<>]+)?\s*\{([^{}]*)\}/g;
+    let em;
+    while((em=enumRx.exec(source))!==null){
+      if(!/(screen|view|page|scene|menu|state)/i.test(em[1]))continue;
+      const members=structureEnumMembers(em[2]);
+      members.forEach(id=>{
+        if(seen.has(id))return;seen.add(id);
+        states.push({id:id,label:structureHumanize(id),enumName:em[1],enumLine:structureLineAt(source,em.index+em[0].indexOf(em[2])+em[2].indexOf(id)),caseLine:0,renderer:'',rendererLine:0,items:[]});
       });
     }
-    const analysis={source:source,enumName:discovered.length?discovered[0].enumName:'',states:discovered,transitions:[],available:discovered.length>0};
-    if(!discovered.length)return analysis;
-    const stateMap=new Map(discovered.map(state=>[state.id,state])),uiLabels=structureUiTextLabels(source);
-    const routeByPair=new Map(),helperCalls=[];
-    function addRoute(from,to,index,via){
-      if(!stateMap.has(from)||!stateMap.has(to)||from===to)return;
-      const key=from+'>'+to;
-      if(routeByPair.has(key)){
-        const previous=routeByPair.get(key);
-        if(!previous.line&&index>=0){previous.line=structureLineAt(source,index);previous.via=via||previous.via;}
-        return;
-      }
-      routeByPair.set(key,{from:from,to:to,line:index>=0?structureLineAt(source,index):0,via:via||'asignación de estado'});
+    const result={source:source,enumName:states.length?states[0].enumName:'',states:states,transitions:[],available:states.length>0};
+    if(!states.length)return result;
+    const stateIds=new Set(states.map(state=>state.id)),labelMap=structureUiTextLabels(source),routes=new Map(),helperCalls=[];
+    function addRoute(from,target,index,via){
+      if(!stateIds.has(from)||!stateIds.has(target)||from===target)return;
+      const key=from+'>'+target;
+      if(routes.has(key)){const old=routes.get(key);if(!old.line&&index>=0){old.line=structureLineAt(source,index);old.via=via;}return;}
+      routes.set(key,{from:from,to:target,line:index>=0?structureLineAt(source,index):0,via:via||'asignación de estado'});
     }
-    function collectBody(body,bodyOffset,from,via){
-      structureFindAssignments(body,discovered,bodyOffset,source).forEach(route=>addRoute(from,route.to,route.index,via));
-      const calls=body.matchAll(/\b([A-Za-z_]\w*)\s*\(/g);
-      for(const call of calls){
+    function scanBody(body,offset,from,via){
+      structureAssignments(body,states,offset,source).forEach(item=>addRoute(from,item.to,item.index,via));
+      for(const call of body.matchAll(/\b([A-Za-z_]\w*)\s*\(/g)){
         const name=call[1];
-        if(/^(draw|render|show|paint|fill|set_color|set_text|printf|if|switch|while|for|sizeof|static_cast|reinterpret_cast|ui_text|std|move|clamp|round|sqrt|sin|cos|strlen|strcmp|to_string|push_back|emplace_back|begin|end|size|empty|clear|front|back|abs|std|assert|return|operator)$/i.test(name))continue;
-        if(/(screen|menu|mission|save|new_game|continue|confirm|delete|setting|manual|title|play|back|cancel|start|return|open|close|select|navigat|quit|resume|pause|restart|accept|reject|load|begin|enter|leave|switch|route|activate|handle|input|next|previous|prev|launch|finish|game)/i.test(name)){
-          helperCalls.push({from:from,name:name,index:bodyOffset+call.index});
-        }
+        if(/^(if|switch|while|for|sizeof|static_cast|reinterpret_cast|ui_text|printf|strlen|strcmp|to_string|push_back|emplace_back|begin|end|size|empty|clear|front|back|abs|round|sqrt|sin|cos|clamp|assert)$/i.test(name))continue;
+        if(/(screen|menu|mission|save|new_game|continue|confirm|delete|setting|manual|title|play|back|cancel|start|return|open|close|select|navigat|quit|resume|pause|restart|accept|reject|load|begin|enter|leave|switch|route|activate|handle|input|next|previous|prev|launch|finish|game)/i.test(name))helperCalls.push({from:from,name:name});
       }
     }
     const conditionRx=/\bif\s*\(\s*(?:this->)?(?:screen_|screen|current_screen_|currentScreen)\s*==\s*(?:[A-Za-z_]\w*::)?([A-Za-z_]\w*)\s*\)\s*\{/g;
     let condition;
     while((condition=conditionRx.exec(source))!==null){
-      const from=condition[1];if(!stateMap.has(from))continue;
+      if(!stateIds.has(condition[1]))continue;
       const open=source.indexOf('{',condition.index+condition[0].length-1),end=structureMatchingBrace(source,open);
-      if(open<0||end<0)continue;
-      collectBody(source.slice(open+1,end),open+1,from,'condición de estado');
+      if(open>=0&&end>=0)scanBody(source.slice(open+1,end),open+1,condition[1],'condición de estado');
     }
     const switchRx=/\bswitch\s*\(\s*(?:this->)?(screen_|screen|current_screen_|currentScreen)\s*\)\s*\{/g;
-    let switchMatch;
-    while((switchMatch=switchRx.exec(source))!==null){
-      const open=source.indexOf('{',switchMatch.index+switchMatch[0].length-1),end=structureMatchingBrace(source,open);
+    let sw;
+    while((sw=switchRx.exec(source))!==null){
+      const open=source.indexOf('{',sw.index+sw[0].length-1),end=structureMatchingBrace(source,open);
       if(open<0||end<0)continue;
       const body=source.slice(open+1,end),caseRx=/\bcase\s+(?:[A-Za-z_]\w*::)?([A-Za-z_]\w*)\s*:/g,cases=[];
-      let c;
-      while((c=caseRx.exec(body))!==null)if(stateMap.has(c[1]))cases.push({state:c[1],index:c.index,bodyStart:caseRx.lastIndex});
-      cases.forEach((entry,index)=>{
-        const stop=index+1<cases.length?cases[index+1].index:body.length,caseBody=body.slice(entry.bodyStart,stop),absolute=open+1+entry.bodyStart;
-        const state=stateMap.get(entry.state);if(!state.caseLine)state.caseLine=structureLineAt(source,open+1+entry.index);
-        const renderers=Array.from(caseBody.matchAll(/\b(?:draw|render|show|paint)_[A-Za-z_]\w*\s*\(/g)).map(match=>match[0].replace(/\s*\($/,''));
-        if(renderers.length){
-          const exact=renderers.find(name=>name==='draw_'+entry.state||name==='render_'+entry.state||name==='show_'+entry.state||name==='paint_'+entry.state);
-          state.renderer=exact||renderers[renderers.length-1];
-        }
-        collectBody(caseBody,absolute,entry.state,'caso de '+entry.state);
+      let cm;
+      while((cm=caseRx.exec(body))!==null)if(stateIds.has(cm[1]))cases.push({id:cm[1],start:cm.index,bodyStart:caseRx.lastIndex});
+      cases.forEach((entry,i)=>{
+        const stop=i+1<cases.length?cases[i+1].start:body.length,sub=body.slice(entry.bodyStart,stop),absolute=open+1+entry.bodyStart,state=states.find(s=>s.id===entry.id);
+        if(state&&!state.caseLine)state.caseLine=structureLineAt(source,open+1+entry.start);
+        const draws=Array.from(sub.matchAll(/\b(?:draw|render|show|paint)_[A-Za-z_]\w*\s*\(/g)).map(x=>x[0].replace(/\s*\($/,''));
+        if(state&&draws.length)state.renderer=draws.find(n=>n==='draw_'+entry.id||n==='render_'+entry.id||n==='show_'+entry.id||n==='paint_'+entry.id)||draws[draws.length-1];
+        scanBody(sub,absolute,entry.id,'caso '+entry.id);
       });
     }
-    const helperOrigins=new Map();
-    helperCalls.forEach(item=>{
-      if(!helperOrigins.has(item.name))helperOrigins.set(item.name,new Set());
-      helperOrigins.get(item.name).add(item.from);
-    });
-    helperOrigins.forEach((origins,name)=>{
+    const origins=new Map();
+    helperCalls.forEach(call=>{if(!origins.has(call.name))origins.set(call.name,new Set());origins.get(call.name).add(call.from);});
+    origins.forEach((fromStates,name)=>{
       const fn=structureFunction(source,name);if(!fn)return;
-      const targets=structureFindAssignments(fn.body,discovered,fn.bodyIndex,source);
-      if(!targets.length)return;
-      origins.forEach(from=>targets.forEach(target=>addRoute(from,target.to,target.index,'llamada a '+name)));
+      structureAssignments(fn.body,states,fn.bodyIndex,source).forEach(target=>fromStates.forEach(from=>addRoute(from,target.to,target.index,'llamada a '+name)));
     });
-    discovered.forEach(state=>{
+    states.forEach(state=>{
       if(!state.renderer){
-        const candidates=['draw_'+state.id,'render_'+state.id,'show_'+state.id,'paint_'+state.id];
-        const found=candidates.map(name=>structureFunction(source,name)).find(Boolean);
-        if(found)state.renderer=found.name;
+        const fn=['draw_'+state.id,'render_'+state.id,'show_'+state.id,'paint_'+state.id].map(name=>structureFunction(source,name)).find(Boolean);
+        if(fn)state.renderer=fn.name;
       }
-      const fn=structureFunction(source,state.renderer);
-      if(fn){
-        state.rendererLine=fn.line;
-        const tokens=Array.from(fn.body.matchAll(/\bUiText::([A-Za-z_]\w*)/g)).map(match=>match[1]);
-        tokens.forEach(key=>{
-          const label=uiLabels[key]||structureHumanize(key);
-          if(label&&state.items.indexOf(label)<0&&state.items.length<14)state.items.push(String(label).slice(0,100));
-        });
-        const arrays=Array.from(fn.body.matchAll(/(?:const\s+)?char\s*\*+\s*(?:labels|items|options|names|entries)\s*\[[^\]]*\]\s*=\s*\{([\s\S]*?)\}\s*;/ig));
-        arrays.forEach(array=>{
-          const literals=array[1].match(/"(?:\\.|[^"\\])*"/g)||[];
-          literals.forEach(literal=>{
-            const label=structureDecodeLiteral(literal).trim();
-            if(label.length>1&&label.length<90&&state.items.indexOf(label)<0&&state.items.length<14)state.items.push(label);
-          });
-        });
-        if(!state.items.length&&/\bkMissionTitles\b|\bkMissions\b/.test(fn.body)){
-          const count=source.match(/\bkMissionCount\s*=\s*(\d+)/);
-          state.items.push('Catálogo dinámico de '+(count?count[1]:'varias')+' misiones');
-        }
+      const fn=structureFunction(source,state.renderer);if(!fn)return;
+      state.rendererLine=fn.line;
+      Array.from(fn.body.matchAll(/\bUiText::([A-Za-z_]\w*)/g)).forEach(match=>{
+        const label=labelMap[match[1]]||structureHumanize(match[1]);
+        if(label&&state.items.indexOf(label)<0&&state.items.length<14)state.items.push(String(label).slice(0,100));
+      });
+      const arrays=Array.from(fn.body.matchAll(/(?:const\s+)?char\s*\*+\s*(?:labels|items|options|names|entries)\s*\[[^\]]*\]\s*=\s*\{([\s\S]*?)\}\s*;/ig));
+      arrays.forEach(array=>(array[1].match(/"(?:\\.|[^"\\])*"/g)||[]).forEach(literal=>{
+        const label=structureDecodeLiteral(literal).trim();
+        if(label.length>1&&label.length<90&&state.items.indexOf(label)<0&&state.items.length<14)state.items.push(label);
+      }));
+      if(!state.items.length&&/\bkMissionTitles\b|\bkMissions\b/.test(fn.body)){
+        const count=source.match(/\bkMissionCount\s*=\s*(\d+)/);state.items.push('Catálogo dinámico de '+(count?count[1]:'varias')+' misiones');
       }
     });
-    analysis.transitions=Array.from(routeByPair.values()).sort((a,b)=>(a.line||0)-(b.line||0)).slice(0,140);
-    return analysis;
+    result.transitions=Array.from(routes.values()).sort((a,b)=>(a.line||0)-(b.line||0)).slice(0,140);
+    return result;
   }
   function structureSourceCode(){
     if(project.manualCode)return String(project.customCode||$('#codeEditor')?.value||'');
@@ -563,135 +516,89 @@
   }
   function structureVisualEdges(){
     const edges=[];
-    (project.flows||[]).filter(flow=>flow.enabled!==false&&flow.action==='navigate').forEach(flow=>{
-      const comp=component(flow.componentId),from=comp?.screenId||project.currentScreen,to=flow.targetScreen;
-      if(from&&to&&project.screens.some(screen=>screen.id===from)&&project.screens.some(screen=>screen.id===to))edges.push({from:from,to:to,line:0,via:'Flujo visual'});
+    project.flows.filter(flow=>flow.enabled!==false&&flow.action==='navigate').forEach(flow=>{
+      const from=component(flow.componentId)?.screenId||project.currentScreen,to=flow.targetScreen;
+      if(from&&to&&project.screens.some(s=>s.id===from)&&project.screens.some(s=>s.id===to))edges.push({from:from,to:to,line:0});
     });
     return edges;
   }
   function renderStructureTree(){
     const root=$('#structureTree');if(!root)return;
-    const query=String($('#structureSearch')?.value||'').trim().toLocaleLowerCase();
-    const visual=project.screens.filter(screen=>(screen.name+' '+screen.id).toLocaleLowerCase().includes(query));
-    const native=(structureAnalysis?.states||[]).filter(state=>(state.label+' '+state.id+' '+state.renderer).toLocaleLowerCase().includes(query));
-    const sections=[];
-    sections.push('<div class="structure-tree-group">Modelo visual · '+project.screens.length+'</div>');
-    sections.push(visual.map(screen=>{
-      const key='visual:'+screen.id,active=structureSelection===key,count=project.components.filter(item=>item.screenId===screen.id).length;
-      return '<button type="button" class="structure-tree-row '+(active?'active':'')+'" data-structure-select="'+esc(key)+'"><span class="structure-tree-icon">▣</span><span class="structure-tree-copy"><strong>'+esc(screen.name)+'</strong><small>'+count+' componentes · '+esc(screen.id)+'</small></span></button>';
-    }).join('')||(query?'<div class="structure-tree-empty">No hay pantallas visuales que coincidan.</div>':'<div class="structure-tree-empty">No hay pantallas visuales definidas.</div>'));
-    sections.push('<div class="structure-tree-group">Estados de código · '+(structureAnalysis?.states.length||0)+'</div>');
-    sections.push(native.map(state=>{
-      const key='native:'+state.id,active=structureSelection===key;
-      return '<button type="button" class="structure-tree-row '+(active?'active':'')+'" data-structure-select="'+esc(key)+'"><span class="structure-tree-icon">⌘</span><span class="structure-tree-copy"><strong>'+esc(state.label)+'</strong><small>'+esc(state.id)+(state.renderer?' · '+esc(state.renderer):' · renderizador no identificado')+'</small></span></button>';
-    }).join('')||(query?'<div class="structure-tree-empty">No hay estados de código que coincidan.</div>':'<div class="structure-tree-empty">No se detectaron enums de pantalla/estado en el código actual.</div>'));
-    root.innerHTML=sections.join('');
+    const q=String($('#structureSearch')?.value||'').trim().toLocaleLowerCase();
+    const visual=project.screens.filter(s=>(s.name+' '+s.id).toLocaleLowerCase().includes(q));
+    const native=(structureAnalysis?.states||[]).filter(s=>(s.label+' '+s.id+' '+s.renderer).toLocaleLowerCase().includes(q));
+    const visualRows=visual.map(s=>{
+      const key='visual:'+s.id,count=project.components.filter(c=>c.screenId===s.id).length;
+      return '<button type="button" class="structure-tree-row '+(structureSelection===key?'active':'')+'" data-structure-select="'+esc(key)+'"><span class="structure-tree-icon">▣</span><span class="structure-tree-copy"><strong>'+esc(s.name)+'</strong><small>'+count+' componentes · '+esc(s.id)+'</small></span></button>';
+    }).join('')||(q?'<div class="structure-tree-empty">No hay pantallas que coincidan.</div>':'<div class="structure-tree-empty">No hay pantallas definidas.</div>');
+    const nativeRows=native.map(s=>{
+      const key='native:'+s.id;
+      return '<button type="button" class="structure-tree-row '+(structureSelection===key?'active':'')+'" data-structure-select="'+esc(key)+'"><span class="structure-tree-icon">⌘</span><span class="structure-tree-copy"><strong>'+esc(s.label)+'</strong><small>'+esc(s.id)+(s.renderer?' · '+esc(s.renderer):' · renderizador no identificado')+'</small></span></button>';
+    }).join('')||(q?'<div class="structure-tree-empty">No hay estados que coincidan.</div>':'<div class="structure-tree-empty">No se detectaron estados en el código.</div>');
+    root.innerHTML='<div class="structure-tree-group">Modelo visual · '+project.screens.length+'</div>'+visualRows+'<div class="structure-tree-group">Estados de código · '+(structureAnalysis?.states.length||0)+'</div>'+nativeRows;
     $('#structureTreeCount').textContent=String(visual.length+native.length);
-    root.querySelectorAll('[data-structure-select]').forEach(button=>button.addEventListener('click',()=>{
-      structureSelection=button.dataset.structureSelect;
-      structureScope=structureSelection.startsWith('native:')?'native':'visual';
-      renderStructure();
+    root.querySelectorAll('[data-structure-select]').forEach(btn=>btn.addEventListener('click',()=>{
+      structureSelection=btn.dataset.structureSelect;structureScope=structureSelection.startsWith('native:')?'native':'visual';renderStructure();
     }));
   }
   function renderStructureMap(){
     const root=$('#structureMapCanvas');if(!root)return;
     const nativeScope=structureScope==='native',nativeStates=structureAnalysis?.states||[];
-    const nodes=nativeScope?nativeStates.map(state=>({
-      key:'native:'+state.id,id:state.id,label:state.label,
-      kind:state.items.length?'Menú / estado':'Estado C++',
-      subtitle:state.renderer||'Renderizador no identificado',
-      footer:state.items.length+' opciones detectadas',items:state.items
-    })):project.screens.map(screen=>{
-      const count=project.components.filter(item=>item.screenId===screen.id).length;
-      const flowCount=project.flows.filter(flow=>{
-        const comp=component(flow.componentId);
-        return comp?.screenId===screen.id||(flow.action==='navigate'&&flow.targetScreen===screen.id);
-      }).length;
-      return {key:'visual:'+screen.id,id:screen.id,label:screen.name,kind:'Pantalla visual',subtitle:screen.id,footer:count+' componentes · '+flowCount+' flujos',items:[]};
-    });
-    const validIds=new Set(nodes.map(node=>node.id));
-    const allEdges=nativeScope?(structureAnalysis?.transitions||[]):structureVisualEdges();
-    const edges=allEdges.filter(edge=>validIds.has(edge.from)&&validIds.has(edge.to));
-    const nodeW=198,nodeH=92,gapX=66,gapY=34,positions=new Map();
-    if(!edges.length){
-      nodes.forEach((node,index)=>positions.set(node.id,{x:24+(index%3)*(nodeW+gapX),y:26+Math.floor(index/3)*(nodeH+gapY),depth:index%3}));
-    }else{
-      const indegree=new Map(nodes.map(node=>[node.id,0]));
-      edges.forEach(edge=>indegree.set(edge.to,(indegree.get(edge.to)||0)+1));
-      const roots=nodes.filter(node=>(indegree.get(node.id)||0)===0).map(node=>node.id);
-      if(!roots.length&&nodes.length)roots.push(nodes[0].id);
-      const depth=new Map(),queue=[];
-      roots.forEach(id=>{depth.set(id,0);queue.push(id);});
-      for(let i=0;i<queue.length;i++){
-        const id=queue[i],next=depth.get(id)+1;
-        edges.filter(edge=>edge.from===id).forEach(edge=>{if(!depth.has(edge.to)){depth.set(edge.to,next);queue.push(edge.to);}});
-      }
-      let maxDepth=Math.max(0,...Array.from(depth.values()));
-      nodes.forEach(node=>{if(!depth.has(node.id)){maxDepth++;depth.set(node.id,maxDepth);}});
-      const groups=new Map();
-      nodes.forEach(node=>{const d=depth.get(node.id)||0;if(!groups.has(d))groups.set(d,[]);groups.get(d).push(node);});
-      Array.from(groups.entries()).sort((a,b)=>a[0]-b[0]).forEach(([d,group])=>group.forEach((node,row)=>positions.set(node.id,{x:24+d*(nodeW+gapX),y:26+row*(nodeH+gapY),depth:d})));
+    const nodes=nativeScope?nativeStates.map(s=>({key:'native:'+s.id,id:s.id,label:s.label,kind:s.items.length?'Menú / estado':'Estado C++',subtitle:s.renderer||'Renderizador no identificado',footer:s.items.length+' opciones detectadas'})):project.screens.map(s=>({key:'visual:'+s.id,id:s.id,label:s.name,kind:'Pantalla visual',subtitle:s.id,footer:project.components.filter(c=>c.screenId===s.id).length+' componentes'}));
+    const valid=new Set(nodes.map(n=>n.id)),allEdges=nativeScope?(structureAnalysis?.transitions||[]):structureVisualEdges(),edges=allEdges.filter(e=>valid.has(e.from)&&valid.has(e.to));
+    const wNode=198,hNode=92,gx=66,gy=34,positions=new Map();
+    if(!edges.length)nodes.forEach((n,i)=>positions.set(n.id,{x:24+(i%3)*(wNode+gx),y:26+Math.floor(i/3)*(hNode+gy)}));
+    else{
+      const indegree=new Map(nodes.map(n=>[n.id,0]));edges.forEach(e=>indegree.set(e.to,(indegree.get(e.to)||0)+1));
+      const roots=nodes.filter(n=>!indegree.get(n.id)).map(n=>n.id);if(!roots.length&&nodes.length)roots.push(nodes[0].id);
+      const depth=new Map(),queue=[];roots.forEach(id=>{depth.set(id,0);queue.push(id);});
+      for(let i=0;i<queue.length;i++)edges.filter(e=>e.from===queue[i]).forEach(e=>{if(!depth.has(e.to)){depth.set(e.to,depth.get(queue[i])+1);queue.push(e.to);}});
+      let max=Math.max(0,...Array.from(depth.values()));nodes.forEach(n=>{if(!depth.has(n.id)){max++;depth.set(n.id,max);}});
+      const groups=new Map();nodes.forEach(n=>{const d=depth.get(n.id)||0;if(!groups.has(d))groups.set(d,[]);groups.get(d).push(n);});
+      Array.from(groups.entries()).sort((a,b)=>a[0]-b[0]).forEach(([d,group])=>group.forEach((n,row)=>positions.set(n.id,{x:24+d*(wNode+gx),y:26+row*(hNode+gy)})));
     }
-    let width=760,height=440;
-    positions.forEach(pos=>{width=Math.max(width,pos.x+nodeW+24);height=Math.max(height,pos.y+nodeH+26);});
+    let width=760,height=440;positions.forEach(p=>{width=Math.max(width,p.x+wNode+24);height=Math.max(height,p.y+hNode+26);});
     root.style.width=width+'px';root.style.height=height+'px';
-    const edgeMarkup=edges.map(edge=>{
-      const a=positions.get(edge.from),b=positions.get(edge.to);if(!a||!b)return '';
-      const sx=a.x+nodeW,sy=a.y+nodeH/2,tx=b.x,ty=b.y+nodeH/2;
-      let path;
-      if(tx>sx+8){const mid=(sx+tx)/2;path='M '+sx+' '+sy+' C '+mid+' '+sy+', '+mid+' '+ty+', '+tx+' '+ty;}
-      else{const arch=Math.max(8,Math.min(sy,ty)-28);path='M '+sx+' '+sy+' C '+(sx+55)+' '+arch+', '+(tx-55)+' '+arch+', '+tx+' '+ty;}
-      const from=nodes.find(node=>node.id===edge.from)?.label||edge.from,to=nodes.find(node=>node.id===edge.to)?.label||edge.to;
-      return '<path class="'+(nativeScope?'derived':'')+'" d="'+path+'" marker-end="url(#structureArrow)"><title>'+esc(from+' → '+to+(edge.line?' · línea '+edge.line:''))+'</title></path>';
+    const edgeMarkup=edges.map(e=>{
+      const a=positions.get(e.from),b=positions.get(e.to);if(!a||!b)return '';
+      const sx=a.x+wNode,sy=a.y+hNode/2,tx=b.x,ty=b.y+hNode/2,mid=(sx+tx)/2;
+      const path=tx>sx+8?'M '+sx+' '+sy+' C '+mid+' '+sy+', '+mid+' '+ty+', '+tx+' '+ty:'M '+sx+' '+sy+' C '+(sx+55)+' '+Math.max(8,Math.min(sy,ty)-28)+', '+(tx-55)+' '+Math.max(8,Math.min(sy,ty)-28)+', '+tx+' '+ty;
+      return '<path class="'+(nativeScope?'derived':'')+'" d="'+path+'" marker-end="url(#structureArrow)"><title>'+esc(e.from+' → '+e.to+(e.line?' · línea '+e.line:''))+'</title></path>';
     }).join('');
-    const cards=nodes.map(node=>{
-      const pos=positions.get(node.id),selected=structureSelection===node.key;
-      const outgoing=edges.filter(edge=>edge.from===node.id).length,incoming=edges.filter(edge=>edge.to===node.id).length;
-      return '<button type="button" class="structure-node '+(selected?'active':'')+'" data-structure-select="'+esc(node.key)+'" style="left:'+pos.x+'px;top:'+pos.y+'px" aria-label="'+esc(node.label)+'"><span class="structure-node-top"><span class="structure-node-kind">'+esc(node.kind)+'</span><span class="structure-node-count">'+incoming+' entr. · '+outgoing+' sal.</span></span><strong>'+esc(node.label)+'</strong><small>'+esc(node.subtitle)+'</small><span class="structure-node-footer">'+esc(node.footer)+'</span></button>';
+    const cards=nodes.map(n=>{
+      const p=positions.get(n.id),out=edges.filter(e=>e.from===n.id).length,inc=edges.filter(e=>e.to===n.id).length;
+      return '<button type="button" class="structure-node '+(structureSelection===n.key?'active':'')+'" data-structure-select="'+esc(n.key)+'" style="left:'+p.x+'px;top:'+p.y+'px"><span class="structure-node-top"><span class="structure-node-kind">'+esc(n.kind)+'</span><span class="structure-node-count">'+inc+' entr. · '+out+' sal.</span></span><strong>'+esc(n.label)+'</strong><small>'+esc(n.subtitle)+'</small><span class="structure-node-footer">'+esc(n.footer)+'</span></button>';
     }).join('');
-    const empty=nodes.length?'':'<div class="structure-empty"><strong>No hay nodos que representar</strong>No se han encontrado estados nativos ni pantallas en el modelo visual.</div>';
-    root.innerHTML='<svg class="structure-map-edges" width="'+width+'" height="'+height+'" viewBox="0 0 '+width+' '+height+'" aria-hidden="true"><defs><marker id="structureArrow" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L0,6 L6,3 z" fill="#8290b2"></path></marker></defs>'+edgeMarkup+'</svg>'+cards+empty;
+    root.innerHTML='<svg class="structure-map-edges" width="'+width+'" height="'+height+'" viewBox="0 0 '+width+' '+height+'" aria-hidden="true"><defs><marker id="structureArrow" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L0,6 L6,3 z" fill="#8290b2"></path></marker></defs>'+edgeMarkup+'</svg>'+cards+(nodes.length?'':'<div class="structure-empty"><strong>No hay nodos que representar</strong>No se han encontrado estados nativos ni pantallas visuales.</div>');
     $('#structureMapHint').textContent=nativeScope?nativeStates.length+' estados · '+edges.length+' transiciones detectadas':project.screens.length+' pantallas · '+edges.length+' navegaciones explícitas';
-    root.querySelectorAll('[data-structure-select]').forEach(button=>button.addEventListener('click',()=>{
-      structureSelection=button.dataset.structureSelect;renderStructure();
-    }));
+    root.querySelectorAll('[data-structure-select]').forEach(btn=>btn.addEventListener('click',()=>{structureSelection=btn.dataset.structureSelect;renderStructure();}));
   }
   function renderStructureDetails(){
     const root=$('#structureDetails');if(!root)return;
     if(structureScope==='native'){
-      const state=(structureAnalysis?.states||[]).find(item=>'native:'+item.id===structureSelection);
-      if(!state){
-        root.innerHTML='<div class="structure-empty"><strong>Sin estados nativos detectados</strong>Este proyecto no declara estados reconocibles en el código actual. Añade una pantalla visual o identifica los estados en el C++.</div>';return;
-      }
-      const outgoing=(structureAnalysis.transitions||[]).filter(edge=>edge.from===state.id);
-      const incoming=(structureAnalysis.transitions||[]).filter(edge=>edge.to===state.id);
-      const routes=(title,list)=>'<div class="structure-detail-section"><strong>'+title+' · '+list.length+'</strong><div class="structure-detail-list">'+(list.map(edge=>{
-        const id=title==='Salidas'?edge.to:edge.from,target=(structureAnalysis.states||[]).find(candidate=>candidate.id===id);
-        return '<button type="button" class="structure-detail-item" data-structure-select="native:'+esc(id)+'"><span class="structure-detail-bullet">↗</span><span>'+esc(target?.label||id)+(edge.line?' · línea '+edge.line:'')+'</span></button>';
-      }).join('')||'<div class="structure-detail-note">No hay transiciones explícitas detectadas.</div>')+'</div></div>';
-      const items=state.items.length?'<div class="structure-detail-section"><strong>Opciones / elementos detectados · '+state.items.length+'</strong><div class="structure-menu-items">'+state.items.map(item=>'<span class="structure-menu-item">'+esc(item)+'</span>').join('')+'</div></div>':'<div class="structure-detail-note">No se encontró una lista estática de opciones. El estado puede dibujar los controles directamente en el código C++.</div>';
-      root.innerHTML='<div class="structure-detail-kicker">'+(state.items.length?'Menú / estado nativo':'Estado nativo C++')+'</div><h3>'+esc(state.label)+'</h3><p class="structure-detail-id">'+esc(state.enumName+'::'+state.id)+'</p><p class="structure-detail-note">Estado identificado mediante el enum de código. Esta vista inspecciona el origen, pero no reconstruye el dibujo exacto en tiempo de ejecución.</p><div class="structure-detail-section"><strong>Implementación</strong><div class="structure-detail-list"><div class="structure-detail-item"><span class="structure-detail-bullet">ƒ</span><span>'+esc(state.renderer||'Renderizador no identificado')+(state.rendererLine?' · línea '+state.rendererLine:'')+'</span></div><div class="structure-detail-item"><span class="structure-detail-bullet">#</span><span>Declaración · línea '+state.enumLine+(state.caseLine?' · switch en línea '+state.caseLine:'')+'</span></div></div></div>'+items+routes('Salidas',outgoing)+routes('Entradas',incoming)+'<div class="structure-detail-actions">'+(state.rendererLine?'<button type="button" class="btn primary small" data-structure-open-code="'+state.rendererLine+'">Ver renderizador</button>':'')+'<button type="button" class="btn secondary small" data-structure-open-code="'+state.enumLine+'">Ir a declaración</button></div><div class="structure-explain">Análisis estático: los enlaces se infieren de condiciones, casos y asignaciones detectadas. Revisa las líneas de origen para confirmar rutas condicionales complejas.</div>';
+      const s=(structureAnalysis?.states||[]).find(x=>'native:'+x.id===structureSelection);
+      if(!s){root.innerHTML='<div class="structure-empty"><strong>Sin estados nativos detectados</strong>No se reconocieron estados en el código actual.</div>';return;}
+      const routes=(title,list)=>'<div class="structure-detail-section"><strong>'+title+' · '+list.length+'</strong><div class="structure-detail-list">'+(list.map(e=>{
+        const id=title==='Salidas'?e.to:e.from,t=(structureAnalysis.states||[]).find(x=>x.id===id);
+        return '<button type="button" class="structure-detail-item" data-structure-select="native:'+esc(id)+'"><span class="structure-detail-bullet">↗</span><span>'+esc(t?.label||id)+(e.line?' · línea '+e.line:'')+'</span></button>';
+      }).join('')||'<div class="structure-detail-note">No se detectaron transiciones explícitas.</div>')+'</div></div>';
+      const items=s.items.length?'<div class="structure-detail-section"><strong>Opciones / elementos detectados</strong><div class="structure-menu-items">'+s.items.map(x=>'<span class="structure-menu-item">'+esc(x)+'</span>').join('')+'</div></div>':'<p class="structure-detail-note">No se encontró una lista estática de opciones. El estado podría dibujar sus controles directamente en C++.</p>';
+      const out=(structureAnalysis.transitions||[]).filter(e=>e.from===s.id),incoming=(structureAnalysis.transitions||[]).filter(e=>e.to===s.id);
+      root.innerHTML='<div class="structure-detail-kicker">'+(s.items.length?'Menú / estado nativo':'Estado nativo C++')+'</div><h3>'+esc(s.label)+'</h3><p class="structure-detail-id">'+esc(s.enumName+'::'+s.id)+'</p><p class="structure-detail-note">Estado encontrado en el código. Este análisis estático no reconstruye el dibujo final en tiempo de ejecución.</p><div class="structure-detail-section"><strong>Implementación</strong><div class="structure-detail-list"><div class="structure-detail-item"><span class="structure-detail-bullet">ƒ</span><span>'+esc(s.renderer||'Renderizador no identificado')+(s.rendererLine?' · línea '+s.rendererLine:'')+'</span></div><div class="structure-detail-item"><span class="structure-detail-bullet">#</span><span>Declaración · línea '+s.enumLine+(s.caseLine?' · caso en línea '+s.caseLine:'')+'</span></div></div></div>'+items+routes('Salidas',out)+routes('Entradas',incoming)+'<div class="structure-detail-actions">'+(s.rendererLine?'<button type="button" class="btn primary small" data-structure-open-code="'+s.rendererLine+'">Ver renderizador</button>':'')+'<button type="button" class="btn secondary small" data-structure-open-code="'+s.enumLine+'">Ir a declaración</button></div><div class="structure-explain">Los enlaces se infieren de condiciones, casos y asignaciones detectadas. Revisa el origen para confirmar rutas complejas.</div>';
     }else{
-      const screen=project.screens.find(item=>'visual:'+item.id===structureSelection)||project.screens.find(item=>item.id===project.currentScreen);
-      if(!screen){root.innerHTML='<div class="structure-empty"><strong>Sin pantalla seleccionada</strong>Añade una pantalla en Diseño para verla aquí.</div>';return;}
-      const comps=project.components.filter(item=>item.screenId===screen.id);
-      const flows=project.flows.filter(flow=>{const comp=component(flow.componentId);return comp?.screenId===screen.id||(flow.action==='navigate'&&flow.targetScreen===screen.id);});
-      const outgoing=structureVisualEdges().filter(edge=>edge.from===screen.id),incoming=structureVisualEdges().filter(edge=>edge.to===screen.id);
-      const routes=(title,list)=>'<div class="structure-detail-section"><strong>'+title+' · '+list.length+'</strong><div class="structure-detail-list">'+(list.map(edge=>{
-        const id=title==='Salidas'?edge.to:edge.from,target=project.screens.find(item=>item.id===id);
-        return '<button type="button" class="structure-detail-item" data-structure-select="visual:'+esc(id)+'"><span class="structure-detail-bullet">↗</span><span>'+esc(target?.name||id)+'</span></button>';
-      }).join('')||'<div class="structure-detail-note">No hay navegaciones explícitas entre pantallas en los flujos visuales.</div>')+'</div></div>';
-      root.innerHTML='<div class="structure-detail-kicker">Pantalla del modelo visual</div><h3>'+esc(screen.name)+'</h3><p class="structure-detail-id">'+esc(screen.id)+'</p><p class="structure-detail-note">Esta pantalla pertenece al modelo visual; los componentes se editan desde el lienzo Diseño.</p><div class="structure-detail-section"><strong>Contenido</strong><div class="structure-detail-list"><div class="structure-detail-item"><span class="structure-detail-bullet">▣</span><span>'+comps.length+' componentes asociados</span></div><div class="structure-detail-item"><span class="structure-detail-bullet">⌘</span><span>'+flows.length+' flujos relacionados</span></div></div></div>'+routes('Salidas',outgoing)+routes('Entradas',incoming)+'<div class="structure-detail-actions"><button type="button" class="btn primary small" data-structure-open-design="'+esc(screen.id)+'">Abrir en Diseño</button></div>';
+      const s=project.screens.find(x=>'visual:'+x.id===structureSelection)||project.screens.find(x=>x.id===project.currentScreen);
+      if(!s){root.innerHTML='<div class="structure-empty"><strong>Sin pantalla seleccionada</strong>Añade una pantalla desde Diseño.</div>';return;}
+      const comps=project.components.filter(c=>c.screenId===s.id),flows=project.flows.filter(f=>component(f.componentId)?.screenId===s.id||(f.action==='navigate'&&f.targetScreen===s.id));
+      const outgoing=structureVisualEdges().filter(e=>e.from===s.id),incoming=structureVisualEdges().filter(e=>e.to===s.id);
+      const routes=(title,list)=>'<div class="structure-detail-section"><strong>'+title+' · '+list.length+'</strong><div class="structure-detail-list">'+(list.map(e=>{
+        const id=title==='Salidas'?e.to:e.from,t=project.screens.find(x=>x.id===id);
+        return '<button type="button" class="structure-detail-item" data-structure-select="visual:'+esc(id)+'"><span class="structure-detail-bullet">↗</span><span>'+esc(t?.name||id)+'</span></button>';
+      }).join('')||'<div class="structure-detail-note">No hay navegación explícita entre pantallas.</div>')+'</div></div>';
+      root.innerHTML='<div class="structure-detail-kicker">Pantalla del modelo visual</div><h3>'+esc(s.name)+'</h3><p class="structure-detail-id">'+esc(s.id)+'</p><p class="structure-detail-note">Los componentes de esta pantalla se pueden editar en el lienzo Diseño.</p><div class="structure-detail-section"><strong>Contenido</strong><div class="structure-detail-list"><div class="structure-detail-item"><span class="structure-detail-bullet">▣</span><span>'+comps.length+' componentes</span></div><div class="structure-detail-item"><span class="structure-detail-bullet">⌘</span><span>'+flows.length+' flujos relacionados</span></div></div></div>'+routes('Salidas',outgoing)+routes('Entradas',incoming)+'<div class="structure-detail-actions"><button type="button" class="btn primary small" data-structure-open-design="'+esc(s.id)+'">Abrir en Diseño</button></div>';
     }
-    root.querySelectorAll('[data-structure-select]').forEach(button=>button.addEventListener('click',()=>{
-      structureSelection=button.dataset.structureSelect;
-      structureScope=structureSelection.startsWith('native:')?'native':'visual';
-      renderStructure();
-    }));
-    root.querySelectorAll('[data-structure-open-code]').forEach(button=>button.addEventListener('click',()=>openStructureSource(Number(button.dataset.structureOpenCode))));
-    root.querySelectorAll('[data-structure-open-design]').forEach(button=>button.addEventListener('click',()=>{
-      selectScreen(button.dataset.structureOpenDesign);setActiveView('design');
-    }));
+    root.querySelectorAll('[data-structure-select]').forEach(btn=>btn.addEventListener('click',()=>{structureSelection=btn.dataset.structureSelect;structureScope=structureSelection.startsWith('native:')?'native':'visual';renderStructure();}));
+    root.querySelectorAll('[data-structure-open-code]').forEach(btn=>btn.addEventListener('click',()=>openStructureSource(Number(btn.dataset.structureOpenCode))));
+    root.querySelectorAll('[data-structure-open-design]').forEach(btn=>btn.addEventListener('click',()=>{selectScreen(btn.dataset.structureOpenDesign);setActiveView('design');}));
   }
   function renderStructure(){
     if(!$('#structureView'))return;
@@ -700,8 +607,8 @@
     if(!structureAnalysis||structureAnalysis.source!==source)structureAnalysis=scanNativeStructure(source);
     if(structureScope==='auto')structureScope=structureAnalysis.available?'native':'visual';
     if(structureScope==='native'&&!structureAnalysis.available)structureScope='visual';
-    const valid=structureSelection&&(structureScope==='native'?structureAnalysis.states.some(state=>'native:'+state.id===structureSelection):project.screens.some(screen=>'visual:'+screen.id===structureSelection));
-    if(!valid)structureSelection=structureScope==='native'?'native:'+structureAnalysis.states[0].id:'visual:'+project.currentScreen;
+    const isValid=structureSelection&&(structureScope==='native'?structureAnalysis.states.some(s=>'native:'+s.id===structureSelection):project.screens.some(s=>'visual:'+s.id===structureSelection));
+    if(!isValid)structureSelection=structureScope==='native'?'native:'+structureAnalysis.states[0].id:'visual:'+project.currentScreen;
     $('#structureSummary').textContent=project.screens.length+' pantallas visuales · '+structureAnalysis.states.length+' estados de código';
     $('#structureScopeNative').classList.toggle('active',structureScope==='native');
     $('#structureScopeNative').disabled=!structureAnalysis.available;
@@ -709,12 +616,10 @@
     renderStructureTree();renderStructureMap();renderStructureDetails();
   }
   function openStructureSource(line){
-    const targetLine=Math.max(1,Number(line)||1);
     setActiveView('code');
-    const editor=$('#codeEditor'),lines=(editor.value||'').split('\n');
-    const start=lines.slice(0,targetLine-1).reduce((sum,value)=>sum+value.length+1,0);
-    const end=start+(lines[targetLine-1]||'').length;
-    editor.focus();editor.setSelectionRange(start,end);editor.scrollTop=Math.max(0,(targetLine-3)*17.27);updateGutter();
+    const editor=$('#codeEditor'),target=Math.max(1,Number(line)||1),lines=(editor.value||'').split('\n');
+    const start=lines.slice(0,target-1).reduce((sum,text)=>sum+text.length+1,0),end=start+(lines[target-1]||'').length;
+    editor.focus();editor.setSelectionRange(start,end);editor.scrollTop=Math.max(0,(target-3)*17.27);updateGutter();
   }
 
   function selectScreen(id){
@@ -1166,8 +1071,8 @@
 
   // Events: drag/drop, panels, tabs, keyboard shortcuts and project operations.
   $$('.rail-item').forEach(b=>b.addEventListener('click',()=>setActivePanel(b.dataset.panel)));
-  $('.editor-tab').forEach(b=>b.addEventListener('click',()=>setActiveView(b.dataset.view)));
-  $('#structureRefreshBtn').onclick=()=>{structureAnalysis=null;renderStructure();toast('Estructura de menús y transiciones actualizada.');};$('#structureSearch').addEventListener('input',renderStructureTree);$('[data-structure-scope]').forEach(button=>button.addEventListener('click',()=>{structureScope=button.dataset.structureScope;structureSelection=null;renderStructure();}));
+  $$('.editor-tab').forEach(b=>b.addEventListener('click',()=>setActiveView(b.dataset.view)));
+  $('#structureRefreshBtn').onclick=()=>{structureAnalysis=null;renderStructure();toast('Estructura de menús y transiciones actualizada.');};$('#structureSearch').addEventListener('input',renderStructureTree);$$('[data-structure-scope]').forEach(button=>button.addEventListener('click',()=>{structureScope=button.dataset.structureScope;structureSelection=null;renderStructure();}));
   $$('.right-tab').forEach(b=>b.addEventListener('click',()=>setRightPane(b.dataset.right)));
   $$('.dock-tab').forEach(b=>b.addEventListener('click',()=>setDock(b.dataset.dock)));
   $('#newProjectBtn').onclick=newProject;$('#openProjectBtn').onclick=openProject;$('#closeProjectBtn').onclick=closeCurrentProject;$('#saveProjectBtn').onclick=saveProject;$('#exportProjectBtn').onclick=exportProject;$('#buildBtn').onclick=buildProject;$('#postBuildPackBtn').onclick=()=>packageNativeWithUltraPack(getLastPostBuildPath());$('#integrationSettingsBtn')?.addEventListener('click',openIntegrationSettings);$('#previewBtn').onclick=togglePreview;$('#addFlowBtn').onclick=()=>addFlow();$('#recheckBtn').onclick=()=>{runAnalysis();renderDiagnostics();log('Análisis estático ejecutado.');};$('#diagFilter').onchange=renderDiagnostics;
