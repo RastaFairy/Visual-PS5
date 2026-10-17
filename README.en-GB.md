@@ -4,6 +4,7 @@ A local visual IDE for Windows for interface design, project management, code in
 
 ## What's new in 1.1.6
 
+- Adds the **Structure** view to separate editable visual screens from native C++ menu states. It provides a searchable tree, transition map, detected menu labels and source-line navigation; C++ routes are static inferences and require manual verification.
 - Adds an **Structure** view that separates editable visual screens from native C++ menu states, with a searchable tree, transition map, detected menu labels and source-line navigation. C++ routes are inferred statically and may require manual verification.
 - Fixes the action buttons in the UltraPack and Presentation dialogs.
 - Native OpenGL builds for IDE-generated projects use their own `build.ps1` and local dependencies, avoiding a redundant shared-SDK setup step that can fail on WSL/DrvFS mounts without `metadata`.
