@@ -1,6 +1,12 @@
 # PS5 Homebrew Studio
 
-**Release 1.1.5 · IDE visual local para Windows.** Integra un editor visual 1920×1080, análisis de flujos, generación de código C# para SharpProspero y conversión del modelo visual a pantallas C++20 para los kits nativos OpenGL/Vulkan. Incluye un catálogo verificado por función de boilerplates, UI kits, drivers, complementos gráficos y aplicaciones comunitarias de referencia.
+**Release 1.1.6 · IDE visual local para Windows.** Integra un editor visual 1920×1080, análisis de flujos, generación de código C# para SharpProspero y conversión del modelo visual a pantallas C++20 para los kits nativos OpenGL/Vulkan. Incluye un catálogo verificado por función de boilerplates, UI kits, drivers, complementos gráficos y aplicaciones comunitarias de referencia.
+
+## Nueva vista Estructura · 1.1.6
+
+- La pestaña **Estructura** muestra por separado las pantallas editables del modelo visual y los estados de interfaz detectados en código C++.
+- Permite buscar menús, consultar el mapa de transiciones, ver etiquetas encontradas y saltar a la declaración o función de dibujo correspondiente.
+- El mapa de C++ se obtiene mediante análisis estático: las rutas inferidas deben comprobarse en el código y no convierten automáticamente un menú dibujado a mano en componentes editables.
 
 ## Corrección urgente 1.1.5
 
