@@ -1,2 +1,0 @@
-# Preserve Unix newlines for scripts executed by WSL/Linux. Windows CRLF breaks bash here-documents.
-*.sh text eol=lf
