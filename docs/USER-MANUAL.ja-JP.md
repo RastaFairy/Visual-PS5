@@ -1,17 +1,6 @@
-# ユーザーマニュアル — PS5 Homebrew Studio 1.1.7
+# ユーザーマニュアル — PS5 Homebrew Studio 1.1.5
 
-最終更新：2026年10月17日。アプリの UI は現在スペイン語です。マニュアルの翻訳は UI 自体のローカライズ完了を意味しません。
-
-## バージョン 1.1.7 の更新と検証状況
-
-- OpenGL／Vulkan の Unicode テキスト用に TrueType（`.ttf`）フォントを選択できます。プロジェクトで使われるコードポイントのアトラスを生成し、必要なグリフがない場合はビルドを停止します。テスト対象はキリル文字、ギリシャ文字、日本語、中国語、韓国語です。CJK IME と完全な RTL 文字整形は含みません。[Unicode フォントガイド](UNICODE-FONTS.en-GB.md)。
-
-- **Estructura** タブでは、編集可能なビジュアルモデルの画面とネイティブ C++ から検出した状態を分けて表示します。状態の検索、推定遷移マップ、検出したラベルの確認、宣言／描画コード行への移動ができます。静的解析では複雑な経路を見落とす場合があり、C++ で直接描画したメニューが編集可能な UI コンポーネントに変換されるわけではありません。
-
-- UltraPack と「プレゼンテーション」ダイアログのアクションボタンを修正しました。
-- IDE が生成した OpenGL プロジェクトでは、プロジェクト内の `build.ps1` とローカル依存関係を使用します。
-- ネイティブビルド画面でアプリアイコン、選択画面／起動画面の背景、音楽を指定できます。画面管理と画面ごとのレイヤー順序もサポートします。
-- メンテナーの Windows/WSL テスト環境では OpenGL ビルドと UltraPack パッケージ化が確認されています。完全な Vulkan ビルド、ATRAC9 変換、実機 PS5 での実行は未検証です。[既知の問題](../PS5-Homebrew-Studio/docs/KNOWN-ISSUES.es-ES.md)を参照してください。
+最終更新：2026年10月16日。アプリの UI は現在スペイン語です。マニュアルの翻訳は UI 自体のローカライズ完了を意味しません。
 
 ## 1. 必要環境
 
@@ -45,7 +34,19 @@
 
 IDE は実際の upstream スクリプトを実行し、ログを保存します。終了コード 0 だけでは不十分で、ネイティブタイトルには eboot.bin と sce_sys/param.json が必要です。Sony 独自 SDK は含まれず、すべてのファームウェアでの動作は保証されません。
 
-## 5. UltraPack でのパッケージ作成
+## 5. ネイティブアプリの表示リソース
+
+**プロジェクト**で `sce_sys/param.json` を持つ初期化済みタイトルを開き、**Presentación** を選択します。未選択の項目は変更されません。
+
+- **アイコン：** `sce_sys/icon0.png`（512×512 PNG）。
+
+- **選択時の背景：** `sce_sys/pic0.dds`。**起動/ロード時の背景：** `sce_sys/pic1.dds`。それぞれ 3840×2160 の DDS BC7/DX10 に変換され、別々の画像を使えます。まだ両方ない場合は初回に2枚とも選択してください。DirectXTex の `texconv` が必要です（`winget install Microsoft.DirectXTex.Texconv`）。
+
+- **アプリ選択時の音楽：** `sce_sys/snd0.at9`（48 kHz、ループする ATRAC9、最大2 MiB）。互換性のある AT9 は直接指定できます。MP3/WAV/OGG/M4A の変換には FFmpeg と、適法に入手した互換 ATRAC9 エンコーダーが必要です。IDE はエンコーダーを配布・ダウンロードしません。
+
+上流の `tools/prepare-assets.ps1` が適用前に形式を検証します。これらは個別アプリの表示リソースであり、PS5 全体の壁紙や起動音は変更しません。システムテーマは別プロジェクトの [ps5-theme](https://github.com/Blaze414/ps5-theme) を参照してください。
+
+## 6. UltraPack でのパッケージ作成
 
 1. 「ツール」で Python 3.10 以降と UltraPack の backend/cli.py を設定します。
 2. 設定を保存します。パスはローカルの .runtime/integrations.json に記録されます。
@@ -56,12 +57,24 @@ IDE は実際の upstream スクリプトを実行し、ログを保存します
 
 出力は packages-ultrapack 内に形式とタイムスタンプごとに保存されます。処理はバックグラウンドで動くため、エディターは応答を続けます。メンテナーによれば、生成された .ffpfsc イメージは実機で正常に動作しました。これは特定のテスト結果であり、すべてのタイトルやファームウェアを保証しません。
 
-## 6. テストとトラブルシューティング
+## 7. テストとトラブルシューティング
 
 Node.js をインストールし、アプリフォルダーで node --check app.js、node --check runtime/native-generator.js、node runtime/test-native-generator.js を実行します。JavaScript の構文とジェネレーターケースを確認しますが、PS5 ツールチェーン全体のビルドや実機テストの代わりにはなりません。
 
 サーバーが起動しない場合はエラー全文を保存し、PowerShell と権限を確認します。ビルドに失敗した場合はバックエンド、upstream のバージョン/コミット、全ログと終了コードを記録します。UltraPack では Python/cli.py、eboot.bin、sce_sys/param.json、出力先の権限を確認します。秘密情報を共有しないでください。
 
-## 7. ライセンスと制限
+
+### WSL エラー：.git/config.lock の chmod に失敗する
+
+ログに `chmod on /mnt/d/.../.git/config.lock failed: Operation not permitted` または `could not set 'core.filemode' to 'false'` が出る場合、WSL が `metadata` オプションなしで Windows ドライブをマウントしています。IDE は SDK のビルド前にこの状態を検出し、修正手順を表示します。
+
+WSL ディストリビューションを開き、IDE に同梱されたスクリプトを実行してください（実際のインストール先に合わせてパスを変更します）。
+
+```bash
+sudo bash /mnt/d/PS5-Homebrew-Studio/runtime/fix-wsl-permissions.sh
+```
+
+スクリプトは `/etc/wsl.conf` のバックアップを作成し、ほかの設定を残したまま `[automount] options` を更新します。WSL を終了し、Windows PowerShell で `wsl --shutdown` を実行してからディストリビューションを再起動し、再ビルドしてください。このコマンドは実行中のすべての WSL ディストリビューションを停止するため、先に作業を保存します。Git や IDE を管理者として実行しないでください。[WSL 権限ガイド](WSL_PERMISSIONS.md) と [Microsoft の資料](https://learn.microsoft.com/windows/wsl/file-permissions)も参照してください。
+## 8. ライセンスと制限
 
 SDK、ドライバー、テンプレート、UI キットには個別のライセンスがあります。公開前に LICENSE、COPYING、NOTICE と再配布条件を確認してください。Visual-PS5 は Sony 公式 SDK ではなく、ファームウェア、キー、ゲーム、BIOS を含まず、タイトルを自動インストールしません。プレビューは PS5 エミュレーターではなく、実行時、音声、入力、永続化を検証しません。

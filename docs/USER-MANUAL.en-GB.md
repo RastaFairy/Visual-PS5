@@ -1,17 +1,6 @@
-# User Manual — PS5 Homebrew Studio 1.1.7
+# User Manual — PS5 Homebrew Studio 1.1.5
 
-Last updated: 17 October 2026. The application interface is still in Spanish. Localised manuals do not mean that the UI itself has been translated.
-
-## Version 1.1.7 updates and validation
-
-- Adds selectable TrueType (`.ttf`) fonts for Unicode text in OpenGL and Vulkan. The IDE bakes atlases for codepoints used in the project and stops the build if a required glyph is absent. Tests cover Cyrillic, Greek, Japanese, Chinese and Korean; CJK IME and full RTL shaping are not included. [Unicode font guide](UNICODE-FONTS.en-GB.md).
-
-- The **Estructura** tab separates editable visual-model screens from states detected in native C++. It provides search, an inferred transition map, detected labels and jumps to declaration/rendering lines. Static analysis can miss complex routes; hand-drawn C++ menus do not become editable visual components.
-
-- Fixed the action-button selector in the UltraPack and Presentation dialogs.
-- Native OpenGL builds for IDE-generated visual projects now run the project's own `build.ps1` and reuse its local SDK/dependencies.
-- The native build dialog accepts app icon, selection/launch backgrounds and music; screen management and per-screen layer ordering are available in the visual editor.
-- The maintainer confirms OpenGL compilation and UltraPack packaging in the Windows/WSL test environment. Full Vulkan builds, ATRAC9 conversion and execution on physical PS5 hardware remain unverified. See [known issues](../PS5-Homebrew-Studio/docs/KNOWN-ISSUES.es-ES.md).
+Last updated: 16 October 2026. The application interface is still in Spanish. Localised manuals do not mean that the UI itself has been translated.
 
 ## 1. Requirements
 
@@ -45,7 +34,17 @@ Create a project, choose its backend before preparing dependencies, add componen
 
 The IDE runs real upstream scripts and preserves build logs. Exit code zero alone is not sufficient: native-title packaging requires eboot.bin and sce_sys/param.json. The IDE does not distribute Sony proprietary SDKs and does not guarantee universal firmware compatibility.
 
-## 5. Packaging with UltraPack
+## 5. Native app presentation assets
+
+In **Projects**, choose an initialized title and select **Presentación**. Only selected fields are replaced; blank fields remain unchanged. The operation updates the project source `sce_sys` files for the next build.
+
+- **Icon:** converted to `sce_sys/icon0.png`, 512×512 PNG.
+- **Selection and launch backgrounds:** the selection image produces `pic0.dds` and the launch image `pic1.dds`, each 3840×2160 BC7/DX10. They may differ; if neither exists, select both. DirectXTex `texconv` is required (`winget install Microsoft.DirectXTex.Texconv`); renaming a PNG to `.dds` is not valid conversion.
+- **Selection music:** produces `sce_sys/snd0.at9`, looped 48 kHz ATRAC9 no larger than 2 MiB. An already compatible AT9 can be supplied directly. Converting WAV/MP3/OGG/M4A requires FFmpeg and a compatible, legally obtained ATRAC9 encoder (`ps4_at9tool.exe`). The IDE does not download or redistribute the encoder.
+
+The upstream `tools/prepare-assets.ps1` script validates dimensions and formats. If conversion fails, inspect the output and install the missing tools; incomplete files are not applied. These assets affect the selected app only, not the system-wide home background or console startup sound. The separate [ps5-theme project](https://github.com/Blaze414/ps5-theme) is a plugin/payload for jailbroken PS5 systems and documents firmware support up to 13.60; it is not part of this asset editor.
+
+## 6. Packaging with UltraPack
 
 1. Open Tools and configure Python 3.10+ and the UltraPack backend/cli.py file.
 2. Save settings. Paths are stored locally in .runtime/integrations.json.
@@ -56,12 +55,24 @@ The IDE runs real upstream scripts and preserves build logs. Exit code zero alon
 
 Outputs are stored under packages-ultrapack, grouped by format and timestamp. Packaging runs in the background so the editor remains responsive. The maintainer has reported a generated .ffpfsc image successfully tested on real hardware; that does not guarantee every title, firmware or backend.
 
-## 6. Tests and troubleshooting
+## 7. Tests and troubleshooting
 
 With Node.js installed, run node --check app.js, node --check runtime/native-generator.js and node runtime/test-native-generator.js from the PS5-Homebrew-Studio folder. These tests check JavaScript syntax and generator cases; they do not replace a complete PS5 toolchain build or a console test.
 
 If the server fails to start, keep the full error and check PowerShell and permissions. For build failures, record the backend, upstream versions and commits, full output and exit code. If UltraPack fails, check Python and cli.py paths, eboot.bin, sce_sys/param.json and output permissions. Never share tokens, keys, protected files or logs containing secrets.
 
-## 7. Licensing and scope
+
+### WSL error: chmod on .git/config.lock
+
+If the log contains `chmod on /mnt/d/.../.git/config.lock failed: Operation not permitted` or `could not set 'core.filemode' to 'false'`, WSL has mounted a Windows drive without the `metadata` option. The IDE detects this before the SDK build and shows the repair steps.
+
+Open the WSL distribution and run the helper shipped with the IDE (adjust the path to the actual installation):
+
+```bash
+sudo bash /mnt/d/PS5-Homebrew-Studio/runtime/fix-wsl-permissions.sh
+```
+
+The script backs up `/etc/wsl.conf` and updates `[automount] options` without discarding other settings. Close WSL, run `wsl --shutdown` from Windows PowerShell, start the distribution again, and retry the build. This stops all running WSL distributions, so save work first. Do not run Git or the IDE as administrator. See the [detailed WSL permissions guide](WSL_PERMISSIONS.md) and [Microsoft's documentation](https://learn.microsoft.com/windows/wsl/file-permissions).
+## 8. Licensing and scope
 
 SDKs, drivers, templates and UI kits retain their own licences. Review LICENSE, COPYING, NOTICE and redistribution requirements before publishing a binary. Visual-PS5 is not an official Sony SDK, includes no firmware, keys, games or BIOS, and does not automatically install titles on a console. The editor preview is not a PS5 emulator and does not validate runtime, audio, input or persistence.

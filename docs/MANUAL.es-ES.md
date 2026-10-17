@@ -1,17 +1,6 @@
-# Manual de usuario — PS5 Homebrew Studio 1.1.7
+# Manual de usuario — PS5 Homebrew Studio 1.1.5
 
-Última actualización: 17 de octubre de 2026. La interfaz de la aplicación continúa en español; estos manuales localizados no significan que la UI ya se haya traducido.
-
-## Novedades y validación de 1.1.7
-
-- Añade la selección de una fuente TrueType (`.ttf`) para compilar texto Unicode en OpenGL y Vulkan. El IDE hornea atlas con los caracteres usados por el proyecto y detiene el build si falta un glifo requerido. Incluye cobertura de prueba para cirílico, griego, japonés, chino y coreano; no añade IME CJK ni shaping RTL completo. [Guía de fuentes Unicode](UNICODE-FUENTES.es-ES.md).
-
-- La pestaña **Estructura** separa las pantallas editables del modelo visual de los estados detectados en C++ nativo. Permite buscar estados, consultar el mapa de transiciones, ver etiquetas detectadas y saltar a las líneas de declaración o renderizado. Las rutas C++ se infieren estáticamente, pueden faltar transiciones complejas y no convierten un menú dibujado a mano en componentes editables.
-
-- Los botones de acción de UltraPack y Presentación ya no fallan por el selector del diálogo.
-- La compilación OpenGL de proyectos visuales generados por el IDE ejecuta el `build.ps1` local y reutiliza el SDK/dependencias del propio proyecto.
-- El diálogo de compilación nativa permite seleccionar icono, fondos de selección/lanzamiento y música. El gestor de pantallas y la jerarquía permiten organizar menús y capas.
-- El mantenedor ha confirmado la compilación OpenGL y el empaquetado UltraPack en Windows/WSL. Vulkan completo, conversión ATRAC9 y ejecución en hardware PS5 no están verificados. Consulta [problemas conocidos](../PS5-Homebrew-Studio/docs/KNOWN-ISSUES.es-ES.md).
+Última actualización: 16 de octubre de 2026. La interfaz de la aplicación continúa en español; estos manuales localizados no significan que la UI ya se haya traducido.
 
 ## 1. Requisitos
 
@@ -45,7 +34,25 @@ Crea el proyecto, elige el backend antes de preparar dependencias, añade compon
 
 El IDE ejecuta scripts upstream reales y conserva los logs. El código de salida cero no basta: el empaquetado de títulos nativos requiere eboot.bin y sce_sys/param.json. El IDE no distribuye SDK propietarios de Sony ni garantiza compatibilidad con todos los firmwares.
 
-## 5. Empaquetar con UltraPack
+## 5. Personalizar la presentación de una app nativa
+
+
+
+En **Proyectos** busca el título ya inicializado y pulsa **Presentación**. Selecciona solo los recursos que quieras sustituir; los campos vacíos se conservan. La acción modifica los archivos fuente `sce_sys` del proyecto para que se incorporen en la próxima compilación.
+
+
+
+- **Icono:** se convierte a `sce_sys/icon0.png`, 512×512 PNG.
+
+- **Fondos de selección y lanzamiento:** la imagen de selección produce `pic0.dds` y la de lanzamiento produce `pic1.dds`, cada una a 3840×2160, BC7/DX10. Pueden ser distintas; si todavía no existe el par, selecciona ambas durante la primera operación. Requiere `texconv` de DirectXTex (`winget install Microsoft.DirectXTex.Texconv`). No basta con renombrar un PNG a `.dds`.
+
+- **Música al seleccionar:** produce `sce_sys/snd0.at9`, ATRAC9 en bucle, 48 kHz y máximo 2 MiB. Se puede aportar un AT9 ya compatible; convertir WAV/MP3/OGG/M4A necesita FFmpeg y un codificador ATRAC9 compatible adquirido legalmente (`ps4_at9tool.exe`). El IDE no descarga ni redistribuye ese codificador.
+
+
+
+El conversor upstream `tools/prepare-assets.ps1` valida las dimensiones y los formatos. Si falla la conversión, revisa el log y las herramientas detectadas; no se aplican archivos incompletos. Estos recursos afectan al icono/fondos/música asociados a **esa aplicación**. No cambian el wallpaper global del sistema, la música de inicio de la consola ni el sonido al salir del modo reposo. Para temas globales existe el proyecto independiente [ps5-theme](https://github.com/Blaze414/ps5-theme), un plugin/payload para PS5 modificadas cuya compatibilidad publicada llega hasta firmware 13.60; no forma parte de este editor de recursos.
+
+## 6. Empaquetar con UltraPack
 
 1. Abre Herramientas y configura Python 3.10 o posterior y el archivo backend/cli.py de UltraPack.
 2. Guarda la configuración. Las rutas quedan localmente en .runtime/integrations.json.
@@ -56,12 +63,24 @@ El IDE ejecuta scripts upstream reales y conserva los logs. El código de salida
 
 Las salidas se guardan bajo packages-ultrapack por formato y fecha/hora. Cada empaquetado se ejecuta en segundo plano para mantener operativo el editor. El mantenedor ha informado de una imagen .ffpfsc generada y probada correctamente en hardware real; esto no garantiza cualquier título, firmware o backend.
 
-## 6. Pruebas y diagnóstico
+## 7. Pruebas y diagnóstico
 
 Con Node.js instalado, ejecuta desde la carpeta PS5-Homebrew-Studio: node --check app.js, node --check runtime/native-generator.js y node runtime/test-native-generator.js. Estas pruebas revisan sintaxis JavaScript y casos del generador; no sustituyen la compilación con la toolchain completa de PS5 ni una prueba en consola.
 
 Si el servidor no arranca, conserva el error completo y comprueba PowerShell y los permisos. Si falla el build, registra backend, versiones y commits upstream, salida íntegra y código de salida. Si falla UltraPack, revisa las rutas de Python y cli.py, la presencia de eboot.bin y sce_sys/param.json y los permisos del destino. No compartas tokens, claves, ficheros protegidos ni logs con secretos.
 
-## 7. Licencias y alcance
+
+### Error WSL: chmod sobre .git/config.lock
+
+Si el registro muestra `chmod on /mnt/d/.../.git/config.lock failed: Operation not permitted` o `could not set 'core.filemode' to 'false'`, WSL está montando una unidad de Windows sin la opción `metadata`. El IDE detecta esa condición antes de compilar y proporciona las instrucciones.
+
+Abre la distribución WSL y ejecuta el script que incluye el IDE (ajusta la ruta a su ubicación real):
+
+```bash
+sudo bash /mnt/d/PS5-Homebrew-Studio/runtime/fix-wsl-permissions.sh
+```
+
+El script respalda `/etc/wsl.conf` y actualiza `[automount] options` sin sobrescribir las demás opciones. Después cierra WSL y ejecuta desde PowerShell de Windows `wsl --shutdown`; inicia de nuevo la distribución y vuelve a compilar. El comando detiene todas las distribuciones WSL activas, así que guarda primero tu trabajo. No ejecutes Git ni el IDE como administrador. Consulta [la guía detallada de permisos WSL](WSL_PERMISSIONS.md) y la [documentación de Microsoft](https://learn.microsoft.com/windows/wsl/file-permissions).
+## 8. Licencias y alcance
 
 Los SDK, drivers, plantillas y kits conservan sus licencias propias. Revisa LICENSE, COPYING, NOTICE y las condiciones de redistribución antes de publicar un binario. Visual-PS5 no es un SDK oficial de Sony, no incluye firmware, claves, juegos ni BIOS y no instala automáticamente títulos en la consola. La vista previa no es un emulador de PS5 ni valida runtime, audio, entrada o persistencia.
