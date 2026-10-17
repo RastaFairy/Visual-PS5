@@ -4,7 +4,7 @@
   const MAX_FONT_BYTES = 20 * 1024 * 1024;
   const MAX_CODEPOINTS = 2500;
   const SKIP_KEYS = new Set(['dataUrl', 'base64', 'fileName', 'mime', 'id', 'assetId', 'assetPath', 'path', 'titleId', 'backend', 'format', 'formatVersion']);
-  const BUILTIN_TEXT = 'Listo cruceta para navegar X para activar Teclado de pantalla Escribe con la cruceta y confirma las teclas Espacio Borrar Limpiar Aceptar Cancelar Confirmar seleccionar Atrás para guardar Edición cancelada valor actualizado Opción · ¿¡áéíóúÁÉÍÓÚñÑüÜ€…';
+  const BUILTIN_TEXT = 'Listo cruceta para navegar X para activar Teclado de pantalla Escribe con la cruceta y confirma las teclas Espacio Borrar Limpiar Aceptar Cancelar Confirmar seleccionar Atrás para guardar Edición cancelada valor actualizado Opción · ¿¡áéíóúÁÉÍÓÚñÑüÜ€…‹›';
 
   function collectCodepoints(project) {
     const points = new Set();
