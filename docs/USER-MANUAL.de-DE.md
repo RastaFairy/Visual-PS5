@@ -1,8 +1,10 @@
-# Benutzerhandbuch — PS5 Homebrew Studio 1.1.5
+# Benutzerhandbuch — PS5 Homebrew Studio 1.1.6
 
 Letzte Aktualisierung: 17. Oktober 2026. Die Anwendungsoberfläche ist weiterhin auf Spanisch. Das übersetzte Handbuch bedeutet nicht, dass die UI bereits lokalisiert ist.
 
-## Neuerungen und Prüfstatus in Version 1.1.5
+## Neuerungen und Prüfstatus in Version 1.1.6
+
+- Die Registerkarte **Estructura** trennt bearbeitbare Bildschirme des visuellen Modells von Zuständen, die im nativen C++ erkannt werden. Sie bietet Suche, eine abgeleitete Übergangskarte, erkannte Beschriftungen und Sprünge zu Deklarations- und Renderzeilen. Die statische Analyse kann komplexe Pfade übersehen; manuell gezeichnete C++-Menüs werden dadurch nicht zu bearbeitbaren UI-Komponenten.
 
 - Die Aktionsschaltflächen in den Dialogen UltraPack und Präsentation wurden korrigiert.
 - Native OpenGL-Builds von IDE-generierten Projekten verwenden das lokale `build.ps1` sowie das projektspezifische SDK und die lokalen Abhängigkeiten.
