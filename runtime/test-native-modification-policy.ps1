@@ -74,6 +74,15 @@ try {
   Assert-Condition $corruptManifestDenied 'Un manifiesto corrupto debe bloquear la operación.'
   Assert-Condition ([IO.File]::ReadAllText($path) -ceq 'after') 'Un manifiesto corrupto no debe permitir modificar fuentes.'
 
+  # Source snapshots include embedded dependencies but never .git internals.
+  [IO.Directory]::CreateDirectory((Join-Path $root '.deps/hui')) | Out-Null
+  [IO.Directory]::CreateDirectory((Join-Path $root '.git/objects')) | Out-Null
+  [IO.File]::WriteAllText((Join-Path $root '.deps/hui/dependency.cpp'),'dependency',$utf8)
+  [IO.File]::WriteAllText((Join-Path $root '.git/objects/ignored'),'git',[Text.UTF8Encoding]::new($false))
+  $treeSnapshot = GetPS5HSNativeTreeHashes -ProjectRoot $root
+  Assert-Condition ($treeSnapshot.ContainsKey('.deps/hui/dependency.cpp')) 'El snapshot debe incluir dependencias embebidas, porque también pueden modificarse.'
+  Assert-Condition (!$treeSnapshot.ContainsKey('.git/objects/ignored')) 'El snapshot no debe recorrer ni auditar internals Git.'
+
   # A newly generated project must record files created by the upstream generator.
   $treeRoot = Join-Path $root 'generated-project'
   $generationConsent = [pscustomobject]@{allowExecuteUpstreamGenerationTools=$true}
