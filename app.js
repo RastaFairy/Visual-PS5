@@ -229,7 +229,7 @@
         const buttons=$$('#modalActions button');buttons.forEach(button=>button.disabled=true);
         const output=$('#presentationAssetOutput');if(output)output.textContent='Preparando recursos en una carpeta temporal y validando formatos…';
         try{
-          const payload={path:nativeProject.path,nativeModifications:window.PS5HSNativeModificationPolicy.normalize({allowExecuteUpstreamBuildTools:true})};
+          const payload={path:nativeProject.path,nativeModifications:window.PS5HSNativeModificationPolicy.normalize({allowExecuteUpstreamAssetTools:$('#presentationAllowUpstreamTools')?.checked===true})};
           if(iconFile)payload.icon=await encodePresentationFile(iconFile);
           if(selectionFile)payload.selectionBackground=await encodePresentationFile(selectionFile);
           if(launchFile)payload.launchBackground=await encodePresentationFile(launchFile);
