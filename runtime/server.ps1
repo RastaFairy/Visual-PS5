@@ -1220,7 +1220,7 @@ function BuildNativeProject([string]$ProjectPath,[bool]$CleanBeforeBuild=$false,
   if ($studioGeneratedUi) {
     if ($policy.allowOpenGlRuntimeProfile) {
       try {
-        $null = InvokePS5HSNativeModificationWithAudit -ProjectRoot $projectRoot -Backend $template -Operation 'apply-opengl-standalone-runtime-profile' -PermissionKey 'allowOpenGlRuntimeProfile' -RelativePaths @('src/app/shell.cpp','src/app/shell_render.cpp') -Policy $policy -SourceRepository ([string]$profile.repository) -Action { ApplyPS5HSStandaloneNativeUiProfile $projectRoot }
+        $null = InvokePS5HSNativeModificationWithAudit -ProjectRoot $projectRoot -Backend $template -Operation 'apply-opengl-standalone-runtime-profile' -PermissionKey 'allowOpenGlRuntimeProfile' -RelativePaths @('src/app/shell.cpp','src/app/shell_render.cpp','.ps5hs-native-runtime.json') -Policy $policy -SourceRepository ([string]$profile.repository) -Action { ApplyPS5HSStandaloneNativeUiProfile $projectRoot }
         if ($script:ActiveBuildLogPath) { WriteBuildJobLog $script:ActiveBuildLogPath 'Perfil de runtime OpenGL aplicado con autorización y auditoría SHA-256.' }
       } catch {
         return @{ok=$false;message='La compilación se detuvo porque no se pudo aplicar/verificar el perfil OpenGL autorizado.';output=$_.Exception.Message;path=$projectRoot;templateId=$template;buildStoppedBeforeCompile=$true}
@@ -1929,9 +1929,13 @@ std::span<const ConceptFactory> concept_registry() {
         $programId = [string]$vulkanAssetResult.programId
         $assetResult.manifest = [string]$vulkanAssetResult.manifest
       }
-      $runtimeRelative = 'examples/' + $programId + '/' + $programId + '.cpp'
-      $null = InvokePS5HSNativeModificationWithAudit -ProjectRoot $projectRoot -Backend $backend -Operation 'install-vulkan-texture-runtime' -PermissionKey 'allowVulkanTemplateIntegration' -RelativePaths @($runtimeRelative) -Policy $policy -SourceRepository 'mihawk-99/PS5_VulkanTemplate' -Action { InstallVulkanTextureRuntime $Body $projectRoot $programId }
-      $assetResult.runtimeSource = Join-Path (Join-Path (Join-Path $projectRoot 'examples') $programId) ($programId + '.cpp')
+      if ($assetResult.count -gt 0) {
+        $runtimeRelative = 'examples/' + $programId + '/' + $programId + '.cpp'
+        $null = InvokePS5HSNativeModificationWithAudit -ProjectRoot $projectRoot -Backend $backend -Operation 'install-vulkan-texture-runtime' -PermissionKey 'allowVulkanTemplateIntegration' -RelativePaths @($runtimeRelative) -Policy $policy -SourceRepository 'mihawk-99/PS5_VulkanTemplate' -Action { InstallVulkanTextureRuntime $Body $projectRoot $programId }
+        $assetResult.runtimeSource = Join-Path (Join-Path (Join-Path $projectRoot 'examples') $programId) ($programId + '.cpp')
+      } else {
+        WriteBuildJobLog $script:ActiveBuildLogPath 'No se ha seleccionado ninguna imagen nativa; no se inyectará el cargador de texturas Vulkan.'
+      }
     }
     $markerPath = Join-Path $projectRoot '.ps5hs-project.json'
     $null = InvokePS5HSNativeModificationWithAudit -ProjectRoot $projectRoot -Backend $backend -Operation 'write-visual-project-metadata' -PermissionKey $integrationPermissionKey -RelativePaths @('ps5hs-model.json','.ps5hs-project.json') -Policy $policy -SourceRepository 'PS5 Homebrew Studio generated metadata' -Action {
