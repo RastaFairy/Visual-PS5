@@ -5,6 +5,8 @@ const policy = require('./native-modification-policy.js');
 const defaults = policy.defaults();
 assert.equal(defaults.allowExecuteUpstreamBuildTools, false);
 assert.equal(defaults.allowExecuteUpstreamAssetTools, false);
+assert.ok(policy.entriesForBackend('opengl-ui').some(entry => entry.key === 'allowExecuteUpstreamAssetTools'));
+assert.ok(policy.entriesForBackend('vulkan-ui').some(entry => entry.key === 'allowExecuteUpstreamAssetTools'));
 assert.ok(Object.values(defaults).every(value => value === false), 'Every source-modification permission must default to false.');
 assert.deepEqual(policy.requiredForBackend('opengl-ui'), ['allowExecuteUpstreamGenerationTools','allowExecuteUpstreamBuildTools','allowOpenGlTemplateIntegration']);
 assert.deepEqual(policy.requiredForBackend('vulkan-ui'), ['allowExecuteUpstreamGenerationTools','allowExecuteUpstreamBuildTools','allowVulkanTemplateIntegration']);
