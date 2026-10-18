@@ -695,7 +695,7 @@ function UpdateNativePresentationAssets($Body) {
   $profile = GetProjectProfile $project.path
   $backend = [string]$profile.template
   if ($backend -notin @('nativecpp','hui-gl','vulkan-template')) { throw 'No se puede editar la presentación: el tipo de proyecto no tiene un perfil nativo admitido.' }
-  $policy = AssertPS5HSNativeModificationConsent -Backend $backend -Policy $Body.nativeModifications -RequirePermissionKeys @('allowExecuteUpstreamBuildTools')
+  $policy = AssertPS5HSNativeModificationConsent -Backend $backend -Policy $Body.nativeModifications -RequirePermissionKeys @('allowExecuteUpstreamAssetTools')
   $null = AssertPS5HSNativeModificationManifestWritable -ProjectRoot $project.path
   $hasIcon = $null -ne $Body.icon
   $hasSelectionBackground = $null -ne $Body.selectionBackground
@@ -810,7 +810,7 @@ function UpdateNativePresentationAssets($Body) {
     $auditAfterHashes = GetPS5HSNativeFileHashes -ProjectRoot $project.path -RelativePaths $auditRelativePaths
     $auditChangedPaths = @($auditRelativePaths | Where-Object { $auditBeforeHashes[$_] -cne $auditAfterHashes[$_] })
     if ($auditChangedPaths.Count -gt 0) {
-      $null = AddPS5HSNativeModificationRecord -ProjectRoot $project.path -Backend $backend -Operation 'update-native-presentation-assets' -PermissionKey 'allowExecuteUpstreamBuildTools' -RelativePaths $auditChangedPaths -BeforeHashes $auditBeforeHashes -Policy $policy -SourceRepository 'PS5 Native App Boilerplate · tools/prepare-assets.ps1'
+      $null = AddPS5HSNativeModificationRecord -ProjectRoot $project.path -Backend $backend -Operation 'update-native-presentation-assets' -PermissionKey 'allowExecuteUpstreamAssetTools' -RelativePaths $auditChangedPaths -BeforeHashes $auditBeforeHashes -Policy $policy -SourceRepository 'PS5 Native App Boilerplate · tools/prepare-assets.ps1'
     }
     return @{
       ok = $true
