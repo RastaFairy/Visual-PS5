@@ -135,7 +135,8 @@ function AddPS5HSNativeModificationRecord {
 
 function AssertPS5HSNativeModificationManifestWritable {
   param([Parameter(Mandatory=$true)][string]$ProjectRoot)
-  $manifestPath = Join-Path ([IO.Path]::GetFullPath($ProjectRoot)) '.ps5hs-modifications.json'
+  $root = [IO.Path]::GetFullPath($ProjectRoot)
+  $manifestPath = Join-Path $root '.ps5hs-modifications.json'
   if (Test-Path -LiteralPath $manifestPath -PathType Leaf) {
     try {
       $existing = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
@@ -143,6 +144,32 @@ function AssertPS5HSNativeModificationManifestWritable {
         throw 'Esquema/versión incompatibles.'
       }
     } catch { throw 'El manifiesto .ps5hs-modifications.json existe pero no es válido; la operación se detiene antes de tocar las fuentes.' }
+    $stream = $null
+    try {
+      $stream = [IO.File]::Open($manifestPath,[IO.FileMode]::Open,[IO.FileAccess]::Write,[IO.FileShare]::ReadWrite)
+    } catch {
+      throw 'El manifiesto de auditoría existe, pero no se puede escribir. No se modificará ningún archivo fuente.'
+    } finally {
+      if ($stream) { $stream.Dispose() }
+    }
+  } else {
+    $probeRoot = $root
+    if (!(Test-Path -LiteralPath $probeRoot -PathType Container)) {
+      $probeRoot = [IO.Path]::GetDirectoryName($root)
+    }
+    if ([string]::IsNullOrWhiteSpace($probeRoot) -or !(Test-Path -LiteralPath $probeRoot -PathType Container)) {
+      throw 'No existe una carpeta accesible donde preparar el registro de auditoría.'
+    }
+    $probePath = Join-Path $probeRoot ('.ps5hs-audit-probe-' + [guid]::NewGuid().ToString('N') + '.tmp')
+    try {
+      [IO.File]::WriteAllText($probePath,'PS5 Homebrew Studio audit preflight',[System.Text.UTF8Encoding]::new($false))
+    } catch {
+      throw 'La carpeta del proyecto no permite crear el registro de auditoría. No se modificará ningún archivo fuente.'
+    } finally {
+      if (Test-Path -LiteralPath $probePath -PathType Leaf) {
+        Remove-Item -LiteralPath $probePath -Force -ErrorAction SilentlyContinue
+      }
+    }
   }
   return $true
 }
