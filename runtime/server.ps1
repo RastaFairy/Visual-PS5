@@ -69,6 +69,7 @@ function NormalizeNativeBuildFiles([string]$ProjectRoot) {
   $allowedNames = @('Makefile','GNUmakefile','CMakeLists.txt','.gitattributes')
   $normalized = 0
   foreach ($item in (Get-ChildItem -LiteralPath $root -File -Recurse -ErrorAction Stop)) {
+    if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { continue }
     $relativePath = $item.FullName.Substring($root.TrimEnd([IO.Path]::DirectorySeparatorChar,[IO.Path]::AltDirectorySeparatorChar).Length).TrimStart([IO.Path]::DirectorySeparatorChar,[IO.Path]::AltDirectorySeparatorChar)
     if ($relativePath -match '(^|[\\/])(\.git|\.deps|\.cache|build|dist|out|obj|node_modules|\.runtime)([\\/]|$)') { continue }
     $extension = $item.Extension.ToLowerInvariant()
@@ -291,7 +292,14 @@ function CopyProjectTree([string]$Source,[string]$Destination,[bool]$IsRoot=$tru
   $alwaysExclude=@('.git','.deps','.cache','node_modules','__pycache__','.venv','.ps5hs-source.json')
   $rootExclude=@('build','dist','out','obj','.runtime')
   New-Item -ItemType Directory -Force -Path $Destination | Out-Null
+  $sourceItem = Get-Item -LiteralPath $Source -Force
+  if (($sourceItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+    throw "La carpeta fuente es un enlace o punto de reanálisis; no se copiará: $Source"
+  }
   foreach($item in (Get-ChildItem -LiteralPath $Source -Force -ErrorAction Stop)) {
+    if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+      throw "La plantilla contiene un enlace o punto de reanálisis; se cancela la copia: $($item.FullName)"
+    }
     if($alwaysExclude -contains $item.Name -or ($IsRoot -and $rootExclude -contains $item.Name)) { continue }
     $childDestination=Join-Path $Destination $item.Name
     if($item.PSIsContainer) {
