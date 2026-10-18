@@ -11,6 +11,9 @@ $script:Utf8 = [System.Text.UTF8Encoding]::new($false)
 $script:NativeRuntimeProfileScript = Join-Path $PSScriptRoot 'native-runtime.ps1'
 if (!(Test-Path -LiteralPath $script:NativeRuntimeProfileScript -PathType Leaf)) { throw 'Falta runtime/native-runtime.ps1; el IDE no se iniciará sin su perfil nativo.' }
 . $script:NativeRuntimeProfileScript
+$script:NativeModificationPolicyScript = Join-Path $PSScriptRoot 'native-modification-policy.ps1'
+if (!(Test-Path -LiteralPath $script:NativeModificationPolicyScript -PathType Leaf)) { throw 'Falta runtime/native-modification-policy.ps1; el IDE no iniciará sin el control de permisos de modificación.' }
+. $script:NativeModificationPolicyScript
 @($script:Toolchains,$script:Runtime,$script:Exports,$script:Workspace) | ForEach-Object { New-Item -ItemType Directory -Force -Path $_ | Out-Null }
 $script:Catalog = @(
   @{id='sharp';name='SharpProspero';repo='SvenGDK/SharpProspero';branch='main';folder='SharpProspero';role='Aplicaciones nativas / payload C#';license='GPL-3.0-or-later';description='SDK C# y toolchain de aplicaciones nativas, interfaz, gráficos, audio, entrada, red y payloads.'},
@@ -66,6 +69,8 @@ function NormalizeNativeBuildFiles([string]$ProjectRoot) {
   $allowedNames = @('Makefile','GNUmakefile','CMakeLists.txt','.gitattributes')
   $normalized = 0
   foreach ($item in (Get-ChildItem -LiteralPath $root -File -Recurse -ErrorAction Stop)) {
+    $relativePath = $item.FullName.Substring($root.TrimEnd([IO.Path]::DirectorySeparatorChar,[IO.Path]::AltDirectorySeparatorChar).Length).TrimStart([IO.Path]::DirectorySeparatorChar,[IO.Path]::AltDirectorySeparatorChar)
+    if ($relativePath -match '(^|[\\/])(\.git|\.deps|\.cache|build|dist|out|obj|node_modules|\.runtime)([\\/]|$)') { continue }
     $extension = $item.Extension.ToLowerInvariant()
     if ($item.Name -notin $allowedNames -and $extension -notin $allowedExtensions) { continue }
     $bytes = [IO.File]::ReadAllBytes($item.FullName)
@@ -296,11 +301,13 @@ function CopyProjectTree([string]$Source,[string]$Destination,[bool]$IsRoot=$tru
     }
   }
 }
-function NewNativeTitle([string]$Name,[string]$TitleId,[string]$Category,[string]$TemplateId) {
+function NewNativeTitle([string]$Name,[string]$TitleId,[string]$Category,[string]$TemplateId,$Policy=$null) {
   if($Name -notmatch '^[A-Za-z0-9][A-Za-z0-9 ._-]{0,39}$') { return @{ok=$false;message='Nombre inválido. Usa 1–40 caracteres ASCII: letras, números, espacios, punto, guion o guion bajo.';output=''} }
   if($TitleId -notmatch '^PPSA\d{5}$') { return @{ok=$false;message='TITLE_ID inválido. Formato PPSA12345.';output=''} }
   if($Category -notin @('game','media')) { return @{ok=$false;message='Categoría inválida.';output=''} }
   if($TemplateId -notin @('nativecpp','hui-gl')) { return @{ok=$false;message='La plantilla no dispone de un generador C++ aquí.';output=''} }
+  $policy = AssertPS5HSNativeModificationConsent -Backend $TemplateId -Policy $Policy -RequirePermissionKeys @('allowExecuteUpstreamGenerationTools')
+  $null = AssertPS5HSNativeModificationManifestWritable -ProjectRoot $script:Workspace
   $entry=$script:Catalog | Where-Object id -eq $TemplateId | Select-Object -First 1
   if(!$entry) { return @{ok=$false;message='No se encontró la plantilla en el catálogo.';output=$TemplateId} }
   try { $cloneResult = InstallRepo $entry; if(!$cloneResult.ok) { return @{ok=$false;message=$cloneResult.message;output=$cloneResult.path} } }
@@ -322,28 +329,10 @@ function NewNativeTitle([string]$Name,[string]$TitleId,[string]$Category,[string
     CopyProjectTree $src $target
     $normalizedLineEndings = NormalizeNativeBuildFiles $target
 
-    # Upstream build.ps1 used to call tools/build.sh directly, bypassing Makefile
-    # defaults (src/ include paths, OpenGL SDK includes, archives and import stubs).
-    # Route the generated Windows entry point through the canonical Makefile target.
-    $buildEntrypoint = Join-Path $target 'build.ps1'
-    if (Test-Path -LiteralPath $buildEntrypoint -PathType Leaf) {
-      $buildText = [IO.File]::ReadAllText($buildEntrypoint)
-      $buildChanged = $false
-      $newLine = [Environment]::NewLine
-      $oldEnvBlock = '        "APP_STATIC_ARCHIVES",' + $newLine + '        "APP_RUNTIME_MODULES",'
-      $newEnvBlock = '        "APP_STATIC_ARCHIVES",' + $newLine + '        "APP_IMPORT_STUBS",' + $newLine + '        "APP_RUNTIME_MODULES",' + $newLine + '        "PS5_OPENGL_PREFIX",' + $newLine + '        "BUILD_JOBS",' + $newLine + '        "USE_CCACHE",'
-      if ($buildText.Contains($oldEnvBlock)) {
-        $buildText = $buildText.Replace($oldEnvBlock, $newEnvBlock)
-        $buildChanged = $true
-      }
-      $legacyBuildCall = '$arguments += @("bash", (Convert-ToWslPath $build))'
-      $makeBuildCall = '$arguments += @("make", "-C", (Convert-ToWslPath (Split-Path -Parent $MyInvocation.MyCommand.Path)), "app")'
-      if ($buildText.Contains($legacyBuildCall)) {
-        $buildText = $buildText.Replace($legacyBuildCall, $makeBuildCall)
-        $buildChanged = $true
-      }
-      if ($buildChanged) { WriteUtf8 $buildEntrypoint $buildText }
-    } elseif (!(Test-Path -LiteralPath (Join-Path $target 'Makefile') -PathType Leaf)) {
+    $normalization = NormalizeNativeBuildFilesWithAudit -ProjectRoot $target -Policy $policy -Backend $TemplateId -SourceRepository $entry.repo
+    $patchResult = ApplyPS5HSWindowsBuildEntrypointPatch -ProjectRoot $target -Policy $policy -Backend $TemplateId -SourceRepository $entry.repo
+    if ($patchResult.changed) { WriteBuildJobLog $script:ActiveBuildLogPath 'Punto de entrada build.ps1 modificado con autorización y registro SHA-256.' }
+    if (!(Test-Path -LiteralPath (Join-Path $target 'build.ps1') -PathType Leaf) -and !(Test-Path -LiteralPath (Join-Path $target 'Makefile') -PathType Leaf)) {
       throw 'La plantilla no contiene build.ps1 ni Makefile; no se puede asignar un perfil de compilación seguro.'
     }
     $initializer=Join-Path $target 'tools/init-project.sh'
@@ -373,10 +362,11 @@ function NewNativeTitle([string]$Name,[string]$TitleId,[string]$Category,[string
   }
 }
 
-function NewVulkanTitle([string]$Name,[string]$TitleId,[string]$Design) {
+function NewVulkanTitle([string]$Name,[string]$TitleId,[string]$Design,$Policy=$null) {
   if($Name -notmatch '^[A-Za-z0-9][A-Za-z0-9 ._-]{0,39}$'){return @{ok=$false;message='Nombre inválido. Usa 1–40 caracteres ASCII: letras, números, espacios, punto, guion o guion bajo.';output=''}}
   if($TitleId -notmatch '^PPSA\d{5}$'){return @{ok=$false;message='TITLE_ID inválido. Formato exigido por el generador: PPSA12345.';output=''}}
   if($Design -notin @('starter','aurora','settings','store','hud')){return @{ok=$false;message='Diseño no admitido por este asistente.';output=''}}
+  $policy = AssertPS5HSNativeModificationConsent -Backend 'vulkan-template' -Policy $Policy -RequirePermissionKeys @('allowExecuteUpstreamGenerationTools')
   $entry=$script:Catalog|Where-Object id -eq 'vulkan-template'|Select-Object -First 1
   if(!$entry) { return @{ok=$false;message='No está registrada la plantilla Vulkan.';output='vulkan-template'} }
   try { $cloneResult = InstallRepo $entry; if(!$cloneResult.ok) { return @{ok=$false;message=$cloneResult.message;output=$cloneResult.path} } }
@@ -1156,7 +1146,7 @@ function InitializeNativeProjectFolder([string]$ProjectRoot,[string]$Template,[s
   return @{ok=$true;message='Proyecto inicializado con el mecanismo upstream de la plantilla.';output=$log;meta=$summary}
 }
 
-function BuildNativeProject([string]$ProjectPath,[bool]$CleanBeforeBuild=$false,[string]$RequestedTitleId='',[string]$RequestedName='') {
+function BuildNativeProject([string]$ProjectPath,[bool]$CleanBeforeBuild=$false,[string]$RequestedTitleId='',[string]$RequestedName='',$Policy=$null) {
   $workspaceRoot = [IO.Path]::GetFullPath($script:Workspace)
   $separator = [string]([IO.Path]::DirectorySeparatorChar)
   if (!$workspaceRoot.EndsWith($separator)) { $workspaceRoot += $separator }
@@ -1171,6 +1161,8 @@ function BuildNativeProject([string]$ProjectPath,[bool]$CleanBeforeBuild=$false,
   if ($template -notin @('nativecpp','hui-gl','vulkan-template')) {
     return @{ok=$false;message=('No hay un perfil de compilación de título compatible: ' + [string]$profile.typeLabel);output=[string]$profile.buildReason;path=$projectRoot;profile=$profile.typeLabel}
   }
+  $policy = AssertPS5HSNativeModificationConsent -Backend $template -Policy $Policy -RequirePermissionKeys @('allowExecuteUpstreamBuildTools')
+  if ($profile.needsInit) { $policy = AssertPS5HSNativeModificationConsent -Backend $template -Policy $policy -RequirePermissionKeys @('allowExecuteUpstreamGenerationTools','allowExecuteUpstreamBuildTools') }
   $st = GetStatus
   if (!$st.prerequisites.wsl) { return @{ok=$false;message='No hay una distribución WSL inicializada.';output='Configura WSL + Debian y completa su primer arranque.';templateId=$template} }
   if (!$st.prerequisites.wslGitPython) { return @{ok=$false;message='Faltan Git o Python 3 dentro de WSL.';output='Instala git y python3 en la distribución Linux indicada por la documentación upstream.';templateId=$template} }
@@ -1195,22 +1187,32 @@ function BuildNativeProject([string]$ProjectPath,[bool]$CleanBeforeBuild=$false,
   }
   try { $meta = Get-Content -LiteralPath $markerPath -Raw | ConvertFrom-Json }
   catch { return @{ok=$false;message='El manifiesto del proyecto no se puede leer.';output=$_.Exception.Message} }
+  if ($template -in @('nativecpp','hui-gl') -and $policy.allowWindowsBuildEntrypointPatch) {
+    try { $null = ApplyPS5HSWindowsBuildEntrypointPatch -ProjectRoot $projectRoot -Policy $policy -Backend $template -SourceRepository ([string]$profile.repository) }
+    catch { return @{ok=$false;message='No se pudo aplicar el ajuste autorizado de build.ps1.';output=$_.Exception.Message;path=$projectRoot;templateId=$template} }
+  }
   $studioGeneratedUi = $false
   if ($template -eq 'hui-gl') {
     $generatedSource = Join-Path $projectRoot 'src/concepts/ps5hs_generated.cpp'
     $studioGeneratedUi = ([bool]$meta.generatedFromStudio -or (Test-Path -LiteralPath $generatedSource -PathType Leaf))
   }
   if ($studioGeneratedUi) {
-    try {
-      $runtimeProfileResult = ApplyPS5HSStandaloneNativeUiProfile $projectRoot
-      if ($script:ActiveBuildLogPath) { WriteBuildJobLog $script:ActiveBuildLogPath 'Runtime autónomo verificado: sin reserva de L1/R1/Touchpad y con InputFrame sin filtrar.' }
-    } catch {
-      return @{ok=$false;message='La compilación se detuvo porque no se pudo verificar el runtime autónomo del título visual.';output=$_.Exception.Message;path=$projectRoot;templateId=$template;buildStoppedBeforeCompile=$true}
-    }
+    if ($policy.allowOpenGlRuntimeProfile) {
+      try {
+        $null = InvokePS5HSNativeModificationWithAudit -ProjectRoot $projectRoot -Backend $template -Operation 'apply-opengl-standalone-runtime-profile' -PermissionKey 'allowOpenGlRuntimeProfile' -RelativePaths @('src/app/shell.cpp','src/app/shell_render.cpp') -Policy $policy -SourceRepository ([string]$profile.repository) -Action { ApplyPS5HSStandaloneNativeUiProfile $projectRoot }
+        if ($script:ActiveBuildLogPath) { WriteBuildJobLog $script:ActiveBuildLogPath 'Perfil de runtime OpenGL aplicado con autorización y auditoría SHA-256.' }
+      } catch {
+        return @{ok=$false;message='La compilación se detuvo porque no se pudo aplicar/verificar el perfil OpenGL autorizado.';output=$_.Exception.Message;path=$projectRoot;templateId=$template;buildStoppedBeforeCompile=$true}
+      }
+    } elseif ($script:ActiveBuildLogPath) { WriteBuildJobLog $script:ActiveBuildLogPath 'Perfil de runtime OpenGL omitido por política: se mantiene el comportamiento upstream existente.' }
   }
-  if ($template -eq 'hui-gl') { try { EnableEuropeanFontAtlas $projectRoot } catch { return @{ok=$false;message=$_.Exception.Message;output=$_.Exception.Message;path=$projectRoot;templateId=$template} } }
-  try { $normalizedLineEndings = NormalizeNativeBuildFiles $projectRoot }
-  catch { return @{ok=$false;message='No se pudieron normalizar los finales de línea de los archivos nativos.';output=$_.Exception.Message;templateId=$template} }
+  if ($template -eq 'hui-gl' -and $policy.allowOpenGlEuropeanAtlas) {
+    try {
+      $null = InvokePS5HSNativeModificationWithAudit -ProjectRoot $projectRoot -Backend $template -Operation 'enable-opengl-european-font-atlas' -PermissionKey 'allowOpenGlEuropeanAtlas' -RelativePaths @('tools/bake-fonts.sh') -Policy $policy -SourceRepository ([string]$profile.repository) -Action { EnableEuropeanFontAtlas $projectRoot }
+    } catch { return @{ok=$false;message=$_.Exception.Message;output=$_.Exception.Message;path=$projectRoot;templateId=$template} }
+  } elseif ($template -eq 'hui-gl' -and $script:ActiveBuildLogPath) { WriteBuildJobLog $script:ActiveBuildLogPath 'Atlas tipográfico europeo omitido por política; se conserva la configuración upstream.' }
+  try { $null = NormalizeNativeBuildFilesWithAudit -ProjectRoot $projectRoot -Policy $policy -Backend $template -SourceRepository ([string]$profile.repository) }
+  catch { return @{ok=$false;message='No se pudieron normalizar los finales de línea de los archivos nativos con la política actual.';output=$_.Exception.Message;templateId=$template} }
   $scriptPath = ''
   if ($template -in @('nativecpp','hui-gl')) {
     if (!(Test-Path -LiteralPath (Join-Path $projectRoot 'Makefile') -PathType Leaf)) {
@@ -1288,8 +1290,13 @@ function BuildNativeProject([string]$ProjectPath,[bool]$CleanBeforeBuild=$false,
       if (!(Test-Path (Join-Path $vulkanDir '.git')) -or !(Test-Path (Join-Path $payloadSdkDir '.git')) -or !(Test-Path (Join-Path $mesaDir '.git'))) {
         throw 'No están disponibles los checkouts Git completos de PS5_Vulkan, PS5_PayloadSDK y PS5_Mesa.'
       }
-      $restored = EnsureVulkanBuildSupport $vulkanDir
-      if ($restored.Count -gt 0) { $dependencyLog += 'Se restauraron helpers upstream ausentes en PS5_Vulkan; detalle en .ps5hs-compatibility.json.' }
+      $helperRelativePaths = @('tools/ninja-build.sh','tools/build-host-tools.sh')
+      $missingHelpers = @($helperRelativePaths | Where-Object { !(Test-Path -LiteralPath (Join-Path $vulkanDir ($_ -replace '/', [IO.Path]::DirectorySeparatorChar)) -PathType Leaf) })
+      if ($missingHelpers.Count -gt 0) {
+        if (!$policy.allowVulkanBuildHelperRestore) { throw ('Faltan helpers de build en PS5_Vulkan (' + ($missingHelpers -join ', ') + '). No se han restaurado: autoriza «Restaurar scripts auxiliares Vulkan» y vuelve a compilar.') }
+        $restored = @(InvokePS5HSNativeModificationWithAudit -ProjectRoot $vulkanDir -Backend $template -Operation 'restore-missing-vulkan-build-helpers' -PermissionKey 'allowVulkanBuildHelperRestore' -RelativePaths $helperRelativePaths -Policy $policy -SourceRepository 'blackbearreloaded/ps5-native-app-boilerplate' -Action { EnsureVulkanBuildSupport $vulkanDir })
+        if ($restored.Count -gt 0) { $dependencyLog += 'Se restauraron helpers upstream con autorización y auditoría SHA-256; detalle en .ps5hs-compatibility.json y .ps5hs-modifications.json.' }
+      }
     }
     $projectWsl = ConvertToWslPath $projectRoot
     $wsl = CmdInfo 'wsl.exe'
@@ -1533,6 +1540,10 @@ $pathLiterals
 function PrepareNativeUnicodeFonts($Body,[string]$ProjectRoot,[string]$Backend) {
   $font = $Body.nativeFont
   if (!$font -or [string]::IsNullOrWhiteSpace([string]$font.base64)) { return @{enabled=$false;glyphCount=0} }
+  $policy = AssertPS5HSNativeModificationConsent -Backend $Backend -Policy $Body.nativeModifications -RequirePermissionKeys @('allowCustomUnicodeFont')
+  $fontModificationPaths = if ($Backend -eq 'vulkan-ui') { @('ps5/ui/setup-kit.sh','.deps/hui/tools/font-baker/bake_font.cpp','.deps/hui/tools/bake-fonts.sh') } else { @('tools/font-baker/bake_font.cpp','tools/bake-fonts.sh') }
+  $null = AssertPS5HSNativeModificationManifestWritable -ProjectRoot $ProjectRoot
+  $fontBeforeHashes = GetPS5HSNativeFileHashes -ProjectRoot $ProjectRoot -RelativePaths $fontModificationPaths
   $fileName = [IO.Path]::GetFileName([string]$font.fileName)
   if ($fileName -notmatch '\.ttf$') { throw 'La fuente personalizada debe ser TrueType (.ttf). OTF/CFF no es compatible con el horneador incluido.' }
   $encoded = [string]$font.base64
@@ -1700,7 +1711,10 @@ Backend: $Backend
 El archivo TTF y la lista de codepoints se conservan en .ps5hs-font-source/ para reconstrucción local. El IDE no concede derechos sobre la fuente; verifica su licencia antes de distribuir el título.
 "@
   WriteUtf8 (Join-Path $ProjectRoot 'PS5HS-UNICODE-FONTS.txt') $notice
-  WriteBuildJobLog $script:ActiveBuildLogPath ("Fuente Unicode personalizada horneada: " + $fileName + "; " + $points.Count + " codepoints; seis atlas SDF generados.")
+  $fontAfterHashes = GetPS5HSNativeFileHashes -ProjectRoot $ProjectRoot -RelativePaths $fontModificationPaths
+  $fontChangedPaths = @($fontModificationPaths | Where-Object { $fontBeforeHashes[$_] -cne $fontAfterHashes[$_] })
+  if ($fontChangedPaths.Count -gt 0) { $null = AddPS5HSNativeModificationRecord -ProjectRoot $ProjectRoot -Backend $Backend -Operation 'prepare-custom-unicode-font-tools' -PermissionKey 'allowCustomUnicodeFont' -RelativePaths $fontChangedPaths -BeforeHashes $fontBeforeHashes -Policy $policy }
+  WriteBuildJobLog $script:ActiveBuildLogPath ("Fuente Unicode personalizada horneada: " + $fileName + "; " + $points.Count + " codepoints; seis atlas SDF generados; herramientas modificadas registradas.")
   return @{enabled=$true;glyphCount=$points.Count;fileName=$fileName;notice='PS5HS-UNICODE-FONTS.txt'}
 }
 
@@ -1710,6 +1724,11 @@ function BuildNativeVisualProject($Body) {
   if ($backend -notin @('opengl-ui','vulkan-ui')) {
     return @{ok=$false;message='Backend nativo visual desconocido.';output=$backend}
   }
+  $requiredPermissions = @('allowExecuteUpstreamGenerationTools','allowExecuteUpstreamBuildTools')
+  if ($backend -eq 'opengl-ui') { $requiredPermissions += 'allowOpenGlTemplateIntegration' } else { $requiredPermissions += 'allowVulkanTemplateIntegration' }
+  if ($Body.nativeFont -and ![string]::IsNullOrWhiteSpace([string]$Body.nativeFont.base64)) { $requiredPermissions += 'allowCustomUnicodeFont' }
+  try { $policy = AssertPS5HSNativeModificationConsent -Backend $backend -Policy $Body.nativeModifications -RequirePermissionKeys $requiredPermissions }
+  catch { return @{ok=$false;message='Operación detenida antes de modificar el proyecto: falta consentimiento explícito.';output=$_.Exception.Message;backend=$backend;buildStoppedBeforeMutation=$true} }
   $name = [string]$Body.project.name
   $titleId = ([string]$Body.titleId).Trim().ToUpperInvariant()
   $code = [string]$Body.programCode
@@ -1754,10 +1773,10 @@ function BuildNativeVisualProject($Body) {
   }
   try {
     if ($backend -eq 'opengl-ui') {
-      $created = NewNativeTitle $name $titleId 'game' 'hui-gl'
+      $created = NewNativeTitle $name $titleId 'game' 'hui-gl' $policy
     } else {
       # A UI title is required: GeneratedScreen implements the upstream Concept contract.
-      $created = NewVulkanTitle $name $titleId 'aurora'
+      $created = NewVulkanTitle $name $titleId 'aurora' $policy
     }
     if (!$created -or !$created.ok) {
       return @{ok=$false;message=[string]$created.message;output=[string]$created.output;path=[string]$created.path;titleId=$titleId;backend=$backend}
@@ -1778,15 +1797,16 @@ function BuildNativeVisualProject($Body) {
           throw "La plantilla OpenGL no contiene el archivo requerido: $requiredPath"
         }
       }
-      $header = Get-Content -LiteralPath $headerPath -Raw
-      if ($header -notmatch 'make_ps5hs_generated') {
+      $headerOriginal = Get-Content -LiteralPath $headerPath -Raw
+      $headerUpdated = $headerOriginal
+      if ($headerUpdated -notmatch 'make_ps5hs_generated') {
         $needle = '} // namespace hui::concepts'
-        if (!$header.Contains($needle)) { throw 'No se pudo localizar el límite del namespace en concepts.hpp.' }
-        $header = $header.Replace($needle,"std::unique_ptr<app::Concept> make_ps5hs_generated(app::Context &context);`r`n`r`n$needle")
-        WriteUtf8 $headerPath $header
+        if (!$headerUpdated.Contains($needle)) { throw 'No se pudo localizar el límite del namespace en concepts.hpp.' }
+        $declaration = 'std::unique_ptr<app::Concept> make_ps5hs_generated(app::Context &context);'
+        $headerUpdated = $headerUpdated.Replace($needle,($declaration + [Environment]::NewLine + [Environment]::NewLine + $needle))
       }
       $registry = @'
-// Generated registry: exposes the Studio screen as the active UI concept.
+ // Generated registry: exposes the Studio screen as the active UI concept.
 #include "concepts/concepts.hpp"
 namespace hui::app {
 std::span<const ConceptFactory> concept_registry() {
@@ -1795,7 +1815,12 @@ std::span<const ConceptFactory> concept_registry() {
 }
 } // namespace hui::app
 '@
-      WriteUtf8 $registryPath $registry
+      $integrationPaths = @('src/concepts/concepts.hpp','src/concepts/registry.cpp','src/concepts/ps5hs_generated.cpp')
+      $null = InvokePS5HSNativeModificationWithAudit -ProjectRoot $projectRoot -Backend $backend -Operation 'integrate-opengl-generated-screen' -PermissionKey 'allowOpenGlTemplateIntegration' -RelativePaths $integrationPaths -Policy $policy -SourceRepository 'blackbearreloaded/ps5-homebrew-ui' -Action {
+        if ($headerUpdated -cne $headerOriginal) { WriteUtf8 $headerPath $headerUpdated }
+        WriteUtf8 $registryPath $registry
+        WriteUtf8 $sourcePath $code
+      }
     } else {
       $samplesPath = Join-Path $projectRoot 'ps5/src/samples.cpp'
       if (!(Test-Path $samplesPath -PathType Leaf)) { throw 'El título Vulkan generado no contiene ps5/src/samples.cpp.' }
@@ -1803,13 +1828,13 @@ std::span<const ConceptFactory> concept_registry() {
       $programMatch = [regex]::Match($samplesText,'(?s)#define PS5_SAMPLES\s*\\\s*SAMPLE\(([A-Za-z0-9_]+),')
       if (!$programMatch.Success) { throw 'No se pudo resolver la ruta del programa Vulkan desde src/samples.cpp.' }
       $programId = $programMatch.Groups[1].Value
-      $sourcePath = Join-Path $projectRoot ('examples/' + $programId + '/kit/screen.cpp')
+      $sourceRelative = 'examples/' + $programId + '/kit/screen.cpp'
+      $sourcePath = Join-Path $projectRoot ($sourceRelative.Replace('/',[IO.Path]::DirectorySeparatorChar))
       if (!(Test-Path -LiteralPath $sourcePath -PathType Leaf)) {
         throw "El generador Vulkan no dejó la pantalla del programa esperado: $sourcePath"
       }
+      $null = InvokePS5HSNativeModificationWithAudit -ProjectRoot $projectRoot -Backend $backend -Operation 'integrate-vulkan-generated-screen' -PermissionKey 'allowVulkanTemplateIntegration' -RelativePaths @($sourceRelative) -Policy $policy -SourceRepository 'mihawk-99/PS5_VulkanTemplate' -Action { WriteUtf8 $sourcePath $code }
     }
-
-    WriteUtf8 $sourcePath $code
     if ($backend -eq 'opengl-ui') {
       $projectMetaPath = Join-Path $projectRoot '.ps5hs-project.json'
       if (!(Test-Path -LiteralPath $projectMetaPath -PathType Leaf)) { throw 'No se encuentra el manifiesto del proyecto OpenGL generado.' }
@@ -1819,10 +1844,9 @@ std::span<const ConceptFactory> concept_registry() {
         throw 'El título generado no coincide con la plantilla OpenGL esperada.'
       }
       Add-Member -InputObject $projectMeta -NotePropertyName 'generatedFromStudio' -NotePropertyValue $true -Force
-      Add-Member -InputObject $projectMeta -NotePropertyName 'nativeRuntimeProfile' -NotePropertyValue 'standalone-native-ui-v1' -Force
+      if ($policy.allowOpenGlRuntimeProfile) { Add-Member -InputObject $projectMeta -NotePropertyName 'nativeRuntimeProfile' -NotePropertyValue 'standalone-native-ui-v1' -Force }
       WriteUtf8 $projectMetaPath (ConvertTo-Json -InputObject $projectMeta -Depth 10)
-      $runtimeProfileResult = ApplyPS5HSStandaloneNativeUiProfile $projectRoot
-      WriteBuildJobLog $script:ActiveBuildLogPath 'Runtime autónomo activo: la galería y su HUD están desactivados; L1/R1/Touchpad se entregan sin filtrado a la pantalla generada.'
+      if (!$policy.allowOpenGlRuntimeProfile) { WriteBuildJobLog $script:ActiveBuildLogPath 'Se conserva el comportamiento de runtime upstream: el desarrollador no autorizó desactivar el HUD/capturas de mando.' }
     }
     $assetResult = WriteNativeVisualAssets $Body $projectRoot
     $unicodeFontResult = PrepareNativeUnicodeFonts $Body $projectRoot $backend
@@ -1838,12 +1862,14 @@ std::span<const ConceptFactory> concept_registry() {
       if (!$programMatch.Success) { throw 'No se pudo resolver el identificador de programa Vulkan para el runtime de texturas.' }
       $programId = $programMatch.Groups[1].Value
       if ($assetResult.count -gt 0) {
-        $vulkanAssetResult = RegisterVulkanNativeAssets $Body $projectRoot
+        $assetIntegrationPaths = @('ps5/assets.json','ps5/licenses/PS5HS-USER-ASSETS.txt')
+        $vulkanAssetResult = InvokePS5HSNativeModificationWithAudit -ProjectRoot $projectRoot -Backend $backend -Operation 'register-vulkan-user-assets' -PermissionKey 'allowVulkanTemplateIntegration' -RelativePaths $assetIntegrationPaths -Policy $policy -SourceRepository 'mihawk-99/PS5_VulkanTemplate' -Action { RegisterVulkanNativeAssets $Body $projectRoot }
         $programId = [string]$vulkanAssetResult.programId
         $assetResult.manifest = [string]$vulkanAssetResult.manifest
       }
-      $runtimeResult = InstallVulkanTextureRuntime $Body $projectRoot $programId
-      $assetResult.runtimeSource = [string]$runtimeResult.source
+      $runtimeRelative = 'examples/' + $programId + '/' + $programId + '.cpp'
+      $null = InvokePS5HSNativeModificationWithAudit -ProjectRoot $projectRoot -Backend $backend -Operation 'install-vulkan-texture-runtime' -PermissionKey 'allowVulkanTemplateIntegration' -RelativePaths @($runtimeRelative) -Policy $policy -SourceRepository 'mihawk-99/PS5_VulkanTemplate' -Action { InstallVulkanTextureRuntime $Body $projectRoot $programId }
+      $assetResult.runtimeSource = Join-Path (Join-Path (Join-Path $projectRoot 'examples') $programId) ($programId + '.cpp')
     }
     WriteUtf8 (Join-Path $projectRoot 'ps5hs-model.json') (ConvertTo-Json -InputObject $Body.project -Depth 100)
     $markerPath = Join-Path $projectRoot '.ps5hs-project.json'
@@ -1876,7 +1902,7 @@ std::span<const ConceptFactory> concept_registry() {
       WriteBuildJobLog $script:ActiveBuildLogPath 'Recursos de presentación preparados por la herramienta upstream antes de iniciar el build.'
     }
     WriteBuildJobLog $script:ActiveBuildLogPath 'Código C++20 generado e inyectado. Preparando dependencias y compilación…'
-    $build = BuildNativeProject $projectRoot
+    $build = BuildNativeProject $projectRoot $false $titleId $name $policy
     if ($build.output) { $parts += [string]$build.output }
     $combined = $parts -join "`r`n"
     if ($build.ok) {
@@ -1933,7 +1959,7 @@ function ServeStatic($C,[string]$UrlPath) {
   $relative=[Uri]::UnescapeDataString($UrlPath.TrimStart('/'));if(!$relative){$relative='index.html'}
   if($relative.StartsWith('downloads/')){$file=[IO.Path]::GetFileName($relative.Substring(10));$p=Join-Path $script:Exports $file;if(!(Test-Path $p)){SendJson $C @{error='ZIP no encontrado'} 404;return};SendBytes $C ([IO.File]::ReadAllBytes($p)) 'application/zip';return}
   $relative=$relative.Replace('\','/').TrimStart('/')
-  $allowed=@('index.html','styles.css','app.js','runtime/native-generator.js','docs/SDK_MATRIX.md','docs/PROJECT_ECOSYSTEM.md')
+  $allowed=@('index.html','styles.css','app.js','runtime/native-generator.js','runtime/native-modification-policy.js','docs/SDK_MATRIX.md','docs/PROJECT_ECOSYSTEM.md')
   if($relative -notin $allowed){SendJson $C @{error='Ruta no disponible'} 404;return}
   $full=Join-Path $script:Root ($relative.Replace('/','\'));if(!(Test-Path $full -PathType Leaf)){SendJson $C @{error='Archivo no encontrado'} 404;return}
   $ext = [IO.Path]::GetExtension($full).ToLowerInvariant()
@@ -1957,7 +1983,7 @@ if ($args.Count -ge 2 -and [string]$args[0] -eq '--worker') {
     WriteBuildJobLog $script:ActiveBuildLogPath 'Trabajador de compilación iniciado.'
     $requestPath = Join-Path $jobDir 'request.json'
     $jobRequest = Get-Content -LiteralPath $requestPath -Raw | ConvertFrom-Json
-    if ([string]$jobRequest.action -eq 'native') { $result = BuildNativeProject ([string]$jobRequest.body.path) ([bool]$jobRequest.body.cleanBeforeBuild) ([string]$jobRequest.body.titleId) ([string]$jobRequest.body.name) }
+    if ([string]$jobRequest.action -eq 'native') { $result = BuildNativeProject ([string]$jobRequest.body.path) ([bool]$jobRequest.body.cleanBeforeBuild) ([string]$jobRequest.body.titleId) ([string]$jobRequest.body.name) $jobRequest.body.nativeModifications }
     elseif ([string]$jobRequest.action -eq 'package') { $result = PackageNativeProjectWithUltraPack $jobRequest.body }
     else { $result = BuildNativeVisualProject $jobRequest.body }
     if ($result.ok) { WriteBuildJobLog $script:ActiveBuildLogPath ('COMPLETADO: ' + [string]$result.message) }
@@ -2180,11 +2206,11 @@ while (!$script:StopServerRequested -and $listener.Server.IsBound) {
                                 '/api/template-create' {
                                     $templateId=[string]$body.templateId
                                     if($templateId -eq 'vulkan-template') {
-                                        $result = NewVulkanTitle ([string]$body.name) ([string]$body.titleId) ([string]$body.design)
+                                        $result = NewVulkanTitle ([string]$body.name) ([string]$body.titleId) ([string]$body.design) $body.nativeModifications
                                     }
                                     elseif($templateId -in @('nativecpp','hui-gl')) {
                                         $category=[string]$body.category;if(!$category){$category='game'}
-                                        $result = NewNativeTitle ([string]$body.name) ([string]$body.titleId) $category $templateId
+                                        $result = NewNativeTitle ([string]$body.name) ([string]$body.titleId) $category $templateId $body.nativeModifications
                                     }
                                     else { $result=@{ok=$false;message='Generador upstream no reconocido.';output='';templateId=$templateId} }
                                     SendJson $ctx $result
@@ -2205,7 +2231,7 @@ while (!$script:StopServerRequested -and $listener.Server.IsBound) {
                                     }
                                 }
                                 '/api/build-native' {
-                                    $result = BuildNativeProject ([string]$body.path)
+                                    $result = BuildNativeProject ([string]$body.path) ([bool]$body.cleanBeforeBuild) ([string]$body.titleId) ([string]$body.name) $body.nativeModifications
                                     SendJson $ctx $result
                                 }
                                 '/api/build-native/start' {
