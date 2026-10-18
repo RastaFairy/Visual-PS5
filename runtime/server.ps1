@@ -2099,8 +2099,15 @@ function SaveProject($P,[string]$Code) {
     }
     $nativeMarker = Join-Path $dir '.ps5hs-project.json'
     $sharpMarker = Join-Path $dir 'native/.ps5hs-sharp-project.json'
-    if ((Test-Path -LiteralPath $nativeMarker -PathType Leaf) -or (Test-Path -LiteralPath $sharpMarker -PathType Leaf)) {
-      return @{ok=$false;message='No se puede guardar el proyecto visual con este nombre porque la carpeta pertenece a un título nativo/OpenGL/Vulkan o SharpProspero. Cambia el nombre del proyecto visual para evitar alterar esos archivos.';path=$dir;name=$name;collision=$true}
+    $nativeParam = Join-Path $dir 'sce_sys/param.json'
+    $nativeMakefile = Join-Path $dir 'Makefile'
+    $nativeMainCpp = Join-Path $dir 'src/main.cpp'
+    $vulkanBuild = Join-Path $dir 'ps5/tools/build.sh'
+    $vulkanParam = Join-Path $dir 'ps5/sce_sys/param.json'
+    $looksLikeNativeTitle = ((Test-Path -LiteralPath $nativeParam -PathType Leaf) -and (Test-Path -LiteralPath $nativeMakefile -PathType Leaf)) -or
+      ((Test-Path -LiteralPath $vulkanBuild -PathType Leaf) -and (Test-Path -LiteralPath $vulkanParam -PathType Leaf))
+    if ((Test-Path -LiteralPath $nativeMarker -PathType Leaf) -or (Test-Path -LiteralPath $sharpMarker -PathType Leaf) -or $looksLikeNativeTitle) {
+      return @{ok=$false;message='No se puede guardar el proyecto visual con este nombre porque la carpeta parece pertenecer a un título nativo/OpenGL/Vulkan o SharpProspero. Cambia el nombre del proyecto visual para evitar alterar sus archivos.';path=$dir;name=$name;collision=$true}
     }
   } else {
     New-Item -ItemType Directory -Force -Path $dir | Out-Null
