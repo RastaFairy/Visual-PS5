@@ -576,6 +576,7 @@ function GetMissingProjectDependencies($Profile) {
 function GetGeneratedProjects {
   $items = @()
   foreach ($dir in (Get-ChildItem -LiteralPath $script:Workspace -Directory -ErrorAction SilentlyContinue)) {
+    if (($dir.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { continue }
     $profile = GetProjectProfile $dir.FullName
     if (!$profile.relevant) { continue }
     $artifact = ''
@@ -660,6 +661,10 @@ function ResolveNativePresentationProject([string]$RequestedPath) {
   $paramPath = Join-Path $sceSys 'param.json'
   if (!(Test-Path -LiteralPath $paramPath -PathType Leaf)) {
     throw 'Falta sce_sys/param.json. Inicializa primero el título PS5 antes de personalizar su presentación.'
+  }
+  $paramItem = Get-Item -LiteralPath $paramPath -Force
+  if (($paramItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+    throw 'No se leerá ni modificará sce_sys/param.json a través de un enlace.'
   }
   try { $null = Get-Content -LiteralPath $paramPath -Raw | ConvertFrom-Json }
   catch { throw 'sce_sys/param.json no es JSON válido; no se han cambiado recursos.' }
@@ -758,6 +763,10 @@ function UpdateNativePresentationAssets($Body) {
     $helper = Join-Path $project.path 'tools\prepare-assets.ps1'
     if (!(Test-Path -LiteralPath $helper -PathType Leaf)) {
       $helper = Join-Path $script:Toolchains 'ps5-native-app-boilerplate\tools\prepare-assets.ps1'
+    }
+    $helperItem = Get-Item -LiteralPath $helper -Force
+    if (($helperItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+      throw 'No se ejecutará tools/prepare-assets.ps1 a través de un enlace o punto de reanálisis.'
     }
     $arguments = @{ OutputDirectory = $stageDir }
     if ($iconPath) { $arguments['Icon'] = $iconPath }
