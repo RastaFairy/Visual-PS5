@@ -677,11 +677,22 @@ function WriteNativePresentationUpload($Upload, [string]$Prefix, [string]$InputD
 
 function UpdateNativePresentationAssets($Body) {
   $project = ResolveNativePresentationProject ([string]$Body.path)
+  $profile = GetProjectProfile $project.path
+  $backend = [string]$profile.template
+  if ($backend -notin @('nativecpp','hui-gl','vulkan-template')) { throw 'No se puede editar la presentación: el tipo de proyecto no tiene un perfil nativo admitido.' }
+  $policy = AssertPS5HSNativeModificationConsent -Backend $backend -Policy $Body.nativeModifications -RequirePermissionKeys @('allowExecuteUpstreamBuildTools')
+  $null = AssertPS5HSNativeModificationManifestWritable -ProjectRoot $project.path
   $hasIcon = $null -ne $Body.icon
   $hasSelectionBackground = $null -ne $Body.selectionBackground
   $hasLaunchBackground = $null -ne $Body.launchBackground
   $hasAudio = $null -ne $Body.audio
   if (!$hasIcon -and !$hasSelectionBackground -and !$hasLaunchBackground -and !$hasAudio) { throw 'Selecciona al menos un recurso para sustituir.' }
+  $auditRelativePaths = @()
+  if ($hasIcon) { $auditRelativePaths += 'sce_sys/icon0.png' }
+  if ($hasSelectionBackground) { $auditRelativePaths += @('sce_sys/pic0.dds','sce_sys/background-source.png') }
+  if ($hasLaunchBackground) { $auditRelativePaths += @('sce_sys/pic1.dds','sce_sys/launch-background-source.png') }
+  if ($hasAudio) { $auditRelativePaths += @('sce_sys/snd0.at9','sce_sys/param.json') }
+  $auditBeforeHashes = GetPS5HSNativeFileHashes -ProjectRoot $project.path -RelativePaths $auditRelativePaths
   $state = GetNativePresentationState $project.path
   if (!$state.conversionScript) {
     throw 'No se encuentra tools/prepare-assets.ps1 en el proyecto ni en la fuente Native App Boilerplate. Instala/actualiza esa fuente desde el panel SDKs e inténtalo de nuevo.'
@@ -776,6 +787,11 @@ function UpdateNativePresentationAssets($Body) {
     if ($hasSelectionBackground) { $summary += 'fondo de selección 3840×2160 BC7 DDS' }
     if ($hasLaunchBackground) { $summary += 'fondo de lanzamiento 3840×2160 BC7 DDS' }
     if ($hasAudio) { $summary += 'música de selección ATRAC9' }
+    $auditAfterHashes = GetPS5HSNativeFileHashes -ProjectRoot $project.path -RelativePaths $auditRelativePaths
+    $auditChangedPaths = @($auditRelativePaths | Where-Object { $auditBeforeHashes[$_] -cne $auditAfterHashes[$_] })
+    if ($auditChangedPaths.Count -gt 0) {
+      $null = AddPS5HSNativeModificationRecord -ProjectRoot $project.path -Backend $backend -Operation 'update-native-presentation-assets' -PermissionKey 'allowExecuteUpstreamBuildTools' -RelativePaths $auditChangedPaths -BeforeHashes $auditBeforeHashes -Policy $policy -SourceRepository 'PS5 Native App Boilerplate · tools/prepare-assets.ps1'
+    }
     return @{
       ok = $true
       message = 'Presentación actualizada: ' + ($summary -join ', ') + '.'
