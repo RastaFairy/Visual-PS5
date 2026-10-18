@@ -2164,7 +2164,7 @@ function BuildSharp($P,[string]$Code,[string]$Backend,[string]$RequestedOutput='
     return @{ok=$false;message='Backend SharpProspero no reconocido.';output=[string]$Backend}
   }
   try {
-    $policy = AssertPS5HSNativeModificationConsent -Backend 'sharp' -Policy $Policy -RequirePermissionKeys @('allowExecuteUpstreamGenerationTools','allowExecuteUpstreamBuildTools')
+    $policy = AssertPS5HSNativeModificationConsent -Backend 'sharp' -Policy $Policy -RequirePermissionKeys @('allowSharpTemplateIntegration','allowExecuteUpstreamBuildTools')
   } catch {
     return @{ok=$false;message='Compilación detenida: faltan permisos explícitos para generar el proyecto o ejecutar herramientas upstream.';output=$_.Exception.Message;buildStoppedBeforeMutation=$true;exitCode=2}
   }
@@ -2228,7 +2228,7 @@ function BuildSharp($P,[string]$Code,[string]$Backend,[string]$RequestedOutput='
 
   if (!(Test-Path -LiteralPath $native -PathType Container)) {
     try {
-      $null = InvokePS5HSNativeTreeModificationWithAudit -ProjectRoot $native -Backend 'sharp' -Operation 'copy-sharpprospero-upstream-ui-template' -PermissionKey 'allowExecuteUpstreamGenerationTools' -Policy $policy -SourceRepository 'SvenGDK/SharpProspero' -Action {
+      $null = InvokePS5HSNativeTreeModificationWithAudit -ProjectRoot $native -Backend 'sharp' -Operation 'copy-sharpprospero-upstream-ui-template' -PermissionKey 'allowSharpTemplateIntegration' -Policy $policy -SourceRepository 'SvenGDK/SharpProspero' -Action {
         CopyProjectTree $sampleRoot $native
       }
     } catch {
@@ -2243,7 +2243,7 @@ function BuildSharp($P,[string]$Code,[string]$Backend,[string]$RequestedOutput='
   }
 
   try {
-    $null = InvokePS5HSNativeTreeModificationWithAudit -ProjectRoot $native -Backend 'sharp' -Operation 'write-sharpprospero-project-source-and-metadata' -PermissionKey 'allowExecuteUpstreamGenerationTools' -Policy $policy -SourceRepository 'SvenGDK/SharpProspero' -Action {
+    $null = InvokePS5HSNativeTreeModificationWithAudit -ProjectRoot $native -Backend 'sharp' -Operation 'write-sharpprospero-project-source-and-metadata' -PermissionKey 'allowSharpTemplateIntegration' -Policy $policy -SourceRepository 'SvenGDK/SharpProspero' -Action {
       WriteProjectFiles $P $Code $native
       $raw = Get-Content -LiteralPath $csproj -Raw
       $assemblyName = '<AssemblyName>' + $slug + '</AssemblyName>'
