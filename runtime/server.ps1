@@ -1850,15 +1850,21 @@ function BuildNativeVisualProject($Body) {
     if (!$created -or !$created.ok) {
       $failurePath = [string]$created.path
       $failureOutput = [string]$created.output
+      $failedProjectPath = ''
       if ($replacementBackupPath -and (Test-Path -LiteralPath $replacementBackupPath -PathType Container)) {
-        if (!(Test-Path -LiteralPath $targetCandidate)) {
-          try { Move-Item -LiteralPath $replacementBackupPath -Destination $targetCandidate -ErrorAction Stop; $replacementBackupPath = '' } catch { }
-        }
-        if ($replacementBackupPath) {
-          $failureOutput += ( [Environment]::NewLine + 'El proyecto previo está preservado en: ' + $replacementBackupPath )
+        $restore = RestoreNativeVisualReplacement $targetCandidate $replacementBackupPath
+        $failedProjectPath = [string]$restore.failedPath
+        $replacementBackupPath = [string]$restore.backupPath
+        if ($restore.restored) {
+          $failurePath = $targetCandidate
+          $failureOutput += ([Environment]::NewLine + 'Se restauró la versión previa en su carpeta original.')
+          if ($failedProjectPath) { $failureOutput += ([Environment]::NewLine + 'La generación incompleta se conserva en: ' + $failedProjectPath) }
+        } elseif ($replacementBackupPath) {
+          $failureOutput += ([Environment]::NewLine + 'La versión previa se conserva en: ' + $replacementBackupPath)
+          if ($restore.error) { $failureOutput += ([Environment]::NewLine + [string]$restore.error) }
         }
       }
-      return @{ok=$false;message=[string]$created.message;output=$failureOutput;path=$failurePath;titleId=$titleId;backend=$backend;backupPath=$(if($replacementBackupPath){$replacementBackupPath}else{$null})}
+      return @{ok=$false;message=[string]$created.message;output=$failureOutput;path=$failurePath;failedProjectPath=$(if($failedProjectPath){$failedProjectPath}else{$null});titleId=$titleId;backend=$backend;backupPath=$(if($replacementBackupPath){$replacementBackupPath}else{$null})}
     }
 
     $projectRoot = [IO.Path]::GetFullPath([string]$created.path)
@@ -2016,17 +2022,42 @@ std::span<const ConceptFactory> concept_registry() {
       }
       return @{ok=$true;message='La pantalla visual se generó como C++20, se compiló con el pipeline upstream y se encontró un artefacto verificable.';output=$combined;path=$projectRoot;artifact=$build.artifact;titleId=$titleId;backend=$backend;templateId=$meta.template;exitCode=0;backupPath=$(if($replacementBackupPath){$replacementBackupPath}else{$null})}
     }
-    if ($replacementBackupPath) { $combined += ([Environment]::NewLine + 'El proyecto previo no se ha borrado; copia de seguridad: ' + $replacementBackupPath) }
-    return @{ok=$false;message='La pantalla C++ se ha generado, pero el pipeline upstream no produjo un artefacto verificable. El proyecto queda guardado para corregirlo y recompilarlo.';output=$combined;path=$projectRoot;titleId=$titleId;backend=$backend;templateId=$meta.template;artifact=$build.artifact;exitCode=$build.exitCode;diagnostics=$build.diagnostics;backupPath=$(if($replacementBackupPath){$replacementBackupPath}else{$null})}
+    $failedProjectPath = ''
+    $resultPath = $projectRoot
+    $failureMessage = 'La pantalla C++ se ha generado, pero el pipeline upstream no produjo un artefacto verificable.'
+    if ($replacementBackupPath -and (Test-Path -LiteralPath $replacementBackupPath -PathType Container)) {
+      $restore = RestoreNativeVisualReplacement $targetCandidate $replacementBackupPath
+      $failedProjectPath = [string]$restore.failedPath
+      $replacementBackupPath = [string]$restore.backupPath
+      if ($restore.restored) {
+        $resultPath = $targetCandidate
+        $failureMessage = 'La compilación falló. Se ha restaurado la versión anterior; el intento fallido se conserva por separado.'
+        if ($failedProjectPath) { $combined += ([Environment]::NewLine + 'Proyecto fallido preservado para diagnóstico: ' + $failedProjectPath) }
+      } else {
+        $combined += ([Environment]::NewLine + 'No se pudo restaurar la versión previa automáticamente.')
+        if ($replacementBackupPath) { $combined += ([Environment]::NewLine + 'Copia previa preservada en: ' + $replacementBackupPath) }
+        if ($restore.error) { $combined += ([Environment]::NewLine + [string]$restore.error) }
+      }
+    }
+    return @{ok=$false;message=$failureMessage;output=$combined;path=$resultPath;failedProjectPath=$(if($failedProjectPath){$failedProjectPath}else{$null});titleId=$titleId;backend=$backend;templateId=$meta.template;artifact=$build.artifact;exitCode=$build.exitCode;diagnostics=$build.diagnostics;backupPath=$(if($replacementBackupPath){$replacementBackupPath}else{$null})}
   } catch {
     $failureOutput = $_.Exception.Message + "`r`n" + [string]$created.output
+    $failedProjectPath = ''
+    $failurePath = $projectRoot
     if ($replacementBackupPath -and (Test-Path -LiteralPath $replacementBackupPath -PathType Container)) {
-      if (!(Test-Path -LiteralPath $targetCandidate)) {
-        try { Move-Item -LiteralPath $replacementBackupPath -Destination $targetCandidate -ErrorAction Stop; $replacementBackupPath = '' } catch { }
+      $restore = RestoreNativeVisualReplacement $targetCandidate $replacementBackupPath
+      $failedProjectPath = [string]$restore.failedPath
+      $replacementBackupPath = [string]$restore.backupPath
+      if ($restore.restored) {
+        $failurePath = $targetCandidate
+        $failureOutput += ([Environment]::NewLine + 'Se restauró la versión previa en su carpeta original.')
+        if ($failedProjectPath) { $failureOutput += ([Environment]::NewLine + 'El proyecto fallido se conserva en: ' + $failedProjectPath) }
+      } else {
+        if ($replacementBackupPath) { $failureOutput += ([Environment]::NewLine + 'La versión previa está preservada en: ' + $replacementBackupPath) }
+        if ($restore.error) { $failureOutput += ([Environment]::NewLine + [string]$restore.error) }
       }
-      if ($replacementBackupPath) { $failureOutput += ([Environment]::NewLine + 'El proyecto previo está preservado en: ' + $replacementBackupPath) }
     }
-    return @{ok=$false;message='No se pudo generar o compilar el proyecto visual nativo.';output=$failureOutput;path=$projectRoot;titleId=$titleId;backend=$backend;backupPath=$(if($replacementBackupPath){$replacementBackupPath}else{$null})}
+    return @{ok=$false;message='No se pudo generar o compilar el proyecto visual nativo.';output=$failureOutput;path=$failurePath;failedProjectPath=$(if($failedProjectPath){$failedProjectPath}else{$null});titleId=$titleId;backend=$backend;backupPath=$(if($replacementBackupPath){$replacementBackupPath}else{$null})}
   }
 }
 
