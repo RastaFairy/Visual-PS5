@@ -147,6 +147,50 @@ function AssertPS5HSNativeModificationManifestWritable {
   return $true
 }
 
+function GetPS5HSNativeTreeHashes {
+  param([Parameter(Mandatory=$true)][string]$ProjectRoot)
+  $root = [IO.Path]::GetFullPath($ProjectRoot)
+  $hashes = @{}
+  if (!(Test-Path -LiteralPath $root -PathType Container)) { return $hashes }
+  foreach ($item in (Get-ChildItem -LiteralPath $root -File -Recurse -Force -ErrorAction Stop)) {
+    if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { continue }
+    $relative = $item.FullName.Substring($root.TrimEnd([IO.Path]::DirectorySeparatorChar,[IO.Path]::AltDirectorySeparatorChar).Length).TrimStart([IO.Path]::DirectorySeparatorChar,[IO.Path]::AltDirectorySeparatorChar)
+    if ($relative -match '(^|[\\/])(\.git|\.deps|\.cache|build|dist|out|obj|node_modules|\.runtime)([\\/]|$)' -or $relative -ieq '.ps5hs-modifications.json') { continue }
+    $relative = $relative.Replace([IO.Path]::DirectorySeparatorChar,'/').Replace([IO.Path]::AltDirectorySeparatorChar,'/')
+    $hashes[$relative] = (Get-FileHash -LiteralPath $item.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+  }
+  return $hashes
+}
+
+function InvokePS5HSNativeTreeModificationWithAudit {
+  param(
+    [Parameter(Mandatory=$true)][string]$ProjectRoot,
+    [Parameter(Mandatory=$true)][string]$Backend,
+    [Parameter(Mandatory=$true)][string]$Operation,
+    [Parameter(Mandatory=$true)][string]$PermissionKey,
+    [Parameter(Mandatory=$true)]$Policy,
+    [Parameter(Mandatory=$true)][scriptblock]$Action,
+    [string]$SourceRepository = ''
+  )
+  $approved = AssertPS5HSNativeModificationConsent -Backend $Backend -Policy $Policy -RequirePermissionKeys @($PermissionKey)
+  $null = AssertPS5HSNativeModificationManifestWritable -ProjectRoot $ProjectRoot
+  $before = GetPS5HSNativeTreeHashes -ProjectRoot $ProjectRoot
+  $result = $null
+  try {
+    $result = & $Action
+  } finally {
+    if (Test-Path -LiteralPath $ProjectRoot -PathType Container) {
+      $after = GetPS5HSNativeTreeHashes -ProjectRoot $ProjectRoot
+      $allPaths = @(@($before.Keys) + @($after.Keys) | Select-Object -Unique)
+      $changed = @($allPaths | Where-Object { $before[$_] -cne $after[$_] })
+      if ($changed.Count -gt 0) {
+        $null = AddPS5HSNativeModificationRecord -ProjectRoot $ProjectRoot -Backend $Backend -Operation $Operation -PermissionKey $PermissionKey -RelativePaths $changed -BeforeHashes $before -Policy $approved -SourceRepository $SourceRepository
+      }
+    }
+  }
+  return $result
+}
+
 function InvokePS5HSNativeModificationWithAudit {
   param(
     [Parameter(Mandatory=$true)][string]$ProjectRoot,
