@@ -49,7 +49,14 @@ $script:Catalog = @(
   @{id='x360-ai';name='X360PS5 (asistencia IA declarada)';repo='polarco/X360PS5';branch='master';folder='X360PS5-AI-Prototype';role='Prototipo experimental Xenia/Vulkan';license='Revisar licencia y dependencias';description='Investigación asistida por Codex declarada por su README; pruebas de host, no PS5 probado y aún no carga juegos.';category='source';method='git';aiDeclared=$true}
   @{id='ps5-ultrapack';name='PS5 UltraPack';repo='knutwurst/ps5-ultrapack';branch='main';folder='ps5-ultrapack';role='Empaquetado ffpfs/ffpfsc/fPKG';license='MIT para código propio + licencias de terceros';description='CLI para convertir carpetas de título en .ffpfs/.ffpfsc/.pkg; el soporte fuera de macOS puede ser limitado.'}
 )
-function WriteUtf8([string]$Path,[string]$Content) { [IO.File]::WriteAllText($Path,$Content,$script:Utf8) }
+function WriteUtf8([string]$Path,[string]$Content) {
+  $fullPath = [IO.Path]::GetFullPath($Path)
+  $parentPath = [IO.Path]::GetDirectoryName($fullPath)
+  if (![string]::IsNullOrWhiteSpace($parentPath) -and !(Test-Path -LiteralPath $parentPath -PathType Container)) {
+    New-Item -ItemType Directory -Force -Path $parentPath | Out-Null
+  }
+  [IO.File]::WriteAllText($fullPath,$Content,$script:Utf8)
+}
 
 # Normalizes build-critical text copied from Windows checkouts before Make/WSL consumes it.
 # This preserves file bytes except CR characters used as line endings and never touches binaries.
