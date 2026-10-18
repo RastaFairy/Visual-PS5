@@ -1762,6 +1762,7 @@ function BuildNativeVisualProject($Body) {
 
   $created = $null
   $projectRoot = ''
+  $replacementBackupPath = ''
   $expectedTemplate = if ($backend -eq 'opengl-ui') { 'hui-gl' } else { 'vulkan-template' }
   $slugForTarget = Slug $name
   if ($backend -eq 'opengl-ui') {
@@ -1783,10 +1784,14 @@ function BuildNativeVisualProject($Body) {
     if ($existingMeta.schema -ne 'ps5hs-native-project' -or [string]$existingMeta.template -ne $expectedTemplate) {
       return @{ok=$false;message='No se puede sobrescribir: el destino no es un proyecto de Homebrew Studio de la misma plantilla.';output=[string]$targetCandidate;path=[string]$targetCandidate;exitCode=2}
     }
-    try { Remove-Item -LiteralPath $targetCandidate -Recurse -Force -ErrorAction Stop } catch {
-      return @{ok=$false;message='No se pudo sustituir la carpeta existente; puede estar bloqueada o no tener permisos suficientes.';output=$_.Exception.Message;path=[string]$targetCandidate;exitCode=2}
+    $replacementBackupPath = $targetCandidate + '.ps5hs-backup-' + [guid]::NewGuid().ToString('N').Substring(0,8)
+    try {
+      Move-Item -LiteralPath $targetCandidate -Destination $replacementBackupPath -ErrorAction Stop
+    } catch {
+      $replacementBackupPath = ''
+      return @{ok=$false;message='No se pudo apartar de forma segura el proyecto existente. No se ha borrado ni sobrescrito.';output=$_.Exception.Message;path=[string]$targetCandidate;exitCode=2}
     }
-    WriteBuildJobLog $script:ActiveBuildLogPath ('Se ha autorizado la sustitución del proyecto existente: ' + $targetCandidate)
+    WriteBuildJobLog $script:ActiveBuildLogPath ('Proyecto anterior preservado como copia de seguridad: ' + $replacementBackupPath)
   }
   try {
     if ($backend -eq 'opengl-ui') {
@@ -1796,7 +1801,17 @@ function BuildNativeVisualProject($Body) {
       $created = NewVulkanTitle $name $titleId 'aurora' $policy
     }
     if (!$created -or !$created.ok) {
-      return @{ok=$false;message=[string]$created.message;output=[string]$created.output;path=[string]$created.path;titleId=$titleId;backend=$backend}
+      $failurePath = [string]$created.path
+      $failureOutput = [string]$created.output
+      if ($replacementBackupPath -and (Test-Path -LiteralPath $replacementBackupPath -PathType Container)) {
+        if (!(Test-Path -LiteralPath $targetCandidate)) {
+          try { Move-Item -LiteralPath $replacementBackupPath -Destination $targetCandidate -ErrorAction Stop; $replacementBackupPath = '' } catch { }
+        }
+        if ($replacementBackupPath) {
+          $failureOutput += ( [Environment]::NewLine + 'El proyecto previo está preservado en: ' + $replacementBackupPath )
+        }
+      }
+      return @{ok=$false;message=[string]$created.message;output=$failureOutput;path=$failurePath;titleId=$titleId;backend=$backend;backupPath=$(if($replacementBackupPath){$replacementBackupPath}else{$null})}
     }
 
     $projectRoot = [IO.Path]::GetFullPath([string]$created.path)
@@ -1956,11 +1971,27 @@ std::span<const ConceptFactory> concept_registry() {
     if ($build.output) { $parts += [string]$build.output }
     $combined = $parts -join "`r`n"
     if ($build.ok) {
-      return @{ok=$true;message='La pantalla visual se generó como C++20, se compiló con el pipeline upstream y se encontró un artefacto verificable.';output=$combined;path=$projectRoot;artifact=$build.artifact;titleId=$titleId;backend=$backend;templateId=$meta.template;exitCode=0}
+      if ($replacementBackupPath -and (Test-Path -LiteralPath $replacementBackupPath -PathType Container)) {
+        try {
+          Remove-Item -LiteralPath $replacementBackupPath -Recurse -Force -ErrorAction Stop
+          $replacementBackupPath = ''
+        } catch {
+          $combined += ([Environment]::NewLine + 'La compilación terminó bien, pero no se pudo borrar la copia previa. Se conserva en: ' + $replacementBackupPath)
+        }
+      }
+      return @{ok=$true;message='La pantalla visual se generó como C++20, se compiló con el pipeline upstream y se encontró un artefacto verificable.';output=$combined;path=$projectRoot;artifact=$build.artifact;titleId=$titleId;backend=$backend;templateId=$meta.template;exitCode=0;backupPath=$(if($replacementBackupPath){$replacementBackupPath}else{$null})}
     }
-    return @{ok=$false;message='La pantalla C++ se ha generado, pero el pipeline upstream no produjo un artefacto verificable. El proyecto queda guardado para corregirlo y recompilarlo.';output=$combined;path=$projectRoot;titleId=$titleId;backend=$backend;templateId=$meta.template;artifact=$build.artifact;exitCode=$build.exitCode;diagnostics=$build.diagnostics}
+    if ($replacementBackupPath) { $combined += ([Environment]::NewLine + 'El proyecto previo no se ha borrado; copia de seguridad: ' + $replacementBackupPath) }
+    return @{ok=$false;message='La pantalla C++ se ha generado, pero el pipeline upstream no produjo un artefacto verificable. El proyecto queda guardado para corregirlo y recompilarlo.';output=$combined;path=$projectRoot;titleId=$titleId;backend=$backend;templateId=$meta.template;artifact=$build.artifact;exitCode=$build.exitCode;diagnostics=$build.diagnostics;backupPath=$(if($replacementBackupPath){$replacementBackupPath}else{$null})}
   } catch {
-    return @{ok=$false;message='No se pudo generar o compilar el proyecto visual nativo.';output=($_.Exception.Message + "`r`n" + [string]$created.output);path=$projectRoot;titleId=$titleId;backend=$backend}
+    $failureOutput = $_.Exception.Message + "`r`n" + [string]$created.output
+    if ($replacementBackupPath -and (Test-Path -LiteralPath $replacementBackupPath -PathType Container)) {
+      if (!(Test-Path -LiteralPath $targetCandidate)) {
+        try { Move-Item -LiteralPath $replacementBackupPath -Destination $targetCandidate -ErrorAction Stop; $replacementBackupPath = '' } catch { }
+      }
+      if ($replacementBackupPath) { $failureOutput += ([Environment]::NewLine + 'El proyecto previo está preservado en: ' + $replacementBackupPath) }
+    }
+    return @{ok=$false;message='No se pudo generar o compilar el proyecto visual nativo.';output=$failureOutput;path=$projectRoot;titleId=$titleId;backend=$backend;backupPath=$(if($replacementBackupPath){$replacementBackupPath}else{$null})}
   }
 }
 
