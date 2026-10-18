@@ -1342,20 +1342,25 @@ function BuildNativeProject([string]$ProjectPath,[bool]$CleanBeforeBuild=$false,
       $cleanExit = $LASTEXITCODE
       if ($cleanExit -ne 0) { throw ('Falló make clean antes de build.ps1 (código ' + $cleanExit + '): ' + (($cleanOutput | ForEach-Object { [string]$_ }) -join "`r`n")) }
     }
-    $studioOutput = @()
-    $studioExit = 1
-    Push-Location -LiteralPath $projectRoot
-    try {
-      $studioOutput = @(& $shell.path -NoLogo -NoProfile -ExecutionPolicy Bypass -File $studioBuildScript 2>&1 | ForEach-Object {
-        $line = $_.ToString()
-        WriteBuildJobLog $script:ActiveBuildLogPath $line
-        $line
-      })
-      $studioExit = $LASTEXITCODE
-    } catch {
-      $studioOutput += [string]$_.Exception.Message
-      $studioExit = 1
-    } finally { Pop-Location }
+    $studioInvocation = InvokePS5HSNativeTreeModificationWithAudit -ProjectRoot $projectRoot -Backend $template -Operation 'execute-native-upstream-build-script' -PermissionKey 'allowExecuteUpstreamBuildTools' -Policy $policy -SourceRepository ([string]$profile.repository) -Action {
+      $capturedOutput = @()
+      $capturedExit = 1
+      Push-Location -LiteralPath $projectRoot
+      try {
+        $capturedOutput = @(& $shell.path -NoLogo -NoProfile -ExecutionPolicy Bypass -File $studioBuildScript 2>&1 | ForEach-Object {
+          $line = $_.ToString()
+          WriteBuildJobLog $script:ActiveBuildLogPath $line
+          $line
+        })
+        $capturedExit = $LASTEXITCODE
+      } catch {
+        $capturedOutput += [string]$_.Exception.Message
+        $capturedExit = 1
+      } finally { Pop-Location }
+      return @{output=@($capturedOutput | ForEach-Object { [string]$_ });exitCode=[int]$capturedExit}
+    }
+    $studioOutput = @($studioInvocation.output)
+    $studioExit = [int]$studioInvocation.exitCode
     $studioLog = ($studioOutput | ForEach-Object { [string]$_ }) -join "`r`n"
     $artifact = ''
     $eboots = @(GetProjectEbootFolders $projectRoot)
@@ -1466,12 +1471,17 @@ function BuildNativeProject([string]$ProjectPath,[bool]$CleanBeforeBuild=$false,
     # Preserve the last usable title if a rebuild fails. A successful build is accepted only
     # when the pipeline exits zero and an eboot.bin plus title metadata can be verified.
     WriteBuildJobLog $script:ActiveBuildLogPath 'Ejecutando el pipeline real de WSL/Make/CMake/Ninja. La salida se transmite al registro mientras avanza.'
-    $output = @(& $wsl.path -d $dist --exec bash -lc $cmd 2>&1 | ForEach-Object {
-      $line = $_.ToString()
-      WriteBuildJobLog $script:ActiveBuildLogPath $line
-      $line
-    })
-    $exit = $LASTEXITCODE
+    $buildInvocation = InvokePS5HSNativeTreeModificationWithAudit -ProjectRoot $projectRoot -Backend $template -Operation 'execute-native-upstream-build-pipeline' -PermissionKey 'allowExecuteUpstreamBuildTools' -Policy $policy -SourceRepository ([string]$profile.repository) -Action {
+      $capturedOutput = @(& $wsl.path -d $dist --exec bash -lc $cmd 2>&1 | ForEach-Object {
+        $line = $_.ToString()
+        WriteBuildJobLog $script:ActiveBuildLogPath $line
+        $line
+      })
+      $capturedExit = $LASTEXITCODE
+      return @{output=@($capturedOutput | ForEach-Object { $_.ToString() });exitCode=[int]$capturedExit}
+    }
+    $output = @($buildInvocation.output)
+    $exit = [int]$buildInvocation.exitCode
     $buildLog = ($output | ForEach-Object { $_.ToString() }) -join "`r`n"
     if ($dependencyLog.Count) { $buildLog = (($dependencyLog -join "`r`n") + "`r`n" + $buildLog) }
     $artifact = ''
