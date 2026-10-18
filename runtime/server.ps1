@@ -148,7 +148,7 @@ function WriteProjectFiles($P,[string]$Code,[string]$Dir) {
     $name=[IO.Path]::GetFileName([string]$a.fileName);if(!$name){continue}
     if($a.dataUrl -match '^data:[^;]+;base64,(.*)$'){
       try{[IO.File]::WriteAllBytes((Join-Path $assets $name),[Convert]::FromBase64String($Matches[1]))}
-      catch{Write-Host ('[WARN] Recurso omitido por base64 inválido: '+$name) -ForegroundColor Yellow}
+      catch{throw ('No se pudo guardar el recurso ' + $name + ': ' + $_.Exception.Message)}
     }
   }
 }
@@ -1757,6 +1757,28 @@ El archivo TTF y la lista de codepoints se conservan en .ps5hs-font-source/ para
   WriteUtf8 (Join-Path $ProjectRoot 'PS5HS-UNICODE-FONTS.txt') $notice
   WriteBuildJobLog $script:ActiveBuildLogPath ("Fuente Unicode personalizada horneada: " + $fileName + "; " + $points.Count + " codepoints; seis atlas SDF generados; la auditoría se registra al finalizar.")
   return @{enabled=$true;glyphCount=$points.Count;fileName=$fileName;notice='PS5HS-UNICODE-FONTS.txt'}
+}
+
+function RestoreNativeVisualReplacement([string]$TargetPath,[string]$BackupPath) {
+  if ([string]::IsNullOrWhiteSpace($BackupPath) -or !(Test-Path -LiteralPath $BackupPath -PathType Container)) {
+    return @{restored=$false;failedPath='';backupPath=$BackupPath;error='No se encuentra la copia de seguridad.'}
+  }
+  $failedPath = ''
+  if (Test-Path -LiteralPath $TargetPath) {
+    $failedPath = $TargetPath + '.ps5hs-failed-' + [guid]::NewGuid().ToString('N').Substring(0,8)
+    try { Move-Item -LiteralPath $TargetPath -Destination $failedPath -ErrorAction Stop }
+    catch { return @{restored=$false;failedPath='';backupPath=$BackupPath;error=('No se pudo apartar el intento fallido: ' + $_.Exception.Message)} }
+  }
+  try {
+    Move-Item -LiteralPath $BackupPath -Destination $TargetPath -ErrorAction Stop
+    return @{restored=$true;failedPath=$failedPath;backupPath='';error=''}
+  } catch {
+    $restoreError = $_.Exception.Message
+    if ($failedPath -and (Test-Path -LiteralPath $failedPath -PathType Container) -and !(Test-Path -LiteralPath $TargetPath)) {
+      try { Move-Item -LiteralPath $failedPath -Destination $TargetPath -ErrorAction Stop; $failedPath = '' } catch { }
+    }
+    return @{restored=$false;failedPath=$failedPath;backupPath=$BackupPath;error=('No se pudo restaurar la copia previa: ' + $restoreError)}
+  }
 }
 
 function BuildNativeVisualProject($Body) {
