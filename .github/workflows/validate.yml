@@ -28,6 +28,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           node --check runtime/unicode-fonts.js
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node --check runtime/native-modification-policy.js
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Run JavaScript regression tests
         shell: pwsh
         run: |
@@ -36,7 +38,8 @@ jobs:
             'runtime/test-native-generator.js',
             'runtime/test-structure-explorer.js',
             'runtime/test-unicode-fonts.js',
-            'runtime/test-unicode-integration.js'
+            'runtime/test-unicode-integration.js',
+            'runtime/test-native-modification-policy.js'
           )
           foreach ($test in $tests) {
             Write-Host "Running $test"
@@ -50,7 +53,9 @@ jobs:
             'runtime/server.ps1',
             'runtime/native-runtime.ps1',
             'runtime/check-syntax.ps1',
-            'runtime/test-native-runtime.ps1'
+            'runtime/test-native-runtime.ps1',
+            'runtime/native-modification-policy.ps1',
+            'runtime/test-native-modification-policy.ps1'
           )
           foreach ($path in $paths) {
             $tokens = $null
@@ -65,6 +70,9 @@ jobs:
       - name: Test isolated native UI runtime profile
         shell: pwsh
         run: ./runtime/test-native-runtime.ps1
+      - name: Test native modification permissions and audit trail
+        shell: pwsh
+        run: ./runtime/test-native-modification-policy.ps1
       - name: Package versioned source ZIP
         shell: pwsh
         run: git archive --format=zip --prefix=PS5-Homebrew-Studio/ --output=PS5-Homebrew-Studio-v1.1.10.zip HEAD
