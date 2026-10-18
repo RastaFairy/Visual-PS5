@@ -214,12 +214,14 @@
       '<div class="form-field"><label>Música al seleccionar la app · AT9/MP3/WAV/OGG/M4A/AAC/FLAC</label><input id="presentationAudioFile" type="file" accept=".at9,.mp3,.wav,.ogg,.m4a,.aac,.flac,audio/*"><small>El resultado es <code>snd0.at9</code> (ATRAC9, 48 kHz, en bucle y máximo 2 MiB). La conversión de audio convencional necesita FFmpeg y un codificador ATRAC9 compatible.</small></div>'+
       '<div class="presentation-section-title">Herramientas detectadas</div><div class="presentation-tool-grid">'+presentationToolRows(state)+'</div>'+
       '<p class="section-note">La conversión de imágenes necesita DirectXTex texconv. Se acepta un archivo AT9 ya codificado sin instalar el codificador. Los fondos y la música de aquí son específicos de esta app; no cambian el tema global ni el sonido de encendido de la consola.</p>'+
+      '<section class="native-modification-policy"><h3>Permiso para esta operación</h3><p>El cambio ejecuta la herramienta local/upstream <code>tools/prepare-assets.ps1</code> y sustituye exclusivamente los archivos de presentación elegidos. El servidor verificará el permiso y registrará hashes SHA-256 antes/después.</p><label class="native-change-row" for="presentationAllowUpstreamTools"><input id="presentationAllowUpstreamTools" type="checkbox"><span><strong>Autorizar herramientas upstream de conversión · requerido</strong><small>Sin este permiso no se ejecutará el conversor ni se escribirá en sce_sys/.</small></span></label></section>'+
       '<pre id="presentationAssetOutput" class="presentation-output">Esperando archivos. No se ha modificado ningún recurso.</pre>';
     openModal('Presentación · '+(nativeProject.name||nativeProject.titleId||'Título nativo'),body,[
       {text:'Cerrar',class:'ghost',action:closeModal},
       {text:'Aplicar cambios',class:'primary',action:async()=>{
         const iconFile=$('#presentationIconFile')?.files?.[0]||null,selectionFile=$('#presentationSelectionFile')?.files?.[0]||null,launchFile=$('#presentationLaunchFile')?.files?.[0]||null,audioFile=$('#presentationAudioFile')?.files?.[0]||null;
         if(!iconFile&&!selectionFile&&!launchFile&&!audioFile){toast('Selecciona al menos un recurso.','warn');return;}
+        if(!$('#presentationAllowUpstreamTools')?.checked){toast('Autoriza expresamente las herramientas upstream para convertir los recursos. No se ha modificado nada.','warn');return;}
         if(!state.icon&&!iconFile){toast('Este título aún no tiene icono. Selecciona uno antes de cambiar los fondos o la música.','warn');return;}
         if((!state.selectionBackground||!state.launchBackground)&&((selectionFile&&!launchFile)||(!selectionFile&&launchFile))){toast('Este título aún no tiene ambos fondos. Selecciona los dos para crear pic0.dds y pic1.dds.','warn');return;}
         const max={icon:10*1024*1024,selection:24*1024*1024,launch:24*1024*1024,audio:24*1024*1024};
@@ -227,7 +229,7 @@
         const buttons=$$('#modalActions button');buttons.forEach(button=>button.disabled=true);
         const output=$('#presentationAssetOutput');if(output)output.textContent='Preparando recursos en una carpeta temporal y validando formatos…';
         try{
-          const payload={path:nativeProject.path};
+          const payload={path:nativeProject.path,nativeModifications:window.PS5HSNativeModificationPolicy.normalize({allowExecuteUpstreamBuildTools:true})};
           if(iconFile)payload.icon=await encodePresentationFile(iconFile);
           if(selectionFile)payload.selectionBackground=await encodePresentationFile(selectionFile);
           if(launchFile)payload.launchBackground=await encodePresentationFile(launchFile);
@@ -304,7 +306,7 @@
     const form='<p>El IDE detecta el tipo y ejecuta la receta upstream validada para ese perfil. Si la plantilla no tiene un perfil compatible, la compilación se deshabilita en la lista. Los archivos del proyecto no se eliminan por conjetura.</p>'+nativeBuildModificationOptionsMarkup(templateId,storedModifications,needsInit)+
       '<div class="form-field"><label>Nombre de título (solo necesario al inicializar)</label><input id="nativeBuildName" maxlength="40" value="'+esc(safeName)+'" '+(needsInit?'':'disabled')+'></div>'+
       '<div class="form-field"><label>TITLE_ID (solo necesario al inicializar)</label><input id="nativeBuildTitleId" maxlength="9" value="'+esc(safeTitle)+'" pattern="PPSA[0-9]{5}" '+(needsInit?'':'disabled')+'></div>'+
-      '<label class="check-row"><input id="nativeCleanBeforeBuild" type="checkbox" checked> Limpiar antes de compilar: ejecutar make clean solo si el Makefile declara ese target</label>'+
+      '<label class="check-row"><input id="nativeCleanBeforeBuild" type="checkbox"> Limpiar antes de compilar: ejecutar make clean solo si el Makefile declara ese target</label>'+
       '<p class="section-note">'+(supportsClean?'El proyecto declara un target clean.':'La detección no encontró un target clean; el IDE lo volverá a comprobar y no borrará artefactos si no existe.')+' Para las plantillas cuyo pipeline no usa Make en la raíz, se conserva el build upstream sin limpieza automática.</p>'+
       '<pre id="nativeBuildOutput" style="font:10px/1.55 Consolas,monospace;color:#aeb8cf;white-space:pre-wrap;word-break:break-word;max-height:42vh;overflow:auto">Listo para iniciar la compilación…</pre>';
     openModal('Compilación nativa · perfil detectado',form,[
