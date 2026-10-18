@@ -206,12 +206,14 @@ function GetPS5HSNativeTreeHashes {
   if (($rootItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw "No se auditará una raíz enlazada: $root" }
   $pending = [System.Collections.Generic.Stack[string]]::new()
   $pending.Push($root)
+  $excludedDirectoryNames = @('.git','.cache','.runtime','build','dist','out','bin','obj','node_modules','__pycache__','.venv')
   while ($pending.Count -gt 0) {
     $directory = $pending.Pop()
     foreach ($subdirectory in [IO.Directory]::EnumerateDirectories($directory)) {
       $directoryItem = Get-Item -LiteralPath $subdirectory -Force
       if (($directoryItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { continue }
-      if ([IO.Path]::GetFileName($subdirectory) -ieq '.git') { continue }
+      $directoryName = [IO.Path]::GetFileName($subdirectory)
+      if ($directoryName -in $excludedDirectoryNames -or $directoryName -match '^out-[A-Za-z0-9-]+$') { continue }
       $pending.Push($subdirectory)
     }
     foreach ($filePath in [IO.Directory]::EnumerateFiles($directory)) {
@@ -225,7 +227,6 @@ function GetPS5HSNativeTreeHashes {
   }
   return $hashes
 }
-
 function InvokePS5HSNativeTreeModificationWithAudit {
   param(
     [Parameter(Mandatory=$true)][string]$ProjectRoot,
