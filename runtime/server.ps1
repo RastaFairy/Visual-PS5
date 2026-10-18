@@ -325,8 +325,9 @@ function NewNativeTitle([string]$Name,[string]$TitleId,[string]$Category,[string
   $target=Join-Path $script:Workspace ($suffix+'-'+$kind)
   if(Test-Path $target) { return @{ok=$false;message='Ya existe la carpeta de destino; cambia el nombre para evitar sobrescribirla.';output=$target;path=$target} }
   try {
-    CopyProjectTree $src $target
-    $normalizedLineEndings = NormalizeNativeBuildFiles $target
+    $null = InvokePS5HSNativeTreeModificationWithAudit -ProjectRoot $target -Backend $TemplateId -Operation 'copy-upstream-template-to-project' -PermissionKey 'allowExecuteUpstreamGenerationTools' -Policy $policy -SourceRepository $entry.repo -Action {
+      CopyProjectTree $src $target
+    }
 
     $normalization = NormalizeNativeBuildFilesWithAudit -ProjectRoot $target -Policy $policy -Backend $TemplateId -SourceRepository $entry.repo
     $patchResult = ApplyPS5HSWindowsBuildEntrypointPatch -ProjectRoot $target -Policy $policy -Backend $TemplateId -SourceRepository $entry.repo
