@@ -1,0 +1,185 @@
+# PS5 Homebrew Studio: explicit permission and audit of native source mutations.
+$script:PS5HSNativeModificationKeys = @(
+  'allowExecuteUpstreamGenerationTools',
+  'allowExecuteUpstreamBuildTools',
+  'allowOpenGlTemplateIntegration',
+  'allowOpenGlRuntimeProfile',
+  'allowOpenGlEuropeanAtlas',
+  'allowWindowsBuildEntrypointPatch',
+  'allowVulkanTemplateIntegration',
+  'allowVulkanBuildHelperRestore',
+  'normalizeBuildFiles',
+  'allowCustomUnicodeFont'
+)
+function NormalizePS5HSNativeModificationPolicy($Value) {
+  $result = @{}
+  foreach ($key in $script:PS5HSNativeModificationKeys) { $result[$key] = $false }
+  if ($null -eq $Value) { return $result }
+  foreach ($key in $script:PS5HSNativeModificationKeys) {
+    $property = $Value.PSObject.Properties[$key]
+    if ($property -and $property.Value -is [bool] -and $property.Value) { $result[$key] = $true }
+    elseif ($Value -is [System.Collections.IDictionary] -and $Value.Contains($key) -and $Value[$key] -is [bool] -and $Value[$key]) { $result[$key] = $true }
+  }
+  return $result
+}
+function GetPS5HSNativeModificationConsentGaps {
+  param(
+    [Parameter(Mandatory=$true)][string]$Backend,
+    $Policy,
+    [bool]$RequireGeneration = $false,
+    [bool]$RequireBuildTools = $false,
+    [bool]$RequireVisualIntegration = $false,
+    [bool]$HasCustomFont = $false
+  )
+  $approved = NormalizePS5HSNativeModificationPolicy $Policy
+  $required = [System.Collections.Generic.List[string]]::new()
+  if ($RequireGeneration -and !$approved.allowExecuteUpstreamGenerationTools) { $required.Add('allowExecuteUpstreamGenerationTools') }
+  if ($RequireBuildTools -and !$approved.allowExecuteUpstreamBuildTools) { $required.Add('allowExecuteUpstreamBuildTools') }
+  if ($RequireVisualIntegration) {
+    $integrationKey = if ($Backend -eq 'opengl-ui') { 'allowOpenGlTemplateIntegration' } elseif ($Backend -eq 'vulkan-ui') { 'allowVulkanTemplateIntegration' } else { '' }
+    if ($integrationKey -and !$approved[$integrationKey]) { $required.Add($integrationKey) }
+  }
+  if ($HasCustomFont -and !$approved.allowCustomUnicodeFont) { $required.Add('allowCustomUnicodeFont') }
+  return @($required)
+}
+function AssertPS5HSNativeModificationConsent {
+  param(
+    [Parameter(Mandatory=$true)][string]$Backend,
+    $Policy,
+    [bool]$RequireGeneration = $false,
+    [bool]$RequireBuildTools = $false,
+    [bool]$RequireVisualIntegration = $false,
+    [bool]$HasCustomFont = $false
+  )
+  $approved = NormalizePS5HSNativeModificationPolicy $Policy
+  $gaps = @(GetPS5HSNativeModificationConsentGaps -Backend $Backend -Policy $approved -RequireGeneration $RequireGeneration -RequireBuildTools $RequireBuildTools -RequireVisualIntegration $RequireVisualIntegration -HasCustomFont $HasCustomFont)
+  if ($gaps.Count -gt 0) {
+    throw ('Operación detenida antes de modificar fuentes. Falta consentimiento explícito para: ' + ($gaps -join ', ') + '. No se han aplicado esas modificaciones.')
+  }
+  return $approved
+}
+function GetPS5HSNativeFileHashes {
+  param([Parameter(Mandatory=$true)][string]$ProjectRoot,[Parameter(Mandatory=$true)][string[]]$RelativePaths)
+  $result = @{}
+  $root = [IO.Path]::GetFullPath($ProjectRoot)
+  foreach ($relative in $RelativePaths) {
+    $path = Join-Path $root ($relative.Replace('/',[IO.Path]::DirectorySeparatorChar))
+    if (Test-Path -LiteralPath $path -PathType Leaf) {
+      try { $result[$relative] = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant() }
+      catch { $result[$relative] = 'hash-error: ' + $_.Exception.Message }
+    } else { $result[$relative] = $null }
+  }
+  return $result
+}
+function AddPS5HSNativeModificationRecord {
+  param(
+    [Parameter(Mandatory=$true)][string]$ProjectRoot,
+    [Parameter(Mandatory=$true)][string]$Backend,
+    [Parameter(Mandatory=$true)][string]$Operation,
+    [Parameter(Mandatory=$true)][string]$PermissionKey,
+    [Parameter(Mandatory=$true)][string[]]$RelativePaths,
+    [Parameter(Mandatory=$true)]$BeforeHashes,
+    $Policy,
+    [string]$SourceRepository = '',
+    [string]$SourceCommit = ''
+  )
+  $approved = NormalizePS5HSNativeModificationPolicy $Policy
+  if (!$approved[$PermissionKey]) { throw "Control interno: la modificación '$Operation' no tiene consentimiento registrado." }
+  $after = GetPS5HSNativeFileHashes -ProjectRoot $ProjectRoot -RelativePaths $RelativePaths
+  $pathRecords = @()
+  foreach ($relative in $RelativePaths) {
+    $beforeValue = $null
+    if ($BeforeHashes -and $BeforeHashes.ContainsKey($relative)) { $beforeValue = $BeforeHashes[$relative] }
+    $afterValue = $after[$relative]
+    if ($beforeValue -cne $afterValue) {
+      $pathRecords += [ordered]@{path=$relative;originalSha256=$beforeValue;resultSha256=$afterValue}
+    }
+  }
+  $manifestPath = Join-Path $ProjectRoot '.ps5hs-modifications.json'
+  $manifest = [ordered]@{schema='ps5hs-native-modifications';version=1;project=$ProjectRoot;records=@()}
+  if (Test-Path -LiteralPath $manifestPath -PathType Leaf) {
+    try {
+      $existing = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
+      if ($existing.schema -eq 'ps5hs-native-modifications' -and $existing.records) { $manifest.records = @($existing.records) }
+    } catch { throw 'El manifiesto de modificaciones existe pero no es JSON válido; no se añadirá un registro incompleto.' }
+  }
+  $manifest.records = @($manifest.records) + @([ordered]@{
+    at=(Get-Date).ToString('o')
+    backend=$Backend
+    operation=$Operation
+    permission=$PermissionKey
+    consented=$true
+    upstreamRepository=$SourceRepository
+    upstreamCommit=$SourceCommit
+    changedFiles=@($pathRecords)
+    policy=$approved
+  })
+  $text = (ConvertTo-Json -InputObject $manifest -Depth 20) + [Environment]::NewLine
+  [IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName([IO.Path]::GetFullPath($manifestPath))) | Out-Null
+  [IO.File]::WriteAllText($manifestPath,$text,[System.Text.UTF8Encoding]::new($false))
+  return @{manifest='.ps5hs-modifications.json';operation=$Operation;files=@($pathRecords)}
+}
+
+
+function ApplyPS5HSWindowsBuildEntrypointPatch {
+  param([Parameter(Mandatory=$true)][string]$ProjectRoot,$Policy,[string]$Backend='nativecpp',[string]$SourceRepository='',[string]$SourceCommit='')
+  $approved = NormalizePS5HSNativeModificationPolicy $Policy
+  if (!$approved.allowWindowsBuildEntrypointPatch) { return @{ok=$true;changed=$false;skipped=$true;files=@()} }
+  $path = Join-Path $ProjectRoot 'build.ps1'
+  if (!(Test-Path -LiteralPath $path -PathType Leaf)) { throw 'Se autorizó el parche de build.ps1, pero el proyecto no contiene ese archivo.' }
+  $original = [IO.File]::ReadAllText($path)
+  $updated = $original
+  $envPattern = '(?m)^(\s*)"APP_STATIC_ARCHIVES",\r?\n\s*"APP_RUNTIME_MODULES",\s*$'
+  $envReplacement = '$1"APP_STATIC_ARCHIVES",' + [Environment]::NewLine + '        "APP_IMPORT_STUBS",' + [Environment]::NewLine + '        "APP_RUNTIME_MODULES",' + [Environment]::NewLine + '        "PS5_OPENGL_PREFIX",' + [Environment]::NewLine + '        "BUILD_JOBS",' + [Environment]::NewLine + '        "USE_CCACHE",'
+  if ([regex]::IsMatch($updated,$envPattern)) {
+    $updated = [regex]::Replace($updated,$envPattern,$envReplacement,1)
+  } elseif ($updated -notmatch '(?s)"APP_IMPORT_STUBS".*"PS5_OPENGL_PREFIX".*"BUILD_JOBS".*"USE_CCACHE"') {
+    throw 'No se reconoce el bloque de variables de build.ps1. Se detiene sin modificar la plantilla.'
+  }
+  $legacyBuildCall = '$arguments += @("bash", (Convert-ToWslPath $build))'
+  $makeBuildCall = '$arguments += @("make", "-C", (Convert-ToWslPath (Split-Path -Parent $MyInvocation.MyCommand.Path)), "app")'
+  if ($updated.Contains($legacyBuildCall)) {
+    $updated = $updated.Replace($legacyBuildCall,$makeBuildCall)
+  } elseif (!$updated.Contains($makeBuildCall)) {
+    throw 'No se reconoce el punto de invocación del build de build.ps1. Se detiene sin modificar la plantilla.'
+  }
+  if ($updated -cne $original) {
+    $before = GetPS5HSNativeFileHashes -ProjectRoot $ProjectRoot -RelativePaths @('build.ps1')
+    WriteUtf8 $path $updated
+    $record = AddPS5HSNativeModificationRecord -ProjectRoot $ProjectRoot -Backend $Backend -Operation 'adapt-build-ps1-to-make-app' -PermissionKey 'allowWindowsBuildEntrypointPatch' -RelativePaths @('build.ps1') -BeforeHashes $before -Policy $approved -SourceRepository $SourceRepository -SourceCommit $SourceCommit
+    if ($script:ActiveBuildLogPath) { WriteBuildJobLog $script:ActiveBuildLogPath 'Modificación autorizada y auditada: build.ps1 ahora invoca el target Makefile app.' }
+    return @{ok=$true;changed=$true;files=@('build.ps1');audit=$record}
+  }
+  return @{ok=$true;changed=$false;files=@()}
+}
+
+function NormalizeNativeBuildFilesWithAudit {
+  param([Parameter(Mandatory=$true)][string]$ProjectRoot,$Policy,[string]$Backend,[string]$SourceRepository='', [string]$SourceCommit='')
+  $approved = NormalizePS5HSNativeModificationPolicy $Policy
+  if (!$approved.normalizeBuildFiles) {
+    if ($script:ActiveBuildLogPath) { WriteBuildJobLog $script:ActiveBuildLogPath 'Normalización omitida por política: no se han cambiado finales de línea de archivos fuente.' }
+    return @{count=0;changedFiles=@();skipped=$true}
+  }
+  $root = [IO.Path]::GetFullPath($ProjectRoot)
+  $allowedExtensions = @('.sh','.sha256','.c','.cc','.cpp','.h','.hpp','.ld','.mk','.s','.cmake','.yml','.yaml')
+  $allowedNames = @('Makefile','GNUmakefile','CMakeLists.txt','.gitattributes')
+  $relativePaths = @()
+  foreach ($item in (Get-ChildItem -LiteralPath $root -File -Recurse -ErrorAction Stop)) {
+    $relative = $item.FullName.Substring($root.TrimEnd([IO.Path]::DirectorySeparatorChar,[IO.Path]::AltDirectorySeparatorChar).Length).TrimStart([IO.Path]::DirectorySeparatorChar,[IO.Path]::AltDirectorySeparatorChar)
+    if ($relative -match '(^|[\\/])(\.git|\.deps|\.cache|build|dist|out|obj|node_modules|\.runtime)([\\/]|$)') { continue }
+    if ($item.Name -notin $allowedNames -and $item.Extension.ToLowerInvariant() -notin $allowedExtensions) { continue }
+    $relativePaths += $relative.Replace([IO.Path]::DirectorySeparatorChar,'/').Replace([IO.Path]::AltDirectorySeparatorChar,'/')
+  }
+  $relativePaths = @($relativePaths | Select-Object -Unique)
+  if ($relativePaths.Count -eq 0) { return @{count=0;changedFiles=@();skipped=$false} }
+  $before = GetPS5HSNativeFileHashes -ProjectRoot $root -RelativePaths $relativePaths
+  $count = NormalizeNativeBuildFiles $root
+  $after = GetPS5HSNativeFileHashes -ProjectRoot $root -RelativePaths $relativePaths
+  $changed = @($relativePaths | Where-Object { $before[$_] -cne $after[$_] })
+  if ($changed.Count -gt 0) {
+    $record = AddPS5HSNativeModificationRecord -ProjectRoot $root -Backend $Backend -Operation 'normalize-build-file-line-endings' -PermissionKey 'normalizeBuildFiles' -RelativePaths $changed -BeforeHashes $before -Policy $approved -SourceRepository $SourceRepository -SourceCommit $SourceCommit
+    if ($script:ActiveBuildLogPath) { WriteBuildJobLog $script:ActiveBuildLogPath ("Normalización consentida y auditada: $count archivos; registro $($record.manifest).") }
+  }
+  return @{count=$count;changedFiles=@($changed);skipped=$false}
+}
+
