@@ -71,11 +71,34 @@ function GetPS5HSNativeFileHashes {
   param([Parameter(Mandatory=$true)][string]$ProjectRoot,[Parameter(Mandatory=$true)][string[]]$RelativePaths)
   $result = @{}
   $root = [IO.Path]::GetFullPath($ProjectRoot)
+  if (Test-Path -LiteralPath $root -PathType Container) {
+    $rootItem = Get-Item -LiteralPath $root -Force
+    if (($rootItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+      throw "No se auditará un proyecto situado en una carpeta enlazada: $root"
+    }
+  }
   foreach ($relative in $RelativePaths) {
+    if ([IO.Path]::IsPathRooted([string]$relative) -or @(([string]$relative -split '[\\/]') | Where-Object { $_ -eq '..' }).Count -gt 0) {
+      throw "Ruta relativa de auditoría no segura: $relative"
+    }
     $path = Join-Path $root ($relative.Replace('/',[IO.Path]::DirectorySeparatorChar))
+    $current = $root
+    $segments = @(([string]$relative -split '[\\/]') | Where-Object { $_ -and $_ -ne '.' })
+    foreach ($segment in $segments) {
+      $current = Join-Path $current $segment
+      if (Test-Path -LiteralPath $current) {
+        $currentItem = Get-Item -LiteralPath $current -Force
+        if (($currentItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+          throw "No se modificará ni auditará una ruta a través de un enlace: $relative"
+        }
+      } else { break }
+    }
     if (Test-Path -LiteralPath $path -PathType Leaf) {
-      try { $result[$relative] = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant() }
-      catch { $result[$relative] = 'hash-error: ' + $_.Exception.Message }
+      $item = Get-Item -LiteralPath $path -Force
+      if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+        throw "No se modificará ni auditará un archivo enlazado: $relative"
+      }
+      $result[$relative] = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant()
     } else { $result[$relative] = $null }
   }
   return $result
@@ -179,6 +202,8 @@ function GetPS5HSNativeTreeHashes {
   $root = [IO.Path]::GetFullPath($ProjectRoot)
   $hashes = @{}
   if (!(Test-Path -LiteralPath $root -PathType Container)) { return $hashes }
+  $rootItem = Get-Item -LiteralPath $root -Force
+  if (($rootItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw "No se auditará una raíz enlazada: $root" }
   $pending = [System.Collections.Generic.Stack[string]]::new()
   $pending.Push($root)
   while ($pending.Count -gt 0) {
