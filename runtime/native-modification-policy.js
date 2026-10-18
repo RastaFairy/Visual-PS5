@@ -32,13 +32,21 @@
   function requiredForBackend(backend) {
     return entriesForBackend(backend).filter(entry => entry.required).map(entry => entry.key);
   }
-  function missingForBackend(backend, value, hasCustomFont) {
+  function missingForPermissions(value, requiredKeys) {
     const policy = normalize(value);
-    const missing = requiredForBackend(backend).filter(key => policy[key] !== true);
-    if (hasCustomFont && policy.allowCustomUnicodeFont !== true) missing.push('allowCustomUnicodeFont');
+    const missing = [];
+    for (const key of [...new Set(requiredKeys || [])]) {
+      if (!KEYS.includes(key) || policy[key] !== true) missing.push(key);
+    }
     return missing;
   }
-  const api = {version:1, entries:ENTRIES.slice(), defaults, normalize, entriesForBackend, getEntry, requiredForBackend, missingForBackend};
+  function missingForBackend(backend, value, hasCustomFont) {
+    const missing = missingForPermissions(value, requiredForBackend(backend));
+    if (hasCustomFont && !missing.includes('allowCustomUnicodeFont') && normalize(value).allowCustomUnicodeFont !== true) missing.push('allowCustomUnicodeFont');
+    else if (hasCustomFont && !normalize(value).allowCustomUnicodeFont) missing.push('allowCustomUnicodeFont');
+    return missing;
+  }
+  const api = {version:1, entries:ENTRIES.slice(), defaults, normalize, entriesForBackend, getEntry, requiredForBackend, missingForPermissions, missingForBackend};
   if (root) root.PS5HSNativeModificationPolicy = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof globalThis === 'object' ? globalThis : null);
