@@ -1842,6 +1842,7 @@ function BuildNativeVisualProject($Body) {
   $requiredPermissions = @('allowExecuteUpstreamGenerationTools','allowExecuteUpstreamBuildTools')
   $requiredPermissions += $integrationPermissionKey
   if ($Body.nativeFont -and ![string]::IsNullOrWhiteSpace([string]$Body.nativeFont.base64)) { $requiredPermissions += 'allowCustomUnicodeFont' }
+  if ($null -ne $Body.icon -or $null -ne $Body.selectionBackground -or $null -ne $Body.launchBackground -or $null -ne $Body.audio) { $requiredPermissions += 'allowExecuteUpstreamAssetTools' }
   try { $policy = AssertPS5HSNativeModificationConsent -Backend $backend -Policy $Body.nativeModifications -RequirePermissionKeys $requiredPermissions }
   catch { return @{ok=$false;message='Operación detenida antes de modificar el proyecto: falta consentimiento explícito.';output=$_.Exception.Message;backend=$backend;buildStoppedBeforeMutation=$true} }
   $name = [string]$Body.project.name
