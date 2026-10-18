@@ -9,6 +9,7 @@ function Assert-Condition([bool]$Condition,[string]$Message) {
 $defaults = NormalizePS5HSNativeModificationPolicy $null
 Assert-Condition ($defaults.Count -eq 12) 'La política debe declarar todas las operaciones registradas.'
 Assert-Condition (@($defaults.Values | Where-Object { $_ -eq $true }).Count -eq 0) 'Todas las modificaciones deben estar denegadas por defecto.'
+Assert-Condition (!$defaults.allowExecuteUpstreamAssetTools) 'La conversión de recursos también debe estar denegada por defecto.'
 $gaps = @(GetPS5HSNativeModificationConsentGaps -Backend 'opengl-ui' -Policy $null -RequireGeneration $true -RequireBuildTools $true -RequireVisualIntegration $true)
 Assert-Condition ($gaps.Count -eq 3) 'OpenGL debe exigir generador, herramientas upstream e integración visual.'
 $approved = [pscustomobject]@{
