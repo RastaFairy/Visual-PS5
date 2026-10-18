@@ -1561,9 +1561,7 @@ function PrepareNativeUnicodeFonts($Body,[string]$ProjectRoot,[string]$Backend) 
   $font = $Body.nativeFont
   if (!$font -or [string]::IsNullOrWhiteSpace([string]$font.base64)) { return @{enabled=$false;glyphCount=0} }
   $policy = AssertPS5HSNativeModificationConsent -Backend $Backend -Policy $Body.nativeModifications -RequirePermissionKeys @('allowCustomUnicodeFont')
-  $fontModificationPaths = if ($Backend -eq 'vulkan-ui') { @('ps5/ui/setup-kit.sh','.deps/hui/tools/font-baker/bake_font.cpp','.deps/hui/tools/bake-fonts.sh') } else { @('tools/font-baker/bake_font.cpp','tools/bake-fonts.sh') }
   $null = AssertPS5HSNativeModificationManifestWritable -ProjectRoot $ProjectRoot
-  $fontBeforeHashes = GetPS5HSNativeFileHashes -ProjectRoot $ProjectRoot -RelativePaths $fontModificationPaths
   $fileName = [IO.Path]::GetFileName([string]$font.fileName)
   if ($fileName -notmatch '\.ttf$') { throw 'La fuente personalizada debe ser TrueType (.ttf). OTF/CFF no es compatible con el horneador incluido.' }
   $encoded = [string]$font.base64
@@ -1731,10 +1729,7 @@ Backend: $Backend
 El archivo TTF y la lista de codepoints se conservan en .ps5hs-font-source/ para reconstrucción local. El IDE no concede derechos sobre la fuente; verifica su licencia antes de distribuir el título.
 "@
   WriteUtf8 (Join-Path $ProjectRoot 'PS5HS-UNICODE-FONTS.txt') $notice
-  $fontAfterHashes = GetPS5HSNativeFileHashes -ProjectRoot $ProjectRoot -RelativePaths $fontModificationPaths
-  $fontChangedPaths = @($fontModificationPaths | Where-Object { $fontBeforeHashes[$_] -cne $fontAfterHashes[$_] })
-  if ($fontChangedPaths.Count -gt 0) { $null = AddPS5HSNativeModificationRecord -ProjectRoot $ProjectRoot -Backend $Backend -Operation 'prepare-custom-unicode-font-tools' -PermissionKey 'allowCustomUnicodeFont' -RelativePaths $fontChangedPaths -BeforeHashes $fontBeforeHashes -Policy $policy }
-  WriteBuildJobLog $script:ActiveBuildLogPath ("Fuente Unicode personalizada horneada: " + $fileName + "; " + $points.Count + " codepoints; seis atlas SDF generados; herramientas modificadas registradas.")
+remove font internal audit  WriteBuildJobLog $script:ActiveBuildLogPath ("Fuente Unicode personalizada horneada: " + $fileName + "; " + $points.Count + " codepoints; seis atlas SDF generados; herramientas modificadas registradas.")
   return @{enabled=$true;glyphCount=$points.Count;fileName=$fileName;notice='PS5HS-UNICODE-FONTS.txt'}
 }
 
@@ -1744,8 +1739,9 @@ function BuildNativeVisualProject($Body) {
   if ($backend -notin @('opengl-ui','vulkan-ui')) {
     return @{ok=$false;message='Backend nativo visual desconocido.';output=$backend}
   }
+  $integrationPermissionKey = if ($backend -eq 'opengl-ui') { 'allowOpenGlTemplateIntegration' } else { 'allowVulkanTemplateIntegration' }
   $requiredPermissions = @('allowExecuteUpstreamGenerationTools','allowExecuteUpstreamBuildTools')
-  if ($backend -eq 'opengl-ui') { $requiredPermissions += 'allowOpenGlTemplateIntegration' } else { $requiredPermissions += 'allowVulkanTemplateIntegration' }
+  $requiredPermissions += $integrationPermissionKey
   if ($Body.nativeFont -and ![string]::IsNullOrWhiteSpace([string]$Body.nativeFont.base64)) { $requiredPermissions += 'allowCustomUnicodeFont' }
   try { $policy = AssertPS5HSNativeModificationConsent -Backend $backend -Policy $Body.nativeModifications -RequirePermissionKeys $requiredPermissions }
   catch { return @{ok=$false;message='Operación detenida antes de modificar el proyecto: falta consentimiento explícito.';output=$_.Exception.Message;backend=$backend;buildStoppedBeforeMutation=$true} }
@@ -1865,11 +1861,519 @@ std::span<const ConceptFactory> concept_registry() {
       }
       Add-Member -InputObject $projectMeta -NotePropertyName 'generatedFromStudio' -NotePropertyValue $true -Force
       if ($policy.allowOpenGlRuntimeProfile) { Add-Member -InputObject $projectMeta -NotePropertyName 'nativeRuntimeProfile' -NotePropertyValue 'standalone-native-ui-v1' -Force }
-      WriteUtf8 $projectMetaPath (ConvertTo-Json -InputObject $projectMeta -Depth 10)
+      $null = InvokePS5HSNativeModificationWithAudit -ProjectRoot $projectRoot -Backend $backend -Operation 'write-opengl-studio-project-metadata' -PermissionKey $integrationPermissionKey -RelativePaths @('.ps5hs-project.json') -Policy $policy -SourceRepository 'blackbearreloaded/ps5-homebrew-ui' -Action {
+        WriteUtf8 $projectMetaPath (ConvertTo-Json -InputObject $projectMeta -Depth 10)
+      }
       if (!$policy.allowOpenGlRuntimeProfile) { WriteBuildJobLog $script:ActiveBuildLogPath 'Se conserva el comportamiento de runtime upstream: el desarrollador no autorizó desactivar el HUD/capturas de mando.' }
     }
-    $assetResult = WriteNativeVisualAssets $Body $projectRoot
-    $unicodeFontResult = PrepareNativeUnicodeFonts $Body $projectRoot $backend
+    $incomingVisualAssets = @($Body.nativeAssets | Where-Object { $_ })
+    if ($incomingVisualAssets.Count -gt 0) {
+      $assetIds = @()
+      foreach ($asset in $incomingVisualAssets) {
+        $assetId = [string]$asset.id
+        if ($assetId -notmatch '^[A-Za-z0-9_-]{1,80}
+    if ($unicodeFontResult.enabled) {
+      $assetResult.unicodeFont = $unicodeFontResult
+      WriteBuildJobLog $script:ActiveBuildLogPath ("Fuente Unicode personalizada lista: " + [string]$unicodeFontResult.fileName + "; " + [string]$unicodeFontResult.glyphCount + " glifos. El build conservará los atlas personalizados.")
+    }
+    if ($backend -eq 'vulkan-ui') {
+      $samplesPath = Join-Path $projectRoot 'ps5/src/samples.cpp'
+      if (!(Test-Path $samplesPath -PathType Leaf)) { throw 'La plantilla Vulkan no contiene ps5/src/samples.cpp para resolver el programa de texturas.' }
+      $samplesText = Get-Content -LiteralPath $samplesPath -Raw
+      $programMatch = [regex]::Match($samplesText,'(?s)#define PS5_SAMPLES\s*\\\s*SAMPLE\(([A-Za-z0-9_]+),')
+      if (!$programMatch.Success) { throw 'No se pudo resolver el identificador de programa Vulkan para el runtime de texturas.' }
+      $programId = $programMatch.Groups[1].Value
+      if ($assetResult.count -gt 0) {
+        $assetIntegrationPaths = @('ps5/assets.json','ps5/licenses/PS5HS-USER-ASSETS.txt')
+        $vulkanAssetResult = InvokePS5HSNativeModificationWithAudit -ProjectRoot $projectRoot -Backend $backend -Operation 'register-vulkan-user-assets' -PermissionKey 'allowVulkanTemplateIntegration' -RelativePaths $assetIntegrationPaths -Policy $policy -SourceRepository 'mihawk-99/PS5_VulkanTemplate' -Action { RegisterVulkanNativeAssets $Body $projectRoot }
+        $programId = [string]$vulkanAssetResult.programId
+        $assetResult.manifest = [string]$vulkanAssetResult.manifest
+      }
+      $runtimeRelative = 'examples/' + $programId + '/' + $programId + '.cpp'
+      $null = InvokePS5HSNativeModificationWithAudit -ProjectRoot $projectRoot -Backend $backend -Operation 'install-vulkan-texture-runtime' -PermissionKey 'allowVulkanTemplateIntegration' -RelativePaths @($runtimeRelative) -Policy $policy -SourceRepository 'mihawk-99/PS5_VulkanTemplate' -Action { InstallVulkanTextureRuntime $Body $projectRoot $programId }
+      $assetResult.runtimeSource = Join-Path (Join-Path (Join-Path $projectRoot 'examples') $programId) ($programId + '.cpp')
+    }
+    WriteUtf8 (Join-Path $projectRoot 'ps5hs-model.json') (ConvertTo-Json -InputObject $Body.project -Depth 100)
+    $markerPath = Join-Path $projectRoot '.ps5hs-project.json'
+    $meta = Get-Content -LiteralPath $markerPath -Raw | ConvertFrom-Json
+    $meta | Add-Member -NotePropertyName visualBackend -NotePropertyValue $backend -Force
+    $meta | Add-Member -NotePropertyName generatedFromStudio -NotePropertyValue $true -Force
+    $meta | Add-Member -NotePropertyName generatedSource -NotePropertyValue ([string]$sourcePath) -Force
+    $meta | Add-Member -NotePropertyName visualModel -NotePropertyValue 'ps5hs-model.json' -Force
+    WriteUtf8 $markerPath (ConvertTo-Json -InputObject $meta -Depth 20)
+
+    $presentationBody = @{ path = $projectRoot }
+    $presentationRequested = $false
+    foreach ($assetKey in @('icon','selectionBackground','launchBackground','audio')) {
+      if ($null -ne $Body.$assetKey) {
+        $presentationBody[$assetKey] = $Body.$assetKey
+        $presentationRequested = $true
+      }
+    }
+
+    $parts = @()
+    if ($created.output) { $parts += [string]$created.output }
+    $parts += "Pantalla C++20 inyectada en plantilla upstream: $sourcePath"
+    $parts += 'Se conservaron el renderer, los metadatos y el pipeline de compilación del repositorio.'
+    if ($backend -eq 'vulkan-ui' -and $assetResult.count -gt 0) { $parts += 'Texturas Vulkan RGBA8 conectadas a VkRenderer::create_texture y registradas en ps5/assets.json.' }
+    if ($assetResult.count -gt 0) { $parts += "Recursos RGBA empaquetados: $($assetResult.count) en $($assetResult.manifest)." }
+    if ($presentationRequested) {
+      $presentationResult = UpdateNativePresentationAssets $presentationBody
+      $parts += 'Recursos de presentación aplicados antes de compilar (sce_sys/icon0.png, pic0.dds, pic1.dds y/o snd0.at9).'
+      if ($presentationResult.output) { $parts += [string]$presentationResult.output }
+      WriteBuildJobLog $script:ActiveBuildLogPath 'Recursos de presentación preparados por la herramienta upstream antes de iniciar el build.'
+    }
+    WriteBuildJobLog $script:ActiveBuildLogPath 'Código C++20 generado e inyectado. Preparando dependencias y compilación…'
+    $build = BuildNativeProject $projectRoot $false $titleId $name $policy
+    if ($build.output) { $parts += [string]$build.output }
+    $combined = $parts -join "`r`n"
+    if ($build.ok) {
+      return @{ok=$true;message='La pantalla visual se generó como C++20, se compiló con el pipeline upstream y se encontró un artefacto verificable.';output=$combined;path=$projectRoot;artifact=$build.artifact;titleId=$titleId;backend=$backend;templateId=$meta.template;exitCode=0}
+    }
+    return @{ok=$false;message='La pantalla C++ se ha generado, pero el pipeline upstream no produjo un artefacto verificable. El proyecto queda guardado para corregirlo y recompilarlo.';output=$combined;path=$projectRoot;titleId=$titleId;backend=$backend;templateId=$meta.template;artifact=$build.artifact;exitCode=$build.exitCode;diagnostics=$build.diagnostics}
+  } catch {
+    return @{ok=$false;message='No se pudo generar o compilar el proyecto visual nativo.';output=($_.Exception.Message + "`r`n" + [string]$created.output);path=$projectRoot;titleId=$titleId;backend=$backend}
+  }
+}
+
+function SaveProject($P,[string]$Code) {
+  $name=Slug $P.name;$dir=Join-Path $script:Workspace $name;New-Item -ItemType Directory -Force -Path $dir|Out-Null;WriteProjectFiles $P $Code $dir
+  if([string]$P.backend -in @('opengl-ui','vulkan-ui')){$sourceName='GeneratedScreen.cpp';$description='C++20 generado contra el contrato hui::app::Concept. Usa Compilar para inyectarlo en la plantilla upstream y construir un título.'}
+  else{$sourceName='Program.cs';$description='Código C# generado/actual.'}
+  $readme="# $($P.name)`r`n`r`nProyecto PS5 Homebrew Studio. Backend: $($P.backend).`r`n`r`n- project.json: modelo del editor.`r`n- ${sourceName}: $description`r`n- assets/: recursos importados.`r`n"
+  WriteUtf8 (Join-Path $dir 'README.md') $readme;return @{ok=$true;path=$dir;name=$name}
+}
+function ExportProject($P,[string]$Code) {
+  $name=Slug $P.name;$id=[guid]::NewGuid().ToString('N').Substring(0,8);$dir=Join-Path $script:Exports ($name+'-'+$id);New-Item -ItemType Directory -Force -Path $dir|Out-Null;WriteProjectFiles $P $Code $dir
+  if([string]$P.backend -in @('opengl-ui','vulkan-ui')){$backendNote='GeneratedScreen.cpp implementa la pantalla nativa. El ZIP contiene el modelo y el fuente generado, no un eboot.bin compilado; pulsa Compilar para usar el generador y pipeline upstream.'}
+  else{$backendNote='El código fuente generado se encuentra en Program.cs.'}
+  WriteUtf8 (Join-Path $dir 'README.md') ("# $($P.name)`r`n`r`nProyecto exportado desde PS5 Homebrew Studio.`r`nBackend: $($P.backend).`r`n$backendNote`r`nEl modelo editable está en project.json; los recursos importados están en assets/. Consulta las licencias y dependencias de cada SDK en su repositorio original. No se incluyen binarios propietarios de Sony.`r`n")
+  $file=$name+'-'+$id+'.zip';$path=Join-Path $script:Exports $file;Compress-Archive -Path (Join-Path $dir '*') -DestinationPath $path -CompressionLevel Optimal -Force;return @{ok=$true;url='/downloads/'+$file;fileName=$file;path=$path}
+}
+function BuildSharp($P,[string]$Code,[string]$Backend,[string]$RequestedOutput='Package') {
+  if($Backend -eq 'sharp-payload'){return @{ok=$false;message='El formato Payload de SharpProspero es un ELF ejecutable dentro de un proceso ya cargado, no una app con pantalla propia. Este proyecto contiene componentes de interfaz y no se transformará incorrectamente en payload.';output='Crea un proyecto de payload específico o cambia el destino a SharpProspero · Aplicación.';diagnostics=@(@{severity='error';title='Tipo de producto incompatible';message='La interfaz visual necesita un módulo de aplicación nativa.';location='Backend'})}}
+  $sdk=Join-Path $script:Toolchains 'SharpProspero';if(!(Test-Path (Join-Path $sdk 'build/build-app.ps1'))){return @{ok=$false;message='SharpProspero no está instalado. Descarga el repositorio desde el panel SDKs.';output='';diagnostics=@(@{severity='error';title='SDK ausente';message='Descarga SharpProspero desde GitHub.';location='Backend'})}}
+  $st=GetStatus;if(!$st.prerequisites.dotnet10){return @{ok=$false;message='.NET SDK 10 no está disponible en Windows.';output='Instala .NET SDK 10 con Configurar entorno.';diagnostics=@(@{severity='error';title='.NET 10 ausente';message='El toolchain SharpProspero requiere .NET 10.';location='Entorno'})}}
+  if(!$st.prerequisites.wsl){return @{ok=$false;message='WSL no tiene una distribución inicializada.';output='Configurar entorno → Instalar WSL + Debian. Termina el primer inicio de la distribución y vuelve a comprobar.';diagnostics=@(@{severity='error';title='WSL ausente';message='En Windows SharpProspero usa WSL para compilar NativeAOT.';location='Entorno'})}}
+  if(!$st.prerequisites.wslDotnet10){return @{ok=$false;message='.NET SDK 10 no está instalado dentro de WSL.';output='Dentro de la distribución Linux, instala .NET SDK 10 siguiendo docs/setup.md de SharpProspero.';diagnostics=@(@{severity='error';title='.NET en WSL ausente';message='NativeAOT necesita el SDK .NET dentro de Linux.';location='Entorno'})}}
+  $slug=Slug $P.name;$home=Join-Path $script:Workspace $slug;New-Item -ItemType Directory -Force -Path $home|Out-Null;$native=Join-Path $home 'native'
+  if(!(Test-Path (Join-Path $native 'SampleApp.csproj'))){New-Item -ItemType Directory -Force -Path $native|Out-Null;Copy-Item -Path (Join-Path $sdk 'samples/prospero-ui/*') -Destination $native -Recurse -Force}
+  WriteProjectFiles $P $Code $native
+  $csproj=Join-Path $native 'SampleApp.csproj';if(!(Test-Path $csproj)){return @{ok=$false;message='La distribución descargada de SharpProspero no contiene la plantilla prospectada samples/prospero-ui/SampleApp.csproj.';output=$sdk}}
+  $raw=Get-Content -LiteralPath $csproj -Raw;$raw=$raw.Replace('<AssemblyName>SampleApp</AssemblyName>',('<AssemblyName>'+$slug+'</AssemblyName>'))
+  if(-not $raw.Contains('assets\**\*')){ $addition = "  <ItemGroup>`r`n    <None Update=`"assets\**\*`" CopyToOutputDirectory=`"PreserveNewest`" />`r`n  </ItemGroup>`r`n</Project>"; $raw=$raw.Replace('</Project>',$addition) }
+  WriteUtf8 $csproj $raw
+  $metaPath=Join-Path $native 'sce_sys/param.json';if(Test-Path $metaPath){$meta=Get-Content $metaPath -Raw|ConvertFrom-Json;$tid=[string]$P.settings.titleId;if($tid -notmatch '^[A-Z]{4}[0-9]{5}$'){$tid='PPSA'+(Get-Random -Minimum 10000 -Maximum 99999)};$meta.titleId=$tid;$meta.contentId=('UP9000-'+$tid+'_00-0000000000000001');$meta.conceptId=$tid.Substring(4);if($meta.localizedParameters.'en-US'){$meta.localizedParameters.'en-US'.titleName=[string]$P.name};WriteUtf8 $metaPath (ConvertTo-Json -InputObject $meta -Depth 50)}
+  $outputDir=Join-Path $native 'out';if(Test-Path $outputDir){Remove-Item $outputDir -Recurse -Force};New-Item -ItemType Directory -Force -Path $outputDir|Out-Null;if($RequestedOutput -notin @('Package','Folder')){$RequestedOutput='Package'};$buildArgs=@('-NoProfile','-ExecutionPolicy','Bypass','-File',(Join-Path $sdk 'build/build-app.ps1'),'-ProjectPath',$csproj,'-SdkRoot',$sdk,'-Output',$RequestedOutput,'-OutputFolder',$outputDir)
+  $out=& powershell.exe @buildArgs 2>&1|ForEach-Object{$_.ToString()};$exit=$LASTEXITCODE;$log=$out -join "`r`n";$art=$null;if(Test-Path $outputDir){$cand=Get-ChildItem $outputDir -Recurse -File -Include '*.pkg','*.elf','eboot.bin'|Sort-Object LastWriteTime -Descending|Select-Object -First 1;if($cand){$art=$cand.FullName}}
+  if($exit -eq 0 -and $art){return @{ok=$true;message='El proceso de compilación terminó correctamente.';output=$log;artifact=$art;diagnostics=@()}}
+  return @{ok=$false;message='La compilación no ha producido un artefacto final verificable.';output=$log;artifact=$art;diagnostics=@(@{severity='error';title='Compilación fallida';message='Revisa la salida real del SDK/compilador mostrada en el panel Salida.';location='Pipeline de compilación'})}
+}
+function InvokeSetup([string]$Action) {
+  if($Action -eq 'diagnose'){return @{ok=$true;message='Diagnóstico completado.';output=(ConvertTo-Json (GetStatus) -Depth 10)}}
+  $messages=@();$ok=$true
+  if($Action -in @('git','all')){if(!(Get-Command winget.exe -ErrorAction SilentlyContinue)){$messages+='winget no está disponible. Instala Git for Windows manualmente desde git-scm.com.';$ok=$false}else{$o=& winget install --id Git.Git --exact --accept-package-agreements --accept-source-agreements 2>&1;$ec=$LASTEXITCODE;$messages+=($o|ForEach-Object{$_.ToString()});if($ec -ne 0){$ok=$false}}}
+  if($Action -in @('dotnet','all')){if(!(Get-Command winget.exe -ErrorAction SilentlyContinue)){$messages+='winget no está disponible. Instala App Installer desde Microsoft Store.';$ok=$false}else{$o=& winget install --id Microsoft.DotNet.SDK.10 --exact --accept-package-agreements --accept-source-agreements 2>&1;$ec=$LASTEXITCODE;$messages+=($o|ForEach-Object{$_.ToString()});if($ec -ne 0){$ok=$false}}}
+  if($Action -in @('wsl','all')){if(!(Get-Command wsl.exe -ErrorAction SilentlyContinue)){$messages+='wsl.exe no está disponible en esta versión/instalación de Windows.';$ok=$false}else{$o=& wsl.exe --install -d Debian 2>&1;$ec=$LASTEXITCODE;$messages+=($o|ForEach-Object{$_.ToString()});if($ec -ne 0){$ok=$false}}}
+  return @{ok=$ok;message=$(if($ok){'Acción de configuración terminada; vuelve a comprobar el entorno.'}else{'La configuración necesita intervención. Consulta la salida.'});output=($messages -join "`r`n")}
+}
+function ServeStatic($C,[string]$UrlPath) {
+  $relative=[Uri]::UnescapeDataString($UrlPath.TrimStart('/'));if(!$relative){$relative='index.html'}
+  if($relative.StartsWith('downloads/')){$file=[IO.Path]::GetFileName($relative.Substring(10));$p=Join-Path $script:Exports $file;if(!(Test-Path $p)){SendJson $C @{error='ZIP no encontrado'} 404;return};SendBytes $C ([IO.File]::ReadAllBytes($p)) 'application/zip';return}
+  $relative=$relative.Replace('\','/').TrimStart('/')
+  $allowed=@('index.html','styles.css','app.js','runtime/native-generator.js','runtime/native-modification-policy.js','docs/SDK_MATRIX.md','docs/PROJECT_ECOSYSTEM.md')
+  if($relative -notin $allowed){SendJson $C @{error='Ruta no disponible'} 404;return}
+  $full=Join-Path $script:Root ($relative.Replace('/','\'));if(!(Test-Path $full -PathType Leaf)){SendJson $C @{error='Archivo no encontrado'} 404;return}
+  $ext = [IO.Path]::GetExtension($full).ToLowerInvariant()
+  $type = switch ($ext) {
+    '.html' { 'text/html; charset=utf-8' }
+    '.css'  { 'text/css; charset=utf-8' }
+    '.js'   { 'application/javascript; charset=utf-8' }
+    '.svg'  { 'image/svg+xml' }
+    '.png'  { 'image/png' }
+    '.md'   { 'text/markdown; charset=utf-8' }
+    default { 'application/octet-stream' }
+  }
+  SendBytes $C ([IO.File]::ReadAllBytes($full)) $type
+}
+# TCP loopback server, not HttpListener: avoids admin-only URL ACL setup on a fresh Windows install.
+if ($args.Count -ge 2 -and [string]$args[0] -eq '--worker') {
+  $jobId = [string]$args[1]
+  try {
+    $jobDir = GetBuildJobDirectory $jobId
+    $script:ActiveBuildLogPath = Join-Path $jobDir 'build.log'
+    WriteBuildJobLog $script:ActiveBuildLogPath 'Trabajador de compilación iniciado.'
+    $requestPath = Join-Path $jobDir 'request.json'
+    $jobRequest = Get-Content -LiteralPath $requestPath -Raw | ConvertFrom-Json
+    if ([string]$jobRequest.action -eq 'native') { $result = BuildNativeProject ([string]$jobRequest.body.path) ([bool]$jobRequest.body.cleanBeforeBuild) ([string]$jobRequest.body.titleId) ([string]$jobRequest.body.name) $jobRequest.body.nativeModifications }
+    elseif ([string]$jobRequest.action -eq 'package') { $result = PackageNativeProjectWithUltraPack $jobRequest.body }
+    else { $result = BuildNativeVisualProject $jobRequest.body }
+    if ($result.ok) { WriteBuildJobLog $script:ActiveBuildLogPath ('COMPLETADO: ' + [string]$result.message) }
+    else { WriteBuildJobLog $script:ActiveBuildLogPath ('ERROR: ' + [string]$result.message) }
+    if ($result.output) { WriteBuildJobLog $script:ActiveBuildLogPath ([string]$result.output) }
+    WriteUtf8 (Join-Path $jobDir 'result.json') (ConvertTo-Json -InputObject $result -Depth 100)
+    exit 0
+  } catch {
+    $failed = @{ok=$false;message='El trabajador de compilación ha fallado.';output=$_.Exception.Message;exitCode=1}
+    try {
+      WriteBuildJobLog (Join-Path (GetBuildJobDirectory $jobId) 'build.log') ('ERROR FATAL: ' + $_.Exception.Message)
+      WriteUtf8 (Join-Path (GetBuildJobDirectory $jobId) 'result.json') (ConvertTo-Json -InputObject $failed -Depth 20)
+    } catch { }
+    exit 1
+  }
+}
+
+$listener = [Net.Sockets.TcpListener]::new([Net.IPAddress]::Parse('127.0.0.1'),47813)
+try {
+    $listener.Start()
+} catch {
+    Write-Host "No se pudo iniciar el servicio en $script:Url." -ForegroundColor Red
+    Write-Host ("Detalle de Windows: " + $_.Exception.Message) -ForegroundColor Yellow
+    try {
+        $owners = @(Get-NetTCPConnection -LocalPort 47813 -State Listen -ErrorAction Stop)
+        foreach ($owner in $owners) {
+            $ownerPid = [int]$owner.OwningProcess
+            Write-Host ("PID que ocupa el puerto 47813: " + $ownerPid) -ForegroundColor Cyan
+            try {
+                $processInfo = Get-CimInstance Win32_Process -Filter ("ProcessId = " + $ownerPid) -ErrorAction Stop
+                Write-Host ("Proceso: " + [string]$processInfo.Name) -ForegroundColor Yellow
+                if ($processInfo.CommandLine) { Write-Host ("Comando: " + [string]$processInfo.CommandLine) -ForegroundColor DarkYellow }
+            } catch { Write-Host 'No se pudo consultar la información del PID.' -ForegroundColor Yellow }
+        }
+    } catch {
+        Write-Host 'No se pudo consultar el PID. Comprueba netstat -ano -p tcp y busca LISTENING en el puerto 47813.' -ForegroundColor Yellow
+    }
+    Write-Host 'No se ha terminado ningún proceso automáticamente.' -ForegroundColor Yellow
+    Read-Host 'Pulsa Intro para cerrar este intento de arranque'
+    exit 2
+}
+Write-Host 'PS5 Homebrew Studio' -ForegroundColor Cyan
+Write-Host "Servicio local: $script:Url"
+Write-Host 'Solo loopback. Cierra esta ventana para detenerlo.' -ForegroundColor DarkGray
+Start-Process $script:Url
+$script:StopServerRequested = $false
+$script:ServerCancelHandler = [System.ConsoleCancelEventHandler]{
+    param($sender, $eventArgs)
+    $eventArgs.Cancel = $true
+    $script:StopServerRequested = $true
+    try { $listener.Stop() } catch { }
+}
+[Console]::add_CancelKeyPress($script:ServerCancelHandler)
+try {
+while (!$script:StopServerRequested -and $listener.Server.IsBound) {
+    $client = $null
+    $stream = $null
+    try {
+        $client = $listener.AcceptTcpClient()
+        $stream = $client.GetStream()
+        $stream.ReadTimeout = 30000
+        $stream.WriteTimeout = 30000
+
+        $headerBytes = New-Object 'System.Collections.Generic.List[byte]'
+        $tail = New-Object 'System.Collections.Generic.Queue[byte]'
+        while ($headerBytes.Count -lt 65536) {
+            $v = $stream.ReadByte()
+            if ($v -lt 0) { break }
+            $headerBytes.Add([byte]$v)
+            $tail.Enqueue([byte]$v)
+            if ($tail.Count -gt 4) { $null = $tail.Dequeue() }
+            if ($tail.Count -eq 4 -and (($tail.ToArray() -join ',') -eq '13,10,13,10')) { break }
+        }
+        if ($headerBytes.Count -eq 0) { continue }
+
+        $headerText = [Text.Encoding]::ASCII.GetString($headerBytes.ToArray())
+        $headLines = $headerText -split "`r`n"
+        $requestParts = $headLines[0].Split(' ')
+        if ($requestParts.Count -lt 2) { continue }
+
+        $method = $requestParts[0].ToUpperInvariant()
+        $target = $requestParts[1]
+        $headers = @{}
+        foreach ($line in ($headLines | Select-Object -Skip 1)) {
+            if (!$line) { continue }
+            $ix = $line.IndexOf(':')
+            if ($ix -gt 0) {
+                $headers[$line.Substring(0, $ix).Trim().ToLowerInvariant()] = $line.Substring($ix + 1).Trim()
+            }
+        }
+
+        $length = 0
+        if ($headers.ContainsKey('content-length')) {
+            [int]::TryParse($headers['content-length'], [ref]$length) | Out-Null
+        }
+
+        $response = [pscustomobject]@{
+            StatusCode = 200
+            ContentType = 'application/octet-stream'
+            Headers = @{ 'Cache-Control' = 'no-store' }
+            Body = [byte[]]@()
+        }
+        $bodyBytes = [byte[]]@()
+
+        if ($length -gt 100MB) {
+            $response.StatusCode = 413
+            $response.ContentType = 'text/plain; charset=utf-8'
+            $bodyBytes = [Text.Encoding]::UTF8.GetBytes('Request too large')
+            $response.Body = $bodyBytes
+        }
+        else {
+            $bodyBytes = New-Object byte[] $length
+            $offset = 0
+            while ($offset -lt $length) {
+                $read = $stream.Read($bodyBytes, $offset, $length - $offset)
+                if ($read -le 0) { break }
+                $offset += $read
+            }
+            if ($offset -ne $length) { continue }
+
+            $hostHeader = [string]$headers['host']
+            if ($hostHeader -notin @('127.0.0.1:47813', 'localhost:47813')) {
+                $response.StatusCode = 403
+                $response.ContentType = 'text/plain; charset=utf-8'
+                $bodyBytes = [Text.Encoding]::UTF8.GetBytes('Invalid Host')
+                $response.Body = $bodyBytes
+            }
+            else {
+                $uri = [Uri]('http://127.0.0.1:47813' + $target)
+                $origin = [string]$headers['origin']
+                $path = $uri.AbsolutePath
+                $request = [pscustomobject]@{
+                    HttpMethod = $method
+                    Url = $uri
+                    ContentEncoding = [Text.Encoding]::UTF8
+                    Body = [Text.Encoding]::UTF8.GetString($bodyBytes)
+                    Headers = $headers
+                }
+                $response = [pscustomobject]@{
+                    StatusCode = 200
+                    ContentType = 'application/octet-stream'
+                    Headers = @{ 'Cache-Control' = 'no-store' }
+                    Body = [byte[]]@()
+                }
+                $ctx = [pscustomobject]@{ Request = $request; Response = $response }
+
+                try {
+                    if ($method -eq 'POST' -and $path.StartsWith('/api/') -and $origin -and $origin -notin @('http://127.0.0.1:47813', 'http://localhost:47813')) {
+                        SendJson $ctx @{ error = 'Origen no permitido' } 403
+                    }
+                    elseif ($method -eq 'OPTIONS') {
+                        SendBytes $ctx ([byte[]]@()) 'text/plain' 204
+                    }
+                    elseif ($path.StartsWith('/api/')) {
+                        if ($method -eq 'GET' -and $path -eq '/api/status') {
+                            SendJson $ctx (GetStatus)
+                        }
+                        elseif ($method -eq 'GET' -and $path -eq '/api/integrations') {
+                            SendJson $ctx (GetIntegrationConfig)
+                        }
+                        elseif ($method -eq 'GET' -and $path -eq '/api/projects') {
+                            $items = @()
+                            Get-ChildItem $script:Workspace -Directory -ErrorAction SilentlyContinue | ForEach-Object {
+                                $projectFile = Join-Path $_.FullName 'project.json'
+                                if (Test-Path $projectFile) {
+                                    try {
+                                        $project = Get-Content $projectFile -Raw | ConvertFrom-Json
+                                        $items += @{ name = $project.name; file = $_.Name; backend = $project.backend }
+                                    }
+                                    catch { }
+                                }
+                            }
+                            SendJson $ctx @{ projects = $items }
+                        }
+                        elseif ($method -eq 'GET' -and $path -eq '/api/native-projects') {
+                            SendJson $ctx @{ projects = (GetGeneratedProjects) }
+                        }
+                        elseif ($method -eq 'GET' -and $path -match '^/api/build-jobs/[a-f0-9]{32}$') {
+                            $jobId = ($path -split '/')[-1]
+                            SendJson $ctx (GetNativeBuildJobStatus $jobId)
+                        }
+                        else {
+                            $body = ReadBody $ctx
+                            switch ($path) {
+                                '/api/save' {
+                                    $result = SaveProject $body.project ([string]$body.programCode)
+                                    SendJson $ctx $result
+                                }
+                                '/api/load' {
+                                    $file = [IO.Path]::GetFileName([string]$body.file)
+                                    $projectPath = Join-Path (Join-Path $script:Workspace $file) 'project.json'
+                                    if (!(Test-Path $projectPath)) {
+                                        SendJson $ctx @{ error = 'Proyecto no encontrado' } 404
+                                    }
+                                    else {
+                                        SendJson $ctx @{ project = (Get-Content $projectPath -Raw | ConvertFrom-Json) }
+                                    }
+                                }
+                                '/api/export-zip' {
+                                    $result = ExportProject $body.project ([string]$body.programCode)
+                                    SendJson $ctx $result
+                                }
+                                '/api/sdk-install' {
+                                    $results = @()
+                                    foreach ($id in @($body.ids)) {
+                                        $entry = $script:Catalog | Where-Object id -eq ([string]$id) | Select-Object -First 1
+                                        if (!$entry) {
+                                            $results += @{ ok = $false; name = [string]$id; message = 'ID de SDK desconocido.' }
+                                            continue
+                                        }
+                                        try { $results += InstallRepo $entry }
+                                        catch { $results += @{ ok = $false; name = $entry.name; message = $_.Exception.Message } }
+                                    }
+                                    $success = @($results | Where-Object ok).Count
+                                    SendJson $ctx @{ ok = ($success -eq $results.Count); message = "$success de $($results.Count) repositorio(s) disponibles."; results = $results }
+                                }
+                                '/api/setup' {
+                                    SendJson $ctx (InvokeSetup ([string]$body.action))
+                                }
+                                '/api/template-create' {
+                                    $templateId=[string]$body.templateId
+                                    if($templateId -eq 'vulkan-template') {
+                                        $result = NewVulkanTitle ([string]$body.name) ([string]$body.titleId) ([string]$body.design) $body.nativeModifications
+                                    }
+                                    elseif($templateId -in @('nativecpp','hui-gl')) {
+                                        $category=[string]$body.category;if(!$category){$category='game'}
+                                        $result = NewNativeTitle ([string]$body.name) ([string]$body.titleId) $category $templateId $body.nativeModifications
+                                    }
+                                    else { $result=@{ok=$false;message='Generador upstream no reconocido.';output='';templateId=$templateId} }
+                                    SendJson $ctx $result
+                                }
+                                '/api/integration-config' {
+                                    $result = SetIntegrationConfig $body
+                                    SendJson $ctx $result
+                                }
+                                '/api/package-ultrapack/start' {
+                                    SendJson $ctx (StartNativeBuildJob $body 'package')
+                                }
+                                '/api/native-presentation-assets' {
+                                    try {
+                                        SendJson $ctx (UpdateNativePresentationAssets $body)
+                                    }
+                                    catch {
+                                        SendJson $ctx @{ ok = $false; error = $_.Exception.Message } 400
+                                    }
+                                }
+                                '/api/build-native' {
+                                    $result = BuildNativeProject ([string]$body.path) ([bool]$body.cleanBeforeBuild) ([string]$body.titleId) ([string]$body.name) $body.nativeModifications
+                                    SendJson $ctx $result
+                                }
+                                '/api/build-native/start' {
+                                    SendJson $ctx (StartNativeBuildJob $body 'native')
+                                }
+                                '/api/build-visual-native/start' {
+                                    SendJson $ctx (StartNativeBuildJob $body 'visual')
+                                }
+                                '/api/build-visual-native' {
+                                    $result = BuildNativeVisualProject $body
+                                    SendJson $ctx $result
+                                }
+                                '/api/build' {
+                                    $backend = [string]$body.backend
+                                    if ($backend -in @('sharp', 'sharp-payload')) {
+                                        $result = BuildSharp $body.project ([string]$body.programCode) $backend ([string]$body.output)
+                                        SendJson $ctx $result
+                                    }
+                                    else {
+                                        if ($backend -eq 'ps5sdk') {
+                                            $message = 'PS5SDK es un backend de payload ELF C/C++. No ofrece un toolkit de UI que pueda representar fielmente los controles visuales del proyecto. No se reutiliza código C# como si fuera C válido.'
+                                        }
+                                        elseif ($backend -eq 'payload') {
+                                            $message = 'ps5-payload-dev/sdk es un backend de payload C/C++. Los widgets del editor pertenecen a aplicaciones; la compilación necesita un proyecto y una entrada de payload C/C++.'
+                                        }
+                                        elseif ($backend -eq 'ps5link') {
+                                            $message = 'ps5link-sdk produce títulos nativos y requiere ps5-payload-sdk, SharpProspero para empaquetado y libc.prx compatible del usuario. El IDE no presenta el código generado de SharpProspero como C válido.'
+                                        }
+                                        elseif ($backend -eq 'etahen') {
+                                            $message = 'etaHEN-Plugins crea daemons/plugins para etaHEN, no aplicaciones de interfaz independientes. Se requiere un proyecto de plugin y su estructura upstream.'
+                                        }
+                                        else {
+                                            $message = 'Backend no reconocido.'
+                                        }
+                                        SendJson $ctx @{
+                                            ok = $false
+                                            message = $message
+                                            output = 'No se ha iniciado una compilación incompatible.'
+                                            diagnostics = @(@{ severity = 'error'; title = 'Backend incompatible con el modelo visual'; message = $message; location = 'Backend' })
+                                        }
+                                    }
+                                }
+                                default {
+                                    SendJson $ctx @{ error = 'Ruta API no encontrada'; path = $path } 404
+                                }
+                            }
+                        }
+                    }
+                    else {
+                        ServeStatic $ctx $path
+                    }
+                }
+                catch {
+                    SendJson $ctx @{ error = $_.Exception.Message } 500
+                    Write-Host ('[ERROR] ' + $_.Exception.Message) -ForegroundColor Yellow
+                }
+
+                $response = $ctx.Response
+                $bodyBytes = [byte[]]$response.Body
+            }
+        }
+
+        $status = [int]$response.StatusCode
+        $reason = switch ($status) {
+            200 { 'OK' }
+            204 { 'No Content' }
+            400 { 'Bad Request' }
+            403 { 'Forbidden' }
+            404 { 'Not Found' }
+            413 { 'Payload Too Large' }
+            500 { 'Internal Server Error' }
+            default { 'OK' }
+        }
+        $contentType = [string]$response.ContentType
+        $responseHead = "HTTP/1.1 $status $reason`r`nContent-Type: $contentType`r`nContent-Length: $($bodyBytes.Length)`r`nConnection: close`r`nCache-Control: no-store`r`nX-Content-Type-Options: nosniff`r`n`r`n"
+        $headBytes = [Text.Encoding]::ASCII.GetBytes($responseHead)
+        $stream.Write($headBytes, 0, $headBytes.Length)
+        if ($bodyBytes.Length -gt 0) { $stream.Write($bodyBytes, 0, $bodyBytes.Length) }
+        $stream.Flush()
+    }
+    catch {
+        Write-Host ('[REQUEST ERROR] ' + $_.Exception.Message) -ForegroundColor Yellow
+    }
+    finally {
+        if ($stream) { $stream.Dispose() }
+        if ($client) { $client.Close() }
+    }
+}
+} catch {
+    Write-Host ("[SERVER STOP] " + $_.Exception.Message) -ForegroundColor Yellow
+} finally {
+    try { [Console]::remove_CancelKeyPress($script:ServerCancelHandler) } catch { }
+    try { $listener.Stop() } catch { }
+    Write-Host 'PS5 Homebrew Studio: listener detenido; puerto local 47813 liberado.' -ForegroundColor DarkGray
+}
+) { throw 'ID de recurso nativo no válido.' }
+        $assetIds += $assetId
+      }
+      $assetMutationPaths = @('assets/ps5hs/manifest.json') + @($assetIds | Select-Object -Unique | ForEach-Object { 'assets/ps5hs/' + $_ + '.rgba' })
+      $assetResult = InvokePS5HSNativeModificationWithAudit -ProjectRoot $projectRoot -Backend $backend -Operation 'write-user-selected-native-image-assets' -PermissionKey $integrationPermissionKey -RelativePaths $assetMutationPaths -Policy $policy -SourceRepository 'user-supplied-assets' -Action { WriteNativeVisualAssets $Body $projectRoot }
+    } else { $assetResult = WriteNativeVisualAssets $Body $projectRoot }
+    $unicodeFontResult = $null
+    if ($Body.nativeFont -and ![string]::IsNullOrWhiteSpace([string]$Body.nativeFont.base64)) {
+      $fontKitPrefix = if ($backend -eq 'vulkan-ui') { '.deps/hui/' } else { '' }
+      $fontMutationPaths = @('.ps5hs-font-source/PS5HS-User-Font.ttf','.ps5hs-font-source/codepoints.txt','PS5HS-UNICODE-FONTS.txt',
+        ($fontKitPrefix + 'tools/font-baker/bake_font.cpp'),
+        ($fontKitPrefix + 'tools/bake-fonts.sh'),
+        ($fontKitPrefix + 'third_party/fonts/PS5HS-User-Font.ttf'),
+        ($fontKitPrefix + 'third_party/fonts/PS5HS-Unicode-Codepoints.txt'),
+        ($fontKitPrefix + 'assets/fonts/inter-regular.huifont'),
+        ($fontKitPrefix + 'assets/fonts/inter-semibold.huifont'),
+        ($fontKitPrefix + 'assets/fonts/montserrat-medium.huifont'),
+        ($fontKitPrefix + 'assets/fonts/dejavu-sans-mono.huifont'),
+        ($fontKitPrefix + 'assets/fonts/press-start-2p.huifont'),
+        ($fontKitPrefix + 'assets/fonts/patrick-hand.huifont'),
+        ($fontKitPrefix + 'build/host/ps5hs-bake-font')
+      )
+      if ($backend -eq 'vulkan-ui') { $fontMutationPaths += 'ps5/ui/setup-kit.sh' }
+      $unicodeFontResult = InvokePS5HSNativeModificationWithAudit -ProjectRoot $projectRoot -Backend $backend -Operation 'prepare-custom-unicode-font-tools-and-atlases' -PermissionKey 'allowCustomUnicodeFont' -RelativePaths $fontMutationPaths -Policy $policy -SourceRepository 'blackbearreloaded/ps5-homebrew-ui' -Action { PrepareNativeUnicodeFonts $Body $projectRoot $backend }
+    } else { $unicodeFontResult = PrepareNativeUnicodeFonts $Body $projectRoot $backend }
     if ($unicodeFontResult.enabled) {
       $assetResult.unicodeFont = $unicodeFontResult
       WriteBuildJobLog $script:ActiveBuildLogPath ("Fuente Unicode personalizada lista: " + [string]$unicodeFontResult.fileName + "; " + [string]$unicodeFontResult.glyphCount + " glifos. El build conservará los atlas personalizados.")
