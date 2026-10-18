@@ -1112,6 +1112,7 @@
             nativeFont.codepoints=window.PS5HSUnicodeFonts.collectCodepoints(data);
           }
           const presentationFiles={icon:$('#nativeVisualIcon')?.files?.[0]||null,selectionBackground:$('#nativeVisualSelectionBg')?.files?.[0]||null,launchBackground:$('#nativeVisualLaunchBg')?.files?.[0]||null,audio:$('#nativeVisualAudio')?.files?.[0]||null};
+          if(Object.values(presentationFiles).some(Boolean)&&!nativeModifications.allowExecuteUpstreamAssetTools){toast('Autoriza expresamente el conversor de recursos de presentación. No se ha creado ni modificado ningún título.','warn');return;}
           const presentationLimits={icon:8*1024*1024,selectionBackground:20*1024*1024,launchBackground:20*1024*1024,audio:20*1024*1024};
           for(const [key,file] of Object.entries(presentationFiles)){if(file&&file.size>presentationLimits[key])throw new Error(`${file.name} supera el máximo permitido de ${Math.round(presentationLimits[key]/1024/1024)} MiB.`);}
           const wirePresentation={};for(const [key,file] of Object.entries(presentationFiles)){if(file)wirePresentation[key]=await encodePresentationFile(file);}
