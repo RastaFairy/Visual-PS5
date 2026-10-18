@@ -1965,7 +1965,7 @@ std::span<const ConceptFactory> concept_registry() {
     }
     $meta = Get-Content -LiteralPath $markerPath -Raw | ConvertFrom-Json
 
-    $presentationBody = @{ path = $projectRoot }
+    $presentationBody = @{ path = $projectRoot; nativeModifications = $policy }
     $presentationRequested = $false
     foreach ($assetKey in @('icon','selectionBackground','launchBackground','audio')) {
       if ($null -ne $Body.$assetKey) {
