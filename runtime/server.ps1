@@ -307,7 +307,6 @@ function NewNativeTitle([string]$Name,[string]$TitleId,[string]$Category,[string
   if($Category -notin @('game','media')) { return @{ok=$false;message='Categoría inválida.';output=''} }
   if($TemplateId -notin @('nativecpp','hui-gl')) { return @{ok=$false;message='La plantilla no dispone de un generador C++ aquí.';output=''} }
   $policy = AssertPS5HSNativeModificationConsent -Backend $TemplateId -Policy $Policy -RequirePermissionKeys @('allowExecuteUpstreamGenerationTools')
-  $null = AssertPS5HSNativeModificationManifestWritable -ProjectRoot $script:Workspace
   $entry=$script:Catalog | Where-Object id -eq $TemplateId | Select-Object -First 1
   if(!$entry) { return @{ok=$false;message='No se encontró la plantilla en el catálogo.';output=$TemplateId} }
   try { $cloneResult = InstallRepo $entry; if(!$cloneResult.ok) { return @{ok=$false;message=$cloneResult.message;output=$cloneResult.path} } }
@@ -347,13 +346,20 @@ function NewNativeTitle([string]$Name,[string]$TitleId,[string]$Category,[string
     } else {
       $cmd='cd '+(BashQuote $targetWsl)+' && make init TITLE_ID='+(BashQuote $TitleId)+' APP_NAME='+(BashQuote $Name)+' APP_CATEGORY='+(BashQuote $Category)
     }
-    $output=@(& $wsl.path -d $dist --exec bash -lc $cmd 2>&1)
-    $exit=$LASTEXITCODE
+    $initInvocation = InvokePS5HSNativeTreeModificationWithAudit -ProjectRoot $target -Backend $TemplateId -Operation 'run-upstream-native-project-initializer' -PermissionKey 'allowExecuteUpstreamGenerationTools' -Policy $policy -SourceRepository $entry.repo -Action {
+      $initOutput = @(& $wsl.path -d $dist --exec bash -lc $cmd 2>&1)
+      $initExit = $LASTEXITCODE
+      return @{output=@($initOutput | ForEach-Object { $_.ToString() });exitCode=[int]$initExit}
+    }
+    $output=@($initInvocation.output)
+    $exit=[int]$initInvocation.exitCode
     $log=($output | ForEach-Object { $_.ToString() }) -join [Environment]::NewLine
     $valid=($exit -eq 0 -and (Test-Path $paramPath) -and (Test-Path (Join-Path $target 'src/main.cpp')) -and (Test-Path (Join-Path $target 'Makefile')))
     if($valid) {
       $summary=@{schema='ps5hs-native-project';template=$TemplateId;repository=$entry.repo;titleId=$TitleId;name=$Name;category=$Category;initializedAt=(Get-Date).ToString('o')}
-      WriteUtf8 (Join-Path $target '.ps5hs-project.json') (ConvertTo-Json -InputObject $summary -Depth 5)
+      $null = InvokePS5HSNativeModificationWithAudit -ProjectRoot $target -Backend $TemplateId -Operation 'write-native-project-metadata' -PermissionKey 'allowExecuteUpstreamGenerationTools' -RelativePaths @('.ps5hs-project.json') -Policy $policy -SourceRepository $entry.repo -Action {
+        WriteUtf8 (Join-Path $target '.ps5hs-project.json') (ConvertTo-Json -InputObject $summary -Depth 5)
+      }
       return @{ok=$true;message=$(if($TemplateId -eq 'hui-gl'){'Proyecto de interfaz OpenGL creado desde ps5-homebrew-ui upstream.'}else{'Proyecto C++20 nativo creado desde ps5-native-app-boilerplate upstream.'});output=$log;path=$target;titleId=$TitleId;templateId=$TemplateId;build='not-run'}
     }
     return @{ok=$false;message="El inicializador upstream finalizó con código $exit o no dejó la estructura esperada.";output=$log;path=$target;titleId=$TitleId}
@@ -382,9 +388,21 @@ function NewVulkanTitle([string]$Name,[string]$TitleId,[string]$Design,$Policy=$
     $repoWsl=ConvertToWslPath $repo;$targetWsl=ConvertToWslPath $target;$generatorWsl=ConvertToWslPath $generator
     $cmd='python3 '+(BashQuote $generatorWsl)+' '+(BashQuote $targetWsl)+' --title-id '+(BashQuote $TitleId)+' --name '+(BashQuote $Name)
     if($Design -ne 'starter'){$cmd+=' --ui '+(BashQuote $Design)}
-    $wsl=CmdInfo 'wsl.exe';if(!$wsl.ok){throw 'wsl.exe no está disponible.'};$output=@(& $wsl.path -d $dist --exec bash -lc $cmd 2>&1);$exit=$LASTEXITCODE;$log=($output|ForEach-Object{$_.ToString()}) -join "`r`n"
+    $wsl=CmdInfo 'wsl.exe';if(!$wsl.ok){throw 'wsl.exe no está disponible.'}
+    $generation = InvokePS5HSNativeTreeModificationWithAudit -ProjectRoot $target -Backend 'vulkan-template' -Operation 'run-vulkan-upstream-title-generator' -PermissionKey 'allowExecuteUpstreamGenerationTools' -Policy $policy -SourceRepository $entry.repo -Action {
+      $generatorOutput = @(& $wsl.path -d $dist --exec bash -lc $cmd 2>&1)
+      $generatorExit = $LASTEXITCODE
+      return @{output=@($generatorOutput | ForEach-Object { $_.ToString() });exitCode=[int]$generatorExit}
+    }
+    $output=@($generation.output);$exit=[int]$generation.exitCode;$log=($output|ForEach-Object{$_.ToString()}) -join "`r`n"
     $valid=($exit -eq 0 -and (Test-Path (Join-Path $target 'README.md')) -and (Test-Path (Join-Path $target 'ps5')))
-    if($valid){$summary=@{schema='ps5hs-native-project';template='vulkan-template';repository=$entry.repo;titleId=$TitleId;name=$Name;category='game';design=$Design;initializedAt=(Get-Date).ToString('o')};WriteUtf8 (Join-Path $target '.ps5hs-project.json') (ConvertTo-Json -InputObject $summary -Depth 5);return @{ok=$true;message='Proyecto C++ nativo generado por el generador upstream PS5 Vulkan Template. Todavía no se ha compilado.';output=$log;path=$target;titleId=$TitleId;design=$Design;templateId='vulkan-template';build='not-run'}}
+    if($valid){
+      $summary=@{schema='ps5hs-native-project';template='vulkan-template';repository=$entry.repo;titleId=$TitleId;name=$Name;category='game';design=$Design;initializedAt=(Get-Date).ToString('o')}
+      $null = InvokePS5HSNativeModificationWithAudit -ProjectRoot $target -Backend 'vulkan-template' -Operation 'write-vulkan-project-metadata' -PermissionKey 'allowExecuteUpstreamGenerationTools' -RelativePaths @('.ps5hs-project.json') -Policy $policy -SourceRepository $entry.repo -Action {
+        WriteUtf8 (Join-Path $target '.ps5hs-project.json') (ConvertTo-Json -InputObject $summary -Depth 5)
+      }
+      return @{ok=$true;message='Proyecto C++ nativo generado por el generador upstream PS5 Vulkan Template. Todavía no se ha compilado.';output=$log;path=$target;titleId=$TitleId;design=$Design;templateId='vulkan-template';build='not-run'}
+    }
     return @{ok=$false;message="El generador upstream terminó con código $exit o no dejó la estructura esperada.";output=$log;path=$target;titleId=$TitleId}
   } catch { return @{ok=$false;message=$_.Exception.Message;output='Error al preparar la ruta o invocar WSL.';path=$target} }
 }
@@ -1173,7 +1191,7 @@ function BuildNativeProject([string]$ProjectPath,[bool]$CleanBeforeBuild=$false,
     if ($titleId -notmatch '^PPSA\d{5}$' -or $titleId -eq 'PPSA00000' -or !$projectName) {
       return @{ok=$false;message='El proyecto se reconoce, pero requiere inicialización. Introduce un nombre y un TITLE_ID válido (PPSA12345).';output=[string]$profile.typeLabel;path=$projectRoot;templateId=$template;needsInit=$true;titleId=$profile.titleId}
     }
-    $initResult = InitializeNativeProjectFolder $projectRoot $template $titleId $projectName 'game' $dist
+    $initResult = InvokePS5HSNativeTreeModificationWithAudit -ProjectRoot $projectRoot -Backend $template -Operation 'initialize-native-project-from-upstream' -PermissionKey 'allowExecuteUpstreamGenerationTools' -Policy $policy -SourceRepository ([string]$profile.repository) -Action { InitializeNativeProjectFolder $projectRoot $template $titleId $projectName 'game' $dist }
     if (!$initResult.ok) { return @{ok=$false;message=$initResult.message;output=$initResult.output;path=$projectRoot;templateId=$template;needsInit=$true} }
     WriteBuildJobLog $script:ActiveBuildLogPath ([string]$initResult.message)
     if ($initResult.output) { WriteBuildJobLog $script:ActiveBuildLogPath ([string]$initResult.output) }
@@ -1183,7 +1201,9 @@ function BuildNativeProject([string]$ProjectPath,[bool]$CleanBeforeBuild=$false,
     if (!$profile.initialized) { return @{ok=$false;message='El proyecto todavía no tiene metadatos de título válidos.';output=$projectRoot;templateId=$template;needsInit=$true} }
     $entry = $script:Catalog | Where-Object id -eq $template | Select-Object -First 1
     $meta = @{schema='ps5hs-native-project';template=$template;repository=$(if($entry){[string]$entry.repo}else{[string]$profile.repository});titleId=[string]$profile.titleId;name=[string]$profile.name;category='game';initializedAt=(Get-Date).ToString('o')}
-    WriteUtf8 $markerPath (ConvertTo-Json -InputObject $meta -Depth 5)
+    $null = InvokePS5HSNativeModificationWithAudit -ProjectRoot $projectRoot -Backend $template -Operation 'write-native-project-metadata' -PermissionKey 'allowExecuteUpstreamBuildTools' -RelativePaths @('.ps5hs-project.json') -Policy $policy -SourceRepository ([string]$profile.repository) -Action {
+      WriteUtf8 $markerPath (ConvertTo-Json -InputObject $meta -Depth 5)
+    }
   }
   try { $meta = Get-Content -LiteralPath $markerPath -Raw | ConvertFrom-Json }
   catch { return @{ok=$false;message='El manifiesto del proyecto no se puede leer.';output=$_.Exception.Message} }
