@@ -7,13 +7,14 @@ function Assert-Condition([bool]$Condition,[string]$Message) {
 }
 
 $defaults = NormalizePS5HSNativeModificationPolicy $null
-Assert-Condition ($defaults.Count -eq 11) 'La política debe declarar todas las operaciones registradas.'
+Assert-Condition ($defaults.Count -eq 12) 'La política debe declarar todas las operaciones registradas.'
 Assert-Condition (@($defaults.Values | Where-Object { $_ -eq $true }).Count -eq 0) 'Todas las modificaciones deben estar denegadas por defecto.'
 $gaps = @(GetPS5HSNativeModificationConsentGaps -Backend 'opengl-ui' -Policy $null -RequireGeneration $true -RequireBuildTools $true -RequireVisualIntegration $true)
 Assert-Condition ($gaps.Count -eq 3) 'OpenGL debe exigir generador, herramientas upstream e integración visual.'
 $approved = [pscustomobject]@{
   allowExecuteUpstreamGenerationTools=$true
   allowExecuteUpstreamBuildTools=$true
+  allowExecuteUpstreamAssetTools=$false
   allowSharpTemplateIntegration=$false
   allowOpenGlTemplateIntegration=$true
   allowOpenGlRuntimeProfile=$false
@@ -39,6 +40,13 @@ try {
   AssertPS5HSNativeModificationConsent -Backend 'sharp' -Policy $null -RequirePermissionKeys @('allowSharpTemplateIntegration','allowExecuteUpstreamBuildTools') | Out-Null
 } catch { $sharpDenied = $true }
 Assert-Condition $sharpDenied 'Una invocación directa de SharpProspero debe fallar cerrada si no recibe permiso de integración y de build.'
+$assetGaps = @(GetPS5HSNativeModificationConsentGaps -Backend 'hui-gl' -Policy $null -RequirePermissionKeys @('allowExecuteUpstreamAssetTools'))
+Assert-Condition ($assetGaps.Count -eq 1 -and $assetGaps[0] -eq 'allowExecuteUpstreamAssetTools') 'Los cambios de presentación deben exigir el permiso de conversión independiente del build.';
+$assetDenied = $false
+try {
+  AssertPS5HSNativeModificationConsent -Backend 'hui-gl' -Policy $null -RequirePermissionKeys @('allowExecuteUpstreamAssetTools') | Out-Null
+} catch { $assetDenied = $true }
+Assert-Condition $assetDenied 'La conversión de presentación debe fallar cerrada sin autorización propia.'
 
 $utf8 = [Text.UTF8Encoding]::new($false)
 $root = Join-Path ([IO.Path]::GetTempPath()) ('ps5hs-policy-' + [guid]::NewGuid().ToString('N'))
