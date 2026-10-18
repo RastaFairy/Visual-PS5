@@ -4,6 +4,7 @@ const policy = require('./native-modification-policy.js');
 
 const defaults = policy.defaults();
 assert.equal(defaults.allowExecuteUpstreamBuildTools, false);
+assert.equal(defaults.allowExecuteUpstreamAssetTools, false);
 assert.ok(Object.values(defaults).every(value => value === false), 'Every source-modification permission must default to false.');
 assert.deepEqual(policy.requiredForBackend('opengl-ui'), ['allowExecuteUpstreamGenerationTools','allowExecuteUpstreamBuildTools','allowOpenGlTemplateIntegration']);
 assert.deepEqual(policy.requiredForBackend('vulkan-ui'), ['allowExecuteUpstreamGenerationTools','allowExecuteUpstreamBuildTools','allowVulkanTemplateIntegration']);
@@ -24,6 +25,8 @@ assert.deepEqual(policy.requiredForBackend('sharp'), ['allowExecuteUpstreamBuild
 assert.deepEqual(policy.missingForBackend('sharp', defaults, false), ['allowExecuteUpstreamBuildTools','allowSharpTemplateIntegration']);
 assert.deepEqual(policy.missingForPermissions(defaults, ['allowExecuteUpstreamGenerationTools']), ['allowExecuteUpstreamGenerationTools']);
 assert.deepEqual(policy.missingForPermissions(defaults, ['allowSharpTemplateIntegration']), ['allowSharpTemplateIntegration']);
+assert.deepEqual(policy.missingForPermissions(defaults, ['allowExecuteUpstreamAssetTools']), ['allowExecuteUpstreamAssetTools']);
+assert.deepEqual(policy.missingForPermissions({...defaults, allowExecuteUpstreamAssetTools:true}, ['allowExecuteUpstreamAssetTools']), []);
 assert.deepEqual(policy.missingForPermissions({...defaults, allowSharpTemplateIntegration:true}, ['allowSharpTemplateIntegration']), []);
 assert.deepEqual(policy.missingForPermissions({...defaults, allowExecuteUpstreamGenerationTools:true}, ['allowExecuteUpstreamGenerationTools']), []);
 assert.deepEqual(policy.missingForPermissions(defaults, ['not-a-known-permission']), ['not-a-known-permission']);
