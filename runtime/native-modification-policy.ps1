@@ -222,6 +222,7 @@ function ApplyPS5HSWindowsBuildEntrypointPatch {
   param([Parameter(Mandatory=$true)][string]$ProjectRoot,$Policy,[string]$Backend='nativecpp',[string]$SourceRepository='',[string]$SourceCommit='')
   $approved = NormalizePS5HSNativeModificationPolicy $Policy
   if (!$approved.allowWindowsBuildEntrypointPatch) { return @{ok=$true;changed=$false;skipped=$true;files=@()} }
+  $null = AssertPS5HSNativeModificationManifestWritable -ProjectRoot $ProjectRoot
   $path = Join-Path $ProjectRoot 'build.ps1'
   if (!(Test-Path -LiteralPath $path -PathType Leaf)) { throw 'Se autorizó el parche de build.ps1, pero el proyecto no contiene ese archivo.' }
   $original = [IO.File]::ReadAllText($path)
@@ -257,6 +258,7 @@ function NormalizeNativeBuildFilesWithAudit {
     if ($script:ActiveBuildLogPath) { WriteBuildJobLog $script:ActiveBuildLogPath 'Normalización omitida por política: no se han cambiado finales de línea de archivos fuente.' }
     return @{count=0;changedFiles=@();skipped=$true}
   }
+  $null = AssertPS5HSNativeModificationManifestWritable -ProjectRoot $ProjectRoot
   $root = [IO.Path]::GetFullPath($ProjectRoot)
   $allowedExtensions = @('.sh','.sha256','.c','.cc','.cpp','.h','.hpp','.ld','.mk','.s','.cmake','.yml','.yaml')
   $allowedNames = @('Makefile','GNUmakefile','CMakeLists.txt','.gitattributes')
