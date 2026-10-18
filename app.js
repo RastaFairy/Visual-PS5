@@ -1041,7 +1041,7 @@
     const current=policyApi.normalize(project.settings?.nativeModifications);
     const required=new Set(requiredKeys||policyApi.requiredForBackend(backend));
     const rows=policyApi.entriesForBackend(backend).map(entry=>'<label class="native-change-row" for="nativeMod-'+entry.key+'"><input id="nativeMod-'+entry.key+'" type="checkbox"'+(current[entry.key]===true?' checked':'')+'><span><strong>'+esc(entry.label)+(required.has(entry.key)?' · requerido':'')+'</strong><small>'+esc(entry.description)+'</small></span></label>').join('');
-    return '<section class="native-modification-policy"><h3>Control explícito de modificaciones</h3><p>Ningún cambio a fuentes upstream se autoriza por defecto. Marca solo las operaciones que aceptas; el servidor valida el permiso necesario para cada acción.</p>'+rows+'</section>';
+    return '<section class="native-modification-policy"><h3>Control explícito de modificaciones</h3><p>Ningún cambio a fuentes upstream se autoriza por defecto. Marca los permisos para esta operación; el servidor los valida y registra los cambios realizados.</p>'+rows+'</section>';
   }
   function nativeBuildModificationKeys(templateId, needsInit=false) {
     const keys=['allowExecuteUpstreamBuildTools','allowWindowsBuildEntrypointPatch','normalizeBuildFiles'];
@@ -1054,7 +1054,7 @@
     const policy=window.PS5HSNativeModificationPolicy.normalize(storedPolicy);
     const keys=nativeBuildModificationKeys(templateId,needsInit);
     const rows=keys.map(key=>{const entry=window.PS5HSNativeModificationPolicy.getEntry(key);return '<label class="native-change-row" for="nativeBuildMod-'+key+'"><input id="nativeBuildMod-'+key+'" type="checkbox"'+(policy[key]===true?' checked':'')+'><span><strong>'+esc(entry.label)+(entry.required?' · requerido':'')+'</strong><small>'+esc(entry.description)+'</small></span></label>';}).join('');
-    return '<section class="native-modification-policy"><h3>Permisos explícitos para esta operación</h3><p>La compilación no cambia fuentes del proyecto ni ejecuta scripts upstream hasta validar las autorizaciones requeridas. Las modificaciones anteriores se conservan; desmarcar un permiso no las revierte automáticamente.</p>'+rows+'</section>';
+    return '<section class="native-modification-policy"><h3>Permisos explícitos para esta operación</h3><p>El servidor no inicia el pipeline ni aplica las modificaciones controladas por el IDE hasta validar los permisos requeridos. Los cambios anteriores se conservan; desmarcar un permiso no los revierte automáticamente.</p>'+rows+'</section>';
   }
   function nativeBuildModificationPolicyFromUi(templateId, storedPolicy, needsInit=false) {
     const policy=window.PS5HSNativeModificationPolicy.normalize(storedPolicy);
