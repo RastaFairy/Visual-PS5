@@ -1754,7 +1754,7 @@ Backend: $Backend
 El archivo TTF y la lista de codepoints se conservan en .ps5hs-font-source/ para reconstrucción local. El IDE no concede derechos sobre la fuente; verifica su licencia antes de distribuir el título.
 "@
   WriteUtf8 (Join-Path $ProjectRoot 'PS5HS-UNICODE-FONTS.txt') $notice
-  WriteBuildJobLog $script:ActiveBuildLogPath ("Fuente Unicode personalizada horneada: " + $fileName + "; " + $points.Count + " codepoints; seis atlas SDF generados; herramientas modificadas registradas.")
+  WriteBuildJobLog $script:ActiveBuildLogPath ("Fuente Unicode personalizada horneada: " + $fileName + "; " + $points.Count + " codepoints; seis atlas SDF generados; la auditoría se registra al finalizar.")
   return @{enabled=$true;glyphCount=$points.Count;fileName=$fileName;notice='PS5HS-UNICODE-FONTS.txt'}
 }
 
@@ -1917,24 +1917,8 @@ std::span<const ConceptFactory> concept_registry() {
       $assetMutationPaths = @('assets/ps5hs/manifest.json') + @($assetIds | Select-Object -Unique | ForEach-Object { 'assets/ps5hs/' + $_ + '.rgba' })
       $assetResult = InvokePS5HSNativeModificationWithAudit -ProjectRoot $projectRoot -Backend $backend -Operation 'write-user-selected-native-image-assets' -PermissionKey $integrationPermissionKey -RelativePaths $assetMutationPaths -Policy $policy -SourceRepository 'user-supplied-assets' -Action { WriteNativeVisualAssets $Body $projectRoot }
     } else { $assetResult = WriteNativeVisualAssets $Body $projectRoot }
-    $unicodeFontResult = $null
     if ($Body.nativeFont -and ![string]::IsNullOrWhiteSpace([string]$Body.nativeFont.base64)) {
-      $fontKitPrefix = if ($backend -eq 'vulkan-ui') { '.deps/hui/' } else { '' }
-      $fontMutationPaths = @('.ps5hs-font-source/PS5HS-User-Font.ttf','.ps5hs-font-source/codepoints.txt','PS5HS-UNICODE-FONTS.txt',
-        ($fontKitPrefix + 'tools/font-baker/bake_font.cpp'),
-        ($fontKitPrefix + 'tools/bake-fonts.sh'),
-        ($fontKitPrefix + 'third_party/fonts/PS5HS-User-Font.ttf'),
-        ($fontKitPrefix + 'third_party/fonts/PS5HS-Unicode-Codepoints.txt'),
-        ($fontKitPrefix + 'assets/fonts/inter-regular.huifont'),
-        ($fontKitPrefix + 'assets/fonts/inter-semibold.huifont'),
-        ($fontKitPrefix + 'assets/fonts/montserrat-medium.huifont'),
-        ($fontKitPrefix + 'assets/fonts/dejavu-sans-mono.huifont'),
-        ($fontKitPrefix + 'assets/fonts/press-start-2p.huifont'),
-        ($fontKitPrefix + 'assets/fonts/patrick-hand.huifont'),
-        ($fontKitPrefix + 'build/host/ps5hs-bake-font')
-      )
-      if ($backend -eq 'vulkan-ui') { $fontMutationPaths += 'ps5/ui/setup-kit.sh' }
-      $unicodeFontResult = InvokePS5HSNativeModificationWithAudit -ProjectRoot $projectRoot -Backend $backend -Operation 'prepare-custom-unicode-font-tools-and-atlases' -PermissionKey 'allowCustomUnicodeFont' -RelativePaths $fontMutationPaths -Policy $policy -SourceRepository 'blackbearreloaded/ps5-homebrew-ui' -Action { PrepareNativeUnicodeFonts $Body $projectRoot $backend }
+      $unicodeFontResult = InvokePS5HSNativeTreeModificationWithAudit -ProjectRoot $projectRoot -Backend $backend -Operation 'prepare-custom-unicode-font-tools-and-atlases' -PermissionKey 'allowCustomUnicodeFont' -Policy $policy -SourceRepository 'blackbearreloaded/ps5-homebrew-ui' -Action { PrepareNativeUnicodeFonts $Body $projectRoot $backend }
     } else { $unicodeFontResult = PrepareNativeUnicodeFonts $Body $projectRoot $backend }
     if ($unicodeFontResult.enabled) {
       $assetResult.unicodeFont = $unicodeFontResult
