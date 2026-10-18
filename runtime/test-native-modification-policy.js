@@ -1,0 +1,19 @@
+'use strict';
+const assert = require('node:assert/strict');
+const policy = require('./native-modification-policy.js');
+
+const defaults = policy.defaults();
+assert.equal(defaults.allowExecuteUpstreamBuildTools, false);
+assert.ok(Object.values(defaults).every(value => value === false), 'Every source-modification permission must default to false.');
+assert.deepEqual(policy.requiredForBackend('opengl-ui'), ['allowExecuteUpstreamGenerationTools','allowExecuteUpstreamBuildTools','allowOpenGlTemplateIntegration']);
+assert.deepEqual(policy.requiredForBackend('vulkan-ui'), ['allowExecuteUpstreamGenerationTools','allowExecuteUpstreamBuildTools','allowVulkanTemplateIntegration']);
+assert.deepEqual(policy.missingForBackend('opengl-ui', defaults, false), ['allowExecuteUpstreamGenerationTools','allowOpenGlTemplateIntegration','allowExecuteUpstreamBuildTools']);
+assert.deepEqual(policy.missingForBackend('vulkan-ui', defaults, false), ['allowExecuteUpstreamGenerationTools','allowVulkanTemplateIntegration','allowExecuteUpstreamBuildTools']);
+assert.ok(policy.missingForBackend('opengl-ui', {...defaults, allowOpenGlTemplateIntegration:true}, true).includes('allowCustomUnicodeFont'));
+assert.deepEqual(policy.missingForBackend('opengl-ui', {...defaults, allowOpenGlTemplateIntegration:true, allowCustomUnicodeFont:true}, true), []);
+const normalized = policy.normalize({allowOpenGlRuntimeProfile:true, unexpectedPermission:true, normalizeBuildFiles:1});
+assert.equal(normalized.allowOpenGlRuntimeProfile, true);
+assert.equal(normalized.normalizeBuildFiles, false, 'Only explicit boolean true is accepted.');
+assert.equal(Object.hasOwn(normalized, 'unexpectedPermission'), false);
+assert.ok(policy.entriesForBackend('vulkan-ui').some(entry => entry.key === 'allowVulkanBuildHelperRestore'));
+console.log('PASS native modification policy: deny-by-default, explicit consent and backend requirements.');
