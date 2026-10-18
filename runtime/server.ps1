@@ -1976,12 +1976,43 @@ if ($args.Count -ge 2 -and [string]$args[0] -eq '--worker') {
 }
 
 $listener = [Net.Sockets.TcpListener]::new([Net.IPAddress]::Parse('127.0.0.1'),47813)
-try { $listener.Start() } catch { Write-Host "No se pudo iniciar el servicio en $script:Url. Cierra otra instancia. $($_.Exception.Message)" -ForegroundColor Red; Read-Host 'Pulsa Intro'; exit 2 }
+try {
+    $listener.Start()
+} catch {
+    Write-Host "No se pudo iniciar el servicio en $script:Url." -ForegroundColor Red
+    Write-Host ("Detalle de Windows: " + $_.Exception.Message) -ForegroundColor Yellow
+    try {
+        $owners = @(Get-NetTCPConnection -LocalPort 47813 -State Listen -ErrorAction Stop)
+        foreach ($owner in $owners) {
+            $ownerPid = [int]$owner.OwningProcess
+            Write-Host ("PID que ocupa el puerto 47813: " + $ownerPid) -ForegroundColor Cyan
+            try {
+                $processInfo = Get-CimInstance Win32_Process -Filter ("ProcessId = " + $ownerPid) -ErrorAction Stop
+                Write-Host ("Proceso: " + [string]$processInfo.Name) -ForegroundColor Yellow
+                if ($processInfo.CommandLine) { Write-Host ("Comando: " + [string]$processInfo.CommandLine) -ForegroundColor DarkYellow }
+            } catch { Write-Host 'No se pudo consultar la información del PID.' -ForegroundColor Yellow }
+        }
+    } catch {
+        Write-Host 'No se pudo consultar el PID. Comprueba netstat -ano -p tcp y busca LISTENING en el puerto 47813.' -ForegroundColor Yellow
+    }
+    Write-Host 'No se ha terminado ningún proceso automáticamente.' -ForegroundColor Yellow
+    Read-Host 'Pulsa Intro para cerrar este intento de arranque'
+    exit 2
+}
 Write-Host 'PS5 Homebrew Studio' -ForegroundColor Cyan
 Write-Host "Servicio local: $script:Url"
 Write-Host 'Solo loopback. Cierra esta ventana para detenerlo.' -ForegroundColor DarkGray
 Start-Process $script:Url
-while ($listener.Server.IsBound) {
+$script:StopServerRequested = $false
+$script:ServerCancelHandler = [ConsoleCancelEventHandler]{
+    param($sender, $eventArgs)
+    $eventArgs.Cancel = $true
+    $script:StopServerRequested = $true
+    try { $listener.Stop() } catch { }
+}
+[Console]::add_CancelKeyPress($script:ServerCancelHandler)
+try {
+while (!$script:StopServerRequested -and $listener.Server.IsBound) {
     $client = $null
     $stream = $null
     try {
@@ -2263,4 +2294,10 @@ while ($listener.Server.IsBound) {
         if ($client) { $client.Close() }
     }
 }
-$listener.Stop()
+} catch {
+    Write-Host ("[SERVER STOP] " + $_.Exception.Message) -ForegroundColor Yellow
+} finally {
+    try { [Console]::remove_CancelKeyPress($script:ServerCancelHandler) } catch { }
+    try { $listener.Stop() } catch { }
+    Write-Host 'PS5 Homebrew Studio: listener detenido; puerto local 47813 liberado.' -ForegroundColor DarkGray
+}
