@@ -722,6 +722,7 @@ function UpdateNativePresentationAssets($Body) {
   $backupDir = Join-Path $tempRoot 'backup'
   New-Item -ItemType Directory -Force -Path $inputDir,$stageDir,$backupDir | Out-Null
   $changedFiles = @()
+  $preserveTempRoot = $false
   try {
     # Copy only assets consumed or updated by the upstream preparation script.
     # Never recurse through unrelated project files or user-controlled links.
@@ -811,20 +812,32 @@ function UpdateNativePresentationAssets($Body) {
     }
   }
   catch {
+    $originalFailure = $_
+    $rollbackErrors = [System.Collections.Generic.List[string]]::new()
     for ($index = $changedFiles.Count - 1; $index -ge 0; $index--) {
       $filename = [string]$changedFiles[$index]
       $destination = Join-Path $project.sceSys $filename
       $backup = Join-Path $backupDir $filename
       try {
         if (Test-Path -LiteralPath $backup -PathType Leaf) { [IO.File]::Copy($backup, $destination, $true) }
-        elseif (Test-Path -LiteralPath $destination -PathType Leaf) { Remove-Item -LiteralPath $destination -Force }
-      } catch { }
+        elseif (Test-Path -LiteralPath $destination -PathType Leaf) { Remove-Item -LiteralPath $destination -Force -ErrorAction Stop }
+      } catch {
+        $rollbackErrors.Add(($filename + ': ' + $_.Exception.Message))
+      }
+    }
+    if ($rollbackErrors.Count -gt 0) {
+      $preserveTempRoot = $true
+      $detail = $rollbackErrors -join [Environment]::NewLine
+      throw ('Falló la actualización de presentación: ' + $originalFailure.Exception.Message + [Environment]::NewLine +
+        'ATENCIÓN: no se pudieron restaurar todos los archivos. Las copias de seguridad se conservan en: ' + $tempRoot +
+        [Environment]::NewLine + 'Archivos pendientes de restaurar:' + [Environment]::NewLine + $detail)
     }
     throw
   }
   finally {
-    if (Test-Path -LiteralPath $tempRoot -PathType Container) {
-      try { Remove-Item -LiteralPath $tempRoot -Recurse -Force } catch { }
+    if (!$preserveTempRoot -and (Test-Path -LiteralPath $tempRoot -PathType Container)) {
+      try { Remove-Item -LiteralPath $tempRoot -Recurse -Force -ErrorAction Stop }
+      catch { Write-Warning ('No se pudo eliminar la carpeta temporal de presentación: ' + $tempRoot + '. Puede borrarse manualmente tras comprobar sus copias de seguridad.') }
     }
   }
 }
