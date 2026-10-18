@@ -1,5 +1,9 @@
 # PS5 Homebrew Studio
 
+<p align="center">
+  <img src="{EDC916EF-F967-4908-A4E6-D206F0BA1AA6}.png" alt="Texto alternativo" width="1000">
+</p>
+
 **Release 1.1.11 · IDE visual local para Windows.** Integra un editor visual 1920×1080, análisis de flujos, generación de código C# para SharpProspero y conversión del modelo visual a pantallas C++20 para los kits nativos OpenGL/Vulkan. Incluye un catálogo verificado por función de boilerplates, UI kits, drivers, complementos gráficos y aplicaciones comunitarias de referencia.
 
 ## Runtime nativo autónomo · 1.1.11
