@@ -1152,10 +1152,10 @@
   async function buildSharpWithConsent(){
     const policyApi=window.PS5HSNativeModificationPolicy;
     if(!policyApi){toast('Falta el catálogo de permisos. Reinicia el IDE antes de compilar.','error');return;}
-    const requiredKeys=['allowExecuteUpstreamGenerationTools','allowExecuteUpstreamBuildTools'];
+    const requiredKeys=['allowSharpTemplateIntegration','allowExecuteUpstreamBuildTools'];
     const savedPolicy=policyApi.normalize(project.settings?.nativeModifications);
     const savedTitleId=String(project.settings?.titleId||'').toUpperCase();
-    const form='<p>SharpProspero copiará una plantilla UI upstream, escribirá el código y los metadatos del título y ejecutará <code>build/build-app.ps1</code>. Sin ambos permisos no se copiarán plantillas, no se cambiarán metadatos y no se ejecutará ninguna herramienta. La salida anterior se conservará.</p>'+
+    const form='<p>SharpProspero copiará la plantilla UI administrada por Homebrew Studio, escribirá el código y los metadatos del título y ejecutará <code>build/build-app.ps1</code>. Debes autorizar por separado la integración de fuentes/recursos y la ejecución de la herramienta de compilación. La salida anterior se conservará.</p>'+
       '<div class="form-field"><label>TITLE_ID explícito (PPSA12345)</label><input id="sharpBuildTitleId" maxlength="9" value="'+esc(/^PPSA\d{5}$/.test(savedTitleId)?savedTitleId:'')+'" placeholder="PPSA12345" pattern="PPSA[0-9]{5}"><small>No se generará un TITLE_ID aleatorio de forma automática.</small></div>'+
       nativeModificationOptionsMarkup('sharp',requiredKeys)+
       '<pre id="sharpBuildOutput" style="font:10px/1.55 Consolas,monospace;color:#aeb8cf;white-space:pre-wrap;word-break:break-word;max-height:32vh;overflow:auto">Esperando autorización. Aún no se ha creado ni modificado ningún archivo.</pre>';
