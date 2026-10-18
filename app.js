@@ -1113,7 +1113,9 @@
           // The source model carries names and links, while image pixels travel once as bounded RGBA assets.
           wireProject.assets=(wireProject.assets||[]).map(a=>{const item=Object.assign({},a);delete item.dataUrl;return item;});
           if(output)output.textContent=`Pantalla generada (${code.length.toLocaleString('es-ES')} caracteres). Recursos RGBA preparados: ${nativeAssets.length}. Iniciando pipeline upstream…`;
-          const startedJob=await api('build-visual-native/start',Object.assign({project:wireProject,programCode:code,backend,titleId:tid,nativeAssets,overwriteExisting:!!$('#nativeVisualOverwrite')?.checked,nativeFont,nativeModifications},wirePresentation));
+          const visualBuildPayload=Object.assign({project:wireProject,programCode:code,backend,titleId:tid,nativeAssets,overwriteExisting:!!$('#nativeVisualOverwrite')?.checked,nativeFont},wirePresentation);
+          visualBuildPayload.nativeModifications=nativeModifications;
+          const startedJob=await api('build-visual-native/start',visualBuildPayload);
           if(!startedJob.ok||!startedJob.jobId)throw new Error(startedJob.message||'El servidor no inició la tarea de compilación.');
           let status=null,lastLog='';
           while(true){
