@@ -250,9 +250,12 @@ function ApplyPS5HSWindowsBuildEntrypointPatch {
   param([Parameter(Mandatory=$true)][string]$ProjectRoot,$Policy,[string]$Backend='nativecpp',[string]$SourceRepository='',[string]$SourceCommit='')
   $approved = NormalizePS5HSNativeModificationPolicy $Policy
   if (!$approved.allowWindowsBuildEntrypointPatch) { return @{ok=$true;changed=$false;skipped=$true;files=@()} }
-  $null = AssertPS5HSNativeModificationManifestWritable -ProjectRoot $ProjectRoot
   $path = Join-Path $ProjectRoot 'build.ps1'
-  if (!(Test-Path -LiteralPath $path -PathType Leaf)) { throw 'Se autorizó el parche de build.ps1, pero el proyecto no contiene ese archivo.' }
+  if (!(Test-Path -LiteralPath $path -PathType Leaf)) {
+    if ($script:ActiveBuildLogPath) { WriteBuildJobLog $script:ActiveBuildLogPath 'Parche opcional de build.ps1 omitido: la plantilla no contiene ese archivo; no se ha modificado ningún archivo.' }
+    return @{ok=$true;changed=$false;skipped=$true;reason='build.ps1 no existe';files=@()}
+  }
+  $null = AssertPS5HSNativeModificationManifestWritable -ProjectRoot $ProjectRoot
   $original = [IO.File]::ReadAllText($path)
   $updated = $original
   $envPattern = '(?m)^(\s*)"APP_STATIC_ARCHIVES",\r?\n\s*"APP_RUNTIME_MODULES",\s*$'
