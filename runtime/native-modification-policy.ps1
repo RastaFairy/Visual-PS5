@@ -2,6 +2,7 @@
 $script:PS5HSNativeModificationKeys = @(
   'allowExecuteUpstreamGenerationTools',
   'allowExecuteUpstreamBuildTools',
+  'allowExecuteUpstreamAssetTools',
   'allowSharpTemplateIntegration',
   'allowOpenGlTemplateIntegration',
   'allowOpenGlRuntimeProfile',
