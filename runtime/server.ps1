@@ -2037,24 +2037,150 @@ function ExportProject($P,[string]$Code) {
   WriteUtf8 (Join-Path $dir 'README.md') ("# $($P.name)`r`n`r`nProyecto exportado desde PS5 Homebrew Studio.`r`nBackend: $($P.backend).`r`n$backendNote`r`nEl modelo editable está en project.json; los recursos importados están en assets/. Consulta las licencias y dependencias de cada SDK en su repositorio original. No se incluyen binarios propietarios de Sony.`r`n")
   $file=$name+'-'+$id+'.zip';$path=Join-Path $script:Exports $file;Compress-Archive -Path (Join-Path $dir '*') -DestinationPath $path -CompressionLevel Optimal -Force;return @{ok=$true;url='/downloads/'+$file;fileName=$file;path=$path}
 }
-function BuildSharp($P,[string]$Code,[string]$Backend,[string]$RequestedOutput='Package') {
-  if($Backend -eq 'sharp-payload'){return @{ok=$false;message='El formato Payload de SharpProspero es un ELF ejecutable dentro de un proceso ya cargado, no una app con pantalla propia. Este proyecto contiene componentes de interfaz y no se transformará incorrectamente en payload.';output='Crea un proyecto de payload específico o cambia el destino a SharpProspero · Aplicación.';diagnostics=@(@{severity='error';title='Tipo de producto incompatible';message='La interfaz visual necesita un módulo de aplicación nativa.';location='Backend'})}}
-  $sdk=Join-Path $script:Toolchains 'SharpProspero';if(!(Test-Path (Join-Path $sdk 'build/build-app.ps1'))){return @{ok=$false;message='SharpProspero no está instalado. Descarga el repositorio desde el panel SDKs.';output='';diagnostics=@(@{severity='error';title='SDK ausente';message='Descarga SharpProspero desde GitHub.';location='Backend'})}}
-  $st=GetStatus;if(!$st.prerequisites.dotnet10){return @{ok=$false;message='.NET SDK 10 no está disponible en Windows.';output='Instala .NET SDK 10 con Configurar entorno.';diagnostics=@(@{severity='error';title='.NET 10 ausente';message='El toolchain SharpProspero requiere .NET 10.';location='Entorno'})}}
-  if(!$st.prerequisites.wsl){return @{ok=$false;message='WSL no tiene una distribución inicializada.';output='Configurar entorno → Instalar WSL + Debian. Termina el primer inicio de la distribución y vuelve a comprobar.';diagnostics=@(@{severity='error';title='WSL ausente';message='En Windows SharpProspero usa WSL para compilar NativeAOT.';location='Entorno'})}}
-  if(!$st.prerequisites.wslDotnet10){return @{ok=$false;message='.NET SDK 10 no está instalado dentro de WSL.';output='Dentro de la distribución Linux, instala .NET SDK 10 siguiendo docs/setup.md de SharpProspero.';diagnostics=@(@{severity='error';title='.NET en WSL ausente';message='NativeAOT necesita el SDK .NET dentro de Linux.';location='Entorno'})}}
-  $slug=Slug $P.name;$home=Join-Path $script:Workspace $slug;New-Item -ItemType Directory -Force -Path $home|Out-Null;$native=Join-Path $home 'native'
-  if(!(Test-Path (Join-Path $native 'SampleApp.csproj'))){New-Item -ItemType Directory -Force -Path $native|Out-Null;Copy-Item -Path (Join-Path $sdk 'samples/prospero-ui/*') -Destination $native -Recurse -Force}
-  WriteProjectFiles $P $Code $native
-  $csproj=Join-Path $native 'SampleApp.csproj';if(!(Test-Path $csproj)){return @{ok=$false;message='La distribución descargada de SharpProspero no contiene la plantilla prospectada samples/prospero-ui/SampleApp.csproj.';output=$sdk}}
-  $raw=Get-Content -LiteralPath $csproj -Raw;$raw=$raw.Replace('<AssemblyName>SampleApp</AssemblyName>',('<AssemblyName>'+$slug+'</AssemblyName>'))
-  if(-not $raw.Contains('assets\**\*')){ $addition = "  <ItemGroup>`r`n    <None Update=`"assets\**\*`" CopyToOutputDirectory=`"PreserveNewest`" />`r`n  </ItemGroup>`r`n</Project>"; $raw=$raw.Replace('</Project>',$addition) }
-  WriteUtf8 $csproj $raw
-  $metaPath=Join-Path $native 'sce_sys/param.json';if(Test-Path $metaPath){$meta=Get-Content $metaPath -Raw|ConvertFrom-Json;$tid=[string]$P.settings.titleId;if($tid -notmatch '^[A-Z]{4}[0-9]{5}$'){$tid='PPSA'+(Get-Random -Minimum 10000 -Maximum 99999)};$meta.titleId=$tid;$meta.contentId=('UP9000-'+$tid+'_00-0000000000000001');$meta.conceptId=$tid.Substring(4);if($meta.localizedParameters.'en-US'){$meta.localizedParameters.'en-US'.titleName=[string]$P.name};WriteUtf8 $metaPath (ConvertTo-Json -InputObject $meta -Depth 50)}
-  $outputDir=Join-Path $native 'out';if(Test-Path $outputDir){Remove-Item $outputDir -Recurse -Force};New-Item -ItemType Directory -Force -Path $outputDir|Out-Null;if($RequestedOutput -notin @('Package','Folder')){$RequestedOutput='Package'};$buildArgs=@('-NoProfile','-ExecutionPolicy','Bypass','-File',(Join-Path $sdk 'build/build-app.ps1'),'-ProjectPath',$csproj,'-SdkRoot',$sdk,'-Output',$RequestedOutput,'-OutputFolder',$outputDir)
-  $out=& powershell.exe @buildArgs 2>&1|ForEach-Object{$_.ToString()};$exit=$LASTEXITCODE;$log=$out -join "`r`n";$art=$null;if(Test-Path $outputDir){$cand=Get-ChildItem $outputDir -Recurse -File -Include '*.pkg','*.elf','eboot.bin'|Sort-Object LastWriteTime -Descending|Select-Object -First 1;if($cand){$art=$cand.FullName}}
-  if($exit -eq 0 -and $art){return @{ok=$true;message='El proceso de compilación terminó correctamente.';output=$log;artifact=$art;diagnostics=@()}}
-  return @{ok=$false;message='La compilación no ha producido un artefacto final verificable.';output=$log;artifact=$art;diagnostics=@(@{severity='error';title='Compilación fallida';message='Revisa la salida real del SDK/compilador mostrada en el panel Salida.';location='Pipeline de compilación'})}
+function BuildSharp($P,[string]$Code,[string]$Backend,[string]$RequestedOutput='Package',$Policy=$null) {
+  if ($Backend -eq 'sharp-payload') {
+    return @{ok=$false;message='El formato Payload de SharpProspero es un ELF para un proceso ya cargado, no una aplicación con pantalla propia.';output='Crea un proyecto de payload específico o cambia el destino a SharpProspero · Aplicación.';diagnostics=@(@{severity='error';title='Tipo de producto incompatible';message='La interfaz visual necesita un módulo de aplicación nativa.';location='Backend'})}
+  }
+  if ($Backend -ne 'sharp') {
+    return @{ok=$false;message='Backend SharpProspero no reconocido.';output=[string]$Backend}
+  }
+  try {
+    $policy = AssertPS5HSNativeModificationConsent -Backend 'sharp' -Policy $Policy -RequirePermissionKeys @('allowExecuteUpstreamGenerationTools','allowExecuteUpstreamBuildTools')
+  } catch {
+    return @{ok=$false;message='Compilación detenida: faltan permisos explícitos para generar el proyecto o ejecutar herramientas upstream.';output=$_.Exception.Message;buildStoppedBeforeMutation=$true;exitCode=2}
+  }
+
+  $name = ([string]$P.name).Trim()
+  if ($name -notmatch '^[A-Za-z0-9][A-Za-z0-9 ._-]{0,39}$') {
+    return @{ok=$false;message='Nombre inválido. Usa entre 1 y 40 caracteres ASCII.';output=$name;exitCode=2}
+  }
+  $titleId = ([string]$P.settings.titleId).Trim().ToUpperInvariant()
+  if ($titleId -notmatch '^PPSA\d{5}$' -or $titleId -eq 'PPSA00000') {
+    return @{ok=$false;message='Introduce explícitamente un TITLE_ID válido (PPSA12345) antes de compilar. No se asignará uno aleatorio.';output=$titleId;exitCode=2}
+  }
+  if ([string]::IsNullOrWhiteSpace($Code)) {
+    return @{ok=$false;message='El generador no entregó código fuente C#.';output='Genera el código C# y vuelve a intentarlo.';exitCode=2}
+  }
+
+  $sdk = Join-Path $script:Toolchains 'SharpProspero'
+  $buildScript = Join-Path $sdk 'build/build-app.ps1'
+  $sampleRoot = Join-Path $sdk 'samples/prospero-ui'
+  $sampleProject = Join-Path $sampleRoot 'SampleApp.csproj'
+  if (!(Test-Path -LiteralPath $buildScript -PathType Leaf) -or !(Test-Path -LiteralPath $sampleProject -PathType Leaf)) {
+    return @{ok=$false;message='SharpProspero o su muestra samples/prospero-ui/SampleApp.csproj no están instalados.';output=$sdk;exitCode=2}
+  }
+  $status = GetStatus
+  if (!$status.prerequisites.dotnet10) { return @{ok=$false;message='.NET SDK 10 no está disponible en Windows.';output='Instala .NET SDK 10 con Configurar entorno.';exitCode=2} }
+  if (!$status.prerequisites.wsl) { return @{ok=$false;message='WSL no tiene una distribución inicializada.';output='Configurar entorno → Instalar WSL + Debian. Termina el primer inicio de la distribución.';exitCode=2} }
+  if (!$status.prerequisites.wslDotnet10) { return @{ok=$false;message='.NET SDK 10 no está instalado dentro de WSL.';output='Instala .NET SDK 10 en WSL siguiendo docs/setup.md de SharpProspero.';exitCode=2} }
+
+  $slug = Slug $name
+  if ([string]::IsNullOrWhiteSpace($slug) -or $slug -match '[\\/]') {
+    return @{ok=$false;message='No se pudo obtener un nombre de carpeta seguro para SharpProspero.';output=$slug;exitCode=2}
+  }
+  $home = Join-Path $script:Workspace $slug
+  if (!(Test-Path -LiteralPath $script:Workspace -PathType Container)) {
+    New-Item -ItemType Directory -Force -Path $script:Workspace | Out-Null
+  }
+  if (Test-Path -LiteralPath $home) {
+    $homeItem = Get-Item -LiteralPath $home -Force
+    if (($homeItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0 -or !$homeItem.PSIsContainer) {
+      return @{ok=$false;message='La carpeta del proyecto es un archivo o enlace. No se escribirá a través de ella.';output=$home;exitCode=2}
+    }
+  } else {
+    New-Item -ItemType Directory -Force -Path $home | Out-Null
+  }
+  $native = Join-Path $home 'native'
+  $sharpMarker = Join-Path $native '.ps5hs-sharp-project.json'
+  if (Test-Path -LiteralPath $native) {
+    $nativeItem = Get-Item -LiteralPath $native -Force
+    if (($nativeItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0 -or !$nativeItem.PSIsContainer) {
+      return @{ok=$false;message='El destino native existe como archivo/enlace. No se modificará.';output=$native;exitCode=2}
+    }
+    if (!(Test-Path -LiteralPath $sharpMarker -PathType Leaf)) {
+      return @{ok=$false;message='Ya existe una carpeta native sin manifiesto de propiedad de Homebrew Studio. Para evitar sobrescribir código ajeno, cambia el nombre del proyecto o archiva esa carpeta manualmente.';output=$native;path=$native;exitCode=2}
+    }
+    try { $existingSharpMeta = Get-Content -LiteralPath $sharpMarker -Raw | ConvertFrom-Json }
+    catch { return @{ok=$false;message='El manifiesto SharpProspero no es JSON válido. La carpeta se conserva intacta.';output=$sharpMarker;exitCode=2} }
+    if ($existingSharpMeta.schema -ne 'ps5hs-sharp-project' -or $existingSharpMeta.template -ne 'prospero-ui') {
+      return @{ok=$false;message='El manifiesto no identifica un proyecto SharpProspero administrado por Homebrew Studio. No se sobrescribirá.';output=$native;exitCode=2}
+    }
+  }
+
+  if (!(Test-Path -LiteralPath $native -PathType Container)) {
+    try {
+      $null = InvokePS5HSNativeTreeModificationWithAudit -ProjectRoot $native -Backend 'sharp' -Operation 'copy-sharpprospero-upstream-ui-template' -PermissionKey 'allowExecuteUpstreamGenerationTools' -Policy $policy -SourceRepository 'SvenGDK/SharpProspero' -Action {
+        CopyProjectTree $sampleRoot $native
+      }
+    } catch {
+      return @{ok=$false;message='No se pudo crear la plantilla SharpProspero con el permiso autorizado.';output=$_.Exception.Message;path=$native;exitCode=1}
+    }
+  }
+
+  $csproj = Join-Path $native 'SampleApp.csproj'
+  $metaPath = Join-Path $native 'sce_sys/param.json'
+  if (!(Test-Path -LiteralPath $csproj -PathType Leaf) -or !(Test-Path -LiteralPath $metaPath -PathType Leaf)) {
+    return @{ok=$false;message='La plantilla SharpProspero no contiene SampleApp.csproj y sce_sys/param.json; no se intentará reparar automáticamente una estructura desconocida.';output=$native;path=$native;exitCode=2}
+  }
+
+  try {
+    $null = InvokePS5HSNativeTreeModificationWithAudit -ProjectRoot $native -Backend 'sharp' -Operation 'write-sharpprospero-project-source-and-metadata' -PermissionKey 'allowExecuteUpstreamGenerationTools' -Policy $policy -SourceRepository 'SvenGDK/SharpProspero' -Action {
+      WriteProjectFiles $P $Code $native
+      $raw = Get-Content -LiteralPath $csproj -Raw
+      $assemblyName = '<AssemblyName>' + $slug + '</AssemblyName>'
+      if ($raw.Contains('<AssemblyName>SampleApp</AssemblyName>')) {
+        $raw = $raw.Replace('<AssemblyName>SampleApp</AssemblyName>',$assemblyName)
+      } elseif (!$raw.Contains($assemblyName)) {
+        throw 'SampleApp.csproj ha cambiado: no se reconoce el nombre de ensamblado esperado. No se aplicará un parche por conjetura.'
+      }
+      if (!$raw.Contains('assets\**\*')) {
+        if (!$raw.Contains('</Project>')) { throw 'SampleApp.csproj no contiene el cierre </Project>. No se modificará.' }
+        $addition = "  <ItemGroup>`r`n    <None Update=`"assets\**\*`" CopyToOutputDirectory=`"PreserveNewest`" />`r`n  </ItemGroup>`r`n</Project>"
+        $raw = $raw.Replace('</Project>',$addition)
+      }
+      WriteUtf8 $csproj $raw
+      $metadata = Get-Content -LiteralPath $metaPath -Raw | ConvertFrom-Json
+      $metadata.titleId = $titleId
+      $metadata.contentId = ('UP9000-' + $titleId + '_00-0000000000000001')
+      $metadata.conceptId = $titleId.Substring(4)
+      if ($metadata.localizedParameters -and $metadata.localizedParameters.'en-US') {
+        $metadata.localizedParameters.'en-US'.titleName = $name
+      }
+      WriteUtf8 $metaPath (ConvertTo-Json -InputObject $metadata -Depth 50)
+      $sharpMeta = @{schema='ps5hs-sharp-project';template='prospero-ui';repository='SvenGDK/SharpProspero';titleId=$titleId;name=$name;updatedAt=(Get-Date).ToString('o')}
+      WriteUtf8 $sharpMarker (ConvertTo-Json -InputObject $sharpMeta -Depth 10)
+    }
+  } catch {
+    return @{ok=$false;message='No se pudo preparar el código/metadata SharpProspero. Revisa la salida; no se tocó ninguna otra carpeta.';output=$_.Exception.Message;path=$native;exitCode=1}
+  }
+
+  $outputId = (Get-Date -Format 'yyyyMMdd-HHmmss') + '-' + [guid]::NewGuid().ToString('N').Substring(0,8)
+  $outputDir = Join-Path $native ('out-' + $outputId)
+  New-Item -ItemType Directory -Force -Path $outputDir | Out-Null
+  if ($RequestedOutput -notin @('Package','Folder')) { $RequestedOutput = 'Package' }
+  $buildArgs = @('-NoProfile','-ExecutionPolicy','Bypass','-File',$buildScript,'-ProjectPath',$csproj,'-SdkRoot',$sdk,'-Output',$RequestedOutput,'-OutputFolder',$outputDir)
+  try {
+    $buildInvocation = InvokePS5HSNativeTreeModificationWithAudit -ProjectRoot $native -Backend 'sharp' -Operation 'execute-sharpprospero-upstream-build' -PermissionKey 'allowExecuteUpstreamBuildTools' -Policy $policy -SourceRepository 'SvenGDK/SharpProspero' -Action {
+      $buildOutput = @(& powershell.exe @buildArgs 2>&1 | ForEach-Object { $_.ToString() })
+      $buildExit = $LASTEXITCODE
+      return @{output=@($buildOutput);exitCode=[int]$buildExit}
+    }
+    $out = @($buildInvocation.output)
+    $exit = [int]$buildInvocation.exitCode
+  } catch {
+    return @{ok=$false;message='La ejecución de build-app.ps1 falló y se registró el intento.';output=$_.Exception.Message;path=$native;exitCode=1}
+  }
+  $log = ($out | ForEach-Object { $_.ToString() }) -join "`r`n"
+  $artifact = $null
+  if (Test-Path -LiteralPath $outputDir -PathType Container) {
+    $candidate = Get-ChildItem -LiteralPath $outputDir -Recurse -File -Include '*.pkg','*.elf','eboot.bin' -ErrorAction SilentlyContinue |
+      Sort-Object LastWriteTime -Descending | Select-Object -First 1
+    if ($candidate) { $artifact = $candidate.FullName }
+  }
+  if ($exit -eq 0 -and $artifact) {
+    return @{ok=$true;message='SharpProspero terminó y produjo un artefacto verificable. Se han conservado todas las salidas de compilaciones anteriores.';output=$log;artifact=$artifact;path=$native;titleId=$titleId;exitCode=0}
+  }
+  return @{ok=$false;message="SharpProspero terminó con código $exit o no produjo un artefacto verificable. Las salidas anteriores se han conservado.";output=$log;path=$native;artifact=$artifact;titleId=$titleId;exitCode=$exit;diagnostics=@(@{severity='error';title='Compilación SharpProspero fallida';message='Revisa la salida de build-app.ps1 y la estructura de la plantilla usada.';location='Pipeline SharpProspero'})}
 }
 function InvokeSetup([string]$Action) {
   if($Action -eq 'diagnose'){return @{ok=$true;message='Diagnóstico completado.';output=(ConvertTo-Json (GetStatus) -Depth 10)}}
@@ -2356,7 +2482,7 @@ while (!$script:StopServerRequested -and $listener.Server.IsBound) {
                                 '/api/build' {
                                     $backend = [string]$body.backend
                                     if ($backend -in @('sharp', 'sharp-payload')) {
-                                        $result = BuildSharp $body.project ([string]$body.programCode) $backend ([string]$body.output)
+                                        $result = BuildSharp $body.project ([string]$body.programCode) $backend ([string]$body.output) $body.nativeModifications
                                         SendJson $ctx $result
                                     }
                                     else {
