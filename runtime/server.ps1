@@ -1859,6 +1859,9 @@ function BuildNativeVisualProject($Body) {
     if ($existingMeta.schema -ne 'ps5hs-native-project' -or [string]$existingMeta.template -ne $expectedTemplate) {
       return @{ok=$false;message='No se puede sobrescribir: el destino no es un proyecto de Homebrew Studio de la misma plantilla.';output=[string]$targetCandidate;path=[string]$targetCandidate;exitCode=2}
     }
+    if ([string]$existingMeta.name -ine $name -or [string]$existingMeta.titleId -ine $titleId) {
+      return @{ok=$false;message='El destino comparte un nombre de carpeta con otro título, pero su nombre o TITLE_ID es distinto. No se sobrescribirá; cambia el nombre para evitar la colisión.';output=[string]$targetCandidate;path=[string]$targetCandidate;exitCode=2}
+    }
     $replacementBackupPath = $targetCandidate + '.ps5hs-backup-' + [guid]::NewGuid().ToString('N').Substring(0,8)
     try {
       Move-Item -LiteralPath $targetCandidate -Destination $replacementBackupPath -ErrorAction Stop
