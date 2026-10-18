@@ -75,11 +75,11 @@ jobs:
         run: ./runtime/test-native-modification-policy.ps1
       - name: Package versioned source ZIP
         shell: pwsh
-        run: git archive --format=zip --prefix=PS5-Homebrew-Studio/ --output=PS5-Homebrew-Studio-v1.1.10.zip HEAD
+        run: git archive --format=zip --prefix=PS5-Homebrew-Studio/ --output=PS5-Homebrew-Studio-v1.1.11.zip HEAD
       - name: Upload versioned source ZIP
         uses: actions/upload-artifact@v7.0.2
         with:
-          name: PS5-Homebrew-Studio-v1.1.10
-          path: PS5-Homebrew-Studio-v1.1.10.zip
+          name: PS5-Homebrew-Studio-v1.1.11
+          path: PS5-Homebrew-Studio-v1.1.11.zip
           if-no-files-found: error
           retention-days: 30
