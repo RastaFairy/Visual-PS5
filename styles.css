@@ -157,3 +157,13 @@ button.structure-detail-item:hover{border-color:#7465d8;color:#e2ddff}
 .isolation-banner button{flex-shrink:0;border:1px solid #4b456c;background:#282342;border-radius:4px;color:#e1dcff;font-size:9px;padding:4px 6px;}
 .isolation-banner button:hover{background:#3b315f;}
 .canvas-item.image.asset-image{background:transparent!important;border:0!important;}
+
+
+/* Explicit, deny-by-default controls for source mutations made by native integration. */
+.native-modification-policy{margin:16px 0;padding:14px;border:1px solid var(--line);border-radius:12px;background:rgba(10,16,28,.58)}
+.native-modification-policy h3{margin:0 0 6px;font-size:13px;letter-spacing:.02em}
+.native-modification-policy>p{margin:0 0 12px;color:var(--muted);font-size:11px;line-height:1.55}
+.native-change-row{display:grid;grid-template-columns:18px minmax(0,1fr);align-items:start;gap:10px;padding:10px 0;border-top:1px solid rgba(140,155,185,.14);cursor:pointer}
+.native-change-row input{margin-top:3px;accent-color:var(--accent)}
+.native-change-row strong{display:block;font-size:11px;font-weight:650;line-height:1.45}
+.native-change-row small{display:block;margin-top:3px;color:var(--muted);font-size:10px;font-weight:400;line-height:1.5}
