@@ -17,6 +17,8 @@ assert.equal(normalized.normalizeBuildFiles, false, 'Only explicit boolean true 
 assert.equal(Object.hasOwn(normalized, 'unexpectedPermission'), false);
 assert.ok(policy.entriesForBackend('vulkan-ui').some(entry => entry.key === 'allowVulkanBuildHelperRestore'));
 assert.deepEqual(policy.missingForBackend('nativecpp', defaults, false), ['allowExecuteUpstreamGenerationTools','allowExecuteUpstreamBuildTools']);
+assert.deepEqual(policy.requiredForBackend('sharp'), ['allowExecuteUpstreamGenerationTools','allowExecuteUpstreamBuildTools']);
+assert.deepEqual(policy.missingForBackend('sharp', defaults, false), ['allowExecuteUpstreamGenerationTools','allowExecuteUpstreamBuildTools']);
 assert.deepEqual(policy.missingForPermissions(defaults, ['allowExecuteUpstreamGenerationTools']), ['allowExecuteUpstreamGenerationTools']);
 assert.deepEqual(policy.missingForPermissions({...defaults, allowExecuteUpstreamGenerationTools:true}, ['allowExecuteUpstreamGenerationTools']), []);
 assert.deepEqual(policy.missingForPermissions(defaults, ['not-a-known-permission']), ['not-a-known-permission']);
