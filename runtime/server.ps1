@@ -924,8 +924,13 @@ function ResolveNativeProjectRoot([string]$InputPath) {
   if (!$projectRoot.StartsWith($workspaceRoot,[StringComparison]::OrdinalIgnoreCase)) {
     throw 'Solo se permiten proyectos creados dentro del workspace de Homebrew Studio.'
   }
+  if (!(Test-Path -LiteralPath $projectRoot -PathType Container)) { throw 'No se encuentra la carpeta del proyecto.' }
+  $projectItem = Get-Item -LiteralPath $projectRoot -Force
+  if (($projectItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw 'No se admiten carpetas de proyecto enlazadas o puntos de reanálisis.' }
   $markerPath = Join-Path $projectRoot '.ps5hs-project.json'
   if (!(Test-Path -LiteralPath $markerPath -PathType Leaf)) { throw 'No se encontró .ps5hs-project.json. Abre un proyecto nativo creado por Homebrew Studio.' }
+  $markerItem = Get-Item -LiteralPath $markerPath -Force
+  if (($markerItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw 'No se leerá ni modificará un manifiesto de proyecto enlazado.' }
   try { $meta = Get-Content -LiteralPath $markerPath -Raw | ConvertFrom-Json } catch { throw 'El manifiesto del proyecto no se puede leer.' }
   if ($meta.schema -ne 'ps5hs-native-project' -or [string]$meta.template -notin @('nativecpp','hui-gl','vulkan-template')) {
     throw 'El manifiesto no identifica una plantilla nativa compatible.'
@@ -1213,7 +1218,20 @@ function BuildNativeProject([string]$ProjectPath,[bool]$CleanBeforeBuild=$false,
   if (!$projectRoot.StartsWith($workspaceRoot, [StringComparison]::OrdinalIgnoreCase)) {
     return @{ok=$false;message='Solo se permite compilar proyectos creados dentro del workspace de Homebrew Studio.';output=$projectRoot}
   }
+  if (!(Test-Path -LiteralPath $projectRoot -PathType Container)) {
+    return @{ok=$false;message='No se encuentra la carpeta del proyecto dentro del workspace.';output=$projectRoot}
+  }
+  $projectRootItem = Get-Item -LiteralPath $projectRoot -Force
+  if (($projectRootItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+    return @{ok=$false;message='No se compilará a través de una carpeta de proyecto enlazada o punto de reanálisis.';output=$projectRoot}
+  }
   $markerPath = Join-Path $projectRoot '.ps5hs-project.json'
+  if (Test-Path -LiteralPath $markerPath -PathType Leaf) {
+    $markerItem = Get-Item -LiteralPath $markerPath -Force
+    if (($markerItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+      return @{ok=$false;message='El manifiesto del proyecto es un enlace; no se leerá ni modificará.';output=$markerPath}
+    }
+  }
   $profile = GetProjectProfile $projectRoot
   $template = [string]$profile.template
   if ($template -notin @('nativecpp','hui-gl','vulkan-template')) {
