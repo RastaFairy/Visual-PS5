@@ -31,6 +31,13 @@ Assert-Condition (@(GetPS5HSNativeModificationConsentGaps -Backend 'vulkan-ui' -
 $unknownDenied = $false
 try { AssertPS5HSNativeModificationConsent -Backend 'opengl-ui' -Policy $normalized -RequirePermissionKeys @('unknownPermission') | Out-Null } catch { $unknownDenied = $true }
 Assert-Condition $unknownDenied 'Un endpoint no debe poder solicitar un permiso que no figure en el catálogo.'
+$sharpGaps = @(GetPS5HSNativeModificationConsentGaps -Backend 'sharp' -Policy $null -RequirePermissionKeys @('allowExecuteUpstreamGenerationTools','allowExecuteUpstreamBuildTools'))
+Assert-Condition ($sharpGaps.Count -eq 2) 'SharpProspero debe exigir consentimiento independiente para preparar la plantilla y ejecutar el build.'
+$sharpDenied = $false
+try {
+  AssertPS5HSNativeModificationConsent -Backend 'sharp' -Policy $null -RequirePermissionKeys @('allowExecuteUpstreamGenerationTools','allowExecuteUpstreamBuildTools') | Out-Null
+} catch { $sharpDenied = $true }
+Assert-Condition $sharpDenied 'Una invocación directa de SharpProspero debe fallar cerrada si no recibe ambos permisos.'
 
 $utf8 = [Text.UTF8Encoding]::new($false)
 $root = Join-Path ([IO.Path]::GetTempPath()) ('ps5hs-policy-' + [guid]::NewGuid().ToString('N'))
