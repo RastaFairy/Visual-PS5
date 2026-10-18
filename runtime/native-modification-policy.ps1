@@ -29,18 +29,26 @@ function GetPS5HSNativeModificationConsentGaps {
     [bool]$RequireGeneration = $false,
     [bool]$RequireBuildTools = $false,
     [bool]$RequireVisualIntegration = $false,
-    [bool]$HasCustomFont = $false
+    [bool]$HasCustomFont = $false,
+    [string[]]$RequirePermissionKeys = @()
   )
   $approved = NormalizePS5HSNativeModificationPolicy $Policy
   $required = [System.Collections.Generic.List[string]]::new()
-  if ($RequireGeneration -and !$approved.allowExecuteUpstreamGenerationTools) { $required.Add('allowExecuteUpstreamGenerationTools') }
-  if ($RequireBuildTools -and !$approved.allowExecuteUpstreamBuildTools) { $required.Add('allowExecuteUpstreamBuildTools') }
+  if ($RequireGeneration) { $required.Add('allowExecuteUpstreamGenerationTools') }
+  if ($RequireBuildTools) { $required.Add('allowExecuteUpstreamBuildTools') }
   if ($RequireVisualIntegration) {
     $integrationKey = if ($Backend -eq 'opengl-ui') { 'allowOpenGlTemplateIntegration' } elseif ($Backend -eq 'vulkan-ui') { 'allowVulkanTemplateIntegration' } else { '' }
-    if ($integrationKey -and !$approved[$integrationKey]) { $required.Add($integrationKey) }
+    if ($integrationKey) { $required.Add($integrationKey) }
   }
-  if ($HasCustomFont -and !$approved.allowCustomUnicodeFont) { $required.Add('allowCustomUnicodeFont') }
-  return @($required)
+  if ($HasCustomFont) { $required.Add('allowCustomUnicodeFont') }
+  foreach ($key in @($RequirePermissionKeys)) {
+    if ($key -notin $script:PS5HSNativeModificationKeys) {
+      throw ("Se ha solicitado un permiso de modificación no registrado: " + [string]$key)
+    }
+    $required.Add([string]$key)
+  }
+  $required = @($required | Select-Object -Unique)
+  return @($required | Where-Object { !$approved[$_] })
 }
 function AssertPS5HSNativeModificationConsent {
   param(
@@ -49,12 +57,13 @@ function AssertPS5HSNativeModificationConsent {
     [bool]$RequireGeneration = $false,
     [bool]$RequireBuildTools = $false,
     [bool]$RequireVisualIntegration = $false,
-    [bool]$HasCustomFont = $false
+    [bool]$HasCustomFont = $false,
+    [string[]]$RequirePermissionKeys = @()
   )
   $approved = NormalizePS5HSNativeModificationPolicy $Policy
-  $gaps = @(GetPS5HSNativeModificationConsentGaps -Backend $Backend -Policy $approved -RequireGeneration $RequireGeneration -RequireBuildTools $RequireBuildTools -RequireVisualIntegration $RequireVisualIntegration -HasCustomFont $HasCustomFont)
+  $gaps = @(GetPS5HSNativeModificationConsentGaps -Backend $Backend -Policy $approved -RequireGeneration $RequireGeneration -RequireBuildTools $RequireBuildTools -RequireVisualIntegration $RequireVisualIntegration -HasCustomFont $HasCustomFont -RequirePermissionKeys $RequirePermissionKeys)
   if ($gaps.Count -gt 0) {
-    throw ('Operación detenida antes de modificar fuentes. Falta consentimiento explícito para: ' + ($gaps -join ', ') + '. No se han aplicado esas modificaciones.')
+    throw ('Operación detenida antes de modificar fuentes o ejecutar herramientas. Falta consentimiento explícito para: ' + ($gaps -join ', ') + '. No se han aplicado esas modificaciones.')
   }
   return $approved
 }
@@ -100,8 +109,11 @@ function AddPS5HSNativeModificationRecord {
   if (Test-Path -LiteralPath $manifestPath -PathType Leaf) {
     try {
       $existing = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
-      if ($existing.schema -eq 'ps5hs-native-modifications' -and $existing.records) { $manifest.records = @($existing.records) }
-    } catch { throw 'El manifiesto de modificaciones existe pero no es JSON válido; no se añadirá un registro incompleto.' }
+      if ($existing.schema -ne 'ps5hs-native-modifications' -or [int]$existing.version -ne 1) {
+        throw 'El esquema o la versión del manifiesto no son compatibles.'
+      }
+      if ($existing.records) { $manifest.records = @($existing.records) }
+    } catch { throw 'El manifiesto de modificaciones existe pero no es válido o compatible; no se sobrescribirá.' }
   }
   $manifest.records = @($manifest.records) + @([ordered]@{
     at=(Get-Date).ToString('o')
@@ -120,6 +132,47 @@ function AddPS5HSNativeModificationRecord {
   return @{manifest='.ps5hs-modifications.json';operation=$Operation;files=@($pathRecords)}
 }
 
+
+function AssertPS5HSNativeModificationManifestWritable {
+  param([Parameter(Mandatory=$true)][string]$ProjectRoot)
+  $manifestPath = Join-Path ([IO.Path]::GetFullPath($ProjectRoot)) '.ps5hs-modifications.json'
+  if (Test-Path -LiteralPath $manifestPath -PathType Leaf) {
+    try {
+      $existing = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
+      if ($existing.schema -ne 'ps5hs-native-modifications' -or [int]$existing.version -ne 1) {
+        throw 'Esquema/versión incompatibles.'
+      }
+    } catch { throw 'El manifiesto .ps5hs-modifications.json existe pero no es válido; la operación se detiene antes de tocar las fuentes.' }
+  }
+  return $true
+}
+
+function InvokePS5HSNativeModificationWithAudit {
+  param(
+    [Parameter(Mandatory=$true)][string]$ProjectRoot,
+    [Parameter(Mandatory=$true)][string]$Backend,
+    [Parameter(Mandatory=$true)][string]$Operation,
+    [Parameter(Mandatory=$true)][string]$PermissionKey,
+    [Parameter(Mandatory=$true)][string[]]$RelativePaths,
+    [Parameter(Mandatory=$true)]$Policy,
+    [Parameter(Mandatory=$true)][scriptblock]$Action,
+    [string]$SourceRepository = ''
+  )
+  $approved = AssertPS5HSNativeModificationConsent -Backend $Backend -Policy $Policy -RequirePermissionKeys @($PermissionKey)
+  $null = AssertPS5HSNativeModificationManifestWritable -ProjectRoot $ProjectRoot
+  $before = GetPS5HSNativeFileHashes -ProjectRoot $ProjectRoot -RelativePaths $RelativePaths
+  $result = $null
+  try {
+    $result = & $Action
+  } finally {
+    $after = GetPS5HSNativeFileHashes -ProjectRoot $ProjectRoot -RelativePaths $RelativePaths
+    $changed = @($RelativePaths | Where-Object { $before[$_] -cne $after[$_] })
+    if ($changed.Count -gt 0) {
+      $null = AddPS5HSNativeModificationRecord -ProjectRoot $ProjectRoot -Backend $Backend -Operation $Operation -PermissionKey $PermissionKey -RelativePaths $changed -BeforeHashes $before -Policy $approved -SourceRepository $SourceRepository
+    }
+  }
+  return $result
+}
 
 function ApplyPS5HSWindowsBuildEntrypointPatch {
   param([Parameter(Mandatory=$true)][string]$ProjectRoot,$Policy,[string]$Backend='nativecpp',[string]$SourceRepository='',[string]$SourceCommit='')
