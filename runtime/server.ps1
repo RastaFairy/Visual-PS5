@@ -1976,7 +1976,334 @@ if ($args.Count -ge 2 -and [string]$args[0] -eq '--worker') {
 }
 
 $listener = [Net.Sockets.TcpListener]::new([Net.IPAddress]::Parse('127.0.0.1'),47813)
-try { $listener.Start() } catch { Write-Host "No se pudo iniciar el servicio en $script:Url. Cierra otra instancia. $($_.Exception.Message)" -ForegroundColor Red; Read-Host 'Pulsa Intro'; exit 2 }
+try {
+    $listener.Start()
+} catch {
+    Write-Host "No se pudo enlazar el servicio en $script:Url." -ForegroundColor Red
+    Write-Host ("Detalle de Windows: " + $_.Exception.Message) -ForegroundColor Yellow
+    $ownerPid = 0
+    $ownerRows = @()
+    try {
+        $ownerRows = @(Get-NetTCPConnection -LocalPort 47813 -State Listen -ErrorAction Stop | Where-Object { $_.LocalAddress -in @('127.0.0.1','0.0.0.0','::1','::') })
+        if ($ownerRows.Count -gt 0) { $ownerPid = [int]$ownerRows[0].OwningProcess }
+    } catch { }
+    if ($ownerPid -le 0) {
+        try {
+            $netstatLines = @(& netstat.exe -ano -p tcp 2>$null)
+            foreach ($line in $netstatLines) {
+                if ($line -match '^\s*TCP\s+\S+:47813\s+\S+\s+LISTENING\s+(\d+)\s*
+Write-Host "Servicio local: $script:Url"
+Write-Host 'Solo loopback. Cierra esta ventana para detenerlo.' -ForegroundColor DarkGray
+Start-Process $script:Url
+while ($listener.Server.IsBound) {
+    $client = $null
+    $stream = $null
+    try {
+        $client = $listener.AcceptTcpClient()
+        $stream = $client.GetStream()
+        $stream.ReadTimeout = 30000
+        $stream.WriteTimeout = 30000
+
+        $headerBytes = New-Object 'System.Collections.Generic.List[byte]'
+        $tail = New-Object 'System.Collections.Generic.Queue[byte]'
+        while ($headerBytes.Count -lt 65536) {
+            $v = $stream.ReadByte()
+            if ($v -lt 0) { break }
+            $headerBytes.Add([byte]$v)
+            $tail.Enqueue([byte]$v)
+            if ($tail.Count -gt 4) { $null = $tail.Dequeue() }
+            if ($tail.Count -eq 4 -and (($tail.ToArray() -join ',') -eq '13,10,13,10')) { break }
+        }
+        if ($headerBytes.Count -eq 0) { continue }
+
+        $headerText = [Text.Encoding]::ASCII.GetString($headerBytes.ToArray())
+        $headLines = $headerText -split "`r`n"
+        $requestParts = $headLines[0].Split(' ')
+        if ($requestParts.Count -lt 2) { continue }
+
+        $method = $requestParts[0].ToUpperInvariant()
+        $target = $requestParts[1]
+        $headers = @{}
+        foreach ($line in ($headLines | Select-Object -Skip 1)) {
+            if (!$line) { continue }
+            $ix = $line.IndexOf(':')
+            if ($ix -gt 0) {
+                $headers[$line.Substring(0, $ix).Trim().ToLowerInvariant()] = $line.Substring($ix + 1).Trim()
+            }
+        }
+
+        $length = 0
+        if ($headers.ContainsKey('content-length')) {
+            [int]::TryParse($headers['content-length'], [ref]$length) | Out-Null
+        }
+
+        $response = [pscustomobject]@{
+            StatusCode = 200
+            ContentType = 'application/octet-stream'
+            Headers = @{ 'Cache-Control' = 'no-store' }
+            Body = [byte[]]@()
+        }
+        $bodyBytes = [byte[]]@()
+
+        if ($length -gt 100MB) {
+            $response.StatusCode = 413
+            $response.ContentType = 'text/plain; charset=utf-8'
+            $bodyBytes = [Text.Encoding]::UTF8.GetBytes('Request too large')
+            $response.Body = $bodyBytes
+        }
+        else {
+            $bodyBytes = New-Object byte[] $length
+            $offset = 0
+            while ($offset -lt $length) {
+                $read = $stream.Read($bodyBytes, $offset, $length - $offset)
+                if ($read -le 0) { break }
+                $offset += $read
+            }
+            if ($offset -ne $length) { continue }
+
+            $hostHeader = [string]$headers['host']
+            if ($hostHeader -notin @('127.0.0.1:47813', 'localhost:47813')) {
+                $response.StatusCode = 403
+                $response.ContentType = 'text/plain; charset=utf-8'
+                $bodyBytes = [Text.Encoding]::UTF8.GetBytes('Invalid Host')
+                $response.Body = $bodyBytes
+            }
+            else {
+                $uri = [Uri]('http://127.0.0.1:47813' + $target)
+                $origin = [string]$headers['origin']
+                $path = $uri.AbsolutePath
+                $request = [pscustomobject]@{
+                    HttpMethod = $method
+                    Url = $uri
+                    ContentEncoding = [Text.Encoding]::UTF8
+                    Body = [Text.Encoding]::UTF8.GetString($bodyBytes)
+                    Headers = $headers
+                }
+                $response = [pscustomobject]@{
+                    StatusCode = 200
+                    ContentType = 'application/octet-stream'
+                    Headers = @{ 'Cache-Control' = 'no-store' }
+                    Body = [byte[]]@()
+                }
+                $ctx = [pscustomobject]@{ Request = $request; Response = $response }
+
+                try {
+                    if ($method -eq 'POST' -and $path.StartsWith('/api/') -and $origin -and $origin -notin @('http://127.0.0.1:47813', 'http://localhost:47813')) {
+                        SendJson $ctx @{ error = 'Origen no permitido' } 403
+                    }
+                    elseif ($method -eq 'OPTIONS') {
+                        SendBytes $ctx ([byte[]]@()) 'text/plain' 204
+                    }
+                    elseif ($path.StartsWith('/api/')) {
+                        if ($method -eq 'GET' -and $path -eq '/api/status') {
+                            SendJson $ctx (GetStatus)
+                        }
+                        elseif ($method -eq 'GET' -and $path -eq '/api/integrations') {
+                            SendJson $ctx (GetIntegrationConfig)
+                        }
+                        elseif ($method -eq 'GET' -and $path -eq '/api/projects') {
+                            $items = @()
+                            Get-ChildItem $script:Workspace -Directory -ErrorAction SilentlyContinue | ForEach-Object {
+                                $projectFile = Join-Path $_.FullName 'project.json'
+                                if (Test-Path $projectFile) {
+                                    try {
+                                        $project = Get-Content $projectFile -Raw | ConvertFrom-Json
+                                        $items += @{ name = $project.name; file = $_.Name; backend = $project.backend }
+                                    }
+                                    catch { }
+                                }
+                            }
+                            SendJson $ctx @{ projects = $items }
+                        }
+                        elseif ($method -eq 'GET' -and $path -eq '/api/native-projects') {
+                            SendJson $ctx @{ projects = (GetGeneratedProjects) }
+                        }
+                        elseif ($method -eq 'GET' -and $path -match '^/api/build-jobs/[a-f0-9]{32}$') {
+                            $jobId = ($path -split '/')[-1]
+                            SendJson $ctx (GetNativeBuildJobStatus $jobId)
+                        }
+                        else {
+                            $body = ReadBody $ctx
+                            switch ($path) {
+                                '/api/save' {
+                                    $result = SaveProject $body.project ([string]$body.programCode)
+                                    SendJson $ctx $result
+                                }
+                                '/api/load' {
+                                    $file = [IO.Path]::GetFileName([string]$body.file)
+                                    $projectPath = Join-Path (Join-Path $script:Workspace $file) 'project.json'
+                                    if (!(Test-Path $projectPath)) {
+                                        SendJson $ctx @{ error = 'Proyecto no encontrado' } 404
+                                    }
+                                    else {
+                                        SendJson $ctx @{ project = (Get-Content $projectPath -Raw | ConvertFrom-Json) }
+                                    }
+                                }
+                                '/api/export-zip' {
+                                    $result = ExportProject $body.project ([string]$body.programCode)
+                                    SendJson $ctx $result
+                                }
+                                '/api/sdk-install' {
+                                    $results = @()
+                                    foreach ($id in @($body.ids)) {
+                                        $entry = $script:Catalog | Where-Object id -eq ([string]$id) | Select-Object -First 1
+                                        if (!$entry) {
+                                            $results += @{ ok = $false; name = [string]$id; message = 'ID de SDK desconocido.' }
+                                            continue
+                                        }
+                                        try { $results += InstallRepo $entry }
+                                        catch { $results += @{ ok = $false; name = $entry.name; message = $_.Exception.Message } }
+                                    }
+                                    $success = @($results | Where-Object ok).Count
+                                    SendJson $ctx @{ ok = ($success -eq $results.Count); message = "$success de $($results.Count) repositorio(s) disponibles."; results = $results }
+                                }
+                                '/api/setup' {
+                                    SendJson $ctx (InvokeSetup ([string]$body.action))
+                                }
+                                '/api/template-create' {
+                                    $templateId=[string]$body.templateId
+                                    if($templateId -eq 'vulkan-template') {
+                                        $result = NewVulkanTitle ([string]$body.name) ([string]$body.titleId) ([string]$body.design)
+                                    }
+                                    elseif($templateId -in @('nativecpp','hui-gl')) {
+                                        $category=[string]$body.category;if(!$category){$category='game'}
+                                        $result = NewNativeTitle ([string]$body.name) ([string]$body.titleId) $category $templateId
+                                    }
+                                    else { $result=@{ok=$false;message='Generador upstream no reconocido.';output='';templateId=$templateId} }
+                                    SendJson $ctx $result
+                                }
+                                '/api/integration-config' {
+                                    $result = SetIntegrationConfig $body
+                                    SendJson $ctx $result
+                                }
+                                '/api/package-ultrapack/start' {
+                                    SendJson $ctx (StartNativeBuildJob $body 'package')
+                                }
+                                '/api/native-presentation-assets' {
+                                    try {
+                                        SendJson $ctx (UpdateNativePresentationAssets $body)
+                                    }
+                                    catch {
+                                        SendJson $ctx @{ ok = $false; error = $_.Exception.Message } 400
+                                    }
+                                }
+                                '/api/build-native' {
+                                    $result = BuildNativeProject ([string]$body.path)
+                                    SendJson $ctx $result
+                                }
+                                '/api/build-native/start' {
+                                    SendJson $ctx (StartNativeBuildJob $body 'native')
+                                }
+                                '/api/build-visual-native/start' {
+                                    SendJson $ctx (StartNativeBuildJob $body 'visual')
+                                }
+                                '/api/build-visual-native' {
+                                    $result = BuildNativeVisualProject $body
+                                    SendJson $ctx $result
+                                }
+                                '/api/build' {
+                                    $backend = [string]$body.backend
+                                    if ($backend -in @('sharp', 'sharp-payload')) {
+                                        $result = BuildSharp $body.project ([string]$body.programCode) $backend ([string]$body.output)
+                                        SendJson $ctx $result
+                                    }
+                                    else {
+                                        if ($backend -eq 'ps5sdk') {
+                                            $message = 'PS5SDK es un backend de payload ELF C/C++. No ofrece un toolkit de UI que pueda representar fielmente los controles visuales del proyecto. No se reutiliza código C# como si fuera C válido.'
+                                        }
+                                        elseif ($backend -eq 'payload') {
+                                            $message = 'ps5-payload-dev/sdk es un backend de payload C/C++. Los widgets del editor pertenecen a aplicaciones; la compilación necesita un proyecto y una entrada de payload C/C++.'
+                                        }
+                                        elseif ($backend -eq 'ps5link') {
+                                            $message = 'ps5link-sdk produce títulos nativos y requiere ps5-payload-sdk, SharpProspero para empaquetado y libc.prx compatible del usuario. El IDE no presenta el código generado de SharpProspero como C válido.'
+                                        }
+                                        elseif ($backend -eq 'etahen') {
+                                            $message = 'etaHEN-Plugins crea daemons/plugins para etaHEN, no aplicaciones de interfaz independientes. Se requiere un proyecto de plugin y su estructura upstream.'
+                                        }
+                                        else {
+                                            $message = 'Backend no reconocido.'
+                                        }
+                                        SendJson $ctx @{
+                                            ok = $false
+                                            message = $message
+                                            output = 'No se ha iniciado una compilación incompatible.'
+                                            diagnostics = @(@{ severity = 'error'; title = 'Backend incompatible con el modelo visual'; message = $message; location = 'Backend' })
+                                        }
+                                    }
+                                }
+                                default {
+                                    SendJson $ctx @{ error = 'Ruta API no encontrada'; path = $path } 404
+                                }
+                            }
+                        }
+                    }
+                    else {
+                        ServeStatic $ctx $path
+                    }
+                }
+                catch {
+                    SendJson $ctx @{ error = $_.Exception.Message } 500
+                    Write-Host ('[ERROR] ' + $_.Exception.Message) -ForegroundColor Yellow
+                }
+
+                $response = $ctx.Response
+                $bodyBytes = [byte[]]$response.Body
+            }
+        }
+
+        $status = [int]$response.StatusCode
+        $reason = switch ($status) {
+            200 { 'OK' }
+            204 { 'No Content' }
+            400 { 'Bad Request' }
+            403 { 'Forbidden' }
+            404 { 'Not Found' }
+            413 { 'Payload Too Large' }
+            500 { 'Internal Server Error' }
+            default { 'OK' }
+        }
+        $contentType = [string]$response.ContentType
+        $responseHead = "HTTP/1.1 $status $reason`r`nContent-Type: $contentType`r`nContent-Length: $($bodyBytes.Length)`r`nConnection: close`r`nCache-Control: no-store`r`nX-Content-Type-Options: nosniff`r`n`r`n"
+        $headBytes = [Text.Encoding]::ASCII.GetBytes($responseHead)
+        $stream.Write($headBytes, 0, $headBytes.Length)
+        if ($bodyBytes.Length -gt 0) { $stream.Write($bodyBytes, 0, $bodyBytes.Length) }
+        $stream.Flush()
+    }
+    catch {
+        Write-Host ('[REQUEST ERROR] ' + $_.Exception.Message) -ForegroundColor Yellow
+    }
+    finally {
+        if ($stream) { $stream.Dispose() }
+        if ($client) { $client.Close() }
+    }
+}
+$listener.Stop()
+) { $ownerPid = [int]$Matches[1]; break }
+            }
+        } catch { }
+    }
+    if ($ownerPid -gt 0) {
+        Write-Host ("PID que ocupa el puerto 47813: " + $ownerPid) -ForegroundColor Cyan
+        try {
+            $ownerProcess = Get-CimInstance Win32_Process -Filter ("ProcessId = " + $ownerPid) -ErrorAction Stop
+            Write-Host ("Proceso: " + [string]$ownerProcess.Name) -ForegroundColor Yellow
+            if ($ownerProcess.CommandLine) { Write-Host ("Comando: " + [string]$ownerProcess.CommandLine) -ForegroundColor DarkYellow }
+            if ([string]$ownerProcess.CommandLine -match '(?i)runtime[\\/]+server\.ps1') {
+                Write-Host 'El proceso parece una instancia anterior de PS5 Homebrew Studio.' -ForegroundColor Yellow
+                Write-Host 'Para reiniciarla manualmente, después de confirmar el PID, ejecuta:' -ForegroundColor Yellow
+                Write-Host ("  Stop-Process -Id " + $ownerPid) -ForegroundColor White
+            } else {
+                Write-Host 'El proceso no se ha identificado como PS5 Homebrew Studio. No lo cierres hasta confirmar qué aplicación es.' -ForegroundColor Yellow
+            }
+        } catch {
+            Write-Host 'Windows devolvió un PID, pero no se pudo consultar la información del proceso.' -ForegroundColor Yellow
+        }
+    } else {
+        Write-Host 'No se pudo determinar el PID del proceso que ocupa el puerto. Comprueba con netstat -ano que está escuchando en el puerto 47813.' -ForegroundColor Yellow
+    }
+    Read-Host 'Pulsa Intro para cerrar este intento de arranque'
+    exit 2
+}
 Write-Host 'PS5 Homebrew Studio' -ForegroundColor Cyan
 Write-Host "Servicio local: $script:Url"
 Write-Host 'Solo loopback. Cierra esta ventana para detenerlo.' -ForegroundColor DarkGray
