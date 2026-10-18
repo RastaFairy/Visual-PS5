@@ -41,9 +41,9 @@
     return missing;
   }
   function missingForBackend(backend, value, hasCustomFont) {
-    const missing = missingForPermissions(value, requiredForBackend(backend));
-    if (hasCustomFont && !missing.includes('allowCustomUnicodeFont') && normalize(value).allowCustomUnicodeFont !== true) missing.push('allowCustomUnicodeFont');
-    else if (hasCustomFont && !normalize(value).allowCustomUnicodeFont) missing.push('allowCustomUnicodeFont');
+    const policy = normalize(value);
+    const missing = missingForPermissions(policy, requiredForBackend(backend));
+    if (hasCustomFont && policy.allowCustomUnicodeFont !== true) missing.push('allowCustomUnicodeFont');
     return missing;
   }
   const api = {version:1, entries:ENTRIES.slice(), defaults, normalize, entriesForBackend, getEntry, requiredForBackend, missingForPermissions, missingForBackend};
