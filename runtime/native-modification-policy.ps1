@@ -179,13 +179,24 @@ function GetPS5HSNativeTreeHashes {
   $root = [IO.Path]::GetFullPath($ProjectRoot)
   $hashes = @{}
   if (!(Test-Path -LiteralPath $root -PathType Container)) { return $hashes }
-  foreach ($item in (Get-ChildItem -LiteralPath $root -File -Recurse -Force -ErrorAction Stop)) {
-    if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { continue }
-    $relative = $item.FullName.Substring($root.TrimEnd([IO.Path]::DirectorySeparatorChar,[IO.Path]::AltDirectorySeparatorChar).Length).TrimStart([IO.Path]::DirectorySeparatorChar,[IO.Path]::AltDirectorySeparatorChar)
-    # For an upstream generator audit, every project file is relevant. Ignore only Git internals and the audit manifest itself.
-    if ($relative -match '(^|[\\/])\.git([\\/]|$)' -or $relative -ieq '.ps5hs-modifications.json') { continue }
-    $relative = $relative.Replace([IO.Path]::DirectorySeparatorChar,'/').Replace([IO.Path]::AltDirectorySeparatorChar,'/')
-    $hashes[$relative] = (Get-FileHash -LiteralPath $item.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+  $pending = [System.Collections.Generic.Stack[string]]::new()
+  $pending.Push($root)
+  while ($pending.Count -gt 0) {
+    $directory = $pending.Pop()
+    foreach ($subdirectory in [IO.Directory]::EnumerateDirectories($directory)) {
+      $directoryItem = Get-Item -LiteralPath $subdirectory -Force
+      if (($directoryItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { continue }
+      if ([IO.Path]::GetFileName($subdirectory) -ieq '.git') { continue }
+      $pending.Push($subdirectory)
+    }
+    foreach ($filePath in [IO.Directory]::EnumerateFiles($directory)) {
+      $item = Get-Item -LiteralPath $filePath -Force
+      if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { continue }
+      if ($item.Name -ieq '.ps5hs-modifications.json') { continue }
+      $relative = $item.FullName.Substring($root.TrimEnd([IO.Path]::DirectorySeparatorChar,[IO.Path]::AltDirectorySeparatorChar).Length).TrimStart([IO.Path]::DirectorySeparatorChar,[IO.Path]::AltDirectorySeparatorChar)
+      $relative = $relative.Replace([IO.Path]::DirectorySeparatorChar,'/').Replace([IO.Path]::AltDirectorySeparatorChar,'/')
+      $hashes[$relative] = (Get-FileHash -LiteralPath $item.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+    }
   }
   return $hashes
 }
