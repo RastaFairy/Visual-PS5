@@ -2004,7 +2004,7 @@ Write-Host "Servicio local: $script:Url"
 Write-Host 'Solo loopback. Cierra esta ventana para detenerlo.' -ForegroundColor DarkGray
 Start-Process $script:Url
 $script:StopServerRequested = $false
-$script:ServerCancelHandler = [ConsoleCancelEventHandler]{
+$script:ServerCancelHandler = [System.ConsoleCancelEventHandler]{
     param($sender, $eventArgs)
     $eventArgs.Cancel = $true
     $script:StopServerRequested = $true
