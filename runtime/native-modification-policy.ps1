@@ -182,7 +182,8 @@ function GetPS5HSNativeTreeHashes {
   foreach ($item in (Get-ChildItem -LiteralPath $root -File -Recurse -Force -ErrorAction Stop)) {
     if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { continue }
     $relative = $item.FullName.Substring($root.TrimEnd([IO.Path]::DirectorySeparatorChar,[IO.Path]::AltDirectorySeparatorChar).Length).TrimStart([IO.Path]::DirectorySeparatorChar,[IO.Path]::AltDirectorySeparatorChar)
-    if ($relative -match '(^|[\\/])(\.git|\.deps|\.cache|build|dist|out|obj|node_modules|\.runtime)([\\/]|$)' -or $relative -ieq '.ps5hs-modifications.json') { continue }
+    # For an upstream generator audit, every project file is relevant. Ignore only Git internals and the audit manifest itself.
+    if ($relative -match '(^|[\\/])\.git([\\/]|$)' -or $relative -ieq '.ps5hs-modifications.json') { continue }
     $relative = $relative.Replace([IO.Path]::DirectorySeparatorChar,'/').Replace([IO.Path]::AltDirectorySeparatorChar,'/')
     $hashes[$relative] = (Get-FileHash -LiteralPath $item.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
   }
