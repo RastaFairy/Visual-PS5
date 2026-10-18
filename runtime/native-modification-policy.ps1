@@ -299,12 +299,20 @@ function NormalizeNativeBuildFilesWithAudit {
   $relativePaths = @($relativePaths | Select-Object -Unique)
   if ($relativePaths.Count -eq 0) { return @{count=0;changedFiles=@();skipped=$false} }
   $before = GetPS5HSNativeFileHashes -ProjectRoot $root -RelativePaths $relativePaths
-  $count = NormalizeNativeBuildFiles $root
+  $count = 0
+  $normalizationError = ''
+  try { $count = NormalizeNativeBuildFiles $root }
+  catch { $normalizationError = $_.Exception.Message }
+  # The normalizer writes files one by one. Always compare and log partial changes
+  # even when a later file fails, then surface the original failure.
   $after = GetPS5HSNativeFileHashes -ProjectRoot $root -RelativePaths $relativePaths
   $changed = @($relativePaths | Where-Object { $before[$_] -cne $after[$_] })
   if ($changed.Count -gt 0) {
     $record = AddPS5HSNativeModificationRecord -ProjectRoot $root -Backend $Backend -Operation 'normalize-build-file-line-endings' -PermissionKey 'normalizeBuildFiles' -RelativePaths $changed -BeforeHashes $before -Policy $approved -SourceRepository $SourceRepository -SourceCommit $SourceCommit
     if ($script:ActiveBuildLogPath) { WriteBuildJobLog $script:ActiveBuildLogPath ("Normalización consentida y auditada: $count archivos; registro $($record.manifest).") }
+  }
+  if ($normalizationError) {
+    throw ("La normalización no se completó. Los cambios parciales se han comparado y auditado cuando fue posible. Error original: " + $normalizationError)
   }
   return @{count=$count;changedFiles=@($changed);skipped=$false}
 }
