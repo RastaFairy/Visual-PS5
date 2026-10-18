@@ -1,5 +1,15 @@
 # Registro de cambios
 
+## 1.1.10 — 2026-10-18
+
+- Añade un perfil de runtime nativo controlado por PS5 Homebrew Studio para los títulos visuales OpenGL.
+- Retira la reserva de L1/R1/Touchpad en el shell de galería, pasa el InputFrame sin filtrar y desactiva el HUD y el panel informativo heredados.
+- El perfil se aplica al generar títulos nuevos y al compilar proyectos visuales anteriores identificados por su fuente generada; los proyectos de galería genéricos no se alteran.
+- El runtime es idempotente, deja un manifiesto para auditoría y detiene la compilación si las anclas de código upstream no se reconocen.
+- Añade pruebas de unidad del parche y validación automática de JavaScript/PowerShell en GitHub Actions; el flujo publica un ZIP versionado como artefacto.
+- Renderer y componentes gráficos siguen procediendo de sus fuentes upstream; esta integración controla el shell y la política de entrada, no afirma haber absorbido Mesa o el SDK.
+- No se afirma una compilación de título PS5 ni una prueba en consola en esta revisión.
+
 ## 1.1.9 — 2026-10-17
 
 - Unifica las mejoras del modelo de capas de 1.1.8 con la selección opcional de fuente TTF para títulos nativos.

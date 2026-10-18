@@ -1,0 +1,76 @@
+name: Validate IDE runtime and package source
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  validate:
+    runs-on: windows-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check JavaScript syntax
+        shell: pwsh
+        run: |
+          node --check app.js
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node --check runtime/native-generator.js
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node --check runtime/layer-model.js
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node --check runtime/unicode-fonts.js
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Run JavaScript regression tests
+        shell: pwsh
+        run: |
+          $tests = @(
+            'runtime/test-layer-model.js',
+            'runtime/test-native-generator.js',
+            'runtime/test-structure-explorer.js',
+            'runtime/test-unicode-fonts.js',
+            'runtime/test-unicode-integration.js'
+          )
+          foreach ($test in $tests) {
+            Write-Host "Running $test"
+            node $test
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
+      - name: Parse PowerShell sources
+        shell: pwsh
+        run: |
+          $paths = @(
+            'runtime/server.ps1',
+            'runtime/native-runtime.ps1',
+            'runtime/check-syntax.ps1',
+            'runtime/test-native-runtime.ps1'
+          )
+          foreach ($path in $paths) {
+            $tokens = $null
+            $errors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $path), [ref]$tokens, [ref]$errors) | Out-Null
+            if ($errors.Count -gt 0) {
+              $errors | ForEach-Object { Write-Error ("{0}:{1}:{2}: {3}" -f $path, $_.Extent.StartLineNumber, $_.Extent.StartColumnNumber, $_.Message) }
+              exit 1
+            }
+            Write-Host "PowerShell syntax OK: $path"
+          }
+      - name: Test isolated native UI runtime profile
+        shell: pwsh
+        run: ./runtime/test-native-runtime.ps1
+      - name: Package versioned source ZIP
+        shell: pwsh
+        run: git archive --format=zip --prefix=PS5-Homebrew-Studio/ --output=PS5-Homebrew-Studio-v1.1.10.zip HEAD
+      - name: Upload versioned source ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: PS5-Homebrew-Studio-v1.1.10
+          path: PS5-Homebrew-Studio-v1.1.10.zip
+          if-no-files-found: error
+          retention-days: 30

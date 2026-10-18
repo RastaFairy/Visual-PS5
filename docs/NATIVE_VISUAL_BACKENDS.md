@@ -2,6 +2,19 @@
 
 PS5 Homebrew Studio admite dos rutas para generar una pantalla desde el lienzo. Ambas producen C++20 y mantienen el proyecto nativo como una carpeta independiente en `Documentos/PS5HomebrewStudio/Projects`.
 
+## Runtime autónomo y propiedad de la entrada · 1.1.10
+
+En los títulos OpenGL generados desde el lienzo, runtime/native-runtime.ps1 aplica el perfil standalone-native-ui-v1 antes de compilar:
+
+- elimina del shell las acciones de galería reservadas para L1/R1 y Touchpad;
+- pasa el InputFrame completo a la pantalla generada, sin enmascarar pressed, released ni held;
+- desactiva la composición del banner, HUD y panel informativo del shell;
+- registra la política en .ps5hs-native-runtime.json para auditoría.
+
+El perfil se aplica al generar títulos nuevos y al compilar proyectos visuales OpenGL anteriores reconocidos por el IDE. Si los puntos de integración no coinciden con el código upstream, el IDE falla de forma cerrada y no lanza el build. No aplica el parche a proyectos de galería genéricos importados.
+
+Esta integración controla la política de la aplicación y el enrutamiento de entrada; renderer y componentes gráficos siguen siendo dependencias de código fuente upstream. La ruta Vulkan usa el programa UI directo de PS5_VulkanTemplate; su salida al mantener OPTIONS permanece como comportamiento de la plantilla.
+
 ## Flujo de uso
 
 1. Añade componentes en el lienzo 1920×1080 y configura sus propiedades.

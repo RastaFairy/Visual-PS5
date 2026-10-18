@@ -1,6 +1,6 @@
-# Validación y problemas conocidos — PS5 Homebrew Studio 1.1.9
+# Validación y problemas conocidos — PS5 Homebrew Studio 1.1.10
 
-Última actualización: 2026-10-17.
+Última actualización: 2026-10-18.
 
 ## Validación técnica de 1.1.9 en el entorno de preparación
 
@@ -20,6 +20,13 @@
 - **Pruebas automatizadas locales:** pasan `node --check app.js`, `node --check runtime/native-generator.js` y `node runtime/test-native-generator.js`, incluida la comprobación de orden de capas para las salidas OpenGL y Vulkan.
 
 Las confirmaciones siguientes se refieren a la versión 1.1.5 y al entorno del usuario, no a una prueba de extremo a extremo de la 1.1.9. Tampoco implican que se hayan validado todas las combinaciones de SDK, backend o hardware.
+
+## Runtime OpenGL autónomo de 1.1.10
+
+- El perfil controlado por el IDE elimina la captura de L1/R1/Touchpad y el HUD de galería en títulos visuales generados.
+- Las pruebas de unidad del perfil verifican el paso directo de InputFrame, la idempotencia y el fallo seguro ante una estructura upstream inesperada.
+- La validación PowerShell y la compilación de título real deben confirmarse en Windows/WSL mediante GitHub Actions y el entorno de destino. Las pruebas estáticas no sustituyen una compilación de PS5 ni una prueba en consola.
+- El renderer y los componentes gráficos siguen dependiendo de fuentes upstream; el IDE controla el shell y la política de entrada.
 
 ## Problemas y validaciones pendientes
 

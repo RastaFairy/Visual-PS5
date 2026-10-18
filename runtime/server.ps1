@@ -8,6 +8,9 @@ $script:Exports = Join-Path $script:Runtime 'exports'
 $script:Workspace = Join-Path ([Environment]::GetFolderPath('MyDocuments')) 'PS5HomebrewStudio\Projects'
 $script:Url = 'http://127.0.0.1:47813/'
 $script:Utf8 = [System.Text.UTF8Encoding]::new($false)
+$script:NativeRuntimeProfileScript = Join-Path $PSScriptRoot 'native-runtime.ps1'
+if (!(Test-Path -LiteralPath $script:NativeRuntimeProfileScript -PathType Leaf)) { throw 'Falta runtime/native-runtime.ps1; el IDE no se iniciará sin su perfil nativo.' }
+. $script:NativeRuntimeProfileScript
 @($script:Toolchains,$script:Runtime,$script:Exports,$script:Workspace) | ForEach-Object { New-Item -ItemType Directory -Force -Path $_ | Out-Null }
 $script:Catalog = @(
   @{id='sharp';name='SharpProspero';repo='SvenGDK/SharpProspero';branch='main';folder='SharpProspero';role='Aplicaciones nativas / payload C#';license='GPL-3.0-or-later';description='SDK C# y toolchain de aplicaciones nativas, interfaz, gráficos, audio, entrada, red y payloads.'},
@@ -18,7 +21,7 @@ $script:Catalog = @(
   @{id='nid';name='libNidResolver';repo='astrelsky/libNidResolver';branch='main';folder='libNidResolver';role='Dependencia etaHEN';license='Consultar upstream';description='Submódulo declarado por etaHEN-Plugins; el ZIP de GitHub no contiene submódulos.'},
   @{id='nativecpp';name='PS5 Native App Boilerplate';repo='blackbearreloaded/ps5-native-app-boilerplate';branch='main';folder='ps5-native-app-boilerplate';role='Fundación C/C++20 para títulos nativos';license='GPL-3.0-or-later';description='Base de aplicación nativa con runtime reproducible, metadatos y empaquetado; clona con submódulos.';category='source';method='git'},
   @{id='opengl';name='PS5 OpenGL 4.6';repo='blackbearreloaded/ps5-opengl';branch='main';folder='ps5-opengl';role='Renderer OpenGL 4.6 / GLSL 4.60';license='GPL-3.0-or-later';description='Pila Mesa/Gallium, EGL, compilación de shaders, SDK estático, puente SDL2 y ejemplos.';category='source';method='git'},
-  @{id='hui-gl';name='PS5 Homebrew UI (OpenGL)';repo='blackbearreloaded/ps5-homebrew-ui';branch='main';folder='ps5-homebrew-ui';role='Kit de interfaz OpenGL';license='GPL-3.0-or-later';description='Biblioteca UI con componentes, temas, diseños, movimiento y audio; orientada a ps5-opengl.';category='source';method='git'},
+  @{id='hui-gl';name='PS5 Homebrew UI (OpenGL)';repo='blackbearreloaded/ps5-homebrew-ui';branch='main';folder='ps5-homebrew-ui';role='Kit de interfaz OpenGL';license='GPL-3.0-or-later';description='Fuente upstream de renderer/componentes OpenGL; el shell de los títulos visuales queda bajo control de Homebrew Studio.';category='source';method='git'},
   @{id='vulkan-template';name='PS5 Vulkan Template';repo='mihawk-99/PS5_VulkanTemplate';branch='main';folder='PS5_VulkanTemplate';role='Plantilla Vulkan/RADV con generador';license='MIT base; UI opcional GPL-3.0-or-later';description='Fundación Vulkan, ejemplos, test runner y new-title.py para crear títulos nativos.';category='source';method='git'},
   @{id='vulkan-radv';name='PS5_Vulkan / RADV';repo='mihawk-99/PS5_Vulkan';branch='main';folder='PS5_Vulkan';role='Driver Vulkan Mesa/RADV';license='GPL-3.0-or-later';description='Driver Vulkan y capa de plataforma para el stack RADV de PS5; requiere componentes compañeros.';category='source';method='git'},
   @{id='vulkan-sdk';name='PS5_PayloadSDK (fork RADV)';repo='mihawk-99/PS5_PayloadSDK';branch='main';folder='PS5_PayloadSDK';role='SDK compañero de PS5 Vulkan';license='Revisar upstream';description='Fork del SDK con capa PS5, requerido por la plantilla Vulkan en un commit exacto; necesita el historial Git que contiene ese commit.';category='source';method='git';fullHistory=$true},
@@ -1185,6 +1188,19 @@ function BuildNativeProject([string]$ProjectPath,[bool]$CleanBeforeBuild=$false,
   }
   try { $meta = Get-Content -LiteralPath $markerPath -Raw | ConvertFrom-Json }
   catch { return @{ok=$false;message='El manifiesto del proyecto no se puede leer.';output=$_.Exception.Message} }
+  $studioGeneratedUi = $false
+  if ($template -eq 'hui-gl') {
+    $generatedSource = Join-Path $projectRoot 'src/concepts/ps5hs_generated.cpp'
+    $studioGeneratedUi = ([bool]$meta.generatedFromStudio -or (Test-Path -LiteralPath $generatedSource -PathType Leaf))
+  }
+  if ($studioGeneratedUi) {
+    try {
+      $runtimeProfileResult = ApplyPS5HSStandaloneNativeUiProfile $projectRoot
+      if ($script:ActiveBuildLogPath) { WriteBuildJobLog $script:ActiveBuildLogPath 'Runtime autónomo verificado: sin reserva de L1/R1/Touchpad y con InputFrame sin filtrar.' }
+    } catch {
+      return @{ok=$false;message='La compilación se detuvo porque no se pudo verificar el runtime autónomo del título visual.';output=$_.Exception.Message;path=$projectRoot;templateId=$template;buildStoppedBeforeCompile=$true}
+    }
+  }
   if ($template -eq 'hui-gl') { try { EnableEuropeanFontAtlas $projectRoot } catch { return @{ok=$false;message=$_.Exception.Message;output=$_.Exception.Message;path=$projectRoot;templateId=$template} } }
   try { $normalizedLineEndings = NormalizeNativeBuildFiles $projectRoot }
   catch { return @{ok=$false;message='No se pudieron normalizar los finales de línea de los archivos nativos.';output=$_.Exception.Message;templateId=$template} }
@@ -1787,6 +1803,20 @@ std::span<const ConceptFactory> concept_registry() {
     }
 
     WriteUtf8 $sourcePath $code
+    if ($backend -eq 'opengl-ui') {
+      $projectMetaPath = Join-Path $projectRoot '.ps5hs-project.json'
+      if (!(Test-Path -LiteralPath $projectMetaPath -PathType Leaf)) { throw 'No se encuentra el manifiesto del proyecto OpenGL generado.' }
+      try { $projectMeta = Get-Content -LiteralPath $projectMetaPath -Raw | ConvertFrom-Json }
+      catch { throw 'El manifiesto del título OpenGL generado no se puede leer.' }
+      if ([string]$projectMeta.schema -ne 'ps5hs-native-project' -or [string]$projectMeta.template -ne 'hui-gl') {
+        throw 'El título generado no coincide con la plantilla OpenGL esperada.'
+      }
+      Add-Member -InputObject $projectMeta -NotePropertyName 'generatedFromStudio' -NotePropertyValue $true -Force
+      Add-Member -InputObject $projectMeta -NotePropertyName 'nativeRuntimeProfile' -NotePropertyValue 'standalone-native-ui-v1' -Force
+      WriteUtf8 $projectMetaPath (ConvertTo-Json -InputObject $projectMeta -Depth 10)
+      $runtimeProfileResult = ApplyPS5HSStandaloneNativeUiProfile $projectRoot
+      WriteBuildJobLog $script:ActiveBuildLogPath 'Runtime autónomo activo: la galería y su HUD están desactivados; L1/R1/Touchpad se entregan sin filtrado a la pantalla generada.'
+    }
     $assetResult = WriteNativeVisualAssets $Body $projectRoot
     $unicodeFontResult = PrepareNativeUnicodeFonts $Body $projectRoot $backend
     if ($unicodeFontResult.enabled) {
