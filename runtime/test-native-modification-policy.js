@@ -10,7 +10,7 @@ assert.deepEqual(policy.requiredForBackend('vulkan-ui'), ['allowExecuteUpstreamG
 assert.deepEqual(policy.missingForBackend('opengl-ui', defaults, false), ['allowExecuteUpstreamGenerationTools','allowExecuteUpstreamBuildTools','allowOpenGlTemplateIntegration']);
 assert.deepEqual(policy.missingForBackend('vulkan-ui', defaults, false), ['allowExecuteUpstreamGenerationTools','allowExecuteUpstreamBuildTools','allowVulkanTemplateIntegration']);
 assert.ok(policy.missingForBackend('opengl-ui', {...defaults, allowOpenGlTemplateIntegration:true}, true).includes('allowCustomUnicodeFont'));
-assert.deepEqual(policy.missingForBackend('opengl-ui', {...defaults, allowOpenGlTemplateIntegration:true, allowCustomUnicodeFont:true}, true), []);
+assert.deepEqual(policy.missingForBackend('opengl-ui', {...defaults, allowExecuteUpstreamGenerationTools:true, allowExecuteUpstreamBuildTools:true, allowOpenGlTemplateIntegration:true, allowCustomUnicodeFont:true}, true), []);
 const normalized = policy.normalize({allowOpenGlRuntimeProfile:true, unexpectedPermission:true, normalizeBuildFiles:1});
 assert.equal(normalized.allowOpenGlRuntimeProfile, true);
 assert.equal(normalized.normalizeBuildFiles, false, 'Only explicit boolean true is accepted.');
