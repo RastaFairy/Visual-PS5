@@ -1818,6 +1818,10 @@ function BuildNativeVisualProject($Body) {
     $targetCandidate = Join-Path $script:Workspace ($suffixForTarget + '-OpenGL-UI')
   } else { $targetCandidate = Join-Path $script:Workspace ($slugForTarget + '-Vulkan') }
   if (Test-Path -LiteralPath $targetCandidate -PathType Container) {
+    $targetItem = Get-Item -LiteralPath $targetCandidate -Force
+    if (($targetItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+      return @{ok=$false;message='No se puede sobrescribir una carpeta enlazada o punto de reanálisis. El IDE no escribirá a través de ese destino.';output=[string]$targetCandidate;path=[string]$targetCandidate;exitCode=2}
+    }
     if (!$Body.overwriteExisting) {
       return @{ok=$false;message='La carpeta de destino ya existe. Cambia el nombre del título o marca «Sobrescribir» para reemplazar únicamente un proyecto de Homebrew Studio de la misma plantilla.';output=[string]$targetCandidate;path=[string]$targetCandidate;exitCode=2}
     }
