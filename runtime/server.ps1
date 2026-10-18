@@ -1336,10 +1336,11 @@ function BuildNativeProject([string]$ProjectPath,[bool]$CleanBeforeBuild=$false,
         throw 'No están disponibles los checkouts Git completos de PS5_Vulkan, PS5_PayloadSDK y PS5_Mesa.'
       }
       $helperRelativePaths = @('tools/ninja-build.sh','tools/build-host-tools.sh')
+      $auditRelativePaths = @($helperRelativePaths) + @('.ps5hs-compatibility.json')
       $missingHelpers = @($helperRelativePaths | Where-Object { !(Test-Path -LiteralPath (Join-Path $vulkanDir ($_ -replace '/', [IO.Path]::DirectorySeparatorChar)) -PathType Leaf) })
       if ($missingHelpers.Count -gt 0) {
         if (!$policy.allowVulkanBuildHelperRestore) { throw ('Faltan helpers de build en PS5_Vulkan (' + ($missingHelpers -join ', ') + '). No se han restaurado: autoriza «Restaurar scripts auxiliares Vulkan» y vuelve a compilar.') }
-        $restored = @(InvokePS5HSNativeModificationWithAudit -ProjectRoot $vulkanDir -Backend $template -Operation 'restore-missing-vulkan-build-helpers' -PermissionKey 'allowVulkanBuildHelperRestore' -RelativePaths $helperRelativePaths -Policy $policy -SourceRepository 'blackbearreloaded/ps5-native-app-boilerplate' -Action { EnsureVulkanBuildSupport $vulkanDir })
+        $restored = @(InvokePS5HSNativeModificationWithAudit -ProjectRoot $vulkanDir -Backend $template -Operation 'restore-missing-vulkan-build-helpers' -PermissionKey 'allowVulkanBuildHelperRestore' -RelativePaths $auditRelativePaths -Policy $policy -SourceRepository 'blackbearreloaded/ps5-native-app-boilerplate' -Action { EnsureVulkanBuildSupport $vulkanDir })
         if ($restored.Count -gt 0) { $dependencyLog += 'Se restauraron helpers upstream con autorización y auditoría SHA-256; detalle en .ps5hs-compatibility.json y .ps5hs-modifications.json.' }
       }
     }
