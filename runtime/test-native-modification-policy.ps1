@@ -86,9 +86,15 @@ try {
   [IO.Directory]::CreateDirectory((Join-Path $root '.git/objects')) | Out-Null
   [IO.File]::WriteAllText((Join-Path $root '.deps/hui/dependency.cpp'),'dependency',$utf8)
   [IO.File]::WriteAllText((Join-Path $root '.git/objects/ignored'),'git',[Text.UTF8Encoding]::new($false))
+  [IO.Directory]::CreateDirectory((Join-Path $root 'build')) | Out-Null
+  [IO.Directory]::CreateDirectory((Join-Path $root 'out-123456')) | Out-Null
+  [IO.File]::WriteAllText((Join-Path $root 'build/compiler-output.bin'),'binary output',$utf8)
+  [IO.File]::WriteAllText((Join-Path $root 'out-123456/title.pkg'),'binary output',$utf8)
   $treeSnapshot = GetPS5HSNativeTreeHashes -ProjectRoot $root
   Assert-Condition ($treeSnapshot.ContainsKey('.deps/hui/dependency.cpp')) 'El snapshot debe incluir dependencias embebidas, porque también pueden modificarse.'
   Assert-Condition (!$treeSnapshot.ContainsKey('.git/objects/ignored')) 'El snapshot no debe recorrer ni auditar internals Git.'
+  Assert-Condition (!$treeSnapshot.ContainsKey('build/compiler-output.bin')) 'El snapshot debe excluir artefactos de build regenerables.'
+  Assert-Condition (!$treeSnapshot.ContainsKey('out-123456/title.pkg')) 'El snapshot debe excluir carpetas de salida para no hashear paquetes grandes.'
 
   # A newly generated project must record files created by the upstream generator.
   $treeRoot = Join-Path $root 'generated-project'
