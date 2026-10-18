@@ -8,8 +8,10 @@ const html = read('index.html');
 const app = read('app.js');
 const server = read('runtime/server.ps1');
 
-assert.match(html, /runtime\/unicode-fonts\.js\?v=1\.1\.9/);
-assert.match(html, /runtime\/layer-model\.js\?v=1\.1\.9/, 'layer model must remain enabled');
+const appVersion = (html.match(/<meta name="application-version" content="([^"]+)"/) || [])[1];
+assert.ok(appVersion, 'application version metadata must exist');
+assert.ok(html.includes(`runtime/unicode-fonts.js?v=${appVersion}`), 'Unicode fonts script must use the current app version');
+assert.ok(html.includes(`runtime/layer-model.js?v=${appVersion}`), 'layer model must use the current app version');
 assert.match(html, /assetFileInput[^>]*\.ttf/, 'asset picker must accept TTF fonts');
 assert.match(app, /fontAssetId:''/, 'new projects must initialise the optional font selection');
 assert.match(app, /if\(!project\.assets\.length\)\{project\.fontAssetId='';/, 'removing the last font asset must clear its selection');
