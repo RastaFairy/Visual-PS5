@@ -20,9 +20,11 @@ assert.deepEqual(policy.requiredForBackend('vulkan-template'), ['allowExecuteUps
 assert.ok(policy.entriesForBackend('vulkan-template').some(entry => entry.key === 'allowVulkanBuildHelperRestore'));
 assert.ok(policy.entriesForBackend('vulkan-template').some(entry => entry.key === 'normalizeBuildFiles'));
 assert.deepEqual(policy.missingForBackend('nativecpp', defaults, false), ['allowExecuteUpstreamGenerationTools','allowExecuteUpstreamBuildTools']);
-assert.deepEqual(policy.requiredForBackend('sharp'), ['allowExecuteUpstreamGenerationTools','allowExecuteUpstreamBuildTools']);
-assert.deepEqual(policy.missingForBackend('sharp', defaults, false), ['allowExecuteUpstreamGenerationTools','allowExecuteUpstreamBuildTools']);
+assert.deepEqual(policy.requiredForBackend('sharp'), ['allowExecuteUpstreamBuildTools','allowSharpTemplateIntegration']);
+assert.deepEqual(policy.missingForBackend('sharp', defaults, false), ['allowExecuteUpstreamBuildTools','allowSharpTemplateIntegration']);
 assert.deepEqual(policy.missingForPermissions(defaults, ['allowExecuteUpstreamGenerationTools']), ['allowExecuteUpstreamGenerationTools']);
+assert.deepEqual(policy.missingForPermissions(defaults, ['allowSharpTemplateIntegration']), ['allowSharpTemplateIntegration']);
+assert.deepEqual(policy.missingForPermissions({...defaults, allowSharpTemplateIntegration:true}, ['allowSharpTemplateIntegration']), []);
 assert.deepEqual(policy.missingForPermissions({...defaults, allowExecuteUpstreamGenerationTools:true}, ['allowExecuteUpstreamGenerationTools']), []);
 assert.deepEqual(policy.missingForPermissions(defaults, ['not-a-known-permission']), ['not-a-known-permission']);
 assert.ok(policy.entriesForBackend('hui-gl').some(entry => entry.key === 'normalizeBuildFiles'), 'Build normalization must be explicitly available on project initialization.');
