@@ -2090,11 +2090,27 @@ std::span<const ConceptFactory> concept_registry() {
 }
 
 function SaveProject($P,[string]$Code) {
-  $name=Slug $P.name;$dir=Join-Path $script:Workspace $name;New-Item -ItemType Directory -Force -Path $dir|Out-Null;WriteProjectFiles $P $Code $dir
+  $name = Slug ([string]$P.name)
+  $dir = Join-Path $script:Workspace $name
+  if (Test-Path -LiteralPath $dir) {
+    $dirItem = Get-Item -LiteralPath $dir -Force
+    if (($dirItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0 -or !$dirItem.PSIsContainer) {
+      return @{ok=$false;message='No se puede guardar: la carpeta de destino es un archivo o un enlace. No se ha escrito nada.';path=$dir;name=$name}
+    }
+    $nativeMarker = Join-Path $dir '.ps5hs-project.json'
+    $sharpMarker = Join-Path $dir 'native/.ps5hs-sharp-project.json'
+    if ((Test-Path -LiteralPath $nativeMarker -PathType Leaf) -or (Test-Path -LiteralPath $sharpMarker -PathType Leaf)) {
+      return @{ok=$false;message='No se puede guardar el proyecto visual con este nombre porque la carpeta pertenece a un título nativo/OpenGL/Vulkan o SharpProspero. Cambia el nombre del proyecto visual para evitar alterar esos archivos.';path=$dir;name=$name;collision=$true}
+    }
+  } else {
+    New-Item -ItemType Directory -Force -Path $dir | Out-Null
+  }
+  WriteProjectFiles $P $Code $dir
   if([string]$P.backend -in @('opengl-ui','vulkan-ui')){$sourceName='GeneratedScreen.cpp';$description='C++20 generado contra el contrato hui::app::Concept. Usa Compilar para inyectarlo en la plantilla upstream y construir un título.'}
   else{$sourceName='Program.cs';$description='Código C# generado/actual.'}
   $readme="# $($P.name)`r`n`r`nProyecto PS5 Homebrew Studio. Backend: $($P.backend).`r`n`r`n- project.json: modelo del editor.`r`n- ${sourceName}: $description`r`n- assets/: recursos importados.`r`n"
-  WriteUtf8 (Join-Path $dir 'README.md') $readme;return @{ok=$true;path=$dir;name=$name}
+  WriteUtf8 (Join-Path $dir 'README.md') $readme
+  return @{ok=$true;path=$dir;name=$name}
 }
 function ExportProject($P,[string]$Code) {
   $name=Slug $P.name;$id=[guid]::NewGuid().ToString('N').Substring(0,8);$dir=Join-Path $script:Exports ($name+'-'+$id);New-Item -ItemType Directory -Force -Path $dir|Out-Null;WriteProjectFiles $P $Code $dir
