@@ -42,13 +42,19 @@
     }
     return missing;
   }
-  function missingForBackend(backend, value, hasCustomFont) {
-    const policy = normalize(value);
-    const missing = missingForPermissions(policy, requiredForBackend(backend));
-    if (hasCustomFont && policy.allowCustomUnicodeFont !== true) missing.push('allowCustomUnicodeFont');
-    return missing;
+  function requiredForNativeVisualBuild(backend, options = {}) {
+    const required = requiredForBackend(backend);
+    if (options.hasPresentationAssets) required.push('allowExecuteUpstreamAssetTools');
+    if (options.hasCustomFont) required.push('allowCustomUnicodeFont');
+    return [...new Set(required)];
   }
-  const api = {version:1, entries:ENTRIES.slice(), defaults, normalize, entriesForBackend, getEntry, requiredForBackend, missingForPermissions, missingForBackend};
+  function missingForNativeVisualBuild(backend, value, options = {}) {
+    return missingForPermissions(value, requiredForNativeVisualBuild(backend, options));
+  }
+  function missingForBackend(backend, value, hasCustomFont) {
+    return missingForPermissions(value, [...requiredForBackend(backend), ...(hasCustomFont ? ['allowCustomUnicodeFont'] : [])]);
+  }
+  const api = {version:1, entries:ENTRIES.slice(), defaults, normalize, entriesForBackend, getEntry, requiredForBackend, requiredForNativeVisualBuild, missingForPermissions, missingForBackend, missingForNativeVisualBuild};
   if (root) root.PS5HSNativeModificationPolicy = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof globalThis === 'object' ? globalThis : null);

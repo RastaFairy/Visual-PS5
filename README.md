@@ -1,12 +1,8 @@
 # PS5 Homebrew Studio
 
-<p align="center">
-  <img src="{EDC916EF-F967-4908-A4E6-D206F0BA1AA6}.png" alt="Texto alternativo" width="1000">
-</p>
+**Release 1.1.10 · IDE visual local para Windows.** Integra un editor visual 1920×1080, análisis de flujos, generación de código C# para SharpProspero y conversión del modelo visual a pantallas C++20 para los kits nativos OpenGL/Vulkan. Incluye un catálogo verificado por función de boilerplates, UI kits, drivers, complementos gráficos y aplicaciones comunitarias de referencia.
 
-**Release 1.1.11 · IDE visual local para Windows.** Integra un editor visual 1920×1080, análisis de flujos, generación de código C# para SharpProspero y conversión del modelo visual a pantallas C++20 para los kits nativos OpenGL/Vulkan. Incluye un catálogo verificado por función de boilerplates, UI kits, drivers, complementos gráficos y aplicaciones comunitarias de referencia.
-
-## Runtime nativo autónomo · 1.1.11
+## Runtime nativo autónomo · 1.1.10
 
 - Los títulos visuales OpenGL aplican un perfil de runtime propio del IDE. El framework upstream aporta el renderer y los componentes gráficos, pero su shell de galería deja de controlar el título generado.
 - L1, R1 y Touchpad no se reservan para cambiar de diseño ni abrir un panel informativo. El InputFrame llega a la pantalla generada sin filtrado; si el código generado no implementa una acción, esos botones no hacen nada.
@@ -51,7 +47,7 @@ En **Recursos**, importa una fuente TrueType `.ttf` (máximo 20 MiB) y selecció
 
 El servicio escucha únicamente en `127.0.0.1`; no expone el sistema de archivos a la red local. Los proyectos del editor se guardan en `Documentos\PS5HomebrewStudio\Projects`. `Ctrl+S` guarda el modelo visual. El editor puede abrirse y usarse sin descargar ningún toolchain.
 
-## Documentación 1.1.11
+## Documentación 1.1.10
 
 - Manual español: [docs/MANUAL.es-ES.md](docs/MANUAL.es-ES.md)
 - English: [docs/USER-MANUAL.en-GB.md](docs/USER-MANUAL.en-GB.md)

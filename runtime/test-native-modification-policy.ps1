@@ -28,6 +28,10 @@ $approved = [pscustomobject]@{
   unexpectedPermission=$true
 }
 $normalized = NormalizePS5HSNativeModificationPolicy $approved
+$visualGaps = @(GetPS5HSNativeModificationConsentGaps -Backend 'opengl-ui' -Policy $normalized -RequirePermissionKeys @('allowExecuteUpstreamAssetTools','allowCustomUnicodeFont'))
+Assert-Condition ($visualGaps.Count -eq 2) 'El preflight visual debe detectar conversión de recursos y TTF sin autorización antes de empezar.'
+$visualApproved = NormalizePS5HSNativeModificationPolicy ([pscustomobject]@{allowExecuteUpstreamAssetTools=$true;allowCustomUnicodeFont=$true})
+Assert-Condition (@(GetPS5HSNativeModificationConsentGaps -Backend 'opengl-ui' -Policy $visualApproved -RequirePermissionKeys @('allowExecuteUpstreamAssetTools','allowCustomUnicodeFont')).Count -eq 0) 'Las autorizaciones específicas deben desbloquear solo las operaciones señaladas.'
 Assert-Condition ($normalized.allowOpenGlTemplateIntegration -and !$normalized.allowOpenGlRuntimeProfile) 'Solo deben respetarse permisos booleanos explícitos.'
 Assert-Condition (!$normalized.ContainsKey('unexpectedPermission')) 'No deben admitirse permisos desconocidos.'
 Assert-Condition (@(GetPS5HSNativeModificationConsentGaps -Backend 'vulkan-ui' -Policy $normalized -RequireVisualIntegration $true -HasCustomFont $true).Count -eq 2) 'Vulkan y la fuente TTF deben exigir sus permisos específicos.'
