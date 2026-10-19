@@ -1,5 +1,13 @@
 # Registro de cambios
 
+## 1.1.11 — 2026-10-19
+
+- Añade permisos explícitos, independientes y denegados por defecto para inicializadores/generadores upstream, integración de pantallas OpenGL/Vulkan/SharpProspero, herramientas de compilación, conversión de recursos y fuentes Unicode personalizadas.
+- El backend vuelve a validar permisos antes de modificar proyectos o ejecutar herramientas; las operaciones denegadas se detienen antes de escribir archivos.
+- Registra los archivos cambiados y sus hashes SHA-256 en `.ps5hs-modifications.json`; rechaza manifiestos de auditoría corruptos y evita seguir enlaces/reparse points.
+- Extiende las pruebas JavaScript y PowerShell y la validación automática de Windows para el control de consentimiento y la auditoría.
+- La validación cubre sintaxis y regresiones automatizadas; no afirma una compilación de título PS5 ni una prueba en consola física.
+
 ## 1.1.10 — 2026-10-18
 
 - Añade un perfil de runtime nativo controlado por PS5 Homebrew Studio para los títulos visuales OpenGL.

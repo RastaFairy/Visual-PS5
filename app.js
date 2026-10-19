@@ -972,7 +972,7 @@
   function openModal(title,body,actions=[]){const layer=$('#modalLayer');layer.innerHTML=`<div class="modal"><div class="modal-head"><strong>${esc(title)}</strong><button id="modalClose" aria-label="Cerrar">×</button></div><div class="modal-body">${body}</div><div class="modal-actions" id="modalActions"></div></div>`;layer.classList.remove('hidden');$('#modalClose').onclick=closeModal;actions.forEach(a=>{const b=document.createElement('button');b.className='btn '+(a.class||'ghost');b.textContent=a.text;b.onclick=a.action;$('#modalActions').append(b);});layer.onclick=e=>{if(e.target===layer)closeModal();};}
   function closeModal(){$('#modalLayer').classList.add('hidden');$('#modalLayer').innerHTML='';}
   function confirmDialog(title,message,run){openModal(title,`<p>${esc(message)}</p>`,[{text:'Cancelar',class:'ghost',action:closeModal},{text:'Continuar',class:'primary',action:()=>{closeModal();run();}}]);}
-  function projectPayload(){if(!isProjectOpen)throw new Error('No hay un proyecto visual abierto. Usa Nuevo o Abrir antes de guardar/exportar/compilar.');project.name=$('#projectName').value.trim()||'MiHomebrew';project.backend=$('#backendSelect').value;return clone(project);}
+  function projectPayload(){if(!isProjectOpen)throw new Error('No hay un proyecto visual abierto. Usa Nuevo o Abrir antes de guardar/exportar/compilar.');project.name=$('#projectName').value.trim()||'MiHomebrew';project.backend=$('#backendSelect').value;const payload=clone(project);if(payload.settings)delete payload.settings.nativeModifications;return payload;}
   async function saveProject(){if(!isProjectOpen){toast('No hay un proyecto visual abierto.','warn');return null;}const data=projectPayload();try{const source=data.manualCode?$('#codeEditor').value:generateCode();const response=await api('save',{project:data,programCode:source});savedState();log(`Proyecto guardado: ${response.path||data.name}`);toast('Proyecto guardado');return response;}catch(e){try{localStorage.setItem(STORAGE_KEY,JSON.stringify(data));savedState();log('Guardado local del navegador (servicio de Windows no disponible): '+e.message,'WARN');toast('Guardado local en el navegador','warn');}catch(_){toast('No se ha podido guardar el proyecto.','error');}return null;}}
   function importProjectFile(file){const reader=new FileReader();reader.onload=()=>{try{const data=JSON.parse(reader.result);if(data.format!=='ps5vproj'&&!Array.isArray(data.components))throw new Error('El archivo no tiene el formato PS5 Homebrew Studio.');project=Object.assign(freshProject(),data);isProjectOpen=true;setProjectOpenState(true);$('#projectName').value=project.name||'MiHomebrew';$('#projectName').placeholder='Nombre del proyecto';$('#backendSelect').value=project.backend||'sharp';selectedId=null;isPreview=false;previewSnapshot=null;undoStack=[];redoStack=[];savedState();renderAll();toast('Proyecto abierto correctamente');log('Proyecto importado desde archivo.');}catch(e){toast('No se puede abrir: '+e.message,'error');}};reader.readAsText(file);}
   async function exportProject(){if(!isProjectOpen){toast('No hay un proyecto visual abierto para exportar.','warn');return;}const data=projectPayload();try{const source=data.manualCode?$('#codeEditor').value:generateCode();const result=await api('export-zip',{project:data,programCode:source});const a=document.createElement('a');a.href=result.url;a.download=result.fileName||`${slug(data.name)}.zip`;document.body.append(a);a.click();a.remove();toast('ZIP de proyecto exportado');log('ZIP exportado al directorio de descargas.');}catch(e){const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});downloadBlob(blob,`${slug(data.name)}.ps5vproj`);toast('Proyecto exportado como .ps5vproj; servicio ZIP no disponible.','warn');log('Exportado en formato .ps5vproj: '+e.message,'WARN');}}
@@ -1092,9 +1092,11 @@
         if(!/^PPSA\d{5}$/.test(tid)){toast('TITLE_ID debe tener el formato PPSA12345.','error');return;}
         const policyApi=window.PS5HSNativeModificationPolicy;
          const nativeModifications=policyApi.normalize(Object.fromEntries(policyApi.entriesForBackend(backend).map(entry=>[entry.key,$('#nativeMod-'+entry.key)?.checked===true])));
-         const missingPermissions=policyApi.missingForBackend(backend,nativeModifications,false);
+         const hasPresentationAssets=['nativeVisualIcon','nativeVisualSelectionBg','nativeVisualLaunchBg','nativeVisualAudio'].some(id=>($('#'+id)?.files?.length||0)>0);
+         const hasCustomFont=Boolean(project.fontAssetId);
+         const missingPermissions=policyApi.missingForNativeVisualBuild(backend,nativeModifications,{hasPresentationAssets,hasCustomFont});
          if(missingPermissions.length){toast('Para continuar debes autorizar expresamente: '+missingPermissions.map(key=>policyApi.getEntry(key)?.label||key).join(', ')+'.','warn');return;}
-         project.settings=project.settings||{};project.settings.nativeModifications=nativeModifications;
+         project.settings=project.settings||{};delete project.settings.nativeModifications;
          const output=$('#nativeVisualOutput');const buttons=$('#modalActions button');buttons.forEach(b=>b.disabled=true);
         buildBusy=true;$('#buildBtn').disabled=true;$('#buildBtn').textContent='⟳ Compilando';setDock('output');
         let buildOutcome='error';
@@ -1158,7 +1160,6 @@
     const policyApi=window.PS5HSNativeModificationPolicy;
     if(!policyApi){toast('Falta el catálogo de permisos. Reinicia el IDE antes de compilar.','error');return;}
     const requiredKeys=['allowSharpTemplateIntegration','allowExecuteUpstreamBuildTools'];
-    const savedPolicy=policyApi.normalize(project.settings?.nativeModifications);
     const savedTitleId=String(project.settings?.titleId||'').toUpperCase();
     const form='<p>SharpProspero copiará la plantilla UI administrada por Homebrew Studio, escribirá el código y los metadatos del título y ejecutará <code>build/build-app.ps1</code>. Debes autorizar por separado la integración de fuentes/recursos y la ejecución de la herramienta de compilación. La salida anterior se conservará.</p>'+
       '<div class="form-field"><label>TITLE_ID explícito (PPSA12345)</label><input id="sharpBuildTitleId" maxlength="9" value="'+esc(/^PPSA\d{5}$/.test(savedTitleId)?savedTitleId:'')+'" placeholder="PPSA12345" pattern="PPSA[0-9]{5}"><small>No se generará un TITLE_ID aleatorio de forma automática.</small></div>'+
@@ -1179,12 +1180,12 @@
         try{
           project.settings=project.settings||{};
           project.settings.titleId=titleId;
-          project.settings.nativeModifications=nativeModifications;
+          delete project.settings.nativeModifications;
           project.name=$('#projectName').value.trim()||project.name||'MiHomebrew';
           project.backend='sharp';
           const data=projectPayload();
           data.name=project.name;data.backend='sharp';data.settings=data.settings||{};
-          data.settings.titleId=titleId;data.settings.nativeModifications=nativeModifications;
+          data.settings.titleId=titleId;delete data.settings.nativeModifications;
           const code=data.manualCode?$('#codeEditor').value:generateCode();
           if(!code||code.length<20)throw new Error('No se ha generado código C# para SharpProspero.');
           if(output)output.textContent='Permisos validados. Preparando plantilla y metadatos…';

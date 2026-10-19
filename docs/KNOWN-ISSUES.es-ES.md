@@ -1,15 +1,17 @@
-# Validación y problemas conocidos — PS5 Homebrew Studio 1.1.10
+# Validación y problemas conocidos — PS5 Homebrew Studio 1.1.11
 
-Última actualización: 2026-10-18.
+Última actualización: 2026-10-19.
 
-## Validación técnica de 1.1.9 en el entorno de preparación
+## Validación técnica de 1.1.11 en el entorno de preparación
 
-- `node --check app.js`, `node --check runtime/native-generator.js`, `node --check runtime/layer-model.js` y `node --check runtime/unicode-fonts.js`: correctos.
+- `node --check app.js`, `runtime/native-generator.js`, `runtime/layer-model.js`, `runtime/unicode-fonts.js` y `runtime/native-modification-policy.js`: correctos.
 - `node runtime/test-layer-model.js`: correcto (normalización de capas antiguas, prioridad explícita, alta de componentes y comprobaciones CSS).
 - `node runtime/test-native-generator.js`: correctos los casos OpenGL/Vulkan y las validaciones negativas.
 - `node runtime/test-structure-explorer.js` y `node runtime/test-unicode-fonts.js`: correctos.
-- `node runtime/test-unicode-integration.js`: correctos los enlaces UI/API/backend y la preparación de fuentes antes del build.
+- `node runtime/test-unicode-integration.js` y `node runtime/test-native-modification-policy.js`: correctos los enlaces UI/API/backend, la preparación de fuentes y el preflight de permisos.
 - Integridad del ZIP de distribución: verificada con la comprobación de archivos del contenedor ZIP y un hash SHA-256 del artefacto final. Esto no sustituye una compilación Windows/WSL ni una prueba de consola.
+
+**Control de modificaciones 1.1.11:** la suite PowerShell comprueba denegación por defecto, permisos explícitos, manifiestos, enlaces y hashes SHA-256. La ejecución de GitHub Actions para la rama de auditoría confirmó el análisis sintáctico PowerShell y las pruebas aisladas de esa revisión; los cambios nuevos deben superar de nuevo la CI.
 
 **Pendiente de validación en Windows/WSL:** este entorno no dispone de PowerShell ni de la toolchain PS5 del equipo de destino, por lo que no se ejecutó una compilación C++20 real de PPSA19918 ni una operación UltraPack de extremo a extremo para esta release. No se deben considerar verificadas por estas pruebas JavaScript.
 

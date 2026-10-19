@@ -365,7 +365,7 @@ function NewNativeTitle([string]$Name,[string]$TitleId,[string]$Category,[string
     $log=($output | ForEach-Object { $_.ToString() }) -join [Environment]::NewLine
     $valid=($exit -eq 0 -and (Test-Path $paramPath) -and (Test-Path (Join-Path $target 'src/main.cpp')) -and (Test-Path (Join-Path $target 'Makefile')))
     if($valid) {
-      $summary=@{schema='ps5hs-native-project';template=$TemplateId;repository=$entry.repo;titleId=$TitleId;name=$Name;category=$Category;nativeModifications=$policy;initializedAt=(Get-Date).ToString('o')}
+      $summary=@{schema='ps5hs-native-project';template=$TemplateId;repository=$entry.repo;titleId=$TitleId;name=$Name;category=$Category;initializedAt=(Get-Date).ToString('o')}
       $null = InvokePS5HSNativeModificationWithAudit -ProjectRoot $target -Backend $TemplateId -Operation 'write-native-project-metadata' -PermissionKey 'allowExecuteUpstreamGenerationTools' -RelativePaths @('.ps5hs-project.json') -Policy $policy -SourceRepository $entry.repo -Action {
         WriteUtf8 (Join-Path $target '.ps5hs-project.json') (ConvertTo-Json -InputObject $summary -Depth 5)
       }
@@ -406,7 +406,7 @@ function NewVulkanTitle([string]$Name,[string]$TitleId,[string]$Design,$Policy=$
     $output=@($generation.output);$exit=[int]$generation.exitCode;$log=($output|ForEach-Object{$_.ToString()}) -join "`r`n"
     $valid=($exit -eq 0 -and (Test-Path (Join-Path $target 'README.md')) -and (Test-Path (Join-Path $target 'ps5')))
     if($valid){
-      $summary=@{schema='ps5hs-native-project';template='vulkan-template';repository=$entry.repo;titleId=$TitleId;name=$Name;category='game';design=$Design;nativeModifications=$policy;initializedAt=(Get-Date).ToString('o')}
+      $summary=@{schema='ps5hs-native-project';template='vulkan-template';repository=$entry.repo;titleId=$TitleId;name=$Name;category='game';design=$Design;initializedAt=(Get-Date).ToString('o')}
       $null = InvokePS5HSNativeModificationWithAudit -ProjectRoot $target -Backend 'vulkan-template' -Operation 'write-vulkan-project-metadata' -PermissionKey 'allowExecuteUpstreamGenerationTools' -RelativePaths @('.ps5hs-project.json') -Policy $policy -SourceRepository $entry.repo -Action {
         WriteUtf8 (Join-Path $target '.ps5hs-project.json') (ConvertTo-Json -InputObject $summary -Depth 5)
       }
@@ -540,7 +540,7 @@ function GetProjectProfile([string]$ProjectRoot) {
   $isRelevant = ((Test-Path -LiteralPath $markerPath -PathType Leaf) -or $remote -or $hasMakefile -or (Test-Path -LiteralPath (Join-Path $ProjectRoot 'CMakeLists.txt') -PathType Leaf) -or $hasVulkanGenerator -or (Test-Path -LiteralPath (Join-Path $ProjectRoot 'build.ps1') -PathType Leaf))
   return @{
     name = $(if ($meta -and $meta.name) { [string]$meta.name } else { $name })
-    nativeModifications = $(if ($meta -and $meta.nativeModifications) { $meta.nativeModifications } else { @{} })
+    nativeModifications = @{}
     path = $ProjectRoot
     repository = $(if ($meta -and $meta.repository) { [string]$meta.repository } else { $remote })
     template = $template
@@ -1267,22 +1267,13 @@ function BuildNativeProject([string]$ProjectPath,[bool]$CleanBeforeBuild=$false,
   if (!(Test-Path -LiteralPath $markerPath -PathType Leaf)) {
     if (!$profile.initialized) { return @{ok=$false;message='El proyecto todavía no tiene metadatos de título válidos.';output=$projectRoot;templateId=$template;needsInit=$true} }
     $entry = $script:Catalog | Where-Object id -eq $template | Select-Object -First 1
-    $meta = @{schema='ps5hs-native-project';template=$template;repository=$(if($entry){[string]$entry.repo}else{[string]$profile.repository});titleId=[string]$profile.titleId;name=[string]$profile.name;category='game';nativeModifications=$policy;initializedAt=(Get-Date).ToString('o')}
+    $meta = @{schema='ps5hs-native-project';template=$template;repository=$(if($entry){[string]$entry.repo}else{[string]$profile.repository});titleId=[string]$profile.titleId;name=[string]$profile.name;category='game';initializedAt=(Get-Date).ToString('o')}
     $null = InvokePS5HSNativeModificationWithAudit -ProjectRoot $projectRoot -Backend $template -Operation 'write-native-project-metadata' -PermissionKey 'allowExecuteUpstreamBuildTools' -RelativePaths @('.ps5hs-project.json') -Policy $policy -SourceRepository ([string]$profile.repository) -Action {
       WriteUtf8 $markerPath (ConvertTo-Json -InputObject $meta -Depth 5)
     }
   }
   try { $meta = Get-Content -LiteralPath $markerPath -Raw | ConvertFrom-Json }
   catch { return @{ok=$false;message='El manifiesto del proyecto no se puede leer.';output=$_.Exception.Message} }
-  try {
-    $null = InvokePS5HSNativeModificationWithAudit -ProjectRoot $projectRoot -Backend $template -Operation 'persist-native-modification-policy' -PermissionKey 'allowExecuteUpstreamBuildTools' -RelativePaths @('.ps5hs-project.json') -Policy $policy -SourceRepository ([string]$profile.repository) -Action {
-      Add-Member -InputObject $meta -NotePropertyName 'nativeModifications' -NotePropertyValue $policy -Force
-      WriteUtf8 $markerPath (ConvertTo-Json -InputObject $meta -Depth 20)
-    }
-    $meta = Get-Content -LiteralPath $markerPath -Raw | ConvertFrom-Json
-  } catch {
-    return @{ok=$false;message='No se pudo guardar el consentimiento para futuras operaciones; el build se ha detenido.';output=$_.Exception.Message;path=$projectRoot;templateId=$template;buildStoppedBeforeCompile=$true}
-  }
   if ($template -in @('nativecpp','hui-gl') -and $policy.allowWindowsBuildEntrypointPatch) {
     try { $null = ApplyPS5HSWindowsBuildEntrypointPatch -ProjectRoot $projectRoot -Policy $policy -Backend $template -SourceRepository ([string]$profile.repository) }
     catch { return @{ok=$false;message='No se pudo aplicar el ajuste autorizado de build.ps1.';output=$_.Exception.Message;path=$projectRoot;templateId=$template} }
@@ -1856,10 +1847,12 @@ function BuildNativeVisualProject($Body) {
     return @{ok=$false;message='Backend nativo visual desconocido.';output=$backend}
   }
   $integrationPermissionKey = if ($backend -eq 'opengl-ui') { 'allowOpenGlTemplateIntegration' } else { 'allowVulkanTemplateIntegration' }
-  $requiredPermissions = @('allowExecuteUpstreamGenerationTools','allowExecuteUpstreamBuildTools')
-  $requiredPermissions += $integrationPermissionKey
-  if ($Body.nativeFont -and ![string]::IsNullOrWhiteSpace([string]$Body.nativeFont.base64)) { $requiredPermissions += 'allowCustomUnicodeFont' }
-  if ($null -ne $Body.icon -or $null -ne $Body.selectionBackground -or $null -ne $Body.launchBackground -or $null -ne $Body.audio) { $requiredPermissions += 'allowExecuteUpstreamAssetTools' }
+  $requiredPermissions = @('allowExecuteUpstreamGenerationTools','allowExecuteUpstreamBuildTools',$integrationPermissionKey)
+  $hasCustomFont = ($null -ne $Body.nativeFont -and ![string]::IsNullOrWhiteSpace([string]$Body.nativeFont.base64))
+  $hasPresentationAssets = ($null -ne $Body.icon -or $null -ne $Body.selectionBackground -or $null -ne $Body.launchBackground -or $null -ne $Body.audio)
+  if ($hasCustomFont) { $requiredPermissions += 'allowCustomUnicodeFont' }
+  if ($hasPresentationAssets) { $requiredPermissions += 'allowExecuteUpstreamAssetTools' }
+  $requiredPermissions = @($requiredPermissions | Select-Object -Unique)
   try { $policy = AssertPS5HSNativeModificationConsent -Backend $backend -Policy $Body.nativeModifications -RequirePermissionKeys $requiredPermissions }
   catch { return @{ok=$false;message='Operación detenida antes de modificar el proyecto: falta consentimiento explícito.';output=$_.Exception.Message;backend=$backend;buildStoppedBeforeMutation=$true} }
   $name = [string]$Body.project.name

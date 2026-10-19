@@ -14,6 +14,13 @@
 - Se aplica al generar un título y al compilar proyectos visuales OpenGL anteriores reconocibles; no altera proyectos de galería importados que no proceden del lienzo de Homebrew Studio.
 - Vulkan conserva su pantalla directa; mantener OPTIONS para salir sigue siendo el comportamiento documentado de la plantilla.
 
+## Control de modificaciones nativas · 1.1.11
+
+- Antes de generar o compilar títulos nativos, autoriza por separado el generador, la integración del código visual, las herramientas de build y cualquier conversión de recursos de presentación o fuente TTF.
+- Las casillas parten desactivadas en cada operación. Un permiso concedido en una operación anterior no autoriza la siguiente.
+- Los cambios controlados por el IDE se registran en `.ps5hs-modifications.json`, con hashes SHA-256 anteriores y posteriores cuando cambian archivos. Desmarcar un permiso no revierte cambios ya aplicados.
+- La operación visual comprueba los permisos necesarios para recursos de presentación y fuentes personalizadas antes de crear o modificar el proyecto.
+
 ## Capas y lienzo · 1.1.9
 
 - Los proyectos visuales antiguos sin orden explícito colocan paneles y tarjetas al fondo en vez de ocultar el contenido.
