@@ -315,7 +315,11 @@
         const requestedName=String($('#nativeBuildName')?.value||'').trim();
         const requestedTitleId=String($('#nativeBuildTitleId')?.value||'').trim().toUpperCase();
         const cleanBeforeBuild=!!$('#nativeCleanBeforeBuild')?.checked;
-         const nativeModifications=nativeBuildModificationPolicyFromUi(templateId,storedModifications,needsInit);
+        const nativeModifications=nativeBuildModificationPolicyFromUi(templateId,storedModifications,needsInit);
+        const requiredPermissionKeys=['allowExecuteUpstreamBuildTools'];
+        if(needsInit)requiredPermissionKeys.unshift('allowExecuteUpstreamGenerationTools');
+        const missingPermissionKeys=window.PS5HSNativeModificationPolicy.missingForPermissions(nativeModifications,requiredPermissionKeys);
+        if(missingPermissionKeys.length){toast('Autoriza expresamente antes de ejecutar el pipeline: '+missingPermissionKeys.map(key=>window.PS5HSNativeModificationPolicy.getEntry(key)?.label||key).join(', ')+'. No se ha iniciado ningún proceso.','warn');return;}
         if(needsInit&&(!/^[A-Za-z0-9][A-Za-z0-9 ._-]{0,39}$/.test(requestedName)||!/^PPSA\d{5}$/.test(requestedTitleId)||requestedTitleId==='PPSA00000')){toast('Para inicializar la plantilla introduce un nombre ASCII válido y un TITLE_ID PPSA12345.','error');return;}
         const output=$('#nativeBuildOutput');if(output)output.textContent='Preparando perfil, dependencias y compilación…';
         const actions=$$('#modalActions button');actions.forEach(b=>{if(b.textContent.trim()==='Compilar')b.disabled=true;});
