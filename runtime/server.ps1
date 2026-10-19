@@ -1532,8 +1532,15 @@ function WriteNativeVisualAssets($Body,[string]$ProjectRoot) {
     $fileName = $assetId + '.rgba'
     $destination = Join-Path $directory $fileName
     $temporary = $destination + '.tmp'
-    [IO.File]::WriteAllBytes($temporary,$bytes)
-    Move-Item -LiteralPath $temporary -Destination $destination -Force | Out-Null
+    try {
+      [IO.File]::WriteAllBytes($temporary,$bytes)
+      Move-Item -LiteralPath $temporary -Destination $destination -Force | Out-Null
+    } finally {
+      # A failed write or rename must not leave an untracked temporary asset.
+      if (Test-Path -LiteralPath $temporary -PathType Leaf) {
+        Remove-Item -LiteralPath $temporary -Force -ErrorAction SilentlyContinue
+      }
+    }
     $manifest += @{id=$assetId;file=('ps5hs/'+$fileName);width=$width;height=$height;bytes=$bytes.Length;sha256=(Get-FileHash -LiteralPath $destination -Algorithm SHA256).Hash.ToLowerInvariant();sourceName=[IO.Path]::GetFileName([string]$asset.sourceName)}
   }
   WriteUtf8 (Join-Path $directory 'manifest.json') (ConvertTo-Json -InputObject @($manifest) -Depth 10)
