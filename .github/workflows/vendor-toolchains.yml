@@ -5,9 +5,7 @@ on:
     branches:
       - toolchains-vendoring-audit-20261020
     paths:
-      - '.github/workflows/vendor-toolchains.yml'
       - '.github/scripts/vendor-toolchains.sh'
-      - 'toolchains/REPOSITORIOS.es-ES.md'
   workflow_dispatch:
 
 permissions:
@@ -28,6 +26,9 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y git rsync python3
+
+      - name: Validar sintaxis del script
+        run: bash -n .github/scripts/vendor-toolchains.sh
 
       - name: Copiar fuentes en el propio repositorio
         run: bash .github/scripts/vendor-toolchains.sh
