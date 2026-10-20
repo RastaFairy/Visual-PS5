@@ -24,6 +24,7 @@ zlib_stamp="$zlib_root/.source-version"
 # there). The pinned revision is exported with git archive, so a build never
 # depends on the fork's working tree, and the SDK directory records it.
 sdk_fork="${PS5_PAYLOAD_SDK_FORK:-$root/../PS5_PayloadSDK}"
+sdk_snapshot="${PS5_PAYLOAD_SDK_SNAPSHOT:-$root/../PS5_PayloadSDK-pinned-b83202be}"
 sdk_revision=b83202be73e930050e00de0f1b4d9ec46c0391bf
 zlib_url="https://zlib.net/fossils/zlib-$zlib_version.tar.gz"
 zlib_hash="bb329a0a2cd0274d05519d61c667c062e06990d72e125ee2dfa8de64f0119d16"
@@ -36,7 +37,7 @@ elif [[ $# -ne 0 ]]; then
     exit 2
 fi
 
-for command in git wget unzip sha256sum tar make; do
+for command in wget unzip sha256sum tar make; do
     command -v "$command" >/dev/null || {
         echo "missing required command: $command" >&2
         exit 2
@@ -63,12 +64,44 @@ restore_sdk_permissions() {
 
 restore_sdk_permissions
 if ! $skip_sdk && [[ ! -f $sdk/.ps5-sdk-revision || $(<"$sdk/.ps5-sdk-revision") != "$sdk_revision" ]]; then
-    git -C "$sdk_fork" cat-file -e "$sdk_revision^{commit}" 2>/dev/null || {
-        echo "the payload SDK fork at $sdk_fork does not have $sdk_revision" >&2
-        exit 2
-    }
     sdk_tree=$(mktemp -d)
-    git -C "$sdk_fork" archive "$sdk_revision" | tar -x -C "$sdk_tree"
+    source_ready=false
+
+    # Prefer a real local Git checkout when it contains the exact pinned commit.
+    # This is useful for developers who keep full Git history in their workspace.
+    if command -v git >/dev/null 2>&1 &&
+        git -C "$sdk_fork" cat-file -e "$sdk_revision^{commit}" 2>/dev/null; then
+        git -C "$sdk_fork" archive "$sdk_revision" | tar -x -C "$sdk_tree"
+        source_ready=true
+    fi
+
+    # Release snapshots ship the exact upstream commit as ordinary files, without
+    # a nested .git directory. Use that self-contained copy when available, so a
+    # build does not depend on Git history or the upstream owner's account.
+    if [[ $source_ready != true ]]; then
+        snapshot_commit=$(python3 - "$sdk_snapshot/.ps5hs-source.json" <<'PY'
+import json, sys
+try:
+    with open(sys.argv[1], encoding="utf-8") as f:
+        d = json.load(f)
+    print(d.get("sourceCommit") or d.get("commit") or "")
+except Exception:
+    print("")
+PY
+)
+        if [[ $snapshot_commit == "$sdk_revision" &&
+            -f "$sdk_snapshot/platform/tools/setup-sdk.sh" ]]; then
+            tar -C "$sdk_snapshot" --exclude='.git' -cf - . | tar -xf - -C "$sdk_tree"
+            source_ready=true
+            echo "Using vendored PS5_PayloadSDK snapshot $sdk_revision" >&2
+        fi
+    fi
+
+    if [[ $source_ready != true ]]; then
+        rm -rf -- "$sdk_tree"
+        echo "the pinned PS5 payload SDK source is unavailable locally. Expected Git commit $sdk_revision at $sdk_fork or vendored snapshot $sdk_snapshot" >&2
+        exit 2
+    fi
     bash "$sdk_tree/platform/tools/setup-sdk.sh" "$sdk" "$sdk_revision" "$cache" >&2
     rm -rf -- "$sdk_tree"
     restore_sdk_permissions
