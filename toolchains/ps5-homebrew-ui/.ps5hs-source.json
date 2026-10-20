@@ -1,0 +1,7 @@
+{
+  "method": "git clone --recurse-submodules",
+  "branch": "main",
+  "repository": "blackbearreloaded/ps5-homebrew-ui",
+  "commit": "",
+  "installedAt": "2026-10-17T18:54:56.8034244+02:00"
+}
