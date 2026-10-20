@@ -1538,9 +1538,9 @@ function BuildNativeProject([string]$ProjectPath,[bool]$CleanBeforeBuild=$false,
       $payloadSdkDir = Join-Path $script:Toolchains 'PS5_PayloadSDK'
       $mesaDir = Join-Path $script:Toolchains 'PS5_Mesa'
       $requiredVendorSources = @(
-        @{path=$vulkanDir;name='PS5_Vulkan';files=@('README.md','Makefile','tools/build.sh','tools/setup-native-dependencies.sh')},
-        @{path=$payloadSdkDir;name='PS5_PayloadSDK';files=@('README.md','platform/tools/setup-sdk.sh')},
-        @{path=$mesaDir;name='PS5_Mesa';files=@('README.md','meson.build')}
+        @{path=$vulkanDir;name='PS5_Vulkan';repository='mihawk-99/PS5_Vulkan';files=@('README.md','Makefile','tools/build.sh','tools/setup-native-dependencies.sh')},
+        @{path=$payloadSdkDir;name='PS5_PayloadSDK';repository='mihawk-99/PS5_PayloadSDK';files=@('README.md','platform/tools/setup-sdk.sh')},
+        @{path=$mesaDir;name='PS5_Mesa';repository='mihawk-99/PS5_Mesa';files=@('README.md','meson.build')}
       )
       foreach($source in $requiredVendorSources) {
         $manifestPath=Join-Path $source.path '.ps5hs-source.json'
@@ -1549,7 +1549,10 @@ function BuildNativeProject([string]$ProjectPath,[bool]$CleanBeforeBuild=$false,
         if(Test-Path -LiteralPath $manifestPath -PathType Leaf) {
           try {
             $manifest=Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
-            $hasVendorManifest=([bool]$manifest.vendoredSnapshot -or ([string]$manifest.method -eq 'vendored-snapshot'))
+            $manifestRepository=[string]$manifest.repository
+            $manifestMirror=[string]$manifest.mirrorRepository
+            $hasMatchingSource=($manifestRepository -eq [string]$source.repository) -or ($manifestMirror -eq [string]$source.repository)
+            $hasVendorManifest=$hasMatchingSource -or [bool]$manifest.vendoredSnapshot -or ([string]$manifest.method -eq 'vendored-snapshot')
           } catch { $hasVendorManifest=$false }
         }
         $missingFiles=@($source.files | Where-Object { !(Test-Path -LiteralPath (Join-Path $source.path $_) -PathType Leaf) })
