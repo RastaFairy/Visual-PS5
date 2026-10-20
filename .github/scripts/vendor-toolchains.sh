@@ -35,8 +35,25 @@ while IFS='|' read -r folder actual_repo ref declared_repo; do
   dest="toolchains/$folder"
 
   if [[ -d "$dest" && -f "$dest/.ps5hs-source.json" && ( -f "$dest/README.md" || -f "$dest/readme.md" || -f "$dest/README" ) ]]; then
-    record "$folder" "already-present" "$declared_repo" "$actual_repo" "$ref" "" "No se sobrescribe una carpeta fuente ya versionada."
-    continue
+    if python3 - "$dest/.ps5hs-source.json" "$declared_repo" "$actual_repo" <<'PY'
+import json, sys
+path, declared, fetched = sys.argv[1:]
+try:
+    with open(path, encoding="utf-8") as f:
+        marker = json.load(f)
+except Exception:
+    raise SystemExit(1)
+repositories = {
+    str(marker.get("repository", "")).lower(),
+    str(marker.get("sourceRepository", "")).lower(),
+    str(marker.get("mirrorRepository", "")).lower(),
+}
+raise SystemExit(0 if {declared.lower(), fetched.lower()} & repositories else 1)
+PY
+    then
+      record "$folder" "already-present" "$declared_repo" "$actual_repo" "$ref" "" "El manifiesto existente coincide con la fuente; no se sobrescribe."
+      continue
+    fi
   fi
   if [[ -e "$dest" ]]; then
     record "$folder" "blocked-existing-path" "$declared_repo" "$actual_repo" "$ref" "" "Existe una ruta de destino sin un manifiesto verificable; no se modifica."
@@ -100,7 +117,7 @@ import json, sys
 path, declared_repo, fetched_repo, ref, commit, stamp = sys.argv[1:]
 record = {
     "repository": declared_repo,
-    "branch": ref if len(ref) != 40 else "main",
+    "branch": ref if len(ref) != 40 else "pinned",
     "commit": commit,
     "sourceCommit": commit,
     "sourceRef": ref,
