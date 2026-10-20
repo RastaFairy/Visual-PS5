@@ -260,10 +260,10 @@ function GetPS5HSBundledToolchainInfo($Entry,[string]$Path) {
       $sourceRepository=[string]$sourceInfo.repository
       $mirrorRepository=[string]$sourceInfo.mirrorRepository
       $declaredSource=[string]$sourceInfo.sourceRepository
-      $matches=($sourceRepository -eq $expected) -or
+      $repoMatches=($sourceRepository -eq $expected) -or
         ($mirrorRepository -eq $expected) -or
         ($declaredSource -eq $expected)
-      if($matches) {
+      if($repoMatches) {
         $result.sourceInfo=$sourceInfo
         $result.commit=[string]$(if($sourceInfo.sourceCommit){$sourceInfo.sourceCommit}else{$sourceInfo.commit})
         $result.bundled=$true
