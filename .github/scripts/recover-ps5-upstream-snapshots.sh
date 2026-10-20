@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Recover exact Vulkan submodule trees and preserve the Wayback-era source snapshots.
 # The copied repository content retains upstream licences; no proprietary DLLs are fetched.
-set -euo pipefail
+set -Eeuo pipefail
+trap 'status=$?; printf "ERROR: snapshot recovery failed at line %s (exit %s)\\n" "$LINENO" "$status" >&2; exit "$status"' ERR
 
 repo_root="$(git rev-parse --show-toplevel)"
 cd "$repo_root"
