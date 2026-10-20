@@ -38,5 +38,12 @@
       "submoduleCommit": "6875f21438b7e51a1377a30f2d7f77b3e0154cd6",
       "archivedPath": "toolchains/archive/ps5-helixsr-2026-10-09"
     }
+  ],
+  "buildVerified": false,
+  "buildStatus": "source-tree-verified; target build not yet run",
+  "buildNotes": [
+    "This manifest proves the pinned source tree is materialized locally; it does not claim a successful compile or console test.",
+    "Generic host build dependencies and precompiled SDK artifacts remain separate.",
+    "HelixSR still requires a legitimate user-supplied model DLL."
   ]
 }

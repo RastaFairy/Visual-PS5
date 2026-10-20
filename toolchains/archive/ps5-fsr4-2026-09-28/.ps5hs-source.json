@@ -31,5 +31,11 @@
     "method": "vendored-tree",
     "completedAt": "2026-10-20T17:42:45Z",
     "note": "The declared Vulkan Gitlink was replaced with the exact verified tree as ordinary files."
-  }
+  },
+  "buildVerified": false,
+  "buildStatus": "source-tree-verified; target build not yet run",
+  "buildNotes": [
+    "This manifest proves the pinned source tree is materialized locally; it does not claim a successful compile or console test.",
+    "Generic host build dependencies and precompiled SDK artifacts remain separate."
+  ]
 }
