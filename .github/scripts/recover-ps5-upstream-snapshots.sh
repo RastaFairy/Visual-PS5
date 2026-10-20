@@ -168,7 +168,7 @@ PY
 
   # Stage and verify before replacing the current copy. This keeps the old
   # directory intact if the mirror content ever fails the exact tree check.
-  local staged_dest="${dest}.recovery-stage-$"
+  local staged_dest="${dest}.recovery-stage-$$"
   rm -rf -- "$staged_dest"
   mkdir -p "$staged_dest"
   rsync -a --delete --exclude='.git' "$source/" "$staged_dest/"
