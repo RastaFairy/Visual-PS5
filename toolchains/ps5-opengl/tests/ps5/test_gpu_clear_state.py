@@ -1,0 +1,642 @@
+#!/usr/bin/env python3
+# PS5 OpenGL - OpenGL implementation for PlayStation 5.
+# Copyright (C) 2026 BlackBearReloaded
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+"""Compile the actual fast-path eligibility and inline-uniform snapshot code."""
+import subprocess
+import tempfile
+from pathlib import Path
+
+root = Path(__file__).resolve().parents[2]
+source = (root / "src/gallium/ps5/ps5_screen.c").read_text()
+native = (root / "src/platform/ps5_agc_native_runtime.c").read_text()
+a = native.index('    /* A color-only pass must disable')
+b = native.index('    {\n        agc_register_t *graphics_state', a)
+code = r'''
+#include <assert.h>
+#include <stdint.h>
+typedef struct { uint16_t offset, reserved; uint32_t value; } agc_register_t;
+static uint32_t seen, count;
+static void set_cx(void *command, agc_register_t *r, uint32_t n) {
+    (void)command; assert(r[0].offset == 0x200); seen=r[0].value; count=n;
+}
+int main(void) {
+    struct { void (*set_cx)(void *,agc_register_t *,uint32_t); } agc={set_cx};
+    uint64_t memory[0x5000/8]; int command;
+    uint32_t runtime_depth_control=0x76, runtime_stencil_control=1;
+    uint32_t runtime_stencil_refmask=2, runtime_stencil_refmask_bf=3;
+    for (unsigned pass=0;pass<3;++pass) {
+        void *runtime_depth_buffer=pass==1 ? 0 : memory;
+        void *runtime_stencil_buffer=pass==2 ? memory : 0;
+''' + native[a:b].replace('memory + 0x4700', '(uint8_t *)memory + 0x4700') + r'''
+        assert(seen == (pass==1 ? 0 : 0x76));
+        assert(count == (pass==2 ? 4 : 1));
+    }
+}
+'''
+with tempfile.TemporaryDirectory() as temporary:
+    executable = str(Path(temporary) / "native-depth-disable")
+    subprocess.run(["cc", "-std=c11", "-Wall", "-Wextra", "-Werror", "-x", "c",
+                    "-o", executable, "-"], input=code, text=True, check=True)
+    subprocess.run([executable], check=True)
+print("PASS: production depth state disables writes on intervening color-only passes")
+assert "#define PS5_GPU_CLEAR_MIN_PIXELS 16384u" in source
+start = source.index("static bool\nps5_clear_gpu_color(")
+clear_body = source[start:source.index("\nstatic void\nps5_clear(", start)]
+assert clear_body.index("context->deferred_blitter_draw = buffers == PIPE_CLEAR_COLOR0;") < \
+       clear_body.index("   util_blitter_clear(") < \
+       clear_body.index("context->deferred_blitter_draw = false;")
+prefix = source[start:source.index("   if (!context->blitter)", start)]
+query_start = source.index("static void\nps5_set_active_query_state(")
+query_state = source[query_start:source.index("\n}\n", query_start) + 3]
+code = r'''
+#include <assert.h>
+#include <stdint.h>
+#include <stdbool.h>
+#include <stdlib.h>
+#include <string.h>
+#define PS5_ENABLE_MRT_CANDIDATE 1
+#define PS5_ENABLE_MSAA4_CANDIDATE 1
+#define PS5_ENABLE_UBO_CANDIDATE 1
+#define PS5_MAX_CONSTANT_BUFFER_SIZE 65536
+#define PS5_GPU_CLEAR_MIN_PIXELS 16384u
+#define PIPE_CLEAR_COLOR 0x3fc
+#define PIPE_CLEAR_COLOR0 4
+#define PIPE_MASK_RGBA 15
+#define PIPE_TEXTURE_2D 2
+#define PIPE_TEXTURE_2D_ARRAY 7
+#define PIPE_FORMAT_R8G8B8A8_UNORM 1
+#define PIPE_FORMAT_R8_UNORM 2
+#define PIPE_FORMAT_R8G8_UNORM 3
+#define PIPE_FORMAT_R16G16B16A16_FLOAT 4
+#define PIPE_FORMAT_R11G11B10_FLOAT 5
+#define PIPE_FORMAT_R8G8B8A8_SRGB 6
+#define PIPE_FORMAT_R10G10B10A2_UNORM 7
+#define PIPE_FORMAT_R16_FLOAT 8
+#define PIPE_FORMAT_R32_FLOAT 9
+#define PIPE_FORMAT_R32G32B32A32_UINT 10
+#define PIPE_FORMAT_R8G8B8A8_SNORM 11
+#define PIPE_FORMAT_B8G8R8A8_UNORM 12
+#define PIPE_FORMAT_R16G16_FLOAT 13
+union pipe_color_union { uint32_t ui[4]; float f[4]; };
+struct pipe_scissor_state { unsigned minx,miny,maxx,maxy; };
+struct resource { unsigned target, nr_samples, nr_storage_samples, format, array_size; };
+struct ps5_resource { struct resource base; unsigned render_staging_size; uint8_t *data; size_t size; };
+struct pipe_surface { struct ps5_resource *texture; unsigned level, first_layer, last_layer, format; };
+struct constant { struct resource *buffer; unsigned offset, size; bool valid, copied; };
+#define ps5_constant_state constant
+struct pipe_constant_buffer { struct resource *buffer; unsigned buffer_offset, buffer_size; const void *user_buffer; };
+struct ps5_context {
+    struct { unsigned width, height, nr_cbufs; struct pipe_surface cbufs[1]; } framebuffer;
+    bool framebuffer_valid, queries_enabled;
+    unsigned render_condition_query, stream_output_target_count, active_occlusion_query;
+    unsigned active_primitives_generated_query, active_primitives_emitted_query;
+    struct constant constants[2][1]; struct ps5_resource *descriptor_storage[2];
+};
+static __attribute__((unused)) bool ps5_any_primitive_query(const struct ps5_context *c) {
+    return c->active_primitives_generated_query || c->active_primitives_emitted_query;
+}
+static unsigned target_width = 128, target_height = 128;
+static unsigned linear_pitch;
+static bool sampled_linear;
+static bool ps5_msaa4_color_format(unsigned format) { return format == PIPE_FORMAT_R8G8B8A8_UNORM; }
+static bool ps5_linear_sampled_layout(const struct resource *r) { (void)r; return sampled_linear; }
+static unsigned ps5_linear_color_pitch(const struct pipe_surface *s) { (void)s; return linear_pitch; }
+static unsigned ps5_surface_width(const struct pipe_surface *s) { (void)s; return target_width; }
+static unsigned ps5_surface_height(const struct pipe_surface *s) { (void)s; return target_height; }
+static unsigned ps5_surface_layer_count(const struct pipe_surface *s) { return s->texture->base.array_size; }
+static size_t ps5_copied_constant_offset(unsigned slot) { assert(slot == 1); return 16; }
+static void ps5_clear_bounds(const struct pipe_scissor_state *s, unsigned w, unsigned h,
+    unsigned *x0, unsigned *y0, unsigned *x1, unsigned *y1) {
+    *x0=s && s->minx<w ? s->minx : s ? w : 0;
+    *y0=s && s->miny<h ? s->miny : s ? h : 0;
+    *x1=s && s->maxx<w ? s->maxx : w;
+    *y1=s && s->maxy<h ? s->maxy : h;
+}
+struct pipe_context { int unused; };
+static unsigned query_drains;
+static __attribute__((unused)) void ps5_draw_batch_drain(void) { ++query_drains; }
+''' + query_state + '\n' + prefix + r'''
+   if (state->valid && state->copied) {
+       assert(cb.user_buffer == copied_constants && cb.buffer_size == state->size);
+       assert(!memcmp(cb.user_buffer, context->descriptor_storage[1]->data + 16, state->size));
+   } else if (state->valid) {
+       assert(cb.buffer == state->buffer && cb.buffer_offset == state->offset && !cb.user_buffer);
+   } else {
+       assert(!cb.buffer && !cb.user_buffer && !cb.buffer_size);
+   }
+   return true;
+}
+static void test_adapter(void);
+int main(void) {
+    test_adapter();
+    struct ps5_context query = {0};
+    ps5_set_active_query_state((struct pipe_context *)&query, true);
+    ps5_set_active_query_state((struct pipe_context *)&query, false);
+    assert(query_drains == 0 && !query.queries_enabled);
+    query.active_occlusion_query = 1;
+    ps5_set_active_query_state((struct pipe_context *)&query, true);
+    ps5_set_active_query_state((struct pipe_context *)&query, true);
+    assert(query_drains == 0 && query.queries_enabled);
+    query.active_occlusion_query = 0;
+    query.active_primitives_generated_query = 1;
+    ps5_set_active_query_state((struct pipe_context *)&query, false);
+    assert(query_drains == 0 && !query.queries_enabled);
+    uint8_t bytes[PS5_MAX_CONSTANT_BUFFER_SIZE + 16]; memset(bytes, 0xa5, sizeof(bytes));
+    struct ps5_resource target = {.base = {.target=2, .format=1, .array_size=1}};
+    struct ps5_resource storage = {.data=bytes, .size=sizeof(bytes)};
+    struct ps5_context good = {.framebuffer={.width=128, .height=128, .nr_cbufs=1,
+        .cbufs={{.texture=&target, .format=1}}}, .framebuffer_valid=true,
+        .descriptor_storage={0, &storage}};
+    union pipe_color_union color = {{0}};
+    target.base.format=PIPE_FORMAT_R8G8B8A8_SRGB;
+    good.framebuffer.cbufs[0].format=PIPE_FORMAT_R8G8B8A8_UNORM;
+    assert(ps5_clear_gpu_color(&good,4,15,NULL,&color));
+    sampled_linear=true;
+    assert(!ps5_clear_gpu_color(&good,4,15,NULL,&color));
+    sampled_linear=false;
+    target.base.format=PIPE_FORMAT_R8G8B8A8_UNORM;
+    good.framebuffer.cbufs[0].format=PIPE_FORMAT_R8G8B8A8_SRGB;
+    assert(ps5_clear_gpu_color(&good,4,15,NULL,&color));
+    good.framebuffer.cbufs[0].format=PIPE_FORMAT_R8G8B8A8_UNORM;
+    struct pipe_scissor_state scissor = {0};
+    assert(ps5_clear_gpu_color(&good, 4, 15, 0, &color));
+    good.framebuffer.width = target_width = 64;
+    good.framebuffer.height = target_height = 64;
+    assert(!ps5_clear_gpu_color(&good, 4, 15, 0, &color));
+    good.framebuffer.width = target_width = 113;
+    good.framebuffer.height = target_height = 47;
+    assert(!ps5_clear_gpu_color(&good, 4, 15, 0, &color));
+    good.framebuffer.width = target_width = 16383;
+    good.framebuffer.height = target_height = 1;
+    assert(!ps5_clear_gpu_color(&good, 4, 15, 0, &color));
+    good.framebuffer.width = target_width = 16384;
+    assert(ps5_clear_gpu_color(&good, 4, 15, 0, &color));
+    good.framebuffer.width = target_width = 0;
+    assert(!ps5_clear_gpu_color(&good, 4, 15, 0, &color));
+    good.framebuffer.width = target_width = 128;
+    good.framebuffer.height = target_height = 128;
+    assert(!ps5_clear_gpu_color(0, 4, 15, 0, &color));
+    assert(!ps5_clear_gpu_color(&good, 4, 15, 0, 0));
+    assert(!ps5_clear_gpu_color(&good, 4, 15, &scissor, &color));
+    scissor.maxx=scissor.maxy=128;
+    assert(ps5_clear_gpu_color(&good, 4, 15, &scissor, &color));
+    scissor.minx=1;
+    assert(ps5_clear_gpu_color(&good, 4, 15, &scissor, &color));
+    scissor=(struct pipe_scissor_state){3,5,4,6};
+    assert(ps5_clear_gpu_color(&good, 4, 15, &scissor, &color));
+    scissor.minx=128;
+    assert(!ps5_clear_gpu_color(&good, 4, 15, &scissor, &color));
+    for (unsigned format=2;format<=4;++format) {
+        target.base.format=good.framebuffer.cbufs[0].format=format;
+        assert(ps5_clear_gpu_color(&good,4,15,NULL,&color));
+    }
+    target.base.format=good.framebuffer.cbufs[0].format=1;
+    /* The production layout validator is tested separately; its rejection
+     * must retain the CPU fallback, including incompatible sRGB views. */
+    target.base.target=PIPE_TEXTURE_2D_ARRAY;
+    target.render_staging_size=4096;
+    for (unsigned format=1;format<=13;++format) {
+        target.base.format=good.framebuffer.cbufs[0].format=format;
+        linear_pitch=0;
+        assert(!ps5_clear_gpu_color(&good,4,15,NULL,&color));
+        linear_pitch=512;
+        assert(ps5_clear_gpu_color(&good,4,15,NULL,&color));
+        good.framebuffer.cbufs[0].format=99;
+        assert(!ps5_clear_gpu_color(&good,4,15,NULL,&color));
+    }
+    target.base.array_size=4;
+    good.framebuffer.cbufs[0].format=target.base.format;
+    good.framebuffer.cbufs[0].first_layer=1;
+    good.framebuffer.cbufs[0].last_layer=3;
+    assert(ps5_clear_gpu_color(&good,4,15,NULL,&color));
+    good.framebuffer.cbufs[0].last_layer=4;
+    assert(!ps5_clear_gpu_color(&good,4,15,NULL,&color));
+    good.framebuffer.cbufs[0].last_layer=0;
+    assert(!ps5_clear_gpu_color(&good,4,15,NULL,&color));
+    good.framebuffer.cbufs[0].first_layer=0;
+    target.base.array_size=1;
+    target.base.target=3;
+    good.framebuffer.cbufs[0].format=target.base.format;
+    assert(!ps5_clear_gpu_color(&good,4,15,NULL,&color));
+    target.base.target=PIPE_TEXTURE_2D;
+    target.render_staging_size=linear_pitch=0;
+    target.base.format=good.framebuffer.cbufs[0].format=1;
+    assert(!ps5_clear_gpu_color(&good, 4, 7, 0, &color));
+    assert(!ps5_clear_gpu_color(&good, 8, 15, 0, &color));
+    assert(!ps5_clear_gpu_color(&good, 12, 15, 0, &color));
+#define REJECT(field, value) do { struct ps5_context c = good; c.field = value; \
+    assert(!ps5_clear_gpu_color(&c, 4, 15, 0, &color)); } while (0)
+    REJECT(framebuffer_valid, false); REJECT(framebuffer.width, 63); REJECT(framebuffer.height, 31);
+    REJECT(framebuffer.nr_cbufs, 2); REJECT(framebuffer.cbufs[0].texture, 0);
+    REJECT(framebuffer.cbufs[0].level, 1); REJECT(framebuffer.cbufs[0].first_layer, 1);
+    REJECT(framebuffer.cbufs[0].last_layer, 1); REJECT(framebuffer.cbufs[0].format, 2);
+    REJECT(render_condition_query, 1); REJECT(stream_output_target_count, 1);
+    good.active_occlusion_query = 1;
+    assert(ps5_clear_gpu_color(&good, 4, 15, NULL, &color));
+    good.active_occlusion_query = 0;
+    good.active_occlusion_query = good.active_primitives_generated_query =
+        good.active_primitives_emitted_query = 1;
+    assert(ps5_clear_gpu_color(&good, 4, 15, NULL, &color));
+    good.active_occlusion_query = good.active_primitives_generated_query =
+        good.active_primitives_emitted_query = 0;
+#define REJECT_TARGET(field, value) do { target.field = value; \
+    assert(!ps5_clear_gpu_color(&good, 4, 15, 0, &color)); target.field = 0; } while (0)
+    REJECT_TARGET(base.nr_samples, 4); REJECT_TARGET(base.nr_storage_samples, 4);
+    REJECT_TARGET(render_staging_size, 1);
+    good.constants[1][0] = (struct constant){.buffer=&target.base, .offset=32, .size=64, .valid=true};
+    assert(ps5_clear_gpu_color(&good, 4, 15, 0, &color));
+    good.constants[1][0] = (struct constant){.size=sizeof(bytes)-16, .valid=true, .copied=true};
+    assert(ps5_clear_gpu_color(&good, 4, 15, 0, &color));
+    REJECT(constants[1][0].size, sizeof(bytes)); REJECT(descriptor_storage[1], 0);
+    storage.size = 15; assert(!ps5_clear_gpu_color(&good, 4, 15, 0, &color));
+}
+'''
+start = source.index("   if (templ && templ->type == PIPE_SHADER_IR_TGSI")
+adapter = source[start:source.index("\n   if (!templ || templ->type != PIPE_SHADER_IR_NIR", start)]
+code += r'''
+enum { PIPE_SHADER_IR_TGSI, PIPE_SHADER_IR_NIR, PSBC_STAGE_GEOMETRY = 3 };
+struct pipe_shader_state { int type; const void *tokens; struct { void *nir; } ir;
+    struct { unsigned num_outputs; } stream_output; };
+static unsigned conversions;
+static unsigned normalizations;
+static int conversion_fails;
+static void *tgsi_to_nir(const void *tokens, void *screen, bool cache) {
+    assert(tokens && screen && !cache); ++conversions;
+    return conversion_fails ? NULL : screen;
+}
+static void nir_lower_io_passes(void *nir, bool renumber) {
+    assert(nir && !renumber); ++normalizations;
+}
+static bool adapt(const struct pipe_shader_state *templ, int stage) {
+    int sentinel;
+    void *screen = &sentinel;
+    struct pipe_shader_state converted;
+''' + adapter + r'''
+    return templ && templ->type == PIPE_SHADER_IR_NIR && templ->ir.nir;
+}
+static void test_adapter(void) {
+    int sentinel;
+    struct pipe_shader_state state = {.type=PIPE_SHADER_IR_NIR, .ir.nir=&sentinel};
+    assert(adapt(&state, 1) && conversions == 0); /* Original NIR unchanged. */
+    state = (struct pipe_shader_state){.type=PIPE_SHADER_IR_TGSI, .tokens=&sentinel};
+    assert(adapt(&state, 1) && conversions == 1);
+    assert(adapt(&state, 2) && conversions == 2);
+    assert(!adapt(&state, PSBC_STAGE_GEOMETRY) && conversions == 2);
+    state.stream_output.num_outputs = 1;
+    assert(!adapt(&state, 1) && conversions == 2);
+    state.stream_output.num_outputs = 0;
+    conversion_fails = 1;
+    assert(!adapt(&state, 1) && conversions == 3);
+    state.tokens = NULL;
+    assert(!adapt(&state, 1) && conversions == 3);
+    assert(!adapt(NULL, 1));
+    assert(normalizations == 2);
+}
+'''
+with tempfile.TemporaryDirectory() as temporary:
+    executable = str(Path(temporary) / "gpu-clear-state")
+    subprocess.run(["cc", "-std=c11", "-Wall", "-Wextra", "-Werror",
+                    "-x", "c", "-o", executable, "-"], input=code, text=True, check=True)
+    subprocess.run([executable], check=True)
+print("PASS: GPU-clear size boundary/eligibility, uniform snapshot bounds, guarded TGSI adapter, NIR unchanged")
+
+# Compile the actual shared callback through its GPU/fallback dispatch boundary.
+# The unchanged CPU pixel loops are covered by native mixed/masked/depth gates.
+start = source.index("static void\nps5_clear(")
+dispatch = source[start:source.index("   if (PS5_ENABLE_MSAA4_CANDIDATE", start)]
+code = r'''
+#include <assert.h>
+#include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
+#include <string.h>
+#define PIPE_CLEAR_DEPTH 1u
+#define PIPE_CLEAR_STENCIL 2u
+#define PIPE_CLEAR_COLOR0 4u
+#define PIPE_CLEAR_COLOR 0x3fcu
+struct pipe_context { int unused; };
+struct pipe_resource { unsigned format; };
+struct ps5_resource { struct pipe_resource base; };
+struct ps5_context { struct pipe_context base; int last_draw_status; bool render_condition_query;
+    struct { unsigned nr_cbufs; struct { struct pipe_resource *texture; } cbufs[1]; struct { struct ps5_resource *texture; } zsbuf; } framebuffer; };
+struct pipe_scissor_state { unsigned unused; };
+union pipe_color_union { float f[4]; };
+static char order[16];
+static unsigned used, pending, expected_depth;
+static bool condition = true, depth_ok = true, gpu_ok = true;
+static int gpu_status;
+static bool gpu_depth;
+static int gpu_depth_status;
+static void record(char stage) { assert(used < 15); order[used++] = stage; }
+static __attribute__((unused)) void ps5_draw_batch_drain(void) { record('D'); pending = 0; }
+static void ps5_draw_batch_drain_query(bool query) { assert(query); record('Q'); }
+static void ps5_draw_batch_drain_buffer(struct pipe_resource *r) { (void)r; record('D'); pending=0; }
+static bool ps5_render_condition_passes(struct ps5_context *c)
+{ assert(c); record('R'); return condition; }
+static bool ps5_clear_gpu_depth_stencil(struct ps5_context *c, unsigned buffers,
+    uint8_t mask, const struct pipe_scissor_state *scissor, double depth, unsigned stencil)
+{
+    assert(c && pending && buffers == expected_depth && mask == 0x5a && !scissor);
+    assert(depth == .25 && stencil == 0x73);
+    if (!gpu_depth) return false;
+    record('H'); c->last_draw_status = gpu_depth_status; return true;
+}
+static bool ps5_clear_depth_stencil(struct ps5_context *c, unsigned buffers,
+    uint8_t mask, const struct pipe_scissor_state *scissor, double depth, unsigned stencil)
+{
+    assert(c && !pending && buffers == expected_depth && mask == 0x5a && !scissor);
+    assert(depth == .25 && stencil == 0x73); record('Z'); return depth_ok;
+}
+static bool ps5_clear_gpu_color(struct ps5_context *c, unsigned buffers,
+    uint32_t mask, const struct pipe_scissor_state *scissor, const union pipe_color_union *color)
+{
+    assert(c && buffers && !(buffers & 3) && mask == 15 && !scissor && color);
+    record('C'); c->last_draw_status = gpu_status;
+    if (gpu_ok) pending = 1;
+    return gpu_ok;
+}
+''' + dispatch + r'''
+    (void)resource; record('F'); /* Existing CPU color fallback follows here. */
+}
+static void run(unsigned buffers, const char *expected, unsigned queued)
+{
+    struct ps5_context c = {.render_condition_query=!condition, .framebuffer.nr_cbufs=1};
+    union pipe_color_union color = {{0}};
+    memset(order, 0, sizeof(order)); used = 0; pending = 1; expected_depth = buffers & 3;
+    ps5_clear(&c.base, buffers, 15, 0x5a, NULL, &color, .25, 0x73);
+    assert(!strcmp(order, expected) && pending == queued);
+}
+int main(void)
+{
+    run(4, "RC", 1);
+    run(1, "RDZ", 0); /* Prior GPU work must retire before this CPU access. */
+    run(2, "RDZ", 0); run(3, "RDZ", 0); run(0, "R", 1);
+    for (unsigned buffers = 5; buffers <= 7; ++buffers) run(buffers, "RDZC", 1);
+    condition = false; run(7, "QR", 1); condition = true;
+    depth_ok = false; run(7, "RDZ", 0); depth_ok = true;
+    gpu_ok = false; run(7, "RDZCDF", 0); gpu_ok = true;
+    gpu_status = -30; run(7, "RDZC", 1); /* No CPU replay after attempted GPU failure. */
+    gpu_status = 0; gpu_depth = true;
+    run(3, "RH", 1); run(7, "RHC", 1);
+    gpu_depth_status = -30; run(7, "RH", 1); /* No depth/color replay after GPU failure. */
+}
+'''
+with tempfile.TemporaryDirectory() as temporary:
+    executable = str(Path(temporary) / "mixed-clear-order")
+    subprocess.run(["cc", "-std=c11", "-Wall", "-Wextra", "-Werror",
+                    "-x", "c", "-o", executable, "-"], input=code, text=True, check=True)
+    subprocess.run([executable], check=True)
+print("PASS: GPU color clear preserves queued draws; CPU depth/color fallbacks and conditional rendering synchronize before access")
+
+# Compile the real depth/stencil admission boundary; no GPU or allocation occurs.
+start = source.index("static bool\nps5_clear_gpu_depth_stencil(")
+prefix = source[start:source.index("   if (!context->blitter)", start)]
+code = r'''
+#include <assert.h>
+#include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
+#include <math.h>
+#define PS5_ENABLE_MRT_CANDIDATE 1
+#define PS5_ENABLE_MSAA4_CANDIDATE 1
+#define PS5_GPU_CLEAR_MIN_PIXELS 16384u
+#define PS5_MAX_DEPTH_WIDTH 8192
+#define PS5_MAX_DEPTH_HEIGHT 8192
+#define PIPE_CLEAR_DEPTH 1u
+#define PIPE_CLEAR_STENCIL 2u
+#define PIPE_TEXTURE_2D 2
+#define PIPE_TEXTURE_2D_ARRAY 7
+#define PIPE_FORMAT_Z32_FLOAT 1
+#define PIPE_FORMAT_Z32_FLOAT_S8X24_UINT 2
+struct resource { unsigned target,format,nr_samples,nr_storage_samples,last_level,
+    array_size,depth0,width0,height0; };
+struct ps5_resource { struct resource base; size_t depth_staging_size,allocation_size,
+    stencil_allocation_size; void *data,*stencil_data; };
+struct pipe_surface { struct ps5_resource *texture; unsigned level,first_layer,last_layer,format; };
+struct pipe_scissor_state { unsigned minx,miny,maxx,maxy; };
+struct ps5_context { bool framebuffer_valid; unsigned render_condition_query,
+    stream_output_target_count,active_occlusion_query,active_primitives_generated_query,
+    active_primitives_emitted_query;
+    struct { struct pipe_surface zsbuf; unsigned width,height; } framebuffer; };
+static __attribute__((unused)) bool ps5_any_primitive_query(const struct ps5_context *c) {
+    return c->active_primitives_generated_query || c->active_primitives_emitted_query;
+}
+static size_t ps5_tiled_depth_surface_size(unsigned w,unsigned h,unsigned samples)
+{ assert(samples==1); return (size_t)w*h*4; }
+static size_t ps5_tiled_stencil_surface_size(unsigned w,unsigned h) { return (size_t)w*h; }
+static void ps5_clear_bounds(const struct pipe_scissor_state *s,unsigned w,unsigned h,
+    unsigned *x0,unsigned *y0,unsigned *x1,unsigned *y1) {
+    *x0=s && s->minx<w ? s->minx : s ? w : 0;
+    *y0=s && s->miny<h ? s->miny : s ? h : 0;
+    *x1=s && s->maxx<w ? s->maxx : w;
+    *y1=s && s->maxy<h ? s->maxy : h;
+}
+''' + prefix + r'''
+   (void)stencil; return true;
+}
+int main(void) {
+    struct ps5_resource target={.base={.target=2,.format=2,.array_size=1,.depth0=1,
+        .width0=1024,.height0=768},.allocation_size=1024*768*4,.stencil_allocation_size=1024*768,
+        .data=(void*)1,.stencil_data=(void*)1};
+    struct ps5_context good={.framebuffer_valid=true,
+        .framebuffer={.zsbuf={.texture=&target,.format=2},.width=1024,.height=768}};
+    struct pipe_scissor_state scissor={17,29,987,725};
+#define CHECK(c,b,m,s,d) ps5_clear_gpu_depth_stencil(c,b,m,s,d,0x69)
+    assert(CHECK(&good,3,255,NULL,.375));
+    target.base.target=PIPE_TEXTURE_2D_ARRAY;
+    assert(CHECK(&good,3,255,NULL,.375));
+    target.base.array_size=2;
+    assert(CHECK(&good,3,255,NULL,.375)); /* Selected layer zero still fits. */
+    target.base.array_size=1;
+    target.base.target=PIPE_TEXTURE_2D;
+    assert(CHECK(&good,2,255,NULL,NAN)); /* Unused depth must not reject stencil. */
+    assert(CHECK(&good,1,255,NULL,.375)); /* Large full clears use the GPU. */
+    assert(CHECK(&good,1,0,&scissor,.375));
+    assert(!CHECK(&good,3,15,&scissor,.375));
+    assert(!CHECK(NULL,3,255,NULL,.375));
+    assert(!CHECK(&good,0,255,&scissor,.375));
+    assert(!CHECK(&good,7,255,&scissor,.375));
+    assert(!CHECK(&good,1,255,&scissor,NAN));
+    assert(!CHECK(&good,1,255,&scissor,-.1));
+    assert(!CHECK(&good,1,255,&scissor,1.1));
+#define REJECT(field,value) do { struct ps5_context c=good; c.field=value; \
+    assert(!CHECK(&c,3,255,&scissor,.375)); } while (0)
+    REJECT(framebuffer_valid,false); REJECT(framebuffer.zsbuf.texture,NULL);
+    REJECT(framebuffer.width,0); REJECT(framebuffer.height,769);
+    REJECT(framebuffer.zsbuf.level,1); REJECT(framebuffer.zsbuf.first_layer,1);
+    REJECT(framebuffer.zsbuf.last_layer,1); REJECT(framebuffer.zsbuf.format,1);
+    REJECT(render_condition_query,1); REJECT(stream_output_target_count,1);
+    good.active_occlusion_query=good.active_primitives_generated_query=
+        good.active_primitives_emitted_query=1;
+    assert(CHECK(&good,3,255,NULL,.375));
+    assert(CHECK(&good,1,255,NULL,.375));
+#define REJECT_TARGET(field,value) do { struct ps5_resource t=target; t.field=value; \
+    struct ps5_context c=good; c.framebuffer.zsbuf.texture=&t; \
+    assert(!CHECK(&c,3,255,&scissor,.375)); } while (0)
+    REJECT_TARGET(base.target,3); REJECT_TARGET(base.last_level,1);
+    REJECT_TARGET(base.nr_samples,4); REJECT_TARGET(base.nr_storage_samples,4);
+    REJECT_TARGET(base.array_size,0); REJECT_TARGET(base.depth0,2);
+    REJECT_TARGET(base.width0,8193); REJECT_TARGET(base.height0,8193);
+    REJECT_TARGET(data,NULL); REJECT_TARGET(stencil_data,NULL);
+    REJECT_TARGET(allocation_size,1); REJECT_TARGET(stencil_allocation_size,1);
+    REJECT_TARGET(depth_staging_size,1);
+    target.base.target=PIPE_TEXTURE_2D_ARRAY; target.base.array_size=4;
+    target.allocation_size*=4; target.stencil_allocation_size*=4;
+    good.framebuffer.zsbuf.first_layer=1; good.framebuffer.zsbuf.last_layer=3;
+    assert(CHECK(&good,3,255,NULL,.375));
+    REJECT(framebuffer.zsbuf.last_layer,4);
+    REJECT(framebuffer.zsbuf.first_layer,4);
+    REJECT_TARGET(allocation_size,target.allocation_size/4);
+    REJECT_TARGET(stencil_allocation_size,target.stencil_allocation_size/4);
+    scissor=(struct pipe_scissor_state){0,0,512,512};
+    assert(CHECK(&good,1,0,&scissor,.375));
+    scissor.minx=1; assert(CHECK(&good,1,0,&scissor,.375));
+    scissor=(struct pipe_scissor_state){3,5,4,6};
+    assert(CHECK(&good,1,0,&scissor,.375));
+    scissor.minx=1024; assert(!CHECK(&good,1,0,&scissor,.375));
+    return 0;
+}
+'''
+with tempfile.TemporaryDirectory() as temporary:
+    executable = str(Path(temporary) / "gpu-depth-clear-guard")
+    subprocess.run(["cc", "-std=c11", "-Wall", "-Wextra", "-Werror",
+                    "-fsanitize=address,undefined", "-fno-pie", "-no-pie",
+                    "-x", "c", "-o", executable, "-"], input=code, text=True, check=True)
+    subprocess.run([executable], check=True)
+print("PASS: actual GPU depth/stencil clear bounds, masks, scissor, format and state exclusions")
+
+# Exercise Mesa's actual query suspension through the driver's query switch.
+blitter=(root/'third_party/mesa-26.2.0/src/gallium/auxiliary/util/u_blitter.c').read_text()
+a=blitter.index('void util_blitter_set_running_flag(')
+b=blitter.index('static void blitter_check_saved_vertex_states',a)
+state=blitter[a:b]
+a=blitter.index('void util_blitter_clear_depth_stencil(')
+b=blitter.index('\n}',a)
+body=blitter[a:b]
+assert body.index('util_blitter_set_running_flag') < body.index('blitter->draw_rectangle') < body.index('util_blitter_unset_running_flag')
+code=r'''
+#include <assert.h>
+#include <stdbool.h>
+#define _debug_printf(...) assert(0)
+struct pipe_context { void (*set_active_query_state)(struct pipe_context *,bool); };
+struct ps5_context { struct pipe_context base; bool queries_enabled; };
+struct blitter_context { struct pipe_context *pipe; bool running; };
+'''+query_state+state+r'''
+int main(void) {
+ struct ps5_context c={.base.set_active_query_state=ps5_set_active_query_state,.queries_enabled=true};
+ struct blitter_context b={.pipe=&c.base};
+ util_blitter_set_running_flag(&b);assert(b.running&&!c.queries_enabled);
+ util_blitter_unset_running_flag(&b);assert(!b.running&&c.queries_enabled);
+}
+'''
+with tempfile.TemporaryDirectory() as d:
+ executable=str(Path(d)/'query-suspension')
+ subprocess.run(['cc','-std=c11','-Wall','-Werror','-x','c','-o',executable,'-'],input=code,text=True,check=True)
+ subprocess.run([executable],check=True)
+print('PASS: admitted depth clears use actual Mesa query suspension and driver scope restoration')
+
+# Actual whole-allocation fill: every rejected case must leave memory untouched.
+start = source.index('static bool\nps5_clear_full_tiled_color(')
+fill = source[start:source.index('static void\nps5_clear(', start)]
+code = r"""
+#include <assert.h>
+#include <stdbool.h>
+#include <stdint.h>
+#include <stddef.h>
+#include <string.h>
+#define PIPE_MASK_RGBA 15
+#define PIPE_BIND_DISPLAY_TARGET 8
+struct base { unsigned bind,last_level,array_size,depth0,nr_samples,nr_storage_samples,width0,height0,format; };
+struct ps5_resource { struct base base; size_t render_staging_size,allocation_size; void *data; };
+struct pipe_surface { unsigned level,first_layer,last_layer,format; };
+static unsigned flushes;
+static unsigned util_format_get_blocksize(unsigned format) { return format; }
+static void ps5_clear_words(void *p,uint32_t v,size_t n) { for(size_t i=0;i<n;++i) ((uint32_t*)p)[i]=v; }
+static void ps5_flush_gpu_data(const void *p,size_t n) { assert(p && n==256); ++flushes; }
+""" + fill + r"""
+int main(void) {
+ uint32_t data[66];
+ for(unsigned i=0;i<66;++i) data[i]=0xabcdef01;
+ struct ps5_resource good={.base={.array_size=1,.depth0=1,.width0=8,.height0=4,.format=4},.allocation_size=256,.data=data+1};
+ struct pipe_surface surface={.format=4}; uint8_t packed[16]={0x12,0x34,0x56,0x78};
+ for(unsigned test=0;test<18;++test) {
+  struct ps5_resource r=good;struct pipe_surface v=surface;unsigned mask=15,x=0,y=0,w=8,h=4;
+  switch(test) {
+   case 0:r.render_staging_size=1;break;case 1:r.base.last_level=1;break;
+   case 2:r.base.array_size=2;break;case 3:r.base.depth0=2;break;
+   case 4:r.base.nr_samples=4;break;case 5:r.base.nr_storage_samples=4;break;
+   case 6:v.level=1;break;case 7:v.first_layer=1;break;case 8:v.last_layer=1;break;
+   case 9:mask=7;break;case 10:x=1;break;case 11:y=1;break;
+   case 12:w=7;break;case 13:h=3;break;case 14:v.format=8;break;
+   case 15:r.base.format=8;break;case 16:r.allocation_size=255;break;case 17:r.base.bind=PIPE_BIND_DISPLAY_TARGET;break;
+  }
+  assert(!ps5_clear_full_tiled_color(&r,&v,mask,x,y,w,h,packed));
+  for(unsigned i=0;i<66;++i) assert(data[i]==0xabcdef01);
+ }
+ assert(!flushes);
+ assert(ps5_clear_full_tiled_color(&good,&surface,15,0,0,8,4,packed));
+ uint32_t pixel;memcpy(&pixel,packed,4);
+ for(unsigned i=1;i<65;++i) assert(data[i]==pixel);
+ assert(data[0]==0xabcdef01 && data[65]==0xabcdef01 && flushes==1);
+}
+"""
+with tempfile.TemporaryDirectory() as tmp:
+    exe = Path(tmp) / 'fill'
+    subprocess.run(['cc','-std=c11','-Wall','-Wextra','-Werror','-fsanitize=address,undefined','-x','c','-','-o',str(exe)],input=code,text=True,check=True)
+    subprocess.run([str(exe)],check=True)
+print('PASS: uniform tiled clear, bounds, masks, layouts, padding and publication')
+
+# Execute the production linear-row fill with padded rows and guard bytes.
+start = source.index('               if (target->render_staging_size && write_mask == PIPE_MASK_RGBA &&')
+row = source[start:source.index('               for (unsigned x = min_x;', start)]
+code = r'''
+#include <assert.h>
+#include <stdbool.h>
+#include <stdint.h>
+#include <stddef.h>
+#include <string.h>
+#define PIPE_MASK_RGBA 15
+struct resource { unsigned render_staging_size; size_t size,level_stride[2]; uint8_t *data; };
+struct surface { unsigned level; };
+static void ps5_clear_words(void *data,uint32_t value,size_t count) { for(size_t i=0;i<count;++i) ((uint32_t*)data)[i]=value; }
+static bool fill(struct resource *target,const struct surface *surface,size_t layer_base,
+                 unsigned write_mask,unsigned format_size,unsigned min_x,unsigned max_x,
+                 unsigned min_y,unsigned max_y,const uint8_t *packed) {
+  for(unsigned y=min_y;y<max_y;++y) {
+''' + row + r'''
+    return false; /* The production per-pixel fallback is intentionally excluded. */
+  }
+  return true;
+reject:
+  return false;
+}
+int main(void) {
+ uint32_t data[130]; uint8_t packed[4]={0x12,0x34,0x56,0x78}; uint32_t pixel;
+ memcpy(&pixel,packed,4);
+ struct resource good={.render_staging_size=512,.size=512,.level_stride={96,48},.data=(uint8_t*)(data+1)};
+ struct surface surface={1};
+ memset(data,0xa5,sizeof(data));
+ assert(fill(&good,&surface,16,15,4,2,7,1,3,packed));
+ for(unsigned i=0;i<130;++i) {
+   size_t at=i*4;
+   bool changed=(at>=76 && at<96)||(at>=124 && at<144);
+   assert(data[i]==(changed?pixel:0xa5a5a5a5));
+ }
+ for(unsigned t=0;t<7;++t) {
+   struct resource r=good;unsigned mask=15,bytes=4,left=2,right=7;size_t base=16;
+   switch(t) {case 0:r.render_staging_size=0;break;case 1:mask=7;break;
+    case 2:bytes=8;break;case 3:left=right;break;case 4:base=17;break;
+    case 5:r.level_stride[1]=49;break;case 6:r.size=60;break;}
+   memset(data,0xa5,sizeof(data));
+   assert(!fill(&r,&surface,base,mask,bytes,left,right,1,3,packed));
+   for(unsigned i=0;i<130;++i) assert(data[i]==0xa5a5a5a5);
+ }
+}
+'''
+with tempfile.TemporaryDirectory() as tmp:
+    exe = Path(tmp) / 'linear-row'
+    subprocess.run(['cc','-std=c11','-Wall','-Wextra','-Werror','-fsanitize=address,undefined','-x','c','-','-o',str(exe)],input=code,text=True,check=True)
+    subprocess.run([str(exe)],check=True)
+print('PASS: production linear-row clear preserves padding, scissor exterior, canaries and rejection bounds')

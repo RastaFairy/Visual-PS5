@@ -1,0 +1,273 @@
+# PS5 OpenGL - OpenGL implementation for PlayStation 5.
+# Copyright (C) 2026 BlackBearReloaded
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+name: Build OpenGL 4.6 SDK
+
+on:
+  workflow_dispatch:
+    inputs:
+      snapshot:
+        description: "Also publish this run's compiler cache as the build-cache snapshot (run it on main)"
+        type: boolean
+        default: false
+      profile:
+        description: Fresh SDK build profile (host checks only); dynamic = one SDK, display mode chosen at runtime
+        type: choice
+        default: dynamic
+        options: [dynamic, 1080p60, 1440p120, 2160p120]
+  # A build on main is started by hand (Run workflow): pushes to main build nothing.
+  # Every run builds the SDK and the showcase app ZIP as run artifacts; only a v* tag
+  # reaches the release job.
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+jobs:
+  sdk:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    # id-token and attestations are for the "Attest the release files" step only.
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    env:
+      LLVM_CONFIG: /usr/bin/llvm-config-21
+      CCACHE_DIR: ${{ github.workspace }}/.ccache
+      CCACHE_MAXSIZE: 2G
+      CCACHE_COMPILERCHECK: content
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Install host tools and LLVM 21
+        run: |
+          curl --fail --location --retry 3 https://apt.llvm.org/llvm-snapshot.gpg.key -o "$RUNNER_TEMP/llvm.asc"
+          test "$(gpg --show-keys --with-colons "$RUNNER_TEMP/llvm.asc" | awk -F: '$1 == "fpr" {print $10; exit}')" = 6084F3CF814B57C1CF12EFD515CF4D18AF4F7421
+          sudo install -m 0644 "$RUNNER_TEMP/llvm.asc" /usr/share/keyrings/llvm.asc
+          echo 'deb [signed-by=/usr/share/keyrings/llvm.asc] https://apt.llvm.org/noble/ llvm-toolchain-noble-21 main' | sudo tee /etc/apt/sources.list.d/llvm21.list
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y build-essential ccache clang-18 lld-18 clang-21 lld-21 llvm-21-dev cmake ninja-build pkg-config python3-venv glslang-tools spirv-tools bison flex unzip libasan8 libubsan1 libegl-dev libgl-dev libegl-mesa0 libgl1-mesa-dri libglx-mesa0
+          python3 -m venv "$RUNNER_TEMP/build-tools"
+          "$RUNNER_TEMP/build-tools/bin/pip" install meson==1.10.1 Mako==1.3.10 PyYAML==6.0.2 packaging==25.0
+          echo "$RUNNER_TEMP/build-tools/bin" >> "$GITHUB_PATH"
+      - name: Restore compiler cache
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: .ccache
+          key: ccache-sdk-${{ runner.os }}-${{ github.sha }}-${{ github.run_id }}
+          restore-keys: |
+            ccache-sdk-${{ runner.os }}-
+      # GitHub drops a cache nobody used for a week, and a pull request only sees main's. When
+      # nothing was restored, start from the snapshot kept as a file of the build-cache release;
+      # a manual run on main with "snapshot" ticked replaces that file (build-cache.yml).
+      - name: Fetch the compiler cache snapshot
+        run: |
+          if [ -z "$(ls -A "$CCACHE_DIR" 2>/dev/null)" ]; then
+            url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/download/build-cache/ccache-sdk.tar"
+            if curl -fsSL --retry 3 -o "$RUNNER_TEMP/ccache-sdk.tar" "$url"; then
+              mkdir -p "$CCACHE_DIR"
+              tar -xf "$RUNNER_TEMP/ccache-sdk.tar" -C "$CCACHE_DIR"
+              rm "$RUNNER_TEMP/ccache-sdk.tar"
+              echo "::notice title=Compiler cache::Started from the build-cache snapshot."
+            fi
+          fi
+      - name: Configure compiler cache
+        run: |
+          ccache --zero-stats
+          echo "Building with $(nproc) cores"
+      - name: Fetch checksum-pinned public payload SDK
+        run: |
+          curl --fail --location --retry 3 https://github.com/ps5-payload-dev/sdk/releases/download/v0.42/ps5-payload-sdk.zip -o "$RUNNER_TEMP/payload-sdk.zip"
+          SDK_HASH=$(python3 -c 'import json; print(json.load(open("dependencies.json"))["native_boilerplate"]["payload_sdk_archive_sha256"])')
+          printf '%s  %s\n' "$SDK_HASH" "$RUNNER_TEMP/payload-sdk.zip" | sha256sum --check
+          unzip -q "$RUNNER_TEMP/payload-sdk.zip" -d "$RUNNER_TEMP/payload"
+          SDK_DIR="$RUNNER_TEMP/payload/ps5-payload-sdk"
+          "$SDK_DIR/bin/prospero-clang" --version
+          echo "PS5_PAYLOAD_SDK=$SDK_DIR" >> "$GITHUB_ENV"
+      - name: Fetch pinned graphics and example sources
+        run: python3 tools/fetch-sources.py --sokol-samples
+      - name: Host regressions and published evidence integrity
+        run: make test
+      - name: CPU and software-OpenGL staging regressions (no console)
+        timeout-minutes: 10
+        env:
+          PS5_OPENGL_PREFIX: ${{ github.workspace }}/third_party/mesa-26.2.0
+          EGL_PLATFORM: surfaceless
+          LIBGL_ALWAYS_SOFTWARE: '1'
+          GALLIUM_DRIVER: llvmpipe
+          LP_NUM_THREADS: '2'
+          MESA_GL_VERSION_OVERRIDE: '3.3'
+          MESA_GLSL_VERSION_OVERRIDE: '330'
+          MESA_SHADER_CACHE_DISABLE: 'true'
+          UBSAN_OPTIONS: halt_on_error=1
+        run: |
+          unset LD_LIBRARY_PATH LD_PRELOAD LIBGL_DRIVERS_PATH
+          unset MESA_LOADER_DRIVER_OVERRIDE __EGL_VENDOR_LIBRARY_FILENAMES __EGL_VENDOR_LIBRARY_DIRS
+          make test-staging
+      - name: Select fresh build profile
+        env:
+          SDK_PROFILE: ${{ inputs.profile || 'dynamic' }}
+        run: |
+          DYNAMIC=0
+          case "$SDK_PROFILE" in
+            # One SDK for every display: 2160p120 capacity, 1080p60 startup,
+            # size and refresh chosen at runtime (ps5_opengl_display_modes.h).
+            dynamic) HEIGHT=2160; FPS=120; DYNAMIC=1 ;;
+            1080p60) HEIGHT=1080; FPS=60 ;;
+            1440p120) HEIGHT=1440; FPS=120 ;;
+            2160p120) HEIGHT=2160; FPS=120 ;;
+            *) exit 1 ;;
+          esac
+          echo "SDK_PROFILE=$SDK_PROFILE" >> "$GITHUB_ENV"
+          echo "PS5_SCANOUT_HEIGHT=$HEIGHT" >> "$GITHUB_ENV"
+          echo "PS5_SCANOUT_FPS=$FPS" >> "$GITHUB_ENV"
+          echo "PS5_DYNAMIC_SCANOUT=$DYNAMIC" >> "$GITHUB_ENV"
+      - name: Build compiler, Mesa and OpenGL 4.6 static SDK
+        env:
+          PS5_GPU_PRESENT_BATCH: '1'
+          PS5_DRAW_PROFILE: '1'
+          PS5_MULTIDRAW_BATCH: '1'
+          PS5_DEFERRED_DRAW_BATCH: '1'
+        run: make sdk-gl46
+      - name: Report compiler cache statistics
+        if: always()
+        run: ccache --show-stats
+      # ccache compresses what it stores, so the snapshot is a plain tar.
+      - name: Pack the compiler cache snapshot
+        if: github.event_name == 'workflow_dispatch' && inputs.snapshot
+        run: tar -cf "$RUNNER_TEMP/ccache-sdk.tar" -C "$CCACHE_DIR" .
+      - name: Upload the compiler cache snapshot
+        if: github.event_name == 'workflow_dispatch' && inputs.snapshot
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ccache-snapshot
+          path: ${{ runner.temp }}/ccache-sdk.tar
+          if-no-files-found: error
+          retention-days: 1
+      - name: Verify OpenGL 4.6 exports and three relocated consumers
+        run: |
+          cp -a build/sdk/ps5-opengl-gl46 "$RUNNER_TEMP/relocated-sdk"
+          python3 tools/check-sdk-consumers.py \
+            --sdk "$RUNNER_TEMP/relocated-sdk" --payload-sdk "$PS5_PAYLOAD_SDK" \
+            --example-dir examples/core33-triangle \
+            --registry third_party/mesa-26.2.0/src/mesa/glapi/glapi/registry/gl.xml \
+            --output "$RUNNER_TEMP/consumer-checks" --forbid-root "$GITHUB_WORKSPACE"
+      - name: Package SDK, source, notices and build evidence
+        run: |
+          VERSION="ci-${GITHUB_SHA:0:12}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          if [[ "$GITHUB_REF_TYPE" == tag ]]; then VERSION="${GITHUB_REF_NAME#v}"; fi
+          if [[ "$SDK_PROFILE" != dynamic ]]; then VERSION="$VERSION-$SDK_PROFILE"; fi
+          echo "SDK_VERSION=$VERSION" >> "$GITHUB_ENV"
+          python3 tools/build-sdk-bundle.py --ci-version "$VERSION" --ci-profile "$SDK_PROFILE" \
+            --sdk "$RUNNER_TEMP/relocated-sdk" --source-commit "$(git rev-parse HEAD)" \
+            --consumer-report "$RUNNER_TEMP/consumer-checks/summary.json" \
+            --runtime-config build/core33-native-runtime/runtime-config.txt \
+            --destination "$RUNNER_TEMP/release"
+          cd "$RUNNER_TEMP/release"
+          sha256sum --check ./*.tar.gz.sha256
+          mkdir unpacked
+          tar -xzf ./*.tar.gz -C unpacked
+          cd unpacked/ps5-opengl-sdk-*
+          sha256sum --check SHA256SUMS
+      - name: Build the showcase demo app (PPSA99005) against this SDK
+        run: |
+          make demo PS5_OPENGL_PREFIX="$RUNNER_TEMP/relocated-sdk" DEMO_VERSION="$SDK_VERSION"
+          cp build/demo/ps5-opengl-showcase-"$SDK_VERSION"-PPSA99005.zip* "$RUNNER_TEMP/release/"
+      - name: Check the showcase app ZIP (every entry 0777) and its checksum
+        run: |
+          cd "$RUNNER_TEMP/release"
+          sha256sum --check ./*.zip.sha256
+          python3 - ps5-opengl-showcase-"$SDK_VERSION"-PPSA99005.zip <<'PY'
+          import sys, zipfile
+          with zipfile.ZipFile(sys.argv[1]) as z:
+              assert z.testzip() is None
+              infos = z.infolist()
+              names = [i.filename for i in infos]
+              assert all(n.startswith("PPSA99005/") for n in names), "entries outside the app folder"
+              assert "PPSA99005/eboot.bin" in names, "no eboot.bin"
+              wrong = [n.filename for n in infos if (n.external_attr >> 16) & 0o777 != 0o777]
+              assert not wrong, f"entries not stored as 0777: {wrong[:3]}"
+              print(f"{sys.argv[1]}: {len(names)} entries, all 0777")
+          PY
+      # Signed provenance: these files were built by this workflow from this commit. Anyone can check
+      # a downloaded copy with `gh attestation verify <file> -R <owner>/<repo>`. Not for pull requests
+      # (a fork's run cannot sign), and not in a private repository (the plan does not include it).
+      - name: Attest the release files
+        if: github.event_name != 'pull_request' && !github.event.repository.private
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: |
+            ${{ runner.temp }}/release/ps5-opengl-sdk-${{ env.SDK_VERSION }}.tar.gz
+            ${{ runner.temp }}/release/ps5-opengl-showcase-${{ env.SDK_VERSION }}-PPSA99005.zip
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ps5-opengl-4.6-sdk
+          path: |
+            ${{ runner.temp }}/release/*.tar.gz
+            ${{ runner.temp }}/release/*.tar.gz.sha256
+            ${{ runner.temp }}/release/*.zip
+            ${{ runner.temp }}/release/*.zip.sha256
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+      - name: Preserve consumer diagnostics
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: sdk-consumer-diagnostics
+          path: |
+            ${{ runner.temp }}/consumer-checks/*.json
+            ${{ runner.temp }}/consumer-checks/*.log
+          if-no-files-found: ignore
+          retention-days: 7
+
+  release:
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: sdk
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: ps5-opengl-4.6-sdk
+          path: release
+      - name: Publish OpenGL 4.6 release without replacing existing releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cd release
+          sha256sum --check ./*.tar.gz.sha256 ./*.zip.sha256
+          TAG=$GITHUB_REF_NAME
+          # A release that already exists for this tag (notes written ahead, or a draft) keeps
+          # its title and notes, and a file it already has is never replaced or removed. Only
+          # missing files are added.
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            existing=$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name')
+            has() { grep -Fxq -- "$1" <<< "$existing"; }
+            kept() { echo "::warning title=Release file not from this run::A release for $TAG already has $1; it was not replaced. It was not published by this run and may have no attestation."; }
+            for file in *.tar.gz *.zip; do
+              if has "$file"; then
+                kept "$file"
+                # This run's checksum file describes this run's build, not the file the release keeps.
+                if has "$file.sha256"; then kept "$file.sha256"; fi
+                continue
+              fi
+              gh release upload "$TAG" "$file" --repo "$GITHUB_REPOSITORY"
+              if has "$file.sha256"; then
+                kept "$file.sha256"
+              else
+                gh release upload "$TAG" "$file.sha256" --repo "$GITHUB_REPOSITORY"
+              fi
+            done
+            exit 0
+          fi
+          gh release create "$GITHUB_REF_NAME" ./*.tar.gz ./*.tar.gz.sha256 ./*.zip ./*.zip.sha256 \
+            --repo "$GITHUB_REPOSITORY" --verify-tag --latest \
+            --title "PS5 OpenGL 4.6 SDK ${GITHUB_REF_NAME#v}" \
+            --notes 'Experimental OpenGL 4.6 Core / GLSL 4.60 SDK, built from this tag. Includes all 657 OpenGL 4.6 Core entry points, compiled libraries, headers, source examples/dependencies, licenses, checksums and provenance. Host tests and relocated Make/pkg-config/CMake links passed. These freshly built binaries have NOT been validated on a PS5; hardware, CTS and performance results belong to their recorded binary identities. The ps5-opengl-showcase zip is the OpenGL 4.6 showcase demo app (PPSA99005) built against this SDK: extract it and upload its PPSA99005 folder to /data/homebrew/.'

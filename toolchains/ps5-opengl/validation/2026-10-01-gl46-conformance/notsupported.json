@@ -1,0 +1,298 @@
+{
+  "run": "official3",
+  "sessions": {
+    "config-gl30-khr-main-cfg-1-run-0-width-64-height-64-seed-1-egl": {
+      "results": {
+        "NotSupported": 1
+      },
+      "not_supported": {
+        "surface-type": 1
+      }
+    },
+    "config-gl40-khr-main-cfg-1-run-1-width-64-height-64-seed-1-egl": {
+      "results": {
+        "Pass": 1
+      },
+      "not_supported": {}
+    },
+    "config-gl43-khr-main-cfg-1-run-2-width-64-height-64-seed-1-egl": {
+      "results": {
+        "NotSupported": 12
+      },
+      "not_supported": {
+        "surface-type": 12
+      }
+    },
+    "config-gl45-es3-main-cfg-1-run-0-width-256-height-256-egl": {
+      "results": {
+        "Pass": 1325
+      },
+      "not_supported": {}
+    },
+    "config-gl45-es31-main-cfg-1-run-1-width-256-height-256-egl": {
+      "results": {
+        "NotSupported": 382,
+        "Pass": 30866
+      },
+      "not_supported": {
+        "minimum-limit": 19,
+        "not-applicable": 23,
+        "optional-extension": 112,
+        "sample-count": 228
+      }
+    },
+    "config-gl45-khr-main-cfg-1-run-3-width-64-height-64-seed-1-egl": {
+      "results": {
+        "NotSupported": 6,
+        "Pass": 2
+      },
+      "not_supported": {
+        "surface-type": 6
+      }
+    },
+    "config-gl46-khr-single-cfg-1-run-3-width-64-height-64-seed-1-egl": {
+      "results": {
+        "NotSupported": 6292,
+        "Pass": 5056
+      },
+      "not_supported": {
+        "optional-extension": 6292
+      }
+    },
+    "config-gl46-main-cfg-2-run-0-width-64-height-64-seed-1-egl": {
+      "results": {
+        "CompatibilityWarning": 1,
+        "NotSupported": 4378,
+        "Pass": 15335
+      },
+      "not_supported": {
+        "minimum-limit": 4,
+        "not-applicable": 212,
+        "optional-extension": 4086,
+        "sample-count": 76
+      }
+    },
+    "config-gl46-main-cfg-2-run-1-width-113-height-47-seed-2-egl": {
+      "results": {
+        "CompatibilityWarning": 1,
+        "NotSupported": 4378,
+        "Pass": 15335
+      },
+      "not_supported": {
+        "minimum-limit": 4,
+        "not-applicable": 212,
+        "optional-extension": 4086,
+        "sample-count": 76
+      }
+    },
+    "config-gl46-main-cfg-2-run-2-width-64-height--1-seed-3-egl": {
+      "results": {
+        "CompatibilityWarning": 1,
+        "NotSupported": 4378,
+        "Pass": 15335
+      },
+      "not_supported": {
+        "minimum-limit": 4,
+        "not-applicable": 212,
+        "optional-extension": 4086,
+        "sample-count": 76
+      }
+    },
+    "config-gl46-main-cfg-2-run-3-width--1-height-64-seed-3-egl": {
+      "results": {
+        "CompatibilityWarning": 1,
+        "NotSupported": 4378,
+        "Pass": 15335
+      },
+      "not_supported": {
+        "minimum-limit": 4,
+        "not-applicable": 212,
+        "optional-extension": 4086,
+        "sample-count": 76
+      }
+    },
+    "configs": {
+      "results": {
+        "Pass": 15
+      },
+      "not_supported": {}
+    }
+  },
+  "rules": {
+    "28": {
+      "class": "surface-type",
+      "justification": "the case creates its own window-surface context; the conformant EGL config renders to pbuffers",
+      "cases": 19,
+      "example": "KHR-NoContext.gl30.no_error.create_context"
+    },
+    "6": {
+      "class": "optional-extension",
+      "justification": "KHR_blend_equation_advanced(_coherent) is not part of OpenGL 4.6",
+      "cases": 39,
+      "example": "dEQP-GL45-ES31.functional.blend_equation_advanced.coherent.colorburn"
+    },
+    "7": {
+      "class": "optional-extension",
+      "justification": "EXT_shader_framebuffer_fetch is not part of OpenGL 4.6",
+      "cases": 47,
+      "example": "dEQP-GL45-ES31.functional.debug.negative_coverage.callbacks.framebuffer_fetch.invalid_inout_version"
+    },
+    "16": {
+      "class": "minimum-limit",
+      "justification": "needs more than the required minimum MAX_SHADER_STORAGE_BLOCK_SIZE (2^27)",
+      "cases": 18,
+      "example": "dEQP-GL45-ES31.functional.draw_indirect.compute_interop.large.drawarrays_combined_grid_1000x1000_drawcount_1"
+    },
+    "24": {
+      "class": "not-applicable",
+      "justification": "the case applies to OpenGL ES contexts only",
+      "cases": 13,
+      "example": "dEQP-GL45-ES31.functional.draw_indirect.negative.client_vertex_attrib_array"
+    },
+    "17": {
+      "class": "minimum-limit",
+      "justification": "needs more than the required minimum MAX_GEOMETRY_TOTAL_OUTPUT_COMPONENTS (1024)",
+      "cases": 1,
+      "example": "dEQP-GL45-ES31.functional.geometry_shading.basic.output_256"
+    },
+    "15": {
+      "class": "sample-count",
+      "justification": "the session's default framebuffer config is single-sampled",
+      "cases": 10,
+      "example": "dEQP-GL45-ES31.functional.multisample.default_framebuffer.constancy_alpha_to_coverage_sample_coverage_sample_mask"
+    },
+    "14": {
+      "class": "sample-count",
+      "justification": "the case needs more samples than the implementation's maximum of 4 (OpenGL 4.6 requires MAX_SAMPLES >= 4, integer formats >= 1)",
+      "cases": 522,
+      "example": "dEQP-GL45-ES31.functional.sample_shading.min_sample_shading.multisample_renderbuffer_samples_16_color"
+    },
+    "8": {
+      "class": "optional-extension",
+      "justification": "EXT_texture_sRGB_R8 and EXT_texture_sRGB_RG8 are not part of OpenGL 4.6",
+      "cases": 30,
+      "example": "dEQP-GL45-ES31.functional.srgb_texture_decode.skip_decode.sr8.conversion_gpu"
+    },
+    "27": {
+      "class": "not-applicable",
+      "justification": "the sRGB ETC2 formats are supported but, like every Mesa driver, not listed in COMPRESSED_TEXTURE_FORMATS, which the test consults",
+      "cases": 18,
+      "example": "dEQP-GL45-ES31.functional.texture.border_clamp.formats.compressed_srgb8_alpha8_etc2_eac.gather_size_not_tile_multiple"
+    },
+    "10": {
+      "class": "optional-extension",
+      "justification": "EXT_mesh_shader is not part of OpenGL 4.6",
+      "cases": 239,
+      "example": "KHR-Single-GL46.meshShader.apiTests.draw.draw_count_0.no_indirect_args.no_count_limit.no_count_offset.no_task_shader"
+    },
+    "9": {
+      "class": "optional-extension",
+      "justification": "KHR_shader_subgroup is not part of OpenGL 4.6",
+      "cases": 6053,
+      "example": "KHR-Single-GL46.subgroups.arithmetic.compute.subgroupadd_double"
+    },
+    "23": {
+      "class": "not-applicable",
+      "justification": "the test fetches cull distances only when drawing points",
+      "cases": 64,
+      "example": "KHR-GL46.cull_distance.functional_test_item_8_primitive_mode_lines_max_culldist_0"
+    },
+    "25": {
+      "class": "not-applicable",
+      "justification": "the case applies to OpenGL ES contexts only",
+      "cases": 4,
+      "example": "KHR-GL46.draw_elements_base_vertex_tests.valid_active_tf"
+    },
+    "3": {
+      "class": "optional-extension",
+      "justification": "EXT_texture_shadow_lod is not part of OpenGL 4.6",
+      "cases": 60,
+      "example": "KHR-GL46.ext_texture_shadow_lod.texture.sampler2darrayshadow_bias_fragment"
+    },
+    "2": {
+      "class": "optional-extension",
+      "justification": "EXT_fragment_shading_rate is not part of OpenGL 4.6",
+      "cases": 4268,
+      "example": "KHR-GL46.fragment_shading_rate.api.basic"
+    },
+    "13": {
+      "class": "optional-extension",
+      "justification": "the cases require the ARB_depth_texture extension string, which a core profile does not list",
+      "cases": 48,
+      "example": "KHR-GL46.internalformat.copy_tex_image.depth_component16"
+    },
+    "26": {
+      "class": "not-applicable",
+      "justification": "RGB9_E5 is not a required color-renderable format",
+      "cases": 4,
+      "example": "KHR-GL46.internalformat.renderbuffer.rgb9_e5"
+    },
+    "1": {
+      "class": "optional-extension",
+      "justification": "tests of ARB_sparse_texture2 and EXT_texture_shadow_lod built-ins",
+      "cases": 120,
+      "example": "KHR-GL46.negative_texture_lookup_functions_with_bias_tests.sparseTextureARB_isampler2DArray_bias"
+    },
+    "5": {
+      "class": "optional-extension",
+      "justification": "ARB_post_depth_coverage is not part of OpenGL 4.6",
+      "cases": 8,
+      "example": "KHR-GL46.post_depth_coverage_tests.PostDepthSampleMask"
+    },
+    "11": {
+      "class": "optional-extension",
+      "justification": "ARB_shader_viewport_layer_array is not part of OpenGL 4.6",
+      "cases": 12,
+      "example": "KHR-GL46.shader_viewport_layer_array.ShaderLayerFramebufferLayeredTestCase"
+    },
+    "12": {
+      "class": "optional-extension",
+      "justification": "the case tests the EXT_shader_integer_mix extension string; the functionality itself is GLSL 4.50 and tested by the other cases",
+      "cases": 4,
+      "example": "KHR-GL46.shaders.shader_integer_mix.prototypes"
+    },
+    "0": {
+      "class": "optional-extension",
+      "justification": "ARB_sparse_texture, ARB_sparse_texture2, ARB_sparse_texture_clamp and ARB_sparse_buffer are not part of OpenGL 4.6",
+      "cases": 11800,
+      "example": "KHR-GL46.sparse_buffer_tests.BufferStorageTest_case_b1_tf_type_0_draw_call_indexed"
+    },
+    "18": {
+      "class": "minimum-limit",
+      "justification": "both limits are at their required minimums (128 and 64)",
+      "cases": 4,
+      "example": "KHR-GL46.tessellation_shader.tessellation_shader_tessellation.max_in_out_attributes"
+    },
+    "4": {
+      "class": "optional-extension",
+      "justification": "ARB_texture_filter_minmax is not part of OpenGL 4.6",
+      "cases": 20,
+      "example": "KHR-GL46.texture_filter_minmax_tests.TextureFilterMinmaxMagnificationFiltering"
+    },
+    "19": {
+      "class": "minimum-limit",
+      "justification": "the case needs a larger surface than this session's",
+      "cases": 12,
+      "example": "KHR-GL46.texture_query_lod.sampler1D_test"
+    },
+    "20": {
+      "class": "not-applicable",
+      "justification": "the case fetches with texelFetch, which GLSL does not define for rectangle (lod) and cube map targets",
+      "cases": 568,
+      "example": "KHR-GL46.texture_swizzle.functional_format_idx_0_target_idx_5"
+    },
+    "21": {
+      "class": "not-applicable",
+      "justification": "the test excludes depth formats on 3D and multisample targets and RGB9_E5 on multisample targets",
+      "cases": 104,
+      "example": "KHR-GL46.texture_swizzle.functional_format_idx_38_target_idx_7"
+    },
+    "22": {
+      "class": "not-applicable",
+      "justification": "GLSL defines no textureProj* function for the 2D array target of the smoke test",
+      "cases": 96,
+      "example": "KHR-GL46.texture_swizzle.smoke_access_idx_12_channel_idx_0"
+    }
+  },
+  "unclassified": []
+}
