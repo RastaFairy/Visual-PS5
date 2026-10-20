@@ -1,0 +1,20 @@
+{
+  "repository": "blackbearreloaded/ps5-helixsr",
+  "branch": "main",
+  "commit": "0673d91561c761b054449d30f2c2036fb6e0cf99",
+  "sourceCommit": "0673d91561c761b054449d30f2c2036fb6e0cf99",
+  "sourceRef": "main",
+  "method": "vendored-snapshot",
+  "vendoredSnapshot": true,
+  "vendorRepository": "RastaFairy/Visual-PS5",
+  "vendoredAt": "2026-10-20T15:57:08Z",
+  "submodulesMaterialized": false,
+  "sourceOnly": true,
+  "mirrorRepository": "manoma080/ps5-helixsr",
+  "unresolvedSubmodules": [
+    "external/ps5-vulkan@6875f21438b7e51a1377a30f2d7f77b3e0154cd6"
+  ],
+  "buildableWithoutExternalRepo": false,
+  "originalMethod": "vendored-snapshot",
+  "sourceRevisionRecorded": true
+}

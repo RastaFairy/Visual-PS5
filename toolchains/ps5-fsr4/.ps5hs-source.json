@@ -1,0 +1,20 @@
+{
+  "repository": "blackbearreloaded/ps5-fsr4",
+  "branch": "main",
+  "commit": "4f931d8926cc25b2fdd78898cf08ee5c1999ea68",
+  "sourceCommit": "4f931d8926cc25b2fdd78898cf08ee5c1999ea68",
+  "sourceRef": "main",
+  "method": "vendored-snapshot",
+  "vendoredSnapshot": true,
+  "vendorRepository": "RastaFairy/Visual-PS5",
+  "vendoredAt": "2026-10-20T15:57:08Z",
+  "submodulesMaterialized": false,
+  "sourceOnly": true,
+  "mirrorRepository": "manoma080/ps5-fsr4",
+  "unresolvedSubmodules": [
+    "external/ps5-vulkan@4bb0c8b1423698a7369efc22b829bf16a99e7128"
+  ],
+  "buildableWithoutExternalRepo": false,
+  "originalMethod": "vendored-snapshot",
+  "sourceRevisionRecorded": true
+}

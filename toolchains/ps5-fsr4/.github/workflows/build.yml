@@ -1,0 +1,260 @@
+# Copyright (C) 2026 BlackBearReloaded
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# Builds the driver, the FSR4 runtime, the SDK, the demo and the showcase from
+# pinned public inputs, runs the host tests and packages a release. Every run
+# keeps the showcase app ZIP as a workflow artifact; a pull request's is named by
+# its number and commit (docs/PULL_REQUEST_BUILDS.md). A v* tag publishes the
+# package as a GitHub pre-release; a manual run with a version keeps all of it
+# as a workflow artifact. docs/RELEASING.md has the procedure.
+name: Build
+
+on:
+  # A build on main is started by hand (Run workflow): pushes to main build nothing.
+  push:
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version to package as an artifact (nothing is published)
+        required: true
+        default: 0.0.0-test
+      snapshot:
+        description: "Also publish this run's compiler cache as the build-cache snapshot (run it on main)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
+    # id-token and attestations are for the "Attest the release files" step only.
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    env:
+      VERSION: ${{ github.event.inputs.version || (startsWith(github.ref, 'refs/tags/v') && github.ref_name) || '0.0.0-dev' }}
+      # The builds compile through ccache (BUILDING.md). A compiler is known by what it
+      # says its version is: the payload SDK's are wrapper scripts around LLVM 21.
+      USE_CCACHE: 1
+      CCACHE_DIR: ${{ github.workspace }}/build/ccache
+      CCACHE_MAXSIZE: 500M
+      CCACHE_COMPILERCHECK: "%compiler% --version"
+    steps:
+      # The payload SDK builds with LLVM 21, which Ubuntu 24.04 does not carry: it comes
+      # from LLVM's own package repository. glslang and SPIRV-Tools are not installed
+      # here: "Fetch pinned inputs" builds the releases the pipeline cache was made with.
+      - name: Install build tools
+        run: |
+          sudo install -d -m 0755 /etc/apt/keyrings
+          curl -fsSL https://apt.llvm.org/llvm-snapshot.gpg.key | sudo tee /etc/apt/keyrings/apt.llvm.org.asc >/dev/null
+          echo "deb [signed-by=/etc/apt/keyrings/apt.llvm.org.asc] https://apt.llvm.org/noble/ llvm-toolchain-noble-21 main" \
+            | sudo tee /etc/apt/sources.list.d/llvm-21.list >/dev/null
+          sudo apt-get update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            bsdextrautils build-essential ca-certificates cmake curl file git make \
+            ninja-build ccache pkg-config python3 python3-mako python3-numpy python3-pil python3-yaml \
+            tar unzip wget xxd xz-utils zlib1g-dev fonts-dejavu-core \
+            clang-18 lld-18 llvm-18 clang-21 lld-21 llvm-21
+
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+
+      - name: Version
+        run: |
+          VERSION="${VERSION#v}"
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "Packaging version $VERSION"
+
+      - name: Restore compiler cache
+        uses: actions/cache@v6
+        with:
+          path: build/ccache
+          key: ccache-ubuntu-24.04-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            ccache-ubuntu-24.04-
+
+      # GitHub drops a cache nobody used for a week, and a pull request only sees main's. When
+      # nothing was restored, start from the snapshot kept as a file of the build-cache release;
+      # a manual run with "snapshot" ticked replaces that file.
+      - name: Fetch the compiler cache snapshot
+        run: |
+          if [ -z "$(ls -A "$CCACHE_DIR" 2>/dev/null)" ]; then
+            url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/download/build-cache/ccache-ubuntu-24.04.tar"
+            if curl -fsSL --retry 3 -o "$RUNNER_TEMP/ccache-ubuntu-24.04.tar" "$url"; then
+              mkdir -p "$CCACHE_DIR"
+              tar -xf "$RUNNER_TEMP/ccache-ubuntu-24.04.tar" -C "$CCACHE_DIR"
+              rm "$RUNNER_TEMP/ccache-ubuntu-24.04.tar"
+              echo "::notice title=Compiler cache::Started from the build-cache snapshot."
+            fi
+          fi
+          ccache --zero-stats
+
+      - name: Cache pinned inputs
+        uses: actions/cache@v6
+        with:
+          path: build/inputs
+          key: inputs-2-ubuntu-24.04-${{ hashFiles('tools/build_inputs.json') }}
+
+      - name: Fetch pinned inputs
+        run: python3 tools/fetch_build_inputs.py --github-env
+
+      # ccache does not see the flags the payload SDK's compiler wrappers add, so a change
+      # in either wrapper has to miss.
+      - name: Tie the compiler cache to the payload SDK
+        run: echo "CCACHE_EXTRAFILES=$PS5_PAYLOAD_SDK/bin/prospero-clang:$PS5_PAYLOAD_SDK/bin/prospero-clang++" >> "$GITHUB_ENV"
+
+      - name: Build the driver, the FSR4 runtime and the SDK
+        run: make sdk
+
+      - name: Check the pipeline cache
+        run: python3 tools/fetch_build_inputs.py --check-cache
+
+      - name: Host tests
+        run: make check
+
+      # A pull request's build is named by its number and its own commit, on the
+      # artifact and in a file in the app folder (docs/PULL_REQUEST_BUILDS.md); the
+      # version stays what it is.
+      - name: Name this build
+        id: label
+        shell: bash
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          if [[ $GITHUB_EVENT_NAME == pull_request ]]; then
+            short=${PR_HEAD:0:7}
+            echo "artifact=${GITHUB_REPOSITORY##*/}-PR$PR_NUMBER-$short" >> "$GITHUB_OUTPUT"
+            echo "BUILD_LABEL=PR $PR_NUMBER, $short" >> "$GITHUB_ENV"
+          else
+            echo "artifact=ps5-fsr4-showcase-$GITHUB_SHA" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build the demo and the showcase
+        run: |
+          make demo
+          make showcase SHOWCASE_ARGS="--release $VERSION"
+
+      - name: Report compiler cache statistics
+        if: always()
+        run: ccache --show-stats
+
+      # ccache compresses what it stores, so the snapshot is a plain tar.
+      - name: Pack the compiler cache snapshot
+        if: github.event_name == 'workflow_dispatch' && inputs.snapshot
+        run: tar -cf "$RUNNER_TEMP/ccache-ubuntu-24.04.tar" -C "$CCACHE_DIR" .
+
+      - name: Upload the compiler cache snapshot
+        if: github.event_name == 'workflow_dispatch' && inputs.snapshot
+        uses: actions/upload-artifact@v7
+        with:
+          name: ccache-snapshot
+          path: ${{ runner.temp }}/ccache-ubuntu-24.04.tar
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Package
+        run: python3 tools/package_fsr4_release.py --version "$VERSION"
+
+      # The console only starts an app whose files are open to all, and some
+      # tools keep a ZIP's permissions when they unpack it.
+      - name: Check the showcase ZIP
+        run: |
+          python3 - "build/release/ps5-fsr4-showcase-$VERSION-PPSA99011.zip" PPSA99011 <<'PY'
+          import sys, zipfile
+          archive, title = sys.argv[1:3]
+          with zipfile.ZipFile(archive) as z:
+              assert z.testzip() is None, "damaged entry"
+              names = z.namelist()
+              assert title + "/eboot.bin" in names, "no eboot.bin"
+              wrong = [i.filename for i in z.infolist() if (i.external_attr >> 16) & 0o777 != 0o777]
+              assert not wrong, f"entries not stored as 0777: {wrong[:3]}"
+              print(f"{archive}: {len(names)} entries, all 0777")
+          PY
+
+      # Signed provenance: these files were built by this workflow from this commit. Anyone can check
+      # a downloaded copy with `gh attestation verify <file> -R <owner>/<repo>`. Not for pull requests
+      # (a fork's run cannot sign), and not in a private repository (the plan does not include it).
+      - name: Attest the release files
+        if: github.event_name != 'pull_request' && !github.event.repository.private && (github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v'))
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: |
+            build/release/ps5-fsr4-showcase-${{ env.VERSION }}-PPSA99011.zip
+            build/release/ps5-fsr4-sdk-${{ env.VERSION }}.zip
+            build/release/ps5-fsr4-${{ env.VERSION }}-source.tar.gz
+
+      - name: Keep the showcase ZIP
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ steps.label.outputs.artifact }}
+          path: build/release/ps5-fsr4-showcase-${{ env.VERSION }}-PPSA99011.zip
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+
+      - name: Keep the package
+        if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
+        uses: actions/upload-artifact@v7
+        with:
+          name: release
+          path: build/release/
+          retention-days: 7
+
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: release
+          path: release
+
+      - name: Publish the pre-release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cd release
+          sha256sum --check SHA256SUMS
+          TAG=$GITHUB_REF_NAME
+          if ! gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --verify-tag --prerelease \
+              --title "PS5 FSR4 ${GITHUB_REF_NAME#v}" --notes-file release-notes.md \
+              *.zip *.tar.gz SHA256SUMS
+            exit 0
+          fi
+          # The release exists (notes written ahead, or a draft): its title and notes stay, and
+          # a file it already has is never replaced or removed. Only missing files are added.
+          existing=$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name')
+          has() { grep -Fxq -- "$1" <<< "$existing"; }
+          kept() { echo "::warning title=Release file not from this run::A release for $TAG already has $1; it was not replaced. It was not published by this run and may have no attestation."; }
+          all_from_this_run=true
+          for file in *.zip *.tar.gz; do
+            if has "$file"; then
+              kept "$file"
+              all_from_this_run=false
+            else
+              gh release upload "$TAG" "$file" --repo "$GITHUB_REPOSITORY"
+            fi
+          done
+          if has SHA256SUMS; then
+            kept SHA256SUMS
+          elif [[ $all_from_this_run == true ]]; then
+            gh release upload "$TAG" SHA256SUMS --repo "$GITHUB_REPOSITORY"
+          else
+            echo "SHA256SUMS not uploaded: it lists this run's files, and the release keeps another one."
+          fi

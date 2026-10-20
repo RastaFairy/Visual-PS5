@@ -1,0 +1,142 @@
+# Building FSR4 for PS5
+
+## Requirements
+
+`make inputs` fetches the pinned public inputs below (the native app template
+with its payload SDK, dxil-spirv, DXC, the BC250 DLL and the pipeline cache)
+into `build/`, and `eval "$(python3 tools/fetch_build_inputs.py --env)"` points
+the builds at them. GitHub Actions builds the same way
+([docs/RELEASING.md](docs/RELEASING.md)).
+
+- Linux (WSL works) with Python 3.11+, CMake, Ninja, a C compiler and
+  `spirv-link` from SPIRV-Tools (the pass tables link the generated postpass
+  head into the converted postpass); Mako and PyYAML for the driver's shader
+  compiler; `glslangValidator`, Pillow and DejaVu Sans (`fonts-dejavu-core`) for
+  the demo and the showcase. The workflow's install step lists the Ubuntu 24.04
+  packages.
+- The payload SDK and native app template the driver's SDK builder uses: set
+  `PS5_PAYLOAD_SDK` and `PS5_NATIVE_APP_TEMPLATE` as described in
+  [the driver's build notes](external/ps5-vulkan/BUILDING.md).
+- The pinned dxil-spirv checkout (`DXIL_SPIRV_DIR`, default
+  `../references/dxil-spirv`) and the pinned DXC under
+  `build/reference-runtime/dxc/`.
+- The BC250 RC11 build of AMD's `amd_fidelityfx_upscaler_dx12.dll` (SHA-256
+  `8192ea97…`, recorded in `tools/fsr4_dll_map.json`) at
+  `build/reference-runtime/bc250-rc11/`: the pass tables read their shaders and
+  model from it. Nothing from it is committed.
+- For the acceptance and replay tests only: local FSR4 reference exports under
+  `build/reference-runtime/`, created as described in
+  [the reference procedure](docs/FSR4_REFERENCE_RUNTIME.md). They are never
+  committed.
+
+## Build
+
+```sh
+make driver   # pinned driver dependencies, PSBC (PS5 and host), driver SDK with the FSR4 profile
+make sdk      # converter, pass tables, then dist-sdk: the driver SDK plus libps5_fsr4.a
+make demo     # PPSA88900 interactive demo against dist-sdk
+make showcase # PPSA99011 showcase app against dist-sdk
+make check    # host tests
+```
+
+`make` fetches the driver when `external/ps5-vulkan` is missing: the pinned
+submodule in a git checkout, otherwise a clone of `DRIVER_URL` at that
+revision (or its default branch when the revision is unknown).
+
+With `USE_CCACHE=1` in the environment, the two PSBC builds, dxil-spirv and the
+shader tools that `make inputs` builds compile through ccache. GitHub Actions
+builds that way and keeps the cache between runs.
+
+`make driver-sdk` stages the driver SDK with the profile FSR4 needs:
+`PS5VK_SHADER_INT8_DIAGNOSTIC`, `PS5VK_SHADER_INT16_DIAGNOSTIC`,
+`PS5VK_SUBGROUP_ALL_DIAGNOSTIC` and `PS5VK_EXTENDED_COMPUTE_DIAGNOSTIC`. The FSR4
+tools copy it into `dist-sdk` whenever it changes. The driver's own `make check`
+restages its SDK without this profile, so `make sdk` restages it first; after
+running the driver tests, run `make driver-sdk` before building FSR4 applications. To build against a driver
+checkout elsewhere, set `PS5VK_ROOT` for the tools and `DRIVER` for make.
+
+A pipeline cache is only valid for the `libps5vk.a` build that saved it; see
+[the SDK guide](docs/FSR4_SDK.md).
+
+The pass tables come from `tools/build_fsr4_runtime.py`. It copies the shaders
+and INT8 models out of the DLL (`tools/fsr4_extract_dll.py`, which reads the
+file and verifies every copy against `tools/fsr4_dll_map.json`) and takes each
+dispatch's bindings, constant block and dispatch rule from
+`tools/fsr4_pass_abi.json`. `--families` lists the families to embed. Each
+family pairs a model, `standard` or `ultra-performance` (AMD's 3× mode), with a
+resolution band, `band0` (outputs up to 1920×1080) or `band1` (up to
+3840×2160). The default is all four; the runtime picks the family per frame
+from the output size and the scaling ratio. Shaders the families share are
+embedded once. The band-1 families double `libps5_fsr4.a` (27 MB instead of
+13 MB); a title that never outputs more than 1920×1080 can leave them out.
+Its `--int8-kernels`
+option takes the dispatch indices whose converted shaders are replaced by
+packed-i16 kernels that `tools/fsr4_int8_kernels.py` generates from the local
+model. The default, 3, 5, 7, 9, 11, 21, 23 and 25 (network passes 1-5 and
+10-12), is the set the PS5 runs faster unrolled; 13, 15, 17 and 19 (passes 6-9)
+and 26 (the postpass head, run in place of its border clear; exact only for
+output sizes that are multiples of 8) are also available. `--weight-tables`
+lists the unrolled kernels that read their weight pairs from a table after the
+model instead of instruction literals (default 9, 11 and 21, whose code
+outgrows the instruction cache). `--int8-loops` takes the dispatch indices
+generated in loop form by `tools/fsr4_int8_loops.py`, whose loop bodies fit the
+instruction cache and stream their weight pairs from a table; its default is
+13, 15, 17, 19 and 23. All of them produce byte-identical output and bake the
+model's weights, so the generated sources stay in the build tree like the
+converted shaders; empty values keep every converted shader. The postpass's own
+learned head is replaced by the generated INT8 head as well: it is compiled as
+a function and linked into the converted postpass, and dispatch 26, the border
+clear only that head read, is then not dispatched (`--no-int8-postpass-head`
+keeps both). When every network pass is generated, the other border clears are
+not dispatched either: each generated kernel stops at the current tensor extent
+and zeroes the one-cell border around its output, which the next 3x3 layer
+reads (`tests/test_fsr4_scratch_borders.py` follows the shared scratch regions
+over several frames). `--wave64` lists the dispatches compiled as wave64
+(default 13, 21 and 23: network passes 6, 10 and 11); the tables header carries
+the set to the runtime.
+
+## Native FSR4 applications
+
+These PPSA88900 applications use the prepared native template and payload SDK
+and write their own result files:
+
+- the runtime test (`tools/build_fsr4_runtime_test.py`) behind the
+  [acceptance](VALIDATION.md#fsr4-acceptance);
+- the interactive demo (`tools/build_fsr4_demo.py`), built from the staged
+  [FSR4 SDK](docs/FSR4_SDK.md);
+- the [showcase app](examples/fsr4_showcase/README.md)
+  (`tools/build_fsr4_showcase.py`), packaged as its own title, PPSA99011;
+- the headless benchmark (`tools/build_fsr4_bench.py`), which times upscaling
+  (720p to 1080p unless `--render-size` and `--output-size` say otherwise)
+  from submission to fence and profiles each pass, without a display or a
+  capture;
+- the comparison capture (`tools/build_fsr4_compare.py`), which renders fixed
+  shots of the demo scene at 1280×720 and 960×540 and writes the bilinear
+  upscale, the converged FSR4 output, a native 1080p render, a 64-sample
+  supersampled reference and an orbiting clip; fetch its `fsr4-compare-*`
+  files and run `tools/build_fsr4_comparisons.py` on them for crops, 3× zooms,
+  PSNR/SSIM against the reference and side-by-side videos. For other sizes pass
+  `--output-size`, `--render-sizes` and `--no-clip` (the 1440p set used
+  `--output-size 2560 1440 --render-sizes 1706x960,1280x720 --no-clip`), and
+  build the page into `comparisons/<width>x<height>/`;
+- the replay and precision witnesses below.
+
+They need the driver SDK staged with the FSR4 profile (`make driver-sdk`).
+
+The frame builder requires the original and corrected local reference exports
+documented in [the reference procedure](docs/FSR4_REFERENCE_RUNTIME.md). The
+precision witnesses require the pinned DXC and converter but no capture:
+
+```sh
+python3 tools/build_fsr4_precision_probe.py --rounding rtz --out build/fsr4-precision-rtz-app
+python3 tools/build_fsr4_precision_probe.py --rounding rte --out build/fsr4-texture-rte-app
+python3 tools/build_fsr4_frame.py --dispatch 29 --use-staged-sdk --out build/fsr4-image29-app
+python3 tools/build_fsr4_frame.py --frames 4 --use-staged-sdk --out build/fsr4-temporal-app
+python3 -m unittest tests.test_fsr4_precision_corpus tests.test_fsr4_frame_continuity tests.test_fsr4_image_compare
+python3 tests/test_fsr4_converter_fma.py
+```
+
+The RTZ test checks scalar conversion; the RTE test checks typed texture loads,
+including subnormals and ties. Constructing an app does not validate its
+output; keep results local. Use only the console explicitly authorized in your
+local configuration.

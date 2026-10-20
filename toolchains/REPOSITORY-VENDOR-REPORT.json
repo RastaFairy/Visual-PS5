@@ -1,206 +1,206 @@
 {
   "schemaVersion": 1,
   "repository": "RastaFairy/Visual-PS5",
-  "generatedAt": "2026-10-20T15:43:39Z",
+  "generatedAt": "2026-10-20T15:57:08Z",
   "policy": "Vendor source code and initialized submodules into this repository. Keep original license files. Do not rely on upstream .git folders at runtime.",
   "entries": [
     {
       "folder": "PS5_VKHomebrewUI",
-      "status": "vendored",
+      "status": "already-present",
       "repository": "mihawk-99/PS5_VKHomebrewUI",
       "fetchedFrom": "mihawk-99/PS5_VKHomebrewUI",
       "ref": "main",
-      "commit": "2188642afbcc8d84d36149124f3d9e39dc1b1a05",
-      "detail": "Fuentes y submódulos copiados a toolchains; sin .git anidado."
+      "commit": null,
+      "detail": "El manifiesto existente coincide con la fuente; no se sobrescribe."
     },
     {
       "folder": "ps5-vulkan-alt",
-      "status": "vendored",
+      "status": "already-present",
       "repository": "mpereiraesaa/ps5-vulkan",
       "fetchedFrom": "mpereiraesaa/ps5-vulkan",
       "ref": "main",
-      "commit": "e6d3c3f82f3c8a574e28c174b15b287f9c0ecc6d",
-      "detail": "Fuentes y submódulos copiados a toolchains; sin .git anidado."
+      "commit": null,
+      "detail": "El manifiesto existente coincide con la fuente; no se sobrescribe."
     },
     {
       "folder": "ProsperoLight",
-      "status": "vendored",
+      "status": "already-present",
       "repository": "blackbearreloaded/ProsperoLight",
       "fetchedFrom": "LedyBacer/ProsperoLight",
       "ref": "main",
-      "commit": "bb3d1d6b3c6986524e56307e7c570f9cd17718ce",
-      "detail": "Fuentes y submódulos copiados a toolchains; sin .git anidado."
+      "commit": null,
+      "detail": "El manifiesto existente coincide con la fuente; no se sobrescribe."
     },
     {
       "folder": "ProsperoEden0",
-      "status": "vendored",
+      "status": "already-present",
       "repository": "Tiang-88/ProsperoEden0",
       "fetchedFrom": "Tiang-88/ProsperoEden0",
       "ref": "main",
-      "commit": "a26ba788222465ec7fb94dc813958fc749734e07",
-      "detail": "Fuentes y submódulos copiados a toolchains; sin .git anidado."
+      "commit": null,
+      "detail": "El manifiesto existente coincide con la fuente; no se sobrescribe."
     },
     {
       "folder": "unofficial-stremio-ps5-port",
-      "status": "vendored",
+      "status": "already-present",
       "repository": "Sp9nky/unofficial-stremio-ps5-port",
       "fetchedFrom": "Sp9nky/unofficial-stremio-ps5-port",
       "ref": "main",
-      "commit": "b8444a661b0b304d1298463151065297840c15e9",
-      "detail": "Fuentes y submódulos copiados a toolchains; sin .git anidado."
+      "commit": null,
+      "detail": "El manifiesto existente coincide con la fuente; no se sobrescribe."
     },
     {
       "folder": "Nativehbl",
-      "status": "vendored",
+      "status": "already-present",
       "repository": "Rufidj/Nativehbl",
       "fetchedFrom": "Rufidj/Nativehbl",
       "ref": "main",
-      "commit": "e9488102399de9546d13dd496694c74142abe49f",
-      "detail": "Fuentes y submódulos copiados a toolchains; sin .git anidado."
+      "commit": null,
+      "detail": "El manifiesto existente coincide con la fuente; no se sobrescribe."
     },
     {
       "folder": "ps5gl",
-      "status": "vendored",
+      "status": "already-present",
       "repository": "Rufidj/ps5gl",
       "fetchedFrom": "Rufidj/ps5gl",
       "ref": "master",
-      "commit": "5f22dcfe01209330f52207217a44becfbb491a6a",
-      "detail": "Fuentes y submódulos copiados a toolchains; sin .git anidado."
+      "commit": null,
+      "detail": "El manifiesto existente coincide con la fuente; no se sobrescribe."
     },
     {
       "folder": "ps5-opengl-mihawk",
-      "status": "vendored",
+      "status": "already-present",
       "repository": "mihawk-99/ps5-opengl",
       "fetchedFrom": "mihawk-99/ps5-opengl",
       "ref": "main",
-      "commit": "ec06d8c2da0359e274e409046f0a9586965e4010",
-      "detail": "Fuentes y submódulos copiados a toolchains; sin .git anidado."
+      "commit": null,
+      "detail": "El manifiesto existente coincide con la fuente; no se sobrescribe."
     },
     {
       "folder": "ps5-fsr4",
-      "status": "failed-to-fetch",
+      "status": "vendored-source-only",
       "repository": "blackbearreloaded/ps5-fsr4",
       "fetchedFrom": "manoma080/ps5-fsr4",
       "ref": "main",
-      "commit": null,
-      "detail": "No se pudo obtener el repositorio y sus submódulos; no se creó una copia parcial."
+      "commit": "4f931d8926cc25b2fdd78898cf08ee5c1999ea68",
+      "detail": "Fuentes copiadas; falta el submódulo externo external/ps5-vulkan@4bb0c8b1423698a7369efc22b829bf16a99e7128. No se marca como compilación autónoma."
     },
     {
       "folder": "ps5-helixsr",
-      "status": "failed-to-fetch",
+      "status": "vendored-source-only",
       "repository": "blackbearreloaded/ps5-helixsr",
       "fetchedFrom": "manoma080/ps5-helixsr",
       "ref": "main",
-      "commit": null,
-      "detail": "No se pudo obtener el repositorio y sus submódulos; no se creó una copia parcial."
+      "commit": "0673d91561c761b054449d30f2c2036fb6e0cf99",
+      "detail": "Fuentes copiadas; falta el submódulo externo external/ps5-vulkan@6875f21438b7e51a1377a30f2d7f77b3e0154cd6. No se marca como compilación autónoma."
     },
     {
       "folder": "PS5_Sunshine",
-      "status": "vendored",
+      "status": "already-present",
       "repository": "griches/PS5_Sunshine",
       "fetchedFrom": "griches/PS5_Sunshine",
       "ref": "main",
-      "commit": "e01f5db1702ac21f2683666abc10917ff9dd206b",
-      "detail": "Fuentes y submódulos copiados a toolchains; sin .git anidado."
+      "commit": null,
+      "detail": "El manifiesto existente coincide con la fuente; no se sobrescribe."
     },
     {
       "folder": "PS5_SwitchWaker",
-      "status": "vendored",
+      "status": "already-present",
       "repository": "griches/PS5_SwitchWaker",
       "fetchedFrom": "griches/PS5_SwitchWaker",
       "ref": "main",
-      "commit": "3c0f213f2d4c17606ac8637eda2c5da6cbcc73b0",
-      "detail": "Fuentes y submódulos copiados a toolchains; sin .git anidado."
+      "commit": null,
+      "detail": "El manifiesto existente coincide con la fuente; no se sobrescribe."
     },
     {
       "folder": "PS5_Dusklight",
-      "status": "vendored",
+      "status": "already-present",
       "repository": "griches/PS5_Dusklight",
       "fetchedFrom": "griches/PS5_Dusklight",
       "ref": "main",
-      "commit": "577c76212bec33198d69ca727433573ec00beb78",
-      "detail": "Fuentes y submódulos copiados a toolchains; sin .git anidado."
+      "commit": null,
+      "detail": "El manifiesto existente coincide con la fuente; no se sobrescribe."
     },
     {
       "folder": "PS5_Ghostship",
-      "status": "vendored",
+      "status": "already-present",
       "repository": "griches/PS5_Ghostship",
       "fetchedFrom": "griches/PS5_Ghostship",
       "ref": "main",
-      "commit": "4cb586e7e5c722ba90fd86f66459569de564fc93",
-      "detail": "Fuentes y submódulos copiados a toolchains; sin .git anidado."
+      "commit": null,
+      "detail": "El manifiesto existente coincide con la fuente; no se sobrescribe."
     },
     {
       "folder": "Porpoise-Dolphin-Emulator-for-PS5",
-      "status": "vendored",
+      "status": "already-present",
       "repository": "elripalda/Porpoise-Dolphin-Emulator-for-PS5",
       "fetchedFrom": "elripalda/Porpoise-Dolphin-Emulator-for-PS5",
       "ref": "Main",
-      "commit": "2ed1ab5a06995aa198f7bccd4da0f90c3fc29d39",
-      "detail": "Fuentes y submódulos copiados a toolchains; sin .git anidado."
+      "commit": null,
+      "detail": "El manifiesto existente coincide con la fuente; no se sobrescribe."
     },
     {
       "folder": "PS5X360",
-      "status": "vendored",
+      "status": "already-present",
       "repository": "BrinooTk/PS5X360",
       "fetchedFrom": "BrinooTk/PS5X360",
       "ref": "main",
-      "commit": "ad628f65ed460416c45103f4867053c5086eab1d",
-      "detail": "Fuentes y submódulos copiados a toolchains; sin .git anidado."
+      "commit": null,
+      "detail": "El manifiesto existente coincide con la fuente; no se sobrescribe."
     },
     {
       "folder": "syobon-action-ps5",
-      "status": "vendored",
+      "status": "already-present",
       "repository": "kvaps/syobon-action-ps5",
       "fetchedFrom": "kvaps/syobon-action-ps5",
       "ref": "main",
-      "commit": "946936228f626412be6e962f563b10544cffe2be",
-      "detail": "Fuentes y submódulos copiados a toolchains; sin .git anidado."
+      "commit": null,
+      "detail": "El manifiesto existente coincide con la fuente; no se sobrescribe."
     },
     {
       "folder": "aurora",
-      "status": "vendored",
+      "status": "already-present",
       "repository": "encounter/aurora",
       "fetchedFrom": "encounter/aurora",
       "ref": "main",
-      "commit": "8e356df6ea1882bbcd551d0b913ff4993cfab309",
-      "detail": "Fuentes y submódulos copiados a toolchains; sin .git anidado."
+      "commit": null,
+      "detail": "El manifiesto existente coincide con la fuente; no se sobrescribe."
     },
     {
       "folder": "PS5_Quake3e",
-      "status": "vendored",
+      "status": "already-present",
       "repository": "griches/PS5_Quake3e",
       "fetchedFrom": "griches/PS5_Quake3e",
       "ref": "main",
-      "commit": "ed2d83946032ac6a01c859f689bc481116d78278",
-      "detail": "Fuentes y submódulos copiados a toolchains; sin .git anidado."
+      "commit": null,
+      "detail": "El manifiesto existente coincide con la fuente; no se sobrescribe."
     },
     {
       "folder": "PS5_RetroArch",
-      "status": "vendored",
+      "status": "already-present",
       "repository": "mihawk-99/PS5_RetroArch",
       "fetchedFrom": "mihawk-99/PS5_RetroArch",
       "ref": "main",
-      "commit": "7268510b12fe7461342e0cc4497c87a0910c1055",
-      "detail": "Fuentes y submódulos copiados a toolchains; sin .git anidado."
+      "commit": null,
+      "detail": "El manifiesto existente coincide con la fuente; no se sobrescribe."
     },
     {
       "folder": "X360PS5-AI-Prototype",
-      "status": "vendored",
+      "status": "already-present",
       "repository": "polarco/X360PS5",
       "fetchedFrom": "polarco/X360PS5",
       "ref": "master",
-      "commit": "21a1a707e09bf78445efda46858837d2659d7d3c",
-      "detail": "Fuentes y submódulos copiados a toolchains; sin .git anidado."
+      "commit": null,
+      "detail": "El manifiesto existente coincide con la fuente; no se sobrescribe."
     },
     {
       "folder": "PS5_PayloadSDK-pinned-b83202be",
-      "status": "vendored",
+      "status": "already-present",
       "repository": "mihawk-99/PS5_PayloadSDK",
       "fetchedFrom": "mihawk-99/PS5_PayloadSDK",
       "ref": "b83202be73e930050e00de0f1b4d9ec46c0391bf",
-      "commit": "b83202be73e930050e00de0f1b4d9ec46c0391bf",
-      "detail": "Fuentes y submódulos copiados a toolchains; sin .git anidado."
+      "commit": null,
+      "detail": "El manifiesto existente coincide con la fuente; no se sobrescribe."
     }
   ]
 }
