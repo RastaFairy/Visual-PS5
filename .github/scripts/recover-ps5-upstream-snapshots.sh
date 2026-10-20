@@ -68,8 +68,10 @@ verify_plain_tree() {
   git -C "$verify" config core.autocrlf false
   git -C "$verify" add -f -A
   got_tree="$(git -C "$verify" write-tree)"
-  [[ "$got_tree" == "$expected_tree" ]] ||
-    fail "Materialized tree at $folder is $got_tree; expected $expected_tree."
+  if [[ "$got_tree" != "$expected_tree" ]]; then
+    printf 'Materialized tree at %s is %s; expected %s.\\n' "$folder" "$got_tree" "$expected_tree" >&2
+    return 1
+  fi
 }
 
 write_parent_manifest() {
