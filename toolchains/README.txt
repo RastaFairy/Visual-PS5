@@ -10,3 +10,5 @@ Inventario de procedencia y estado: REPOSITORIOS.es-ES.md.
 Las carpetas fuente se guardan como snapshots ordinarios versionados en el repositorio principal; no exigen un .git anidado. El sincronizador registra cada resultado en REPOSITORY-VENDOR-REPORT.json y no sobrescribe carpetas con procedencia no coincidente.
 
 Esta copia elimina la dependencia de la cuenta upstream para las fuentes incorporadas, pero no hace offline todas las dependencias genéricas de compilación (paquetes WSL/Linux, herramientas del compilador, zlib y SDKs precompilados). Todo source-only o submódulo no disponible queda marcado explícitamente; nunca se debe confundir con un backend compilable.
+
+Los snapshots exactos recuperados de Web Archive se conservan en toolchains/archive/, separados de las entradas actuales del catálogo. Los módulos external/ps5-vulkan de FSR4 y HelixSR se incluyen como archivos normales y sus manifiestos registran el SHA y el SHA del árbol verificado. Esto no incluye DLL propietarias ni sustituye los requisitos genéricos de compilación.

@@ -47,8 +47,8 @@ Estos repositorios son útiles porque aparecen en el catálogo SDK/Proyectos, pe
 | `Nativehbl` | `Rufidj/Nativehbl` | Mismo repositorio | Launcher nativo SDL2 |
 | `ps5gl` | `Rufidj/ps5gl` | Mismo repositorio | API gráfica con forma OpenGL sobre AGC; API parcial |
 | `ps5-opengl-mihawk` | `mihawk-99/ps5-opengl` | Mismo repositorio | Fork OpenGL alternativo, separado del backend principal |
-| `ps5-fsr4` | `blackbearreloaded/ps5-fsr4` | `manoma080/ps5-fsr4` (mirror) | **Snapshot source-only**: el submódulo `external/ps5-vulkan` referencia el commit `4bb0c8b1423698a7369efc22b829bf16a99e7128` del upstream ausente; no es un backend compilable completo |
-| `ps5-helixsr` | `blackbearreloaded/ps5-helixsr` | `manoma080/ps5-helixsr` (mirror) | **Snapshot source-only**: el submódulo `external/ps5-vulkan` referencia el commit `6875f21438b7e51a1377a30f2d7f77b3e0154cd6` del upstream ausente; no es un backend compilable completo. Además, requiere DLL legítima del usuario |
+| `ps5-fsr4` | `blackbearreloaded/ps5-fsr4` | `manoma080/ps5-fsr4` (mirror) | Fuente actual `4f931d8926cc25b2fdd78898cf08ee5c1999ea68`; driver `4bb0c8b1423698a7369efc22b829bf16a99e7128` materializado bajo `external/ps5-vulkan`. Requiere los inputs de compilación/validación indicados upstream |
+| `ps5-helixsr` | `blackbearreloaded/ps5-helixsr` | `manoma080/ps5-helixsr` (mirror) | Fuente actual `0673d91561c761b054449d30f2c2036fb6e0cf99`; driver `6875f21438b7e51a1377a30f2d7f77b3e0154cd6` materializado bajo `external/ps5-vulkan`. Requiere NVIDIA DLSS DLL 310.7.0 legítima del usuario |
 | `PS5_Sunshine` | `griches/PS5_Sunshine` | Mismo repositorio | Port y ejemplo OpenGL |
 | `PS5_SwitchWaker` | `griches/PS5_SwitchWaker` | Mismo repositorio | Port de referencia WebGPU/RADV; datos propios del juego |
 | `PS5_Dusklight` | `griches/PS5_Dusklight` | Mismo repositorio | Port de referencia WebGPU/RADV; datos propios del juego |
@@ -61,7 +61,13 @@ Estos repositorios son útiles porque aparecen en el catálogo SDK/Proyectos, pe
 | `PS5_RetroArch` | `mihawk-99/PS5_RetroArch` | Mismo repositorio | Frontend modular de emulación; no contiene ROMs/BIOS |
 | `X360PS5-AI-Prototype` | `polarco/X360PS5` | Mismo repositorio | Prototipo experimental Xenia/Vulkan |
 
-La copia automatizada deja constancia de los submódulos ausentes o de archivos grandes. FSR4 y HelixSR se conservan como snapshots de código fuente con un estado `vendored-source-only`, porque su Gitlink `external/ps5-vulkan` apunta a commits que no existen en los forks accesibles. El manifiesto registra esos SHAs y `buildableWithoutExternalRepo=false`: no se oculta ni se sustituye el driver por otro commit incompatible. Cualquier otro submódulo ausente o archivo individual de más de 95 MiB bloquea la incorporación para evitar copias engañosas.
+El repositorio original blackbearreloaded dejó de estar disponible. Los dos Gitlinks Vulkan se han resuelto por SHA exacto en el mirror público mpereiraesaa/ps5-vulkan; el sincronizador incorpora sus árboles como archivos normales, verifica el SHA del árbol Git y actualiza los manifiestos. No se sustituye una revisión por la rama main de otro driver.
+
+Las capturas de Web Archive también se preservan como snapshots históricos separados, sin alterar las versiones actuales:
+- FSR4: captura del 28-09-2026, raíz 3789980ceba27568f2910a561483aa1cee383342, con el Gitlink Vulkan histórico 6a0228bedebef949fd2dd90643eae4a5b711c23f; copia bajo toolchains/archive/ps5-fsr4-2026-09-28.
+- HelixSR: captura del 09-10-2026, raíz 028fcd7f737a95183cf688ee4bca8a9e48fe0c40, con Vulkan 6875f21438b7e51a1377a30f2d7f77b3e0154cd6; copia bajo toolchains/archive/ps5-helixsr-2026-10-09.
+
+Las revisiones archivadas corresponden a las capturas fechadas; no hay que confundir el pin histórico de FSR4 (6a0228) con el pin de la copia actual (4bb0c8). Los snapshots históricos no son entradas adicionales del catálogo del IDE. Resolver el Gitlink tampoco hace offline todas las dependencias genéricas: FSR4 mantiene sus requisitos de compilación/validación y HelixSR requiere la DLL legítima indicada en su guía. Cualquier otro submódulo sin recuperar o archivo individual de más de 95 MiB debe seguir declarado explícitamente.
 
 ## C. Dependencias indirectas detectadas dentro de las plantillas
 

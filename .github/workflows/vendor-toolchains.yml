@@ -4,8 +4,10 @@ on:
   push:
     branches:
       - main
+      - toolchains-vendoring-audit-20261020
     paths:
       - '.github/scripts/vendor-toolchains.sh'
+      - '.github/scripts/recover-ps5-upstream-snapshots.sh'
   workflow_dispatch:
 
 permissions:
@@ -25,13 +27,18 @@ jobs:
       - name: Preparar herramientas
         run: |
           sudo apt-get update
-          sudo apt-get install -y git rsync python3
+          sudo apt-get install -y git rsync python3 curl
 
       - name: Validar sintaxis del script
-        run: bash -n .github/scripts/vendor-toolchains.sh
+        run: |
+          bash -n .github/scripts/vendor-toolchains.sh
+          bash -n .github/scripts/recover-ps5-upstream-snapshots.sh
 
       - name: Copiar fuentes en el propio repositorio
         run: bash .github/scripts/vendor-toolchains.sh
+
+      - name: Recuperar los submódulos y snapshots históricos FSR4/HelixSR
+        run: bash .github/scripts/recover-ps5-upstream-snapshots.sh
 
       - name: Guardar los snapshots
         env:
