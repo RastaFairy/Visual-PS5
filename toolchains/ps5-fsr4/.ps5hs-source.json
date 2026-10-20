@@ -27,7 +27,7 @@
   "submoduleRecovery": {
     "status": "verified",
     "method": "vendored-tree",
-    "completedAt": "2026-10-20T17:11:28Z",
+    "completedAt": "2026-10-20T17:42:45Z",
     "note": "The declared Vulkan Gitlink was replaced with the exact verified tree as ordinary files."
   },
   "historicalSnapshots": [
