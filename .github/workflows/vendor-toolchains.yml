@@ -46,7 +46,12 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add toolchains
+          # Vendored source trees contain their own upstream .gitignore files.
+          # Force-stage the pinned checkout contents so upstream-tracked files that
+          # match those ignore patterns are not silently omitted from the snapshot.
+          # The workflow checks out a clean repo and the sync scripts copy clean
+          # Git trees, not build caches or local working files.
+          git add -f toolchains
           if git diff --cached --quiet; then
             echo "No hay cambios de toolchains para guardar."
             exit 0
