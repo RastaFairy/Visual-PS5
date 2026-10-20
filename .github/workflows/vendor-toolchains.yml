@@ -3,7 +3,7 @@ name: Vendorizar fuentes de toolchains PS5
 on:
   push:
     branches:
-      - toolchains-vendoring-audit-20261020
+      - main
     paths:
       - '.github/scripts/vendor-toolchains.sh'
   workflow_dispatch:
