@@ -35,8 +35,25 @@ while IFS='|' read -r folder actual_repo ref declared_repo; do
   dest="toolchains/$folder"
 
   if [[ -d "$dest" && -f "$dest/.ps5hs-source.json" && ( -f "$dest/README.md" || -f "$dest/readme.md" || -f "$dest/README" ) ]]; then
-    record "$folder" "already-present" "$declared_repo" "$actual_repo" "$ref" "" "No se sobrescribe una carpeta fuente ya versionada."
-    continue
+    if python3 - "$dest/.ps5hs-source.json" "$declared_repo" "$actual_repo" <<'PY'
+import json, sys
+path, declared, fetched = sys.argv[1:]
+try:
+    with open(path, encoding="utf-8") as f:
+        marker = json.load(f)
+except Exception:
+    raise SystemExit(1)
+repositories = {
+    str(marker.get("repository", "")).lower(),
+    str(marker.get("sourceRepository", "")).lower(),
+    str(marker.get("mirrorRepository", "")).lower(),
+}
+raise SystemExit(0 if {declared.lower(), fetched.lower()} & repositories else 1)
+PY
+    then
+      record "$folder" "already-present" "$declared_repo" "$actual_repo" "$ref" "" "El manifiesto existente coincide con la fuente; no se sobrescribe."
+      continue
+    fi
   fi
   if [[ -e "$dest" ]]; then
     record "$folder" "blocked-existing-path" "$declared_repo" "$actual_repo" "$ref" "" "Existe una ruta de destino sin un manifiesto verificable; no se modifica."
@@ -47,6 +64,7 @@ while IFS='|' read -r folder actual_repo ref declared_repo; do
   rm -rf -- "$src"
   url="https://github.com/$actual_repo.git"
   clone_ok=0
+  source_only=false
   if [[ "$ref" =~ ^[0-9a-f]{40}$ ]]; then
     if git clone --depth 1 --no-checkout -- "$url" "$src" >/dev/null 2>&1 &&
        git -C "$src" fetch --depth 1 origin "$ref" >/dev/null 2>&1 &&
@@ -57,6 +75,14 @@ while IFS='|' read -r folder actual_repo ref declared_repo; do
   else
     if git clone --depth 1 --recurse-submodules --shallow-submodules --branch "$ref" -- "$url" "$src" >/dev/null 2>&1; then
       clone_ok=1
+    elif [[ "$folder" == "ps5-fsr4" || "$folder" == "ps5-helixsr" ]]; then
+      # Preserve the real source files; do not pretend the missing PS5 Vulkan
+      # submodule is available or that this copy builds independently.
+      rm -rf -- "$src"
+      if git clone --depth 1 --branch "$ref" -- "$url" "$src" >/dev/null 2>&1; then
+        clone_ok=1
+        source_only=true
+      fi
     fi
   fi
 
@@ -77,10 +103,22 @@ while IFS='|' read -r folder actual_repo ref declared_repo; do
   fi
 
   submodule_status="$(git -C "$src" submodule status --recursive 2>/dev/null || true)"
+  unresolved_submodule=""
   if printf '%s\n' "$submodule_status" | grep -Eq '^[-+U]'; then
-    rm -rf -- "$src"
-    record "$folder" "failed-submodules" "$declared_repo" "$actual_repo" "$ref" "" "Hay submódulos ausentes o en revisión distinta; no se incorpora una copia incompleta."
-    continue
+    expected_gitlink=""
+    case "$folder" in
+      ps5-fsr4) expected_gitlink="4bb0c8b1423698a7369efc22b829bf16a99e7128" ;;
+      ps5-helixsr) expected_gitlink="6875f21438b7e51a1377a30f2d7f77b3e0154cd6" ;;
+    esac
+    if [[ ( "$folder" == "ps5-fsr4" || "$folder" == "ps5-helixsr" ) &&
+          "$source_only" == true &&
+          "$submodule_status" == "-$expected_gitlink external/ps5-vulkan" ]]; then
+      unresolved_submodule="external/ps5-vulkan@$expected_gitlink"
+    else
+      rm -rf -- "$src"
+      record "$folder" "failed-submodules" "$declared_repo" "$actual_repo" "$ref" "" "Hay submódulos ausentes o en revisión distinta; no se incorpora una copia parcial."
+      continue
+    fi
   fi
 
   oversized="$(find "$src" -type f -not -path '*/.git/*' -size +95M -print -quit)"
@@ -95,12 +133,12 @@ while IFS='|' read -r folder actual_repo ref declared_repo; do
   rsync -a --exclude='.git' "$src/" "$dest/"
   rm -rf -- "$src"
 
-  python3 - "$dest/.ps5hs-source.json" "$declared_repo" "$actual_repo" "$ref" "$commit" "$run_stamp" <<'PY'
+  python3 - "$dest/.ps5hs-source.json" "$declared_repo" "$actual_repo" "$ref" "$commit" "$run_stamp" "$unresolved_submodule" <<'PY'
 import json, sys
-path, declared_repo, fetched_repo, ref, commit, stamp = sys.argv[1:]
+path, declared_repo, fetched_repo, ref, commit, stamp, unresolved_submodule = sys.argv[1:]
 record = {
     "repository": declared_repo,
-    "branch": ref if len(ref) != 40 else "main",
+    "branch": ref if len(ref) != 40 else "pinned",
     "commit": commit,
     "sourceCommit": commit,
     "sourceRef": ref,
@@ -108,15 +146,23 @@ record = {
     "vendoredSnapshot": True,
     "vendorRepository": "RastaFairy/Visual-PS5",
     "vendoredAt": stamp,
-    "submodulesMaterialized": True,
+    "submodulesMaterialized": not bool(unresolved_submodule),
+    "sourceOnly": bool(unresolved_submodule),
 }
 if fetched_repo.lower() != declared_repo.lower():
     record["mirrorRepository"] = fetched_repo
-with open(path, "w", encoding="utf-8", newline="\n") as f:
+if unresolved_submodule:
+    record["unresolvedSubmodules"] = [unresolved_submodule]
+    record["buildableWithoutExternalRepo"] = False
+with open(path, "w", encoding="utf-8", newline="\\n") as f:
     json.dump(record, f, ensure_ascii=False, indent=2)
-    f.write("\n")
+    f.write("\\n")
 PY
-  record "$folder" "vendored" "$declared_repo" "$actual_repo" "$ref" "$commit" "Fuentes y submódulos copiados a toolchains; sin .git anidado."
+  if [[ -n "$unresolved_submodule" ]]; then
+    record "$folder" "vendored-source-only" "$declared_repo" "$actual_repo" "$ref" "$commit" "Fuentes copiadas; falta el submódulo externo $unresolved_submodule. No se marca como compilación autónoma."
+  else
+    record "$folder" "vendored" "$declared_repo" "$actual_repo" "$ref" "$commit" "Fuentes y submódulos copiados a toolchains; sin .git anidado."
+  fi
 done <<'REPOSITORIES'
 PS5_VKHomebrewUI|mihawk-99/PS5_VKHomebrewUI|main|mihawk-99/PS5_VKHomebrewUI
 ps5-vulkan-alt|mpereiraesaa/ps5-vulkan|main|mpereiraesaa/ps5-vulkan
