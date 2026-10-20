@@ -149,23 +149,31 @@ else:
     print("unexpected")
 PY
 )"
-  if [[ -d "$dest" && -f "$dest/README.md" ]]; then
-    if [[ "$marker_ok" == "previously-materialized" ]]; then
-      if verify_plain_tree "$dest" "$driver_tree" "$label-existing" 2>/dev/null; then
-        echo "==> $parent: external/ps5-vulkan already complete and verified."
-        return 0
-      fi
-      fail "$dest is marked materialized but its tree does not match; preserving it for inspection."
+  if [[ -d "$dest" && -f "$dest/README.md" && "$marker_ok" == "previously-materialized" ]]; then
+    if verify_plain_tree "$dest" "$driver_tree" "$label-existing" 2>/dev/null; then
+      echo "==> $parent: external/ps5-vulkan already complete and verified."
+      return 0
     fi
+    # The source is pinned and verified above. A mismatching local tree can be
+    # a partial earlier snapshot where nested upstream .gitignore rules caused
+    # tracked source files to be omitted from the parent repository's index.
+    # Rebuild only this declared Gitlink from the pinned mirror; never switch pins.
+    echo "==> $dest: incomplete materialization detected; rebuilding from verified pin $driver_commit."
+    marker_ok="previously-materialized-incomplete"
   fi
 
-  [[ "$marker_ok" == "expected-unresolved" || "$marker_ok" == "source-only" ]] ||
+  [[ "$marker_ok" == "expected-unresolved" || "$marker_ok" == "source-only" || "$marker_ok" == "previously-materialized-incomplete" ]] ||
     fail "$dest exists or the manifest does not prove the missing Gitlink; refusing to overwrite."
 
+  # Stage and verify before replacing the current copy. This keeps the old
+  # directory intact if the mirror content ever fails the exact tree check.
+  local staged_dest="${dest}.recovery-stage-$"
+  rm -rf -- "$staged_dest"
+  mkdir -p "$staged_dest"
+  rsync -a --delete --exclude='.git' "$source/" "$staged_dest/"
+  verify_plain_tree "$staged_dest" "$driver_tree" "$label"
   rm -rf -- "$dest"
-  mkdir -p "$dest"
-  rsync -a --delete --exclude='.git' "$source/" "$dest/"
-  verify_plain_tree "$dest" "$driver_tree" "$label"
+  mv -- "$staged_dest" "$dest"
   write_parent_manifest "$parent" "$driver_commit" "$driver_tree" "$label"
   echo "==> $parent: recovered external/ps5-vulkan@$driver_commit; verified tree $driver_tree."
 }
