@@ -1,0 +1,7 @@
+# Frame generation check, DOSBox Pure: Second Reality's setup set to No sound (Right), START (Enter) to run it and past its notice, then two recordings
+8 RIGHT
+11 START
+15 START
+30 RECORD 120
+60 RECORD 120
+75 STOP

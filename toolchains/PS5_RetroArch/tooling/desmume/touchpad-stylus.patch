@@ -1,0 +1,148 @@
+--- a/desmume/src/frontend/libretro/libretro.cpp
++++ b/desmume/src/frontend/libretro/libretro.cpp
+@@ -183,28 +183,55 @@
+ static const uint32_t FramesWithPointerBase = 60 * 10;
+ static int32_t FramesWithPointer;
+ 
+-static void DrawPointerLine_32(uint32_t* aOut, uint32_t aPitchInPix)
+-{
+-   for(int i = 0; i < (5 * scale) ; i ++)
+-      aOut[aPitchInPix * i] = pointer_color_32;
+-}
+-
+-static void DrawPointerLineSmall_32(uint32_t* aOut, uint32_t aPitchInPix, int factor)
+-{
+-   for(int i = 0; i < (factor * scale) ; i ++)
+-      aOut[aPitchInPix * i] = pointer_color_32;
+-}
+-
+-static void DrawPointerLine(uint16_t* aOut, uint32_t aPitchInPix)
+-{
+-   for(int i = 0; i < (5 * scale) ; i ++)
+-      aOut[aPitchInPix * i] = pointer_colour;
+-}
+-
+-static void DrawPointerLineSmall(uint16_t* aOut, uint32_t aPitchInPix, int factor)
+-{
+-   for(int i = 0; i < (factor * scale) ; i ++)
+-      aOut[aPitchInPix * i] = pointer_colour;
++// A slim, rounded stylus with a tapered nib at the exact touch coordinate.
++// Rasterise the outline at the current resolution rather than enlarging a bitmap.
++static void DrawStylus(uint16_t* output, unsigned pitch, int width, int height,
++                       int x, int y, int size)
++{
++   const uint32_t body = pointer_color_32;
++   const uint32_t edge = body == 0 ? 0xffffff : 0x202830;
++   for (int py = std::max(0, y - 21 * size); py < std::min(height, y + 2 * size); ++py)
++      for (int px = std::max(0, x - 2 * size); px < std::min(width, x + 17 * size); ++px)
++      {
++         uint32_t original;
++         if (colorMode == RETRO_PIXEL_FORMAT_XRGB8888)
++            original = reinterpret_cast<uint32_t*>(output)[py * pitch + px];
++         else
++         {
++            uint16_t c = output[py * pitch + px];
++            original = ((c >> 11) * 255 / 31 << 16) |
++                       (((c >> 5) & 63) * 255 / 63 << 8) | ((c & 31) * 255 / 31);
++         }
++         unsigned red = 0, green = 0, blue = 0, covered = 0;
++         for (int sy = 0; sy < 2; ++sy)
++            for (int sx = 0; sx < 2; ++sx)
++            {
++               const float dx = (px - x + (sx - 0.5f) * 0.5f) / size;
++               const float dy = (py - y + (sy - 0.5f) * 0.5f) / size;
++               const float along = dx * 0.6f - dy * 0.8f;
++               const float side = dx * 0.8f + dy * 0.6f;
++               const float radius = std::min(1.6f, along * 0.32f);
++               const float cap = std::max(0.0f, along - 22.0f);
++               uint32_t colour = original;
++               if (along >= 0 && side * side + cap * cap <= radius * radius)
++               {
++                  ++covered;
++                  // Dark tip, outline and end cap; light barrel with a fine seam.
++                  colour = along > 5.0f && along < 20.5f &&
++                           std::abs(side) < radius - 0.45f ? body : edge;
++               }
++               red += (colour >> 16) & 255;
++               green += (colour >> 8) & 255;
++               blue += colour & 255;
++            }
++         if (!covered)
++            continue;
++         red /= 4; green /= 4; blue /= 4;
++         if (colorMode == RETRO_PIXEL_FORMAT_XRGB8888)
++            reinterpret_cast<uint32_t*>(output)[py * pitch + px] = (red << 16) | (green << 8) | blue;
++         else
++            output[py * pitch + px] = ((red >> 3) << 11) | ((green >> 2) << 5) | (blue >> 3);
++      }
+ }
+ 
+ static void DrawPointer(uint16_t* aOut, uint32_t aPitchInPix)
+@@ -215,21 +242,8 @@
+    TouchX = Saturate(0, (GPU_LR_FRAMEBUFFER_NATIVE_WIDTH-1), TouchX);
+    TouchY = Saturate(0, (GPU_LR_FRAMEBUFFER_NATIVE_HEIGHT-1), TouchY);
+ 
+-   if (colorMode != RETRO_PIXEL_FORMAT_XRGB8888)
+-   {
+-       if (TouchX >   (5 * scale)) DrawPointerLine(&aOut[TouchY * aPitchInPix + TouchX - (5 * scale) ], 1);
+-       if (TouchX < (GPU_LR_FRAMEBUFFER_NATIVE_WIDTH - (5 * scale) )) DrawPointerLine(&aOut[TouchY * aPitchInPix + TouchX + 1], 1);
+-       if (TouchY >   (5 * scale)) DrawPointerLine(&aOut[(TouchY - (5 * scale) ) * aPitchInPix + TouchX], aPitchInPix);
+-       if (TouchY < (GPU_LR_FRAMEBUFFER_NATIVE_HEIGHT-(5 * scale) )) DrawPointerLine(&aOut[(TouchY + 1) * aPitchInPix + TouchX], aPitchInPix);
+-   }
+-   else
+-   {
+-       uint32_t *aOut_32 = (uint32_t *) aOut;
+-       if (TouchX >   (5 * scale)) DrawPointerLine_32(&aOut_32[TouchY * aPitchInPix + TouchX - (5 * scale) ], 1);
+-       if (TouchX < (GPU_LR_FRAMEBUFFER_NATIVE_WIDTH - (5 * scale) )) DrawPointerLine_32(&aOut_32[TouchY * aPitchInPix + TouchX + 1], 1);
+-       if (TouchY >   (5 * scale)) DrawPointerLine_32(&aOut_32[(TouchY - (5 * scale) ) * aPitchInPix + TouchX], aPitchInPix);
+-       if (TouchY < (GPU_LR_FRAMEBUFFER_NATIVE_HEIGHT-(5 * scale) )) DrawPointerLine_32(&aOut_32[(TouchY + 1) * aPitchInPix + TouchX], aPitchInPix);
+-   }
++   DrawStylus(aOut, aPitchInPix, GPU_LR_FRAMEBUFFER_NATIVE_WIDTH,
++              GPU_LR_FRAMEBUFFER_NATIVE_HEIGHT, TouchX, TouchY, scale);
+ }
+ 
+ static void DrawPointerHybrid(uint16_t* aOut, uint32_t aPitchInPix, bool large)
+@@ -272,21 +286,8 @@
+     else
+         factor = hybrid_layout_ratio;
+ 
+-    if (colorMode != RETRO_PIXEL_FORMAT_XRGB8888)
+-    {
+-        if (DrawX >   (factor * scale)) DrawPointerLineSmall(&aOut[DrawY * aPitchInPix + DrawX - (factor * scale) ], 1, factor);
+-        if (DrawX < (width - (factor * scale) )) DrawPointerLineSmall(&aOut[DrawY * aPitchInPix + DrawX + 1], 1, factor);
+-        if (DrawY >   (factor * scale)) DrawPointerLineSmall(&aOut[(DrawY - (factor * scale) ) * aPitchInPix + DrawX], aPitchInPix, factor);
+-        if (DrawY < (height-(factor * scale) )) DrawPointerLineSmall(&aOut[(DrawY + 1) * aPitchInPix + DrawX], aPitchInPix, factor);
+-    }
+-    else
+-    {
+-        uint32_t *aOut_32 = (uint32_t *) aOut;
+-        if (DrawX >   (factor * scale)) DrawPointerLineSmall_32(&aOut_32[DrawY * aPitchInPix + DrawX - (factor * scale) ], 1, factor);
+-        if (DrawX < (width - (factor * scale) )) DrawPointerLineSmall_32(&aOut_32[DrawY * aPitchInPix + DrawX + 1], 1, factor);
+-        if (DrawY >   (factor * scale)) DrawPointerLineSmall_32(&aOut_32[(DrawY - (factor * scale) ) * aPitchInPix + DrawX], aPitchInPix, factor);
+-        if (DrawY < (height-(factor * scale) )) DrawPointerLineSmall_32(&aOut_32[(DrawY + 1) * aPitchInPix + DrawX], aPitchInPix, factor);
+-    }
++    DrawStylus(aOut, aPitchInPix, width, height, DrawX, DrawY,
++               std::max(1u, factor * scale / 5));
+ }
+ 
+ static bool NDS_3D_ChangeCore(int newCore)
+@@ -1937,8 +1938,8 @@
+          rotate_input(mouseX, mouseY, input_rotation);
+          have_touch           = have_touch || input_cb(0, RETRO_DEVICE_MOUSE, 0, RETRO_DEVICE_ID_MOUSE_LEFT);
+ 
+-         mouse_x_delta += mouseX * mouse_speed;
+-         mouse_y_delta += mouseY * mouse_speed;
++         mouse_x_delta += mouseX * mouse_speed * GPU_LR_FRAMEBUFFER_NATIVE_WIDTH / 1920.0;
++         mouse_y_delta += mouseY * mouse_speed * GPU_LR_FRAMEBUFFER_NATIVE_HEIGHT / 1080.0;
+ 
+          mouseX = (int16_t) trunc(mouse_x_delta);
+          mouse_x_delta -= mouseX;
+@@ -1947,7 +1948,7 @@
+ 
+          TouchX = Saturate(0, (GPU_LR_FRAMEBUFFER_NATIVE_WIDTH-1), TouchX + mouseX);
+          TouchY = Saturate(0, (GPU_LR_FRAMEBUFFER_NATIVE_HEIGHT-1), TouchY + mouseY);
+-         FramesWithPointer = (mouseX || mouseY) ? FramesWithPointerBase : FramesWithPointer;
++         FramesWithPointer = (mouseX || mouseY || have_touch) ? FramesWithPointerBase : FramesWithPointer;
+       }
+       // TOUCH: Pointer
+       else if(input_cb(0, RETRO_DEVICE_POINTER, 0, RETRO_DEVICE_ID_POINTER_PRESSED))

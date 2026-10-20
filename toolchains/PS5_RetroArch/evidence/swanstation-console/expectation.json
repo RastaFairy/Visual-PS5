@@ -1,0 +1,13 @@
+{
+  "step": "swanstation-console",
+  "note": "SwanStation on the console: the core loads through the title's loader, negotiates its Vulkan context with RetroArch's, boots the BIOS and runs (574 frames in 10 s while the disc boots, up to 59.9 new frames a second); the run ends cleanly.",
+  "must_contain": [
+    "Loading dynamic libretro core from: \"/app0/cores/swanstation_libretro.so\"",
+    "[HostInterface] Renderer = Vulkan",
+    "SET_HW_RENDER, context type: vulkan.",
+    "MARK at 15.004 s: frames=739",
+    "pad script STOP at 18.01 s"
+  ],
+  "must_not_contain": [],
+  "human_check": "The owner can look at klog/pad-220128/pad-shot-1.png on this machine; it is not committed."
+}

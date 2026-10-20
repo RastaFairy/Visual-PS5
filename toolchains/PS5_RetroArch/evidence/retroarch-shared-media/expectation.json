@@ -1,0 +1,10 @@
+{
+  "step": "retroarch-shared-media",
+  "note": "RetroArch draws a scraped game's box art from the shared library (/app0/library), with no thumbnails folder of its own on the console.",
+  "must_contain": [
+    "history_tab",
+    "550 No such file or directory"
+  ],
+  "must_not_contain": [],
+  "human_check": "the capture's box art, checked by eye: klog/retroarch-shared-media/menu-20261007-105446.png"
+}

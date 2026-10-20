@@ -1,0 +1,14 @@
+{
+  "repository": "kvaps/syobon-action-ps5",
+  "branch": "main",
+  "commit": "946936228f626412be6e962f563b10544cffe2be",
+  "sourceCommit": "946936228f626412be6e962f563b10544cffe2be",
+  "sourceRef": "main",
+  "method": "vendored-snapshot",
+  "vendoredSnapshot": true,
+  "vendorRepository": "RastaFairy/Visual-PS5",
+  "vendoredAt": "2026-10-20T15:43:39Z",
+  "submodulesMaterialized": true,
+  "originalMethod": "vendored-snapshot",
+  "sourceRevisionRecorded": true
+}

@@ -1,0 +1,16 @@
+{
+  "step": "webui-media-icons",
+  "must_contain": [
+    "verify: PASS (format unit build integration evidence)",
+    "Console serves corrected icons.js bytes",
+    "Production image policy remains self-only",
+    "Embedded media image URLs removed",
+    "All ten media selector icons render on the console WebUI",
+    "RetroArch and frontend configuration bytes unchanged"
+  ],
+  "must_not_contain": [
+    "FAILED",
+    "Traceback"
+  ],
+  "human_check": "Browser screenshot of installed Add Game Media shows the colored 3D box and disc artwork."
+}

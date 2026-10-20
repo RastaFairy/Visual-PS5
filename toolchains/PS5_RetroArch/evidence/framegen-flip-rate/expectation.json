@@ -1,0 +1,19 @@
+{
+  "step": "framegen-flip-rate",
+  "note": "The 59.94 Hz mode takes 120 flips a second with VRR and 60 on an output without 120 Hz; 0121 planned 119.88 for both and halved the game's speed on the second. 0131 times the flips once and plans on them. Accepted on the owner's report of a tester's run on a 60 Hz output; the VRR path with 0131 is not yet run on a console.",
+  "must_contain": [
+    "build identity 1f81446ad708fb08f7dfbbb5a4239afd69b49e256b77b2b630ec5a95dd27dce3",
+    "[PS5] The output shows %.3f flips a second in its %.3f Hz mode.",
+    "119.88 Hz not offered on the console's present output (0)",
+    "each shown 2x",
+    "core 29.6 calls/s",
+    "pace: 118.8 presents/s",
+    "python3 -m unittest tests.test_framegen_plan: OK",
+    "Owner: the tester's run of the hotfix worked perfectly",
+    "Not run: 0131 on the owner's base PS5"
+  ],
+  "must_not_contain": [
+    "0131 verified on the VRR console"
+  ],
+  "human_check": "Owner reports the tester's run of the hotfix (identity 1f81446a) on a 60 Hz output worked perfectly (2026-10-17); no log of that run was received."
+}

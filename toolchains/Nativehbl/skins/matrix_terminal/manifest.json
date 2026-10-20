@@ -1,0 +1,24 @@
+{
+  "name": "Matrix Terminal",
+  "colors": {
+    "bg_top": "#061008FF",
+    "bg_bottom": "#000602FF",
+    "bg_grid": "#123418FF",
+    "panel": "#08180CFF",
+    "panel_soft": "#0C2210FF",
+    "panel_strong": "#0C2C12FF",
+    "border": "#24803AFF",
+    "border_active": "#44FF74FF",
+    "text": "#CBFFD4FF",
+    "text_soft": "#80E092FF",
+    "text_muted": "#52A862FF",
+    "accent": "#46FF7EFF",
+    "accent_alt": "#40FF84FF",
+    "accent_soft": "#28FF683C",
+    "ps_cross": "#40FF84FF",
+    "ps_circle": "#FF4A88FF",
+    "ps_square": "#FFD048FF",
+    "ps_triangle": "#76FFA4FF",
+    "status_bg": "#000A02DC"
+  }
+}

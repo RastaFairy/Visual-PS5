@@ -1,0 +1,20 @@
+{
+  "step": "scraper-screenscraper",
+  "note": "ScreenScraper as a source: sign-in checked with the source and kept 0600 on the console, never returned; checksum, file-name and search matching; details by language; the account thread limit; a quota pauses the job until resumed; PC mode refused so the developer account never leaves the console; the sign-in form and green check in Chromium; no plain copy of the developer account in a tracked or shipped file.",
+  "must_contain": [
+    "test_sign_in_is_checked_kept_private_and_forgotten",
+    "test_ps5_mode_checksum_name_search_details_and_thread_limit",
+    "test_a_quota_pauses_the_job_until_resumed",
+    "test_pc_mode_is_refused_so_no_account_leaves_the_console",
+    "test_sign_in_form_in_a_browser",
+    "test_a_build_without_the_developer_account_offers_no_screenscraper",
+    "Ran 6 tests",
+    "built in (scrambled)"
+  ],
+  "must_not_contain": [
+    "FAIL ",
+    "ERROR",
+    "skipped"
+  ],
+  "human_check": "A live sign-in and job against api.screenscraper.fr with the real accounts, on the console: the owner (pending; not run by the agent)"
+}

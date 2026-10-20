@@ -1,0 +1,14 @@
+{
+  "repository": "mihawk-99/PS5_VKHomebrewUI",
+  "branch": "main",
+  "commit": "2188642afbcc8d84d36149124f3d9e39dc1b1a05",
+  "sourceCommit": "2188642afbcc8d84d36149124f3d9e39dc1b1a05",
+  "sourceRef": "main",
+  "method": "vendored-snapshot",
+  "vendoredSnapshot": true,
+  "vendorRepository": "RastaFairy/Visual-PS5",
+  "vendoredAt": "2026-10-20T15:43:39Z",
+  "submodulesMaterialized": true,
+  "originalMethod": "vendored-snapshot",
+  "sourceRevisionRecorded": true
+}

@@ -1,0 +1,17 @@
+{
+  "step": "touchpad-stylus",
+  "note": "Host/native/deployment evidence; physical controller acceptance remains pending.",
+  "must_contain": [
+    "format: PASS",
+    "Core stylus tests:",
+    "Final patches match native core build provenance: PASS",
+    "Ran 182 tests",
+    "verify: PASS (build integration evidence)",
+    "Stored console eboot.bin and both cores match staged SHA-256: PASS"
+  ],
+  "must_not_contain": [
+    "FAILED",
+    "ERROR"
+  ],
+  "human_check": "Restart the title; in DeSmuME and Azahar, slide without pressing (hover), physically click (touch), hold and slide (drag), then release. Confirm the stylus nib hits the intended lower-screen point, lifting/recontacting does not jump, and menu/other-core touchpad Select still works."
+}

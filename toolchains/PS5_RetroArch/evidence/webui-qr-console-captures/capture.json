@@ -1,0 +1,51 @@
+{
+  "step": "webui-qr-console-captures",
+  "revision": "afbd69e (installed RetroArch build cbe6d6f1)",
+  "command": "tools/run-title.sh --no-build --no-deploy with timed frontend/menu captures; zbarimg --quiet --raw on each PNG; tools/verify.sh format evidence",
+  "lines": [
+    "Picker, XMB, RGUI and ES-DE overlays captured on the base PS5",
+    "All four screenshot QR codes independently decode to the configured console WebUI URL",
+    "Console WebUI responded HTTP 200 during the capture session",
+    "Original Picker binary and RetroArch configuration restored with exact readback; frontend choice restored; temporary controls removed",
+    "Four-image local release preview loads all images without horizontal overflow; captures remain ignored"
+  ],
+  "captures": [
+    {
+      "frontend": "picker",
+      "capture": "klog/qr-release-captures/picker.png",
+      "sha256": "2683cb2f83f6896ad0450b742943e65f952e44b49baaf65f2654800014428e8b",
+      "qr_matches_console_webui": true
+    },
+    {
+      "frontend": "xmb",
+      "capture": "klog/qr-release-captures/xmb.png",
+      "sha256": "2cec680b2430e9151d057748111a36b521096a24c2021ef2628982c864315ad2",
+      "qr_matches_console_webui": true
+    },
+    {
+      "frontend": "rgui",
+      "capture": "klog/qr-release-captures/rgui.png",
+      "sha256": "fcee86076988a50e23131e0519e0edc11c13a191be66a020210c3464ad0b42d7",
+      "qr_matches_console_webui": true
+    },
+    {
+      "frontend": "es-de",
+      "capture": "klog/qr-release-captures/es-de.png",
+      "sha256": "198450a2145f49475659117d1883a8a3d7ac828724ecb2d3f42ce0d1ca885685",
+      "qr_matches_console_webui": true
+    }
+  ],
+  "capture_procedure": {
+    "es-de": "--relaunch-test=1 --relaunch-image=es-de/es-de.bin --frontend-capture=20,40,60 --watch 80; owner opens WebUI",
+    "picker": "--picker-test=2400:none --watch 65; owner presses Triangle; temporary generated build retains physical input instead of clearing InputFrame during capture",
+    "xmb": "1080p 16:9, metrics off, config saving off; RIGHT at 5s, B at 7s; --menu-capture=700 --watch 30",
+    "rgui": "1080p 16:9, metrics off, config saving off; B at 5s; --menu-capture=700 --watch 30"
+  },
+  "limits": [
+    "Picker used a temporary capture-only build; QR renderer unchanged; original installed binary restored afterward",
+    "Initial RetroArch SCREENSHOT_FULL captures omitted menus; first 4K readback had incorrect aspect layout. Successful captures use the previously verified 1080p 16:9 menu capture path",
+    "XMB QR shows a horizontal shading gradient in the actual capture; zbarimg still decodes it successfully",
+    "No phone-camera scan claimed; QR decoding and WebUI HTTP response checked independently",
+    "Raw screenshots include local network address and remain under ignored klog per repository instructions; no release published"
+  ]
+}

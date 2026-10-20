@@ -1,0 +1,20 @@
+{
+  "step": "capture-readback-size",
+  "recorded": "2026-10-04T18:37:43Z",
+  "console_run": "base PS5 13.40, 2026-10-04 14:39",
+  "revision": "d200efa + patch 0031 size fix (build 10a24fa1)",
+  "command": "args.txt: --ps5-capture=600 --ps5-capture-path=/app0/xmb-preview.ppm --appendconfig /app0/config/xmb-capture.cfg",
+  "raw_capture": "klog/capture-readback-summary.txt",
+  "raw_lines": 8,
+  "raw_bytes": 1043,
+  "lines": [
+    "==> PS5 RetroArch XMB preview capture: args.txt --ps5-capture=600 with --appendconfig (1920x1080, aspect 16:9, no config save)",
+    "before the fix (build ce576f3d): capture: frame 600 of 600, viewport 1920x1080, read_viewport -> ok; PPM 1920x1080 garbled",
+    "garbled PPM: written rows are 1440 pixels (rows 1440 apart differ by 0.92 on average; 1,555,200 = 1440x1080 pixels written); top quarter black",
+    "cause: vulkan_read_viewport writes min(viewport, video size) rows; the video size was 1440x1080 (aspect index 22, core-provided 4:3 with no core); patch 0031 wrote the PPM at the viewport size",
+    "fix (tools/apply-port-patches.py, 0031): the PPM takes min(vp, video) width and height, as read_viewport writes",
+    "after the fix (build 10a24fa1, build/ra-conf recreated): capture: frame 600 of 600, viewport 1920x1080, read_viewport -> ok (/app0/xmb-preview.ppm)",
+    "clean capture: 1920x1080, black rows 0, png sha256 45717b63754aa739b8ea526ac59b0069b9b890f1ce956175aa87629242639ec0",
+    "config/retroarch.cfg unchanged by both capture runs (sha256 785579484698f8e2...)"
+  ]
+}

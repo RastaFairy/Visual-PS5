@@ -1,0 +1,13 @@
+{
+  "step": "framegen-off-presents-once",
+  "note": "0132 on the console: with frame generation off, the 2 it leaves in retroarch.cfg is replaced by one present per game frame (the log says so) and the game runs at 60 frames a second; turned off from its menu mid-game, the video output is reinitialized (a 2.5 s gap) and the same happens at once.",
+  "must_contain": [
+    "[FrameGen] Off: each game frame is presented once (2 presents were kept).",
+    "MARK at 15.005 s: frames=907",
+    "Target Framerate 120: display 119.880 Hz",
+    "entry 0 of 7 'Frame Generation'",
+    "MARK at 27.007 s: frames=1792"
+  ],
+  "must_not_contain": [],
+  "human_check": ""
+}

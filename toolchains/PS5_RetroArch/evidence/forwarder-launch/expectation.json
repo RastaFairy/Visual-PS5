@@ -1,0 +1,13 @@
+{
+  "step": "forwarder-launch",
+  "note": "#34 on the console: a launch whose arguments are a forwarder's runs that game in RetroArch through game mode with the core named, and with --exit-after-game the title closes when RetroArch quits; the next launch from the home screen opens the picker as usual.",
+  "must_contain": [
+    "forwarder: /app0/content/nes/<a backup in content/nes> with /app0/cores/fceumm_libretro.so, closing after it",
+    "forwarder: RetroArch quit (status 0) after 11 s; the title closes",
+    "relaunch test PASS: 1 restarts, every one with its arguments",
+    "'--rom', 'nes/<a backup in content/nes>'",
+    "-> picker"
+  ],
+  "must_not_contain": [],
+  "human_check": ""
+}

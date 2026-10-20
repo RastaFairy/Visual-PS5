@@ -1,0 +1,13 @@
+{
+  "step": "melondsds-microphone",
+  "note": "0134 on the console: the ps5 microphone driver opens the first user's AudioIn port at 48 kHz when melonDS DS asks, captures while the core has the microphone on, reports the mute state, and closes cleanly; melonDS DS runs at 60 frames a second.",
+  "must_contain": [
+    "microphone ps5: opened user=",
+    "rate=48000 latency=64 s16 mono grain=256",
+    "microphone ps5: silence state=00000000",
+    "microphone ps5: closed result=00000000 received=866816",
+    "MARK at 15.015 s: frames=882"
+  ],
+  "must_not_contain": [],
+  "human_check": ""
+}

@@ -1,0 +1,134 @@
+#ifndef AUDIO_HEAP_H
+#define AUDIO_HEAP_H
+
+#include <libultra/types.h>
+
+#include "port/Engine.h"
+#include "internal.h"
+
+#define SOUND_LOAD_STATUS_NOT_LOADED     0
+#define SOUND_LOAD_STATUS_IN_PROGRESS    1
+#define SOUND_LOAD_STATUS_COMPLETE       2
+#define SOUND_LOAD_STATUS_DISCARDABLE    3
+#define SOUND_LOAD_STATUS_4              4
+#define SOUND_LOAD_STATUS_5              5
+
+#define IS_BANK_LOAD_COMPLETE(bankId) GameEngine_IsBankLoaded(bankId)
+#define IS_SEQ_LOAD_COMPLETE(seqId) GameEngine_IsSequenceLoaded(seqId)
+
+struct SoundAllocPool {
+    u8 *start;
+    u8 *cur;
+    u32 size;
+    s32 numAllocatedEntries;
+}; // size = 0x10
+
+struct SeqOrBankEntry {
+    u8 *ptr;
+    u32 size;
+#ifdef VERSION_SH
+    s16 poolIndex;
+    s16 id;
+#else
+    s32 id; // seqId or bankId
+#endif
+}; // size = 0xC
+
+struct PersistentPool {
+    /*0x00*/ u32 numEntries;
+    /*0x04*/ struct SoundAllocPool pool;
+    /*0x14*/ struct SeqOrBankEntry entries[32];
+}; // size = 0x194
+
+struct TemporaryPool {
+    /*EU,   SH*/
+    /*0x00, 0x00*/ u32 nextSide;
+    /*0x04,     */ struct SoundAllocPool pool;
+    /*0x04,        pool.start     */
+    /*0x08,        pool.cur       */
+    /*0x0C, 0x0C   pool.size      */
+    /*0x10, 0x10   pool.numAllocatedEntries */
+    /*0x14,     */ struct SeqOrBankEntry entries[2];
+    /*0x14, 0x14   entries[0].ptr */
+    /*0x18,        entries[0].size*/
+    /*0x1C, 0x1E   entries[0].id  */
+    /*0x20, 0x20   entries[1].ptr */
+    /*0x24,        entries[1].size*/
+    /*0x28, 0x2A   entries[1].id  */
+}; // size = 0x2C
+
+struct SoundMultiPool {
+    /*0x000*/ struct PersistentPool persistent;
+    /*0x194*/ struct TemporaryPool temporary;
+    /*     */ u32 pad2[4];
+}; // size = 0x1D0
+
+struct Unk1Pool {
+    struct SoundAllocPool pool;
+    struct SeqOrBankEntry entries[32];
+};
+
+struct UnkEntry {
+    s8 used;
+    s8 medium;
+    s8 bankId;
+    u32 pad;
+    u8 *srcAddr;
+    u8 *dstAddr;
+    u32 size;
+};
+
+struct UnkPool {
+    /*0x00*/  struct SoundAllocPool pool;
+    /*0x10*/  struct UnkEntry entries[64];
+    /*0x510*/ s32 numEntries;
+    /*0x514*/ u32 unk514;
+};
+
+extern_s u8 gAudioHeap[];
+extern_s s16 gVolume;
+extern_s s8 gReverbDownsampleRate;
+extern_s struct SoundAllocPool gAudioInitPool;
+extern_s struct SoundAllocPool gNotesAndBuffersPool;
+extern_s struct SoundAllocPool gPersistentCommonPool;
+extern_s struct SoundAllocPool gTemporaryCommonPool;
+#ifdef VERSION_SH
+extern_s struct Unk1Pool gUnkPool1;
+extern_s struct UnkPool gUnkPool2;
+extern_s struct UnkPool gUnkPool3;
+#endif
+extern_s volatile u8 gAudioResetStatus;
+extern_s u8 gAudioResetPresetIdToLoad;
+
+#if defined(VERSION_EU) || defined(VERSION_SH)
+extern_s volatile u8 gAudioResetStatus;
+#endif
+
+extern_s void *soundAlloc(struct SoundAllocPool *pool, u32 size);
+extern_s void *sound_alloc_uninitialized(struct SoundAllocPool *pool, u32 size);
+extern_s void sound_init_main_pools(s32 sizeForAudioInitPool);
+extern_s void sound_alloc_pool_init(struct SoundAllocPool *pool, void *memAddr, u32 size);
+#ifdef VERSION_SH
+extern_s void *alloc_bank_or_seq(s32 poolIdx, s32 size, s32 arg3, s32 id);
+extern_s void *get_bank_or_seq(s32 poolIdx, s32 arg1, s32 id);
+#else
+extern_s void *alloc_bank_or_seq(struct SoundMultiPool *arg0, s32 arg1, s32 size, s32 arg3, s32 id);
+extern_s void *get_bank_or_seq(struct SoundMultiPool *arg0, s32 arg1, s32 id);
+#endif
+#if defined(VERSION_EU) || defined(VERSION_SH)
+extern_s s32 audio_shut_down_and_reset_step(void);
+extern_s void audio_reset_session(void);
+#else
+extern_s void audio_reset_session(struct AudioSessionSettings *preset);
+#endif
+extern_s void discard_bank(s32 bankId);
+
+#ifdef VERSION_SH
+extern_s void fill_filter(s16 filter[8], s32 arg1, s32 arg2);
+extern_s u8 *func_sh_802f1d40(u32 size, s32 bank, u8 *arg2, s8 medium);
+extern_s u8 *func_sh_802f1d90(u32 size, s32 bank, u8 *arg2, s8 medium);
+extern_s void *unk_pool1_lookup(s32 poolIdx, s32 id);
+extern_s void *unk_pool1_alloc(s32 poolIndex, s32 arg1, u32 size);
+#endif
+
+#endif // AUDIO_HEAP_H

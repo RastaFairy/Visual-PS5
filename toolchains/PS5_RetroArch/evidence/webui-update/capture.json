@@ -1,0 +1,30 @@
+{
+  "step": "webui-update",
+  "recorded": "2026-10-02T23:04:37.445722+00:00",
+  "revision": "d5f429c039d6fc615d615273800777ef34281683 + updater changes",
+  "build": "0e3423d78a8046a1ae9d8ae849282a57c25b9b79ccb52d40bf5ccfaba7fa46cf",
+  "command": "Use development WebUI Install latest release for v0.6.0-alpha.6; wait for ready; Install and close RetroArch; reopen and read /version.json. Host: bash tools/verify.sh; browser: tests/webui_update_fixture.py + tests/webui_update_browser.cjs",
+  "raw_capture": "klog/webui-update/sanitized-summary.txt",
+  "raw_lines": 13,
+  "lines": [
+    "native HTTPS package download: 600520132 bytes",
+    "release ZIP SHA-256 and all packaged file hashes: verified",
+    "installed managed replacements: 6",
+    "installed eboot.bin permissions: 0755",
+    "package readback matches: true",
+    "configuration unchanged: true",
+    "installed release relaunch: v0.6.0-alpha.6",
+    "console installation and relaunch: PASS",
+    "host tests: 118 PASS; format/build/integration/evidence PASS",
+    "browser desktop/mobile: PASS (installer transport mocked, native BIOS handlers)",
+    "final development build running: 0e3423d78a8046a1ae9d8ae849282a57c25b9b79ccb52d40bf5ccfaba7fa46cf",
+    "final updater state: idle",
+    "native BIOS alerts: 3"
+  ],
+  "limits": [
+    "Reinstall of existing published Alpha 6 from a development build; no new release published.",
+    "Native transaction tested from the menu. Frame-boundary exit has a host regression test; active-content install not exercised on console.",
+    "Initial native install could not launch because eboot lacked execute permission; changing only the mode restored launch. Full fixed install and relaunch passed without repair.",
+    "BIOS checks use metadata and configured system folders; presence only, not authenticity or per-content overrides."
+  ]
+}

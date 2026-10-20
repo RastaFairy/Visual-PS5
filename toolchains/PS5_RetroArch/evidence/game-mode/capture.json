@@ -1,0 +1,28 @@
+{
+  "step": "game-mode",
+  "recorded": "2026-10-04T22:07:06Z",
+  "console_run": "base PS5 13.40, run frontend-20261004-180356",
+  "revision": "8cb7e98 + game mode",
+  "command": "PS5_FRONTENDS='es-de picker' tools/build-title.sh; tools/run-title.sh --no-build --relaunch-test=1 --relaunch-image=es-de/es-de.bin --frontend-capture=4,20 --frontend-launch --retroarch-frames=600 --watch 75",
+  "raw_capture": "klog/game-mode-summary.txt",
+  "raw_lines": 16,
+  "raw_bytes": 1669,
+  "lines": [
+    "==> PS5_FRONTENDS='es-de picker' tools/build-title.sh; tools/run-title.sh --no-build --relaunch-test=1 --relaunch-image=es-de/es-de.bin --frontend-capture=4,20 --frontend-launch --retroarch-frames=600 --watch 75   (base PS5, 13.40)",
+    "kernel log: 191 eboot.bin, 192 es-de/es-de.bin, 193 eboot.bin, 194 es-de/es-de.bin; fatal signals 0",
+    "trace: frontend: mode 'game', test run 1, picker test 0, picker 1, es-de 1 -> game",
+    "trace: game mode: /app0/content/Nintendo - Super Nintendo Entertainment System/Jungle Run 2 - Partner's Island Quest (USA) (En,Fr) (Rev 1).zip with /app0/cores/snes9x_libretro.so, for /app0/es-de/es-de.bin",
+    "trace: rarch_main returned = 0",
+    "trace: game mode: RetroArch quit (status 0) after 11 s; back to the frontend",
+    "retroarch.log: [SRAM] Saved successfully to \"/app0/savefiles/Snes9x/Jungle Run 2 - Partner's Island Quest (USA) (En,Fr) (Rev 1).srm\".",
+    "es-de-ps5.log: start: back from a game 1",
+    "es_log: Back from \"Jungle Run 2 - Partner's Island Quest (USA) (En,Fr) (Rev 1)\" after 11 seconds in RetroArch (status 0)",
+    "gamelist snes: playcount 1, playtime 11, lastplayed 20261004T180914",
+    "capture capture-frontend-20261004-180356-192-4.png: 1920x1080, 377792 colours",
+    "capture capture-frontend-20261004-180356-194-20.png: 1920x1080, 39383 colours",
+    "capture capture-frontend-20261004-180356-194-4.png: 1920x1080, 39383 colours",
+    "capture after the game (process 194, 4 s): the SNES game list with Jungle Run 2 selected",
+    "console after the run: game-request.txt and game-result.txt consumed; config/game-mode.cfg quit_on_close_content = \"2\"",
+    "frontend capture PASS: 3 pictures from 2 process(es); relaunch test PASS: handed over to /app0/es-de/es-de.bin"
+  ]
+}

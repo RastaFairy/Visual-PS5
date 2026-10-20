@@ -1,0 +1,23 @@
+{
+  "step": "webui-add-game",
+  "note": "Add Game, savestate screenshot previews and approved colorful icons, accurate region flags and 50 system images. Full gates, source matching isolation, browser flow, and real console disposable-file validation.",
+  "must_contain": [
+    "Ran 185 tests",
+    "verify: PASS (format unit build integration evidence)",
+    "Running console daemon matches staged build: ef4668acefa32f93654097f3e956aed03b741dfd75ad9fcc3701e9eba3a1a4f7",
+    "Running daemon and all changed WebUI assets match staged build",
+    "Add Game registers backup in library; duplicate refused; original bytes preserved",
+    "Manual metadata and partial-edit preservation round trip",
+    "Manual cover upload succeeds",
+    "Savestate sibling screenshot is listed and preview bytes match",
+    "Replacing state invalidates old screenshot; unrelated preview rejected",
+    "Console LaunchBox database search puts the exact title first",
+    "All disposable probe files removed",
+    "RetroArch and frontend configuration bytes unchanged"
+  ],
+  "must_not_contain": [
+    "Traceback",
+    "FAILED"
+  ],
+  "human_check": "Fresh full review matched the approved desktop/phone artwork and CTA/progress scope; its documentation fix was scored resolved. User approved the new visual direction. Synthetic state fixture previews visibly render. Live console Add Game reviewed."
+}

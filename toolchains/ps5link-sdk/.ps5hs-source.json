@@ -2,5 +2,10 @@
   "repository": "Rufidj/ps5link-sdk",
   "branch": "master",
   "installedAt": "2026-10-17T17:46:47.4053391+02:00",
-  "method": "source ZIP"
+  "method": "vendored-snapshot",
+  "vendorRepository": "RastaFairy/Visual-PS5",
+  "vendoredSnapshot": true,
+  "vendoredAt": "2026-10-20T15:43:39Z",
+  "originalMethod": "source ZIP",
+  "sourceRevisionRecorded": false
 }

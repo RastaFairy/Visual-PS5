@@ -1,0 +1,27 @@
+{
+  "step": "issues-25-27",
+  "recorded": "2026-10-07T03:39:44Z",
+  "console_run": "base PS5 13.40, ES-DE runs frontend-20261006-232627, -232901, -233318, -233654",
+  "revision": "working tree on 8c6e891 (this commit)",
+  "command": "tools/run-title.sh --no-build --relaunch-test=1 --relaunch-image=es-de/es-de.bin --frontend-capture=10,14,20 --watch 40 (a synthetic H.264/AAC clip and cover for one SNES game, StartupView gamelist); then --frontend-capture=4,30 --frontend-launch --retroarch-frames=600 with StartupSystem atari2600",
+  "raw_capture": "klog/issues-25-27/runs-20261006.txt",
+  "raw_lines": 15,
+  "raw_bytes": 1410,
+  "lines": [
+    "== issue 25: ES-DE's library",
+    "an earlier start (playlists only, from the log's history): start: library from RetroArch's playlists: 14 systems, 16 games (1 with ES-DE's details kept), 15 cores, 0 failures",
+    "after (content scan, archives for cartridge systems): start: library from RetroArch's playlists: 36 systems, 1025 games (1025 with ES-DE's details kept), 33 cores, 0 favourites, 37 played, 0 failures",
+    "game mode: /app0/content/ATARI 2600/Hacks/E.T. the Extra-Terrestrial (Fixed).zip with /app0/cores/stella_libretro.so, for /app0/es-de/es-de.bin",
+    "game mode: RetroArch quit (status 0) after 11 s; back to the frontend",
+    "[INFO] [Content] Loading content file: \"/app0/content/ATARI 2600/Hacks/E.T. the Extra-Terrestrial (Fixed).zip#E.T. the Extra-Terrestrial - Fixed (E.T. the Extra-Terrestrial modification) (1.0).a26\".",
+    "== issue 27: video previews",
+    "before: Error:  VideoFFmpegComponent::setupAudioFilters(): Couldn't add graph filter: Filter not found",
+    "after: es_log filter errors: 0",
+    "before: frame 505 at 10 s: 1920x1080, GL error 0, sound ps5 (0 playing)",
+    "before: frame 721 at 14 s: 1920x1080, GL error 0, sound ps5 (0 playing)",
+    "before: frame 1058 at 20 s: 1920x1080, GL error 0, sound ps5 (0 playing)",
+    "after: frame 505 at 10 s: 1920x1080, GL error 0, sound ps5 (1 playing)",
+    "after: frame 722 at 14 s: 1920x1080, GL error 0, sound ps5 (1 playing)",
+    "after: frame 1058 at 20 s: 1920x1080, GL error 0, sound ps5 (1 playing)"
+  ]
+}

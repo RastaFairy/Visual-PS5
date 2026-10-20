@@ -1,0 +1,72 @@
+{
+  "step": "azahar-stylus-parity",
+  "recorded": "2026-10-08T00:25:07.482933+00:00",
+  "revision": "working tree on 63e11a3",
+  "command": "tools/verify.sh format; PS5_FRONTENDS=\"es-de picker\" PS5_VULKAN_TEMPLATE=\"$PWD/build/picker-template\" tools/verify.sh unit build integration evidence; python3 tools/deploy-title.py",
+  "lines": [
+    "format: PASS",
+    "182 unit and 182 integration tests: PASS",
+    "Azahar software raster matches DeSmuME at 1x, 5x and 18x: PASS",
+    "Vulkan shader compile/link, pen predicate parity and clipped nib coordinates: PASS",
+    "Old Azahar raster fails the DeSmuME pixel comparison as expected",
+    "Native Azahar build, ABI and cursor-patch provenance: PASS",
+    "Stored eboot.bin and both cores match staged SHA-256: PASS",
+    "Core-switch crash remains unresolved; no lifecycle changes made",
+    "Fresh PS5 Azahar launch: cursor captured, 399 frames by 7 seconds, clean exit"
+  ],
+  "native_azahar": {
+    "sha256": "54cdcf809cf521eb544a60c26726a3074045c812c53942ce3cb9b4b383b2b0f6",
+    "bytes": 62186560,
+    "abi_passed": true,
+    "source_revision": "4aef900a1a903d0aa6ea86fdb1e18236fb0d5907",
+    "port_inputs_sha256": {
+      "tools/core-fork.sh": "392c8a7577eaa7a81e99f58a6e006cecab92610d959dc460aabc3ef1064ac1b0",
+      "tooling/native/ps5-core.ld": "5ffe0f0e99e23de5245afb46fa6dfda6dd860b53d942a5fe2f06eaf9e520df42",
+      "tooling/native/core_cxx_runtime.cpp": "6d7c11d8595f47601b3a281e616033ea5d28c6329872aa286d4d81c597509433",
+      "tools/build-azahar.sh": "2418b991f7f4a71c4c4c984ab7831dad085861c6a40e82c0e8ca791acee2f40c",
+      "tooling/azahar/ps5-toolchain.cmake": "930762cf6f56d1e8b1a927bd70ac5e782f77cdb9b9622617973ef92ce881c398",
+      "tooling/azahar/touchpad-stylus.patch": "fa8187c2919fda1152b611318aaeced29f9c4e8ccb25997f25f230ce624ccd6f"
+    }
+  },
+  "deployed_readback": {
+    "eboot.bin": {
+      "bytes": 38772204,
+      "sha256": "096ba6d77e9a6667f0d41c1473268200316cd086ee6b4d83523ada646e255287",
+      "matches_staged": true
+    },
+    "cores/desmume_libretro.so": {
+      "bytes": 5626312,
+      "sha256": "b1b4d20bf62a4115007646b76ae7f5e04ddb661b8f9cb5b79a00c940c3b801a4",
+      "matches_staged": true
+    },
+    "cores/azahar_libretro.so": {
+      "bytes": 62186560,
+      "sha256": "54cdcf809cf521eb544a60c26726a3074045c812c53942ce3cb9b4b383b2b0f6",
+      "matches_staged": true
+    }
+  },
+  "preview_sha256": "d7d3b09c0ad154398920b1f614a9d5c3cb4dec9dd71156197ea995226ca15a84",
+  "raw_directory": "klog/azahar-stylus-parity",
+  "console_run": {
+    "command": "python3 klog/azahar-stylus-parity/run-fresh.py",
+    "build_id": "cbe6d6f13b15aaaf5f75604e555562a32f5dce39ef0a434e84a661dee6a2ae83",
+    "raw_capture": "klog/run-PPSA99169-202311.log",
+    "frontend_log": "klog/retroarch-202311.log",
+    "events": [
+      "input: pad script MARK at 7.011 s: frames=399 worst_ms=80.4 over_40ms=7",
+      "input: pad script STOP at 9.01 s",
+      "rarch_main returned = 0"
+    ],
+    "frames": [
+      {
+        "path": "klog/pad-202311/pad-shot-1.png",
+        "sha256": "54eaff3ddb6428207c2760e30c39f02b53c1244242c08080ae1eb43f3a6a8efb"
+      },
+      {
+        "path": "klog/pad-202311/pad-shot-2.png",
+        "sha256": "cc1920a1ad0e2a7337099e11b4ed18144faf232c292ee6443bdc6d29ef327361"
+      }
+    ],
+    "visual_check": "Both screenshots show the white pen with dark outline/nib pointing down-left on the lower screen."
+  }
+}

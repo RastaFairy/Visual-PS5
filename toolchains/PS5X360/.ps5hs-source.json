@@ -1,0 +1,14 @@
+{
+  "repository": "BrinooTk/PS5X360",
+  "branch": "main",
+  "commit": "ad628f65ed460416c45103f4867053c5086eab1d",
+  "sourceCommit": "ad628f65ed460416c45103f4867053c5086eab1d",
+  "sourceRef": "main",
+  "method": "vendored-snapshot",
+  "vendoredSnapshot": true,
+  "vendorRepository": "RastaFairy/Visual-PS5",
+  "vendoredAt": "2026-10-20T15:43:39Z",
+  "submodulesMaterialized": true,
+  "originalMethod": "vendored-snapshot",
+  "sourceRevisionRecorded": true
+}

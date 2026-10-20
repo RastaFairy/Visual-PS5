@@ -1,0 +1,12 @@
+{
+  "step": "webui-qr-console-captures",
+  "must_contain": [
+    "Picker, XMB, RGUI and ES-DE overlays captured on the base PS5",
+    "All four screenshot QR codes independently decode to the configured console WebUI URL",
+    "Console WebUI responded HTTP 200 during the capture session",
+    "Original Picker binary and RetroArch configuration restored with exact readback; frontend choice restored; temporary controls removed",
+    "Four-image local release preview loads all images without horizontal overflow; captures remain ignored"
+  ],
+  "must_not_contain": [],
+  "human_check": "Local preview shows all four actual overlays. Phone-camera scanning and interactive close buttons were not exhaustively rechecked."
+}

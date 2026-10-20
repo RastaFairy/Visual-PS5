@@ -1,0 +1,14 @@
+{
+  "repository": "encounter/aurora",
+  "branch": "main",
+  "commit": "8e356df6ea1882bbcd551d0b913ff4993cfab309",
+  "sourceCommit": "8e356df6ea1882bbcd551d0b913ff4993cfab309",
+  "sourceRef": "main",
+  "method": "vendored-snapshot",
+  "vendoredSnapshot": true,
+  "vendorRepository": "RastaFairy/Visual-PS5",
+  "vendoredAt": "2026-10-20T15:43:39Z",
+  "submodulesMaterialized": true,
+  "originalMethod": "vendored-snapshot",
+  "sourceRevisionRecorded": true
+}

@@ -1,0 +1,16 @@
+{
+  "step": "new-cores-2026-10-06",
+  "note": "Thirteen cores, one game each, 25 s with START twice: PicoDrive (32X Test Game, 32X Test Game 2, Mega Drive Test Game), Beetle PCE (PC Engine Test Game, SuperGrafx Test Game), Beetle PC-FX (PC-FX Test Game, BIOS intro), Beetle VB, PokeMini, DOSBox Pure (DOS Test Game), Handy, Virtual Jaguar, Beetle NeoPop, Beetle Cygne, Stella, a5200, ProSystem. Each loads, runs at its system's rate (VB 50.3, Pokemon Mini 72, the rest 60 frames a second, no frame over 40 ms except two in DOSBox Pure) and exits with 0. PicoDrive's first run (212433, RGB565) was garbled; with XRGB8888 output and patch 0112 every picture is right, six RGB565 cores included.",
+  "must_contain": [
+    "core=picodrive_libretro.so format=XRGB8888",
+    "core=pokemini_libretro.so format=RGB565",
+    "core=prosystem_libretro.so format=RGB565",
+    "ten-run-mednafen_vb: MARK at 25.015 s: frames=1272",
+    "ten-run-pokemini: MARK at 25.003 s: frames=4743",
+    "nc-run-mednafen_pcfx-212825: MARK at 25.007 s: frames=1500"
+  ],
+  "must_not_contain": [
+    "rarch_main returned = 1"
+  ],
+  "human_check": "Agent inspected every run's pictures (klog/pad-212551 to pad-220552): titles, menus and gameplay with correct colours; PicoDrive's before (pad-212433, garbled) and after (pad-213919/214037/214154)."
+}

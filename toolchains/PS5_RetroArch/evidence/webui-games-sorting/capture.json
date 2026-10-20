@@ -1,0 +1,98 @@
+{
+  "step": "webui-games-sorting",
+  "recorded": "2026-10-07T21:15:01.313313+00:00",
+  "console_run": "Deployed to configured base PS5; FTP stored-byte and live HTTP asset verification. Existing daemon still running; new server metadata not exercised live.",
+  "revision": "working tree on 11847f6",
+  "command": "python3 -m unittest -v tests.test_scraper.Scraper.test_library_sort_details tests.test_scraper.Scraper.test_games_page_in_a_browser",
+  "raw_capture": "klog/webui-games-sorting/targeted-tests.log",
+  "raw_lines": 7,
+  "raw_bytes": 281,
+  "lines": [
+    "test_library_sort_details (tests.test_scraper.Scraper.test_library_sort_details) ... ok",
+    "test_games_page_in_a_browser (tests.test_scraper.Scraper.test_games_page_in_a_browser) ... ok",
+    "",
+    "----------------------------------------------------------------------",
+    "Ran 2 tests in 28.325s",
+    "",
+    "OK",
+    "staged WebUI assets match source: PASS",
+    "== format",
+    "   PASS (8s)",
+    "verify: PASS (format)",
+    "== unit",
+    "Ran 169 tests in 238.797s",
+    "OK",
+    "   PASS (239s)",
+    "== build",
+    "   PASS (117s)",
+    "== integration",
+    "Ran 169 tests in 254.723s",
+    "OK",
+    "   PASS (261s)",
+    "== evidence",
+    "100 capture(s) replayed, 0 failed",
+    "   PASS (1s)",
+    "verify: PASS (unit build integration evidence)",
+    "deployment: 9 changed files verified; 11689 unchanged files retained from prior verification",
+    "eboot.bin stored-byte SHA-256 matches staged artifact: PASS",
+    "live HTTP index.html, app.js, app.css and version.json match staged artifacts: PASS",
+    "running daemon is older than deployed files: title restart required"
+  ],
+  "staged_tree": "dist/PPSA99169",
+  "staged_artifacts": {
+    "webui/app.js": {
+      "bytes": 113207,
+      "sha256": "427401a18a221bc2fad54c2b06e3c198ae887bcc68809d194ac94b54b3d20905"
+    },
+    "webui/app.css": {
+      "bytes": 59375,
+      "sha256": "f5dec658a19557fe7836558394076c4b1ef7dc967936be26584d2d8632a7b250"
+    },
+    "webui/index.html": {
+      "bytes": 25627,
+      "sha256": "79564e3daef615e0beafa31e42f2c65730f3e1ef0c564474b2f358bb5a2995a3"
+    },
+    "webui/ps5-retroarch-webui.elf": {
+      "bytes": 3274240,
+      "sha256": "25fafa17f1600da2b85194083cd88c84e63933cac69ca6b6260164deb7a5833a"
+    },
+    "eboot.bin": {
+      "bytes": 38740844,
+      "sha256": "f496dd161b18120930e1e89e360603f656b09df6d0847bc58bedf85652e14073"
+    },
+    "manifest.sha256": {
+      "bytes": 1548076,
+      "sha256": "0b91da1470390481ef5f7985e97545f096705f60daa7b9857bca45daac436517"
+    }
+  },
+  "initial_sandbox_attempt": {
+    "tests_run": 0,
+    "exit_code": 1,
+    "error": "PermissionError: [Errno 1] Operation not permitted creating the localhost test-server socket",
+    "resolution": "Reran with approved loopback networking outside the sandbox."
+  },
+  "verification_commands": [
+    "tools/verify.sh format",
+    "tools/verify.sh unit build integration evidence"
+  ],
+  "verification_logs": [
+    "klog/webui-games-sorting/format.log",
+    "klog/webui-games-sorting/gates.log"
+  ],
+  "deployment": {
+    "date": "2026-10-07",
+    "command": "python3 tools/deploy-title.py",
+    "raw_capture": "klog/webui-games-sorting/deploy/upload.log",
+    "readback": "klog/webui-games-sorting/deploy/readback.json",
+    "changed_files_verified": 9,
+    "unchanged_files_skipped": 11689,
+    "eboot_stored_sha256_matches": true,
+    "http_assets_match": {
+      "index.html": true,
+      "app.js": true,
+      "app.css": true,
+      "version.json": true
+    },
+    "restart_required": true
+  }
+}

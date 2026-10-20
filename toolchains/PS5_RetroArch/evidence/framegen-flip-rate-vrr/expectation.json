@@ -1,0 +1,14 @@
+{
+  "step": "framegen-flip-rate-vrr",
+  "note": "0131 on a VRR display: the driver lists only the 59.94 Hz mode (its idle vblank check reads VRR's 48 Hz floor), the timed flips come 8.34 ms apart, so frame generation plans at 119.88 and generates at 120 with the core at full speed.",
+  "must_contain": [
+    "[PS5] The output shows 119.877 flips a second in its 59.940 Hz mode.",
+    "[PS5] The output shows 119.898 flips a second in its 59.940 Hz mode.",
+    "Target Framerate 120: display 119.880 Hz",
+    "pace: 119.9 presents/s, 59.9 generated/s, 59.9 new frames/s, core 59.9 calls/s"
+  ],
+  "must_not_contain": [
+    "display 59.940 Hz"
+  ],
+  "human_check": ""
+}

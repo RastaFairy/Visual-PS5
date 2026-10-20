@@ -1,0 +1,14 @@
+{
+  "repository": "griches/PS5_Quake3e",
+  "branch": "main",
+  "commit": "ed2d83946032ac6a01c859f689bc481116d78278",
+  "sourceCommit": "ed2d83946032ac6a01c859f689bc481116d78278",
+  "sourceRef": "main",
+  "method": "vendored-snapshot",
+  "vendoredSnapshot": true,
+  "vendorRepository": "RastaFairy/Visual-PS5",
+  "vendoredAt": "2026-10-20T15:43:39Z",
+  "submodulesMaterialized": true,
+  "originalMethod": "vendored-snapshot",
+  "sourceRevisionRecorded": true
+}

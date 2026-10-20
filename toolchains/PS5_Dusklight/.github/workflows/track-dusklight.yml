@@ -1,0 +1,62 @@
+# Keeps vendor/dusklight on upstream Dusklight's latest revision.
+#
+# Every day: move the submodule to TwilitRealm/dusklight's main, put the console's
+# patches back, and check that the Dawn and SDL3 patches still apply to what
+# Aurora now pins. If everything applies, the new revision is committed. If
+# something does not, nothing is committed and an issue says which patch.
+#
+# This cannot build the game (that needs the PS5 Vulkan stack), so a revision it
+# commits is one the patches apply to, not one known to compile or run.
+name: Track Dusklight
+
+on:
+  schedule:
+    - cron: "17 5 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  track:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check out Dusklight, Aurora and Borealis
+        run: |
+          git submodule update --init vendor/dusklight
+          git -C vendor/dusklight submodule update --init extern/aurora extern/borealis
+      - name: Move to the latest Dusklight
+        id: update
+        run: |
+          set -o pipefail
+          if bash ps5/tools/update-dusklight.sh 2>&1 | tee update.log && bash ps5/tools/check-patches.sh 2>&1 | tee -a update.log; then
+            echo "applies=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "applies=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Commit the new revision
+        if: steps.update.outputs.applies == 'true'
+        run: |
+          if git diff --cached --quiet -- vendor/dusklight; then
+            echo "nothing new"
+            exit 0
+          fi
+          revision=$(git -C vendor/dusklight rev-parse --short=10 HEAD)
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Dusklight $revision: the latest upstream revision the patches apply to" \
+            -m "Moved by the Track Dusklight workflow. Not built: the patches apply, nothing more is known."
+          git push
+      - name: Report a patch that no longer applies
+        if: steps.update.outputs.applies == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          title="A patch no longer applies to the latest Dusklight"
+          if [ -z "$(gh issue list --state open --search "in:title \"$title\"" --json number --jq '.[].number')" ]; then
+            { echo "The daily check could not move to upstream's latest revision:"; echo; echo '```'; cat update.log; echo '```'; \
+              echo; echo "The repository stays on the last revision that worked. See ps5/tools/update-dusklight.sh."; } > body.md
+            gh issue create --title "$title" --body-file body.md
+          fi

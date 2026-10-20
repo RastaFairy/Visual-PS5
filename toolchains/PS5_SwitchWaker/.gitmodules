@@ -1,0 +1,3 @@
+[submodule "vendor/switchwaker"]
+	path = vendor/switchwaker
+	url = https://github.com/centollOS/SwitchWaker.git

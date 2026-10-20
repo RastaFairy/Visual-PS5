@@ -1,0 +1,14 @@
+{
+  "repository": "mpereiraesaa/ps5-vulkan",
+  "branch": "main",
+  "commit": "e6d3c3f82f3c8a574e28c174b15b287f9c0ecc6d",
+  "sourceCommit": "e6d3c3f82f3c8a574e28c174b15b287f9c0ecc6d",
+  "sourceRef": "main",
+  "method": "vendored-snapshot",
+  "vendoredSnapshot": true,
+  "vendorRepository": "RastaFairy/Visual-PS5",
+  "vendoredAt": "2026-10-20T15:43:39Z",
+  "submodulesMaterialized": true,
+  "originalMethod": "vendored-snapshot",
+  "sourceRevisionRecorded": true
+}

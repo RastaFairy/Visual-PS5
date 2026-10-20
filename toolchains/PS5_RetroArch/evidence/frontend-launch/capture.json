@@ -1,0 +1,30 @@
+{
+  "step": "frontend-launch",
+  "recorded": "2026-10-05T02:06:24Z",
+  "console_run": "base PS5 13.40, runs 215659, 215920, 220041, the WebUI call, 220245",
+  "revision": "4f72d85 + remembered frontend, quit, per-mode logs, update closes",
+  "command": "tools/run-title.sh --picker-test=300:es-de:remember --frontend-capture=20 --watch 50; tools/run-title.sh --no-build --no-deploy --home-launch --frontend-capture=8 --frontend-quit --watch 40",
+  "raw_capture": "klog/frontend-launch/summary.txt",
+  "raw_lines": 18,
+  "raw_bytes": 1752,
+  "lines": [
+    "==> base PS5 13.40, build 584d4d27 (PS5_FRONTENDS='es-de picker'), five runs in a row",
+    "A. game-mode round trip (--relaunch-test=1 --relaunch-image=es-de/es-de.bin --frontend-capture=4,20 --frontend-launch --retroarch-frames=600 --watch 80):",
+    "  frontend: mode 'game', test run 1, picker test 0, picker 1, es-de 1, remembered ask, L1 0 -> game",
+    "  game mode: RetroArch quit (status 0) after 10 s; back to the frontend",
+    "  saved retroarch-game.log (current build identity), frontend capture PASS: 3 pictures from 2 process(es)",
+    "  trace.txt: 97 lines, this session only (build identities 584d4d27 584d4d27); trace.1.txt: 3085 lines, the sessions before",
+    "B. picker, Remember on (--picker-test=300:es-de:remember --frontend-capture=20 --watch 50):",
+    "  picker test PASS: 300 frames, a picture of the last, then es-de",
+    "  [Frontend Picker] picker: remember es-de (write 0)",
+    "  console config/frontend.cfg: frontend_start = \"es-de\"",
+    "C. launch as the home screen makes it (--home-launch --frontend-capture=8 --frontend-quit --watch 40):",
+    "  frontend: L1 at launch: pad open, not held after 0 ms (0 samples the system's)",
+    "  frontend: mode '', test run 0, picker test 0, picker 1, es-de 1, remembered es-de, L1 0 -> es-de",
+    "  frontend: mode 'quit', test run 0, picker test 0, picker 1, es-de 1, remembered es-de, L1 0 -> close",
+    "  VERDICT: it exited on its own before 40s",
+    "D. the console's WebUI while RetroArch ran: GET /api/settings frontend_start = es-de; POST frontend_start=ask -> 200; GET -> ask",
+    "  then --home-launch: frontend: mode '', test run 0, picker test 0, picker 1, es-de 1, remembered ask, L1 0 -> picker",
+    "host tests: frontend_mode_ps5 (remembered frontend, L1, quit and closing, session and per-mode logs, no handover after an update) PASS; test_webui frontend_start PASS"
+  ]
+}

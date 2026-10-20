@@ -1,0 +1,21 @@
+{
+  "step": "picker-template-pin",
+  "recorded": "2026-10-07T00:50:35Z",
+  "console_run": "base PS5 13.40, run-PPSA99169-204853",
+  "revision": "working tree on e06c1b8 (this commit)",
+  "command": "PS5_FRONTENDS='es-de picker' PS5_REUSE_STAGED_CORES=mame tools/build-title.sh; tools/run-title.sh --no-build --picker-test=300:retroarch --retroarch-frames=600 --watch 60",
+  "raw_capture": "klog/picker-template-pin/run-204853.txt",
+  "raw_lines": 9,
+  "raw_bytes": 751,
+  "lines": [
+    "==> [picker] generating its title from PS5_VulkanTemplate b577e950",
+    "==> [picker] picker/picker.bin 29570317 bytes, assets 44M, previews 2 (1280x720)",
+    "    frontend: mode '', test run 1, picker test 1, picker 1, es-de 1, remembered ask, L1 0 -> picker",
+    "    frontend: mode 'retroarch', test run 1, picker test 0, picker 1, es-de 1, remembered ask, L1 0 -> retroarch",
+    "    frontend: RetroArch quit; back to the picker or closed",
+    "    frontend: mode 'quit', test run 0, picker test 0, picker 1, es-de 1, remembered ask, L1 0 -> picker",
+    "    picker: 300 frames, chose retroarch, next '/app0/eboot.bin'",
+    "    picker test PASS: 300 frames, a picture of the last (klog/picker-204853/picker.png), then retroarch",
+    "==> [run] VERDICT: it ran for 60s and this script closed it"
+  ]
+}

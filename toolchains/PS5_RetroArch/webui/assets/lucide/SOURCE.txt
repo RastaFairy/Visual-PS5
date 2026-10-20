@@ -1,0 +1,3 @@
+Lucide icons: https://lucide.dev
+SVG source: https://github.com/lucide-icons/lucide/tree/a04f228cd01185e09c188b7227b9600c08c565ec/icons
+ISC and Feather MIT notices: LICENSE

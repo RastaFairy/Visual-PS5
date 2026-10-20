@@ -1,0 +1,12 @@
+{
+  "step": "game-close-content",
+  "note": "A game EmulationStation started in game mode, closed through RetroArch's Quick Menu (L3+R3, Close Content) as a person closes it: RetroArch quits and the title goes back to EmulationStation (quit_on_close_content = CLI).",
+  "must_contain": [
+    "input: pad script MENU at 8.51 s: depth 2, list 'quick_menu' 'Quick Menu', entry 0 of 17 'Resume', pending ''",
+    "input: pad script MENU at 10.51 s: depth 2, list 'quick_menu' 'Quick Menu', entry 2 of 17 'Close Content', pending ''",
+    "game mode: RetroArch quit (status 0) after 11 s; back to the frontend",
+    "frontend capture PASS: 3 pictures from 2 process(es)"
+  ],
+  "must_not_contain": [],
+  "human_check": ""
+}

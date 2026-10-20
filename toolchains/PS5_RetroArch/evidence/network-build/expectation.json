@@ -1,0 +1,9 @@
+{
+  "step": "network-build",
+  "note": "RetroArch built with networking, netplay (LAN discovery, lobby), RetroAchievements and HTTPS (its own mbedTLS): every RetroArch name lookup reaches the console's DNS resolver (src/net_shims.c), none the refusing libc getaddrinfo; mbedTLS seeds from arc4random_buf, not /dev/urandom.",
+  "must_contain": [
+    "mbedTLS entropy source registered: <__wrap_mbedtls_platform_entropy_poll> -> arc4random_buf"
+  ],
+  "must_not_contain": [],
+  "human_check": ""
+}

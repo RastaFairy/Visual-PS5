@@ -1,0 +1,17 @@
+{
+  "step": "loadexec-relaunch",
+  "note": "Approach B's first proof: the title restarts itself through sceSystemServiceLoadExec with its own eboot.bin; every restart is a new process with its arguments as argv[0] and the same flexible memory free as a cold launch, and RetroArch starts normally after the chain.",
+  "must_contain": [
+    "generation 1: argc=1 argv=[\"--ps5-relaunch=1\"]",
+    "generation 5: argc=1 argv=[\"--ps5-relaunch=5\"] pid=122 flexible_free=419430400 action=continue",
+    "generation 0: argc=1 argv=[\"\"] pid=117 flexible_free=419430400",
+    "EXEC /app0/eboot.bin x6, \"Kill for LoadExec(...) => 0\" x5, fatal signals 0",
+    "relaunch test PASS: 5 restarts, every one with its arguments",
+    "[XMB] Assets missing: no; fonts ready: yes"
+  ],
+  "must_not_contain": [
+    "relaunch test FAIL",
+    "XMB not loaded"
+  ],
+  "human_check": ""
+}

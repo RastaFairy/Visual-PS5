@@ -1,0 +1,24 @@
+{
+  "step": "framegen-flip-rate-vrr",
+  "recorded": "2026-10-17T23:18:12Z",
+  "console_run": "",
+  "revision": "5c4256b (patch 0131), in build 22b5d122",
+  "command": "tools/run-title.sh --no-build --no-deploy --game=fceumm:/app0/tests/flip-test.nes --watch 40; the same with --game=snes9x:<a backup in content/snes> --watch 45",
+  "raw_capture": "klog/framegen-flip-rate-vrr/record.txt",
+  "raw_lines": 12,
+  "raw_bytes": 1241,
+  "lines": [
+    "Console: the owner's base PS5 on a 1440p display with 120 Hz and VRR, build identity 22b5d1229342dc01e94a5b023dd9534b17836c1b70f038246a92ed5f811a9c61, 2026-10-17.",
+    "The driver's own check, from the picker: [Frontend Picker] wsi/videoout: 119.88 Hz accepted, but a vblank comes every 20.873 ms; 59.94 Hz restored",
+    "A self-made NES image that loops on a black screen (FCEUmm, 60.0988 fps):",
+    "  [INFO] [PS5] Flips timed 8.32 to 8.35 ms apart, median 8.34 ms.",
+    "  [INFO] [PS5] The output shows 119.877 flips a second in its 59.940 Hz mode.",
+    "  [INFO] [FrameGen] Target Framerate 120: display 119.880 Hz, game 60.100 fps -> 1.99 pictures per game frame, each shown 1x",
+    "  [INFO] [FrameGen] pace: 119.9 presents/s, 0.0 generated/s, 0.0 new frames/s, core 59.9 calls/s, governor level 0 (0.00 ms a picture)",
+    "One of the owner's SNES game backups (Snes9x):",
+    "  [INFO] [PS5] Flips timed 8.33 to 8.35 ms apart, median 8.34 ms.",
+    "  [INFO] [PS5] The output shows 119.898 flips a second in its 59.940 Hz mode.",
+    "  [INFO] [FrameGen] Target Framerate 120: display 119.880 Hz, game 60.099 fps -> 1.99 pictures per game frame, each shown 1x",
+    "  [INFO] [FrameGen] pace: 119.9 presents/s, 59.9 generated/s, 59.9 new frames/s, core 59.9 calls/s, governor level 0 (1.65 ms a picture)"
+  ]
+}

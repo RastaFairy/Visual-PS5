@@ -1,0 +1,164 @@
+{
+  "step": "touchpad-stylus",
+  "recorded": "2026-10-07T23:09:55.018212+00:00",
+  "revision": "working tree on 3de11ab",
+  "command": "PS5_FRONTENDS=\"es-de picker\" PS5_VULKAN_TEMPLATE=\"$PWD/build/picker-template\" tools/verify.sh; after repair: tools/verify.sh build integration evidence",
+  "raw_capture": "klog/touchpad-stylus/gates-final.log",
+  "raw_lines": 1817,
+  "raw_bytes": 111021,
+  "lines": [
+    "format: PASS (klog/touchpad-stylus/gates.log)",
+    "PS5 joypad: touchpad stylus contact, hover, click, release, disconnect and scope PASS",
+    "Core stylus tests: hover, scale, Vulkan geometry, software pixels and clipping PASS",
+    "Final patches match native core build provenance: PASS",
+    "Ran 182 tests in 247.117s",
+    "verify: PASS (build integration evidence)",
+    "Stored console eboot.bin and both cores match staged SHA-256: PASS"
+  ],
+  "staged_artifacts": {
+    "eboot.bin": {
+      "bytes": 38772204,
+      "sha256": "11c1168c587008dd04cd2b060ee12975df9c3f207db9d8e4421baad985929cff"
+    },
+    "cores/desmume_libretro.so": {
+      "bytes": 5642792,
+      "sha256": "57e321510e339017310143521087e799346ebaadbc72a2ed1aa74128b7d05500"
+    },
+    "cores/azahar_libretro.so": {
+      "bytes": 62186680,
+      "sha256": "8a8dab00afafcb92fc60839512dbb1c572ff16c928b0d9b6fe0ee302fc7ac85b"
+    },
+    "manifest.sha256": {
+      "bytes": 1785503,
+      "sha256": "149f65281ecb8c9fb7c250990a8deb08b68f1f2ee6bb381cdc1cf85d2c6c1c6b"
+    }
+  },
+  "native_cores": {
+    "desmume": {
+      "sha256": "57e321510e339017310143521087e799346ebaadbc72a2ed1aa74128b7d05500",
+      "bytes": 5642792,
+      "needed": [
+        "libkernel_web.sprx",
+        "libSceLibcInternal.sprx",
+        "libScePosixForWebKit.sprx"
+      ],
+      "libretro_exports": [
+        "retro_api_version",
+        "retro_cheat_reset",
+        "retro_cheat_set",
+        "retro_deinit",
+        "retro_get_memory_data",
+        "retro_get_memory_size",
+        "retro_get_region",
+        "retro_get_system_av_info",
+        "retro_get_system_info",
+        "retro_init",
+        "retro_load_game",
+        "retro_load_game_special",
+        "retro_reset",
+        "retro_run",
+        "retro_serialize",
+        "retro_serialize_size",
+        "retro_set_audio_sample",
+        "retro_set_audio_sample_batch",
+        "retro_set_controller_port_device",
+        "retro_set_environment",
+        "retro_set_input_poll",
+        "retro_set_input_state",
+        "retro_set_video_refresh",
+        "retro_unload_game",
+        "retro_unserialize"
+      ],
+      "abi_passed": true,
+      "console_loading_verified": false,
+      "source_revision": "54540709d343bd93d021487af4408679ca187825",
+      "port_inputs_sha256": {
+        "tools/core-fork.sh": "392c8a7577eaa7a81e99f58a6e006cecab92610d959dc460aabc3ef1064ac1b0",
+        "tooling/native/ps5-core.ld": "5ffe0f0e99e23de5245afb46fa6dfda6dd860b53d942a5fe2f06eaf9e520df42",
+        "tooling/native/core_cxx_runtime.cpp": "6d7c11d8595f47601b3a281e616033ea5d28c6329872aa286d4d81c597509433",
+        "tools/build-desmume.sh": "55ad2647a5cb5333eb6dd4e3454af5cc93e5be2ea235910e5bc18d7506e63b24",
+        "tooling/desmume/touchpad-stylus.patch": "abb72fdd9711444bc47913c4110b70aa4fd209f9949e053f74af2ff4535bf9ec"
+      }
+    },
+    "azahar": {
+      "sha256": "8a8dab00afafcb92fc60839512dbb1c572ff16c928b0d9b6fe0ee302fc7ac85b",
+      "bytes": 62186680,
+      "needed": [
+        "libkernel_web.sprx",
+        "libSceLibcInternal.sprx",
+        "libScePosixForWebKit.sprx"
+      ],
+      "libretro_exports": [
+        "retro_api_version",
+        "retro_cheat_reset",
+        "retro_cheat_set",
+        "retro_deinit",
+        "retro_get_memory_data",
+        "retro_get_memory_size",
+        "retro_get_region",
+        "retro_get_system_av_info",
+        "retro_get_system_info",
+        "retro_init",
+        "retro_load_game",
+        "retro_load_game_special",
+        "retro_reset",
+        "retro_run",
+        "retro_serialize",
+        "retro_serialize_size",
+        "retro_set_audio_sample",
+        "retro_set_audio_sample_batch",
+        "retro_set_controller_port_device",
+        "retro_set_environment",
+        "retro_set_input_poll",
+        "retro_set_input_state",
+        "retro_set_video_refresh",
+        "retro_unload_game",
+        "retro_unserialize"
+      ],
+      "abi_passed": true,
+      "console_loading_verified": false,
+      "source_revision": "4aef900a1a903d0aa6ea86fdb1e18236fb0d5907",
+      "port_inputs_sha256": {
+        "tools/core-fork.sh": "392c8a7577eaa7a81e99f58a6e006cecab92610d959dc460aabc3ef1064ac1b0",
+        "tooling/native/ps5-core.ld": "5ffe0f0e99e23de5245afb46fa6dfda6dd860b53d942a5fe2f06eaf9e520df42",
+        "tooling/native/core_cxx_runtime.cpp": "6d7c11d8595f47601b3a281e616033ea5d28c6329872aa286d4d81c597509433",
+        "tools/build-azahar.sh": "2418b991f7f4a71c4c4c984ab7831dad085861c6a40e82c0e8ca791acee2f40c",
+        "tooling/azahar/ps5-toolchain.cmake": "930762cf6f56d1e8b1a927bd70ac5e782f77cdb9b9622617973ef92ce881c398",
+        "tooling/azahar/touchpad-stylus.patch": "9c5881c02b3c7f8e71f45ad6114f88351de28bd3403e195ce2f5a9703ffe8f89"
+      }
+    }
+  },
+  "deployed_readback": {
+    "eboot.bin": {
+      "bytes": 38772204,
+      "sha256": "11c1168c587008dd04cd2b060ee12975df9c3f207db9d8e4421baad985929cff",
+      "matches_staged": true
+    },
+    "cores/desmume_libretro.so": {
+      "bytes": 5642792,
+      "sha256": "57e321510e339017310143521087e799346ebaadbc72a2ed1aa74128b7d05500",
+      "matches_staged": true
+    },
+    "cores/azahar_libretro.so": {
+      "bytes": 62186680,
+      "sha256": "8a8dab00afafcb92fc60839512dbb1c572ff16c928b0d9b6fe0ee302fc7ac85b",
+      "matches_staged": true
+    }
+  },
+  "tests": {
+    "driver": "Production PS5 driver with mocked native pad samples; first contact, hover, click, finger switch, lift/recontact, duplicate polling, disconnection, interception and read error. Core/menu gating, other cores and Select preserved outside DS/3DS.",
+    "core": "Pinned fork patches applied in a temporary tree. Production DeSmuME normal/hybrid RGB565/XRGB8888 cursor code and Azahar mouse update, Vulkan cursor vertices and software cursor compiled under ASan/UBSan. Hover, drag, release, render scaling and lower-screen bounds.",
+    "preview": "klog/touchpad-stylus/stylus-preview.png: host render of production DeSmuME DrawStylus; visually inspected."
+  },
+  "initial_build_failure": {
+    "raw_capture": "klog/touchpad-stylus/gates.log",
+    "reason": "DeSmuME hybrid cursor std::max mixed signed factor and unsigned scale.",
+    "repair": "Use unsigned minimum; expanded host cursor test compiles and exercises both normal and hybrid wrappers. Final native build passes."
+  },
+  "software_followup": "Azahar software rendering is a selectable shipped option. Its cursor was also converted from crosshair to stylus, then rebuilt and the full integration gate rerun.",
+  "console_run": "Final title and both cores uploaded and exact stored hashes verified. No title launch or physical DualSense stylus interaction performed in this turn.",
+  "limits": [
+    "Physical movement, press/drag/release and cursor appearance on console require owner verification.",
+    "DeSmuME requires Mouse/Pointer enabled and Pointer Type Mouse; Azahar requires mouse touchscreen enabled (all defaults)."
+  ]
+}

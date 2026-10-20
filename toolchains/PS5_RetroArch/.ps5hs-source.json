@@ -1,0 +1,14 @@
+{
+  "repository": "mihawk-99/PS5_RetroArch",
+  "branch": "main",
+  "commit": "7268510b12fe7461342e0cc4497c87a0910c1055",
+  "sourceCommit": "7268510b12fe7461342e0cc4497c87a0910c1055",
+  "sourceRef": "main",
+  "method": "vendored-snapshot",
+  "vendoredSnapshot": true,
+  "vendorRepository": "RastaFairy/Visual-PS5",
+  "vendoredAt": "2026-10-20T15:43:39Z",
+  "submodulesMaterialized": true,
+  "originalMethod": "vendored-snapshot",
+  "sourceRevisionRecorded": true
+}

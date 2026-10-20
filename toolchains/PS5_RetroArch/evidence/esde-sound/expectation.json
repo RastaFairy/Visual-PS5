@@ -1,0 +1,11 @@
+{
+  "step": "esde-sound",
+  "note": "EmulationStation has sound: SDL2 is built with the PS5 fork's audio driver (sceAudioOut, main port, 48 kHz), ES-DE opens it and its device plays while it browses.",
+  "must_contain": [
+    "es_log: Audio driver: ps5",
+    "es_log: Detected playback device: System audio output device",
+    "sound ps5 (1 playing)"
+  ],
+  "must_not_contain": [],
+  "human_check": "Hearing it: ES-DE's navigation sounds and video previews on the TV; not part of a scripted run."
+}

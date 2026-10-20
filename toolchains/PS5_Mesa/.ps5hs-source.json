@@ -3,5 +3,10 @@
   "branch": "main",
   "commit": "",
   "installedAt": "2026-10-17T18:32:45.1551524+02:00",
-  "method": "git clone --recurse-submodules"
+  "method": "vendored-snapshot",
+  "vendorRepository": "RastaFairy/Visual-PS5",
+  "vendoredSnapshot": true,
+  "vendoredAt": "2026-10-20T15:43:39Z",
+  "originalMethod": "git clone --recurse-submodules",
+  "sourceRevisionRecorded": false
 }

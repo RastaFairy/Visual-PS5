@@ -1,0 +1,144 @@
+#pragma once
+
+#define LOAD_ASSET(path) (path == NULL ? NULL : (GameEngine_OTRSigCheck((const char*) path) ? ResourceGetDataByName((const char*) path) : path))
+#define LOAD_ASSET_RAW(path) ResourceGetDataByName((const char*) path)
+
+#ifdef __cplusplus
+#include <vector>
+#include <ship/controller/controldeck/ControlDeck.h>
+#include <ship/Context.h>
+#include <fast/interpreter.h>
+#include "interpolation/FrameInterpolation.h"
+
+#ifndef IDYES
+#define IDYES 6
+#endif
+#ifndef IDNO
+#define IDNO 7
+#endif
+
+#define SAMPLES_HIGH 544
+#define SAMPLES_LOW 528
+#define AUDIO_FRAMES_PER_UPDATE 2
+#define NUM_AUDIO_CHANNELS 2
+#define SAMPLES_PER_FRAME (SAMPLES_HIGH * NUM_AUDIO_CHANNELS * 2)
+
+struct Animation;
+struct CtlEntry;
+struct AudioBankSample;
+struct AudioSequenceData;
+
+struct AllocationEntry {
+  uint8_t* addr;
+  size_t size;
+};
+
+class GameEngine {
+  public:
+    static GameEngine* Instance;
+
+    int totalScripts = 0;
+
+    // Empty when the last code-mod build succeeded; else the full compiler output.
+    std::string mLastCompileError;
+    std::string mLastCompileScript;
+
+    ImFont *fontStandard;
+    ImFont *fontStandardLarger;
+    ImFont *fontStandardLargest;
+    ImFont *fontMono;
+    ImFont *fontMonoLarger;
+    ImFont *fontMonoLargest;
+
+    std::shared_ptr<Ship::Context> context;
+    std::vector<Animation*> animationsTable;
+
+    std::vector<CtlEntry*> banksTable;
+    std::vector<std::string> sequenceTable;
+    std::vector<AudioSequenceData*> audioSequenceTable;
+
+    std::vector<AllocationEntry> memoryPool;
+
+    std::unordered_map<std::string, uint8_t> bankMapTable;
+    std::unordered_map<std::string, std::vector<uint8_t>>* dictionary;
+
+    GameEngine();
+    static void Create(int argc, char* argv[]);
+    static bool GenAssetFile(bool exitOnFail = true);
+    void LoadScripts();
+    void LoadResourceFiles();
+    void RunExtract(int argc, char* argv[]);
+    void AudioInit();
+    void FinishInit();
+    void StartFrame() const;
+    static void RunCommands(Gfx* Commands, const std::vector<FrameInterpolationResult>& replacements);
+    static uint32_t GetInterpolationFPS();
+    static void HandleAudioThread();
+    static void StartAudioFrame();
+    static void EndAudioFrame();
+    static void AudioExit();
+    static void ProcessGfxCommands(Gfx* commands);
+    static uint8_t GetBankIdByName(const std::string& name);
+    static int ShowYesNoBox(const char* title, const char* box);
+    static ImFont *CreateFontWithSize(float size, std::string fontPath);
+    static void ScaleImGui();
+    // static void ShowMessage(const char* title, const char* message, SDL_MessageBoxFlags type = SDL_MESSAGEBOX_ERROR);
+    static bool IsAltAssetsEnabled();
+    void LoadDictionary();
+    void LoadPlayerAnims();
+    static uint32_t GetGameVersion();
+    static void Destroy();
+};
+
+Fast::Interpreter* GameEngine_GetInterpreter();
+
+extern "C" {
+#endif
+// HUD and Rendering related
+float GameEngine_GetAspectRatio();
+uint32_t OTRGetCurrentWidth(void);
+uint32_t OTRGetCurrentHeight(void);
+float OTRGetHUDAspectRatio();
+int32_t OTRConvertHUDXToScreenX(int32_t v);
+float OTRGetDimensionFromLeftEdge(float v);
+float OTRGetDimensionFromRightEdge(float v);
+int16_t OTRGetRectDimensionFromLeftEdge(float v);
+int16_t OTRGetRectDimensionFromRightEdge(float v);
+float OTRGetDimensionFromLeftEdgeForcedAspect(float v, float aspectRatio);
+float OTRGetDimensionFromRightEdgeForcedAspect(float v, float aspectRatio);
+int16_t OTRGetRectDimensionFromLeftEdgeForcedAspect(float v, float aspectRatio);
+int16_t OTRGetRectDimensionFromRightEdgeForcedAspect(float v, float aspectRatio);
+float OTRGetDimensionFromLeftEdgeOverride(float v);
+float OTRGetDimensionFromRightEdgeOverride(float v);
+int16_t OTRGetRectDimensionFromLeftEdgeOverride(float v);
+int16_t OTRGetRectDimensionFromRightEdgeOverride(float v);
+uint32_t OTRGetGameRenderWidth();
+uint32_t OTRGetGameRenderHeight();
+
+// Engine related
+void GameEngine_ProcessGfxCommands(Gfx* commands);
+uint32_t GameEngine_GetInterpolatedFPS();
+uint32_t GameEngine_GetSampleRate();
+uint32_t GameEngine_GetSamplesPerFrame();
+struct CtlEntry* GameEngine_LoadBank(uint8_t bankId);
+uint8_t GameEngine_IsBankLoaded(uint8_t bankId);
+void GameEngine_UnloadBank(uint8_t bankId);
+struct AudioSequenceData* GameEngine_LoadSequence(uint8_t seqId);
+uint32_t GameEngine_GetSequenceCount();
+uint8_t GameEngine_IsSequenceLoaded(uint8_t seqId);
+void GameEngine_UnloadSequence(uint8_t seqId);
+uint32_t GameEngine_GetGameVersion();
+uint8_t* GameEngine_LoadActName(uint32_t actId);
+uint8_t* GameEngine_LoadLevelName(uint32_t levelId);
+struct DialogEntry* GameEngine_LoadDialog(uint32_t dialogId);
+uint8_t* GameEngine_LoadTranslation(const char* key);
+bool GameEngine_OTRSigCheck(const char* imgData);
+struct Animation* GameEngine_LoadAnimation(uint32_t animId);
+void GameEngine_GfxPrint(const char* str, void* printer, void (*printImpl)(void*, uint8_t));
+void* GameEngine_GetExactDataByName(const char* path);
+void* GameEngine_Malloc(size_t size);
+void GameEngine_Free(void* ptr);
+
+#ifdef __cplusplus
+}
+#endif

@@ -1,0 +1,12 @@
+{
+  "step": "capture-readback-size",
+  "note": "The port's frame capture writes the image at the size RetroArch's synchronous readback produces (the viewport no larger than the video size), so a capture is never garbled; the XMB preview for the pre-screen's RetroArch card is a clean 1920x1080 capture.",
+  "must_contain": [
+    "fix (tools/apply-port-patches.py, 0031): the PPM takes min(vp, video) width and height",
+    "after the fix (build 10a24fa1, build/ra-conf recreated): capture: frame 600 of 600, viewport 1920x1080, read_viewport -> ok",
+    "clean capture: 1920x1080, black rows 0",
+    "config/retroarch.cfg unchanged by both capture runs"
+  ],
+  "must_not_contain": [],
+  "human_check": ""
+}

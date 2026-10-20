@@ -1,0 +1,23 @@
+{
+  "step": "child-processes",
+  "recorded": "2026-10-04T22:33:23Z",
+  "console_run": "base PS5 13.40, runs 182727 and 183131",
+  "revision": "26c003b + child probe",
+  "command": "PS5_FRONTENDS='es-de picker child-probe' tools/build-title.sh; tools/run-title.sh --no-build --relaunch-test=1 --relaunch-image=es-de/child-probe.bin --watch 120 (and with es-de/child-probe-mode.txt = nogpu)",
+  "raw_capture": "klog/child-processes-summary.txt",
+  "raw_lines": 11,
+  "raw_bytes": 1388,
+  "lines": [
+    "==> PS5_FRONTENDS='es-de picker child-probe' tools/build-title.sh; tools/run-title.sh --no-build --relaunch-test=1 --relaunch-image=es-de/child-probe.bin --watch 120   (base PS5, 13.40)",
+    "start: probe pid 196, app 16408, local processes 1, flexible free 437256192",
+    "headless child (libc-only preload, display held by the parent): service id 335644465, reported in 0.12 s, native pid 197, socket type 5, listed 1, local processes 2",
+    "memory with the child alive: child flexible free 299892736, parent flexible free 299892736 (one budget)",
+    "headless child closed: kill status 0, present after 0, local processes 1",
+    "live child 335644481 (native pid 198) across the parent's LoadExec: listed after 0, local processes 1, flexible free 437256192",
+    "display opened and drawn by the second process: matched 120/120, then released",
+    "graphics child (full default preload) after the parent released the display: service id 335644513, reported 0",
+    "kernel log (run-PPSA99169-182727): EXEC child-probe.bin pid 200; gbase_gvmsw_open 6978 error; exception 0xa0020104 (PRX_PROCESS_STARTUP_FAILURE); App Crash PID=0xc8; Kill process 0xc8 and 0xc7 (the parent too)",
+    "graphics child from a parent that never opened the display: service id 369198993, reported 0",
+    "kernel log (run-PPSA99169-183131): EXEC child-probe.bin pid 205; gbase_gvmsw_open 6978 error; exception 0xa0020104 (PRX_PROCESS_STARTUP_FAILURE); App Crash PID=0xcd"
+  ]
+}

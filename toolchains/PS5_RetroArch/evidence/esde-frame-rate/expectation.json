@@ -1,0 +1,12 @@
+{
+  "step": "esde-frame-rate",
+  "note": "ES-DE ran at 27 fps while browsing because ../PS5_OpenGL flushed its whole 16 MiB scanout pool from the CPU cache before every unbatched scanout write (each window glClear, about 8 ms each); flushed once per pool (PS5_OpenGL e6990b5), ES-DE browses at 58-60 fps.",
+  "must_contain": [
+    "before (PS5_OpenGL 54f01c7): 436 frames to 40 s, 37 presses: between swaps mean 36.64 ms",
+    "after (PS5_OpenGL e6990b5): 1171 frames to 45 s, 49 presses: between swaps mean 17.08 ms, p95 17.62 ms, 8 over 25 ms",
+    "75.0% self in util_clflushopt_range",
+    "util_clflushopt_range 1.8% self"
+  ],
+  "must_not_contain": [],
+  "human_check": "The owner reported the frame rate as horribly low before the change."
+}

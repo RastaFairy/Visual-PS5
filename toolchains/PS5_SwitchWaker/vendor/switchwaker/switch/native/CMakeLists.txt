@@ -1,0 +1,368 @@
+# The native port (native/: the decompiled game on Aurora) as a Switch NRO: phase 7 of
+# docs/NATIVE_PORT_PLAN.md. Configure with devkitPro's Switch toolchain inside the build image;
+# scripts/switch/build_native.sh does it (docs/SWITCH_BUILD.md, "Native port").
+#
+# It reuses the translated port's Switch layer (switch/):
+#   - Dawn, built from source for its Null backend with the Horizon patches (switch/dawn/dawn.cmake):
+#     Aurora's WebGPU object model, and Tint for switch/deko's shader translation;
+#   - SDL 3 as the libnx shim of switch/aurora/sdl3_shim, plus the few functions Aurora 3227d76
+#     calls beyond the translated port's Aurora (sdl3_shim_extra.c);
+#   - sqlite's Horizon VFS settings (switch/aurora/sqlite_horizon.c), the USB log
+#     (switch/source/common/usb_log.c), the NRO packaging and the SD card layout.
+# What differs from the translated port:
+#   - Aurora is native/'s pin (3227d76, COS_SWITCH_AURORA_SOURCE), copied into the build directory
+#     with native/patches/aurora/*.patch (decision H11) and then aurora/patches/*.patch applied;
+#   - nod (Rust, no libnx target) is replaced by nod/nod_gcn.cpp, a reader of plain GameCube
+#     disc images behind nod's C API, so Aurora's DVD library reads the .iso on the SD card;
+#   - the game units compile with clang 19 (clang-launcher.sh), as on the Mac; Aurora, Dawn, the
+#     SDK and libnx stay on devkitA64's GCC;
+#   - source/: the harness's Switch platform layer (logs, run options, crash report, threads).
+# The renderer is deko3d (switch/deko, docs/DEKO3D_MIGRATION_PLAN.md): switchwaker.nro in /switch/switchwaker/
+# with its bundled caches, next to the data (disc, native/: saves, settings, caches, logs). The OpenGL ES
+# renderer on Mesa (switchwaker_gl.nro) was removed on 2026-10-09.
+cmake_minimum_required(VERSION 3.28)
+project(cos_switch LANGUAGES C CXX)
+
+if (NOT CMAKE_SYSTEM_NAME STREQUAL "NintendoSwitch")
+    message(FATAL_ERROR "Configure with the devkitPro Switch toolchain (scripts/switch/build_native.sh)")
+endif ()
+
+set(COS_SWITCH_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
+cmake_path(SET COS_REPO_ROOT NORMALIZE "${CMAKE_CURRENT_SOURCE_DIR}/../..")
+set(COS_SWITCH_AURORA_SOURCE "" CACHE PATH "A pristine checkout of Aurora at native/'s pin (3227d76)")
+if (NOT EXISTS "${COS_SWITCH_AURORA_SOURCE}/cmake/aurora_core.cmake")
+    message(FATAL_ERROR "Set COS_SWITCH_AURORA_SOURCE to a checkout of Aurora at native/'s pin")
+endif ()
+
+# libdeko3dd: deko3d's checks of every call and its messages (switch/deko/device.cpp debug_message: a
+# misuse or failure is logged before the process ends); the release library aborts with a bare
+# 2359-xxxx result. Off by default (SwitchWakerHD's CMakeLists.txt WWHD_DEKO3D_DEBUG_LIB).
+option(COS_DK_DEBUG_LIB "deko3d build: link the debug library libdeko3dd" OFF)
+set(_nro_dir "/switch/switchwaker")
+set(COS_SWITCH_NRO_NAME "switchwaker" CACHE STRING "File name of the NRO and its ELF (without .nro)")
+message(STATUS "Switch renderer: deko3d (${COS_SWITCH_NRO_NAME}.nro)")
+
+set(BUILD_TESTING OFF CACHE BOOL "" FORCE)
+# Frame records everywhere: the crash report (source/cos_switch.cpp) and Atmosphère's walk them.
+string(APPEND CMAKE_C_FLAGS " -fno-omit-frame-pointer")
+string(APPEND CMAKE_CXX_FLAGS " -fno-omit-frame-pointer")
+
+include(FetchContent)
+
+# ---- Dawn (Null backend and Tint, patched for Horizon): webgpu_dawn, dawn::webgpu_dawn and abseil --
+include("${COS_REPO_ROOT}/switch/dawn/dawn.cmake")
+
+# ---- SDL 3: its headers at Aurora's pin and the libnx shim ----------------------------------------
+FetchContent_Declare(sdl3_headers
+        URL https://github.com/libsdl-org/SDL/archive/refs/tags/release-3.4.10.tar.gz
+        DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+        SOURCE_SUBDIR do-not-build)
+FetchContent_MakeAvailable(sdl3_headers)
+file(GLOB _shim_sources CONFIGURE_DEPENDS "${COS_REPO_ROOT}/switch/aurora/sdl3_shim/*.c")
+add_library(SDL3-static STATIC ${_shim_sources} "${COS_SWITCH_DIR}/sdl3_shim_extra.c")
+add_library(SDL3::SDL3-static ALIAS SDL3-static)
+target_include_directories(SDL3-static PUBLIC "${sdl3_headers_SOURCE_DIR}/include")
+target_include_directories(SDL3-static PRIVATE "${COS_REPO_ROOT}/switch/aurora/sdl3_shim")
+target_link_libraries(SDL3-static PUBLIC nx)
+
+# ---- nod: plain GameCube disc images (nod/) ----------------------------------------------------------
+add_library(cos_switch_nod STATIC "${COS_SWITCH_DIR}/nod/nod_gcn.cpp")
+target_include_directories(cos_switch_nod PUBLIC "${COS_SWITCH_DIR}/nod")
+add_library(nod::nod ALIAS cos_switch_nod)
+
+# ---- devkitPro portlibs, under the names Aurora's extern/ looks for ---------------------------------
+set(SWITCH_PORTLIBS "${DEVKITPRO_ROOT}/portlibs/switch")
+function(cos_switch_portlib target)
+    add_library(${target} INTERFACE IMPORTED GLOBAL)
+    target_include_directories(${target} INTERFACE "${SWITCH_PORTLIBS}/include")
+    target_link_directories(${target} INTERFACE "${SWITCH_PORTLIBS}/lib")
+endfunction()
+cos_switch_portlib(ZLIB::ZLIB)
+target_link_libraries(ZLIB::ZLIB INTERFACE z)
+cos_switch_portlib(PNG::PNG)
+target_link_libraries(PNG::PNG INTERFACE png16 z)
+
+# ---- Tracy: Aurora's profiler stays off; headers only (its client does not build for Horizon) ------
+FetchContent_Declare(tracy
+        URL https://github.com/wolfpld/tracy/archive/refs/tags/v0.14.1.zip
+        URL_HASH SHA256=908f3a2917fa86a247abfcf85dcf04bad1db6986a4d40f94b70512f3e9e98d5b
+        DOWNLOAD_EXTRACT_TIMESTAMP FALSE
+        SOURCE_SUBDIR do-not-build)
+FetchContent_MakeAvailable(tracy)
+add_library(TracyClient INTERFACE)
+target_include_directories(TracyClient INTERFACE "${tracy_SOURCE_DIR}/public")
+add_library(Tracy::TracyClient ALIAS TracyClient)
+
+# ---- ImGui: Aurora's pin, without the SDL backends (aurora/patches stub them on Horizon) -----------
+FetchContent_Declare(imgui
+        URL https://github.com/ocornut/imgui/archive/refs/tags/v1.91.9b-docking.tar.gz
+        URL_HASH SHA256=466fdef9b18de15f0bb6e288e3d00ffa3d82200ec458ce5e4f724a161d9528a5
+        DOWNLOAD_EXTRACT_TIMESTAMP FALSE
+        SOURCE_SUBDIR do-not-build)
+FetchContent_MakeAvailable(imgui)
+add_library(imgui STATIC
+        ${imgui_SOURCE_DIR}/imgui.cpp
+        ${imgui_SOURCE_DIR}/imgui_demo.cpp
+        ${imgui_SOURCE_DIR}/imgui_draw.cpp
+        ${imgui_SOURCE_DIR}/imgui_tables.cpp
+        ${imgui_SOURCE_DIR}/imgui_widgets.cpp
+        ${imgui_SOURCE_DIR}/misc/cpp/imgui_stdlib.cpp
+        ${imgui_SOURCE_DIR}/backends/imgui_impl_wgpu.cpp)
+target_include_directories(imgui PUBLIC ${imgui_SOURCE_DIR})
+target_compile_definitions(imgui PRIVATE IMGUI_IMPL_WEBGPU_BACKEND_DAWN)
+# ImGui's default "open in shell" uses fork/exec/waitpid.
+target_compile_definitions(imgui PUBLIC IMGUI_DISABLE_DEFAULT_SHELL_FUNCTIONS)
+target_link_libraries(imgui PRIVATE dawn::webgpu_dawn)
+
+# ---- Aurora: native/'s pin with the shared and the Switch patches, in the build directory -----------
+# The copy gets native/patches/aurora/*.patch first (decision H11, the patches every Mac build has),
+# then aurora/patches/*.patch, each set in name order, through native/cmake's
+# aurora_apply_patches.cmake. It is redone when the source path or either patch set changes.
+set(COS_SWITCH_AURORA_DIR "${CMAKE_BINARY_DIR}/aurora-switch")
+set(_aurora_patch_dirs "${COS_REPO_ROOT}/native/patches/aurora" "${COS_SWITCH_DIR}/aurora/patches")
+set(_aurora_stamp "${COS_SWITCH_AURORA_SOURCE}\n")
+set(_aurora_count 0)
+foreach (_dir IN LISTS _aurora_patch_dirs)
+    file(GLOB _patches CONFIGURE_DEPENDS "${_dir}/*.patch")
+    list(SORT _patches)
+    foreach (_patch IN LISTS _patches)
+        file(SHA256 "${_patch}" _hash)
+        string(APPEND _aurora_stamp "${_patch}=${_hash}\n")
+        math(EXPR _aurora_count "${_aurora_count} + 1")
+    endforeach ()
+endforeach ()
+set(_aurora_stamp_file "${COS_SWITCH_AURORA_DIR}.stamp")
+set(_aurora_previous "")
+if (EXISTS "${_aurora_stamp_file}")
+    file(READ "${_aurora_stamp_file}" _aurora_previous)
+endif ()
+if (NOT EXISTS "${COS_SWITCH_AURORA_DIR}" OR NOT _aurora_previous STREQUAL _aurora_stamp)
+    file(REMOVE_RECURSE "${COS_SWITCH_AURORA_DIR}" "${_aurora_stamp_file}")
+    file(COPY "${COS_SWITCH_AURORA_SOURCE}/" DESTINATION "${COS_SWITCH_AURORA_DIR}"
+            PATTERN ".git" EXCLUDE)
+    foreach (_dir IN LISTS _aurora_patch_dirs)
+        execute_process(COMMAND "${CMAKE_COMMAND}" -DCOS_AURORA_SRC=${COS_SWITCH_AURORA_DIR}
+                -DCOS_AURORA_PATCH_DIR=${_dir} -P "${COS_REPO_ROOT}/native/cmake/aurora_apply_patches.cmake"
+                RESULT_VARIABLE _result)
+        if (NOT _result EQUAL 0)
+            message(FATAL_ERROR "cos_switch: patching Aurora with ${_dir} failed")
+        endif ()
+    endforeach ()
+    file(WRITE "${_aurora_stamp_file}" "${_aurora_stamp}")
+    message(STATUS "cos_switch: Aurora copied with ${_aurora_count} patches (shared, then Switch)")
+endif ()
+# The copy already carries native/patches/aurora: native/cmake/Aurora.cmake builds it as it is.
+set(COS_AURORA_PREPATCHED ON)
+set(FETCHCONTENT_SOURCE_DIR_AURORA "${COS_SWITCH_AURORA_DIR}" CACHE PATH "" FORCE)
+
+# Aurora's providers find the targets above and use them as they are.
+set(AURORA_SDL3_PROVIDER vendor CACHE STRING "" FORCE)
+set(AURORA_SDL3_LINKAGE static CACHE STRING "" FORCE)
+set(AURORA_DAWN_PROVIDER vendor CACHE STRING "" FORCE)
+set(AURORA_DAWN_LINKAGE static CACHE STRING "" FORCE)
+set(AURORA_NOD_PROVIDER vendor CACHE STRING "" FORCE)
+set(AURORA_NOD_LINKAGE static CACHE STRING "" FORCE)
+# Cache entries stay uncompressed (no zstd for Horizon needed).
+set(AURORA_CACHE_USE_ZSTD OFF CACHE BOOL "" FORCE)
+
+# ---- The native port itself ---------------------------------------------------------------------------
+# The NRO's entry point (source/cos_switch_main.cpp) instead of aurora::main.
+set(COS_EXE_ENTRY cos_switch_main)
+add_subdirectory("${COS_REPO_ROOT}/native" native)
+
+# sqlite (Aurora's caches): no WAL or memory-mapped files (no mmap), lock-free VFS on Horizon,
+# exclusive locking (one process; the pager keeps its cache between transactions) and temp files in
+# memory (no create-then-unlink on the SD card). Aurora's Switch patch 0006 drops the journal file.
+if (TARGET sqlite3)
+    target_compile_definitions(sqlite3 PRIVATE SQLITE_OMIT_WAL=1 SQLITE_MAX_MMAP_SIZE=0
+            SQLITE_OMIT_LOAD_EXTENSION=1 SQLITE_THREADSAFE=1 SQLITE_DEFAULT_LOCKING_MODE=1
+            SQLITE_TEMP_STORE=3)
+    target_sources(sqlite3 PRIVATE "${COS_REPO_ROOT}/switch/aurora/sqlite_horizon.c")
+    get_target_property(_sqlite_sources sqlite3 SOURCES)
+    list(GET _sqlite_sources 0 _sqlite_amalgamation)
+    get_filename_component(_sqlite_dir "${_sqlite_amalgamation}" DIRECTORY)
+    target_include_directories(sqlite3 PRIVATE "${_sqlite_dir}")
+endif ()
+
+# devkitPro's portlibs and libnx (no Mesa: the deko3d NRO references no EGL or GLES).
+target_include_directories(aurora_core PRIVATE "${SWITCH_PORTLIBS}/include")
+target_link_directories(aurora_core PUBLIC "${SWITCH_PORTLIBS}/lib")
+target_link_libraries(aurora_core PUBLIC nx)
+
+# Game units: newlib's <ctype.h> macros collide with decomp member names (include/cos_switch_compat.h).
+target_compile_options(cos_game_headers INTERFACE
+        "SHELL:-include ${COS_SWITCH_DIR}/include/cos_switch_compat.h")
+# pc_shot.cpp (COS_SHOT) and pc_capture.cpp (bug B36) read Dawn's C++ headers; the vendored Dawn carries them on its own
+# header target, not on webgpu_dawn as the Mac's prebuilt package does.
+set_property(SOURCE "${COS_REPO_ROOT}/native/src/pc/harness/pc_shot.cpp"
+        "${COS_REPO_ROOT}/native/src/pc/game_hooks/pc_capture.cpp" DIRECTORY "${COS_REPO_ROOT}/native"
+        APPEND PROPERTY INCLUDE_DIRECTORIES
+        "$<TARGET_PROPERTY:dawn::dawncpp_headers,INTERFACE_INCLUDE_DIRECTORIES>")
+
+# Dolphin's DSP HLE shim allocates its memory through <sys/mman.h>, which Horizon lacks: the
+# translated port's page-aligned heap stand-in (switch/host/compat/sys/mman.h).
+# Its zlib (Common::HashAdler32) is devkitPro's.
+target_include_directories(cos_dsp_hle PRIVATE "${COS_REPO_ROOT}/switch/host/compat"
+        "${SWITCH_PORTLIBS}/include")
+
+# The SDK over Aurora was written on the Mac, where plain char is signed (arm64 Darwin), as it is
+# for the game (-fsigned-char, GameConfig.cmake); AArch64 ELF's is unsigned. Keep the Mac's.
+target_compile_options(cos_sdk PRIVATE -fsigned-char)
+target_compile_options(cos_sdk_gf PRIVATE -fsigned-char)
+
+# Every target compiled like a game unit (it links cos_game_headers) compiles with clang.
+function(cos_switch_use_clang dir)
+    get_property(_targets DIRECTORY "${dir}" PROPERTY BUILDSYSTEM_TARGETS)
+    foreach (_t IN LISTS _targets)
+        get_target_property(_type ${_t} TYPE)
+        if (_type STREQUAL "INTERFACE_LIBRARY" OR _type STREQUAL "UTILITY")
+            continue()
+        endif ()
+        get_target_property(_libs ${_t} LINK_LIBRARIES)
+        if (_libs AND "cos_game_headers" IN_LIST _libs)
+            set_target_properties(${_t} PROPERTIES
+                    C_COMPILER_LAUNCHER "${COS_SWITCH_DIR}/clang-launcher.sh"
+                    CXX_COMPILER_LAUNCHER "${COS_SWITCH_DIR}/clang-launcher.sh")
+        endif ()
+    endforeach ()
+    get_property(_subdirs DIRECTORY "${dir}" PROPERTY SUBDIRECTORIES)
+    foreach (_d IN LISTS _subdirs)
+        cos_switch_use_clang("${_d}")
+    endforeach ()
+endfunction()
+cos_switch_use_clang("${COS_REPO_ROOT}/native")
+
+# ---- The harness's Switch platform layer ---------------------------------------------------------------
+add_library(cos_switch_platform STATIC
+        "${COS_SWITCH_DIR}/source/cos_switch.cpp"
+        "${COS_SWITCH_DIR}/source/cos_switch_stats.cpp"
+        "${COS_SWITCH_DIR}/source/cos_shader_cache.cpp"
+        "${COS_SWITCH_DIR}/source/cos_debug.cpp"
+        "${COS_SWITCH_DIR}/source/debug_server.cpp"
+        "${COS_SWITCH_DIR}/source/thread_wrap.c"
+        "${COS_SWITCH_DIR}/source/nv_wrap.c"
+        "${COS_REPO_ROOT}/switch/source/common/usb_log.c")
+target_include_directories(cos_switch_platform PUBLIC "${COS_SWITCH_DIR}/source"
+        PRIVATE "${COS_REPO_ROOT}/switch/source/common")
+target_link_libraries(cos_switch_platform PUBLIC nx)
+# the debug server's "info" (cos_debug.cpp): the NRO's version (scripts/switch/build_native.sh: git describe)
+set_property(SOURCE "${COS_SWITCH_DIR}/source/cos_debug.cpp" APPEND PROPERTY COMPILE_DEFINITIONS
+        COS_SWITCH_VERSION_STR="${COS_SWITCH_VERSION}")
+# cos_switch_stats.cpp reads Aurora's Switch counters (aurora/patches/0005), switch/deko's and the disc
+# reader's (nod/), which the executable links.
+target_include_directories(cos_switch_platform PRIVATE "${COS_SWITCH_AURORA_DIR}/include")
+target_link_libraries(cos_switch_platform PUBLIC aurora_gx cos_switch_nod)
+add_library(cos_switch_main STATIC "${COS_SWITCH_DIR}/source/cos_switch_main.cpp")
+target_link_libraries(cos_switch_main PUBLIC cos_switch_platform)
+# The harness (cos_pc) calls the platform layer (pc_crash.cpp, pc_harness.cpp, pc_main.cpp).
+target_include_directories(cos_pc PRIVATE "${COS_SWITCH_DIR}/source")
+target_link_libraries(cos_pc PRIVATE cos_switch_platform)
+
+# ---- The deko3d renderer (switch/deko; docs/DEKO3D_MIGRATION_PLAN.md phases 2-3) -------------------------
+# Aurora with AURORA_GFX_DEKO3D (aurora/patches/0013-0014) records its frames as for WebGPU, keeps Dawn's
+# Null device as its object model, and switch/deko records them into deko3d (switch/deko/aurora, compiled
+# into Aurora's gx library), presents and compiles the shaders its DKSH caches lack (uamlib and Tint in
+# the NRO).
+set(_dk_dir "${COS_REPO_ROOT}/switch/deko")
+# The renderer's own shaders (ImGui, the 3x5 text): GLSL compiled by devkitPro's uam at build time and
+# embedded (bin2s), named <name>_vsh.glsl / <name>_fsh.glsl. The test pattern's shaders are WGSL
+# compiled offline into the DKSH cache (shaders/dk_test_pattern.wgsl, native/tools/dksh_cache).
+file(GLOB _dk_glsl CONFIGURE_DEPENDS "${_dk_dir}/shaders/*.glsl")
+set(_dk_dksh)
+foreach (_glsl IN LISTS _dk_glsl)
+    get_filename_component(_name "${_glsl}" NAME_WE)
+    if (_name MATCHES "_vsh$")
+        set(_stage vert)
+    elseif (_name MATCHES "_fsh$")
+        set(_stage frag)
+    else ()
+        message(FATAL_ERROR "${_glsl}: deko3d shaders are named <name>_vsh.glsl or <name>_fsh.glsl")
+    endif ()
+    nx_add_shader_program(cos_dksh_${_name} "${_glsl}" ${_stage} OUTPUT "${CMAKE_BINARY_DIR}/dksh/${_name}.dksh")
+    list(APPEND _dk_dksh cos_dksh_${_name})
+endforeach ()
+dkp_add_embedded_binary_library(cos_switch_deko_shaders ${_dk_dksh})
+# uam (devkitPro's deko3d shader compiler with SwitchWakerHD's patches, switch/uam) for the shaders the
+# DKSH caches lack, on one worker thread (switch/deko/shaders.cpp)
+add_subdirectory("${COS_REPO_ROOT}/switch/uam" "${CMAKE_BINARY_DIR}/uam" EXCLUDE_FROM_ALL)
+add_library(cos_switch_deko STATIC
+        "${_dk_dir}/device.cpp"
+        "${_dk_dir}/memory.cpp"
+        "${_dk_dir}/descriptors.cpp"
+        "${_dk_dir}/overlay.cpp"
+        "${_dk_dir}/pattern.cpp"
+        "${_dk_dir}/shader_cache.cpp"
+        "${_dk_dir}/shaders.cpp"
+        "${_dk_dir}/shader_translate.cpp"
+        "${_dk_dir}/dksh_file.cpp")
+target_include_directories(cos_switch_deko PUBLIC "${_dk_dir}")
+set_target_properties(cos_switch_deko PROPERTIES CXX_STANDARD 20 CXX_STANDARD_REQUIRED ON)  # (Tint's headers)
+# Tint's WGSL reader and GLSL writer from the Dawn build (with switch/dawn/patches' Tint options
+# depth_zero_to_one and disable_position_y_negation, which shader_translate.cpp sets)
+target_include_directories(cos_switch_deko PRIVATE "${dawn_SOURCE_DIR}" "${dawn_SOURCE_DIR}/include")
+target_compile_definitions(cos_switch_deko PRIVATE "COS_SWITCH_NRO_DIR=\"${_nro_dir}\""
+        "COS_SWITCH_DATA_DIR=\"/switch/switchwaker/native\""
+        $<$<BOOL:${COS_DK_DEBUG_LIB}>:COS_DK_DEBUG_LIB=1>)
+if (COS_DK_DEBUG_LIB)
+    set(_dk_lib deko3dd)
+else ()
+    set(_dk_lib deko3d)
+endif ()
+target_link_libraries(cos_switch_deko PRIVATE cos_switch_deko_shaders imgui ZLIB::ZLIB xxHash::xxhash uamlib
+        tint_api tint_lang_glsl_writer tint_lang_wgsl_reader tint_lang_wgsl_inspector
+        PUBLIC ${_dk_lib} nx)
+# Every unit sees the define (the structs it changes are shared with the game's units).
+target_compile_definitions(aurora_core PUBLIC AURORA_GFX_DEKO3D=1)
+target_include_directories(aurora_core PRIVATE "${_dk_dir}")
+target_link_libraries(aurora_core PUBLIC cos_switch_deko)
+# The recording of Aurora's frames: inside Aurora's gx library, with its internal headers.
+target_sources(aurora_gx PRIVATE
+        "${_dk_dir}/aurora/dk_objects.cpp"
+        "${_dk_dir}/aurora/dk_pipeline.cpp"
+        "${_dk_dir}/aurora/dk_encode.cpp"
+        "${_dk_dir}/aurora/dk_present.cpp")
+target_include_directories(aurora_gx PRIVATE "${_dk_dir}" "${_dk_dir}/aurora" "${COS_SWITCH_AURORA_DIR}/lib")
+# The NRO's own folder: SDL_GetBasePath (the bundled pipeline cache) and the DKSH cache next to it; the
+# logs are COS_SWITCH_ROOT/logs/<NRO name>_<date>_<time>.log (source/cos_switch.cpp).
+target_compile_definitions(SDL3-static PRIVATE "COS_SWITCH_NRO_DIR=\"${_nro_dir}\"")
+target_compile_definitions(cos_switch_platform PUBLIC COS_SWITCH_DEKO3D=1
+        "COS_SWITCH_NRO_NAME=\"${COS_SWITCH_NRO_NAME}\"")
+target_include_directories(cos_switch_platform PUBLIC "${_dk_dir}")
+message(STATUS "deko3d: ${_dk_lib}, NRO folder ${_nro_dir}")
+
+# ---- The NRO ---------------------------------------------------------------------------------------------
+if (NOT TARGET switchwaker)
+    message(FATAL_ERROR "native/ did not define the executable switchwaker (modules or cos_sdk missing)")
+endif ()
+target_link_libraries(switchwaker PRIVATE cos_switch_platform)
+# Every thread gets a stack Dawn's shader compiler fits in and runs on the application cores
+# (source/thread_wrap.c).
+target_link_options(switchwaker PRIVATE "LINKER:--wrap=pthread_create" "LINKER:--wrap=pthread_detach")
+# libnx's GPU waits and submissions, timed per thread for the perf-switch lines (source/nv_wrap.c).
+target_link_options(switchwaker PRIVATE "LINKER:--wrap=nvFenceWait" "LINKER:--wrap=nvGpuChannelKickoff"
+        "LINKER:--wrap=nvGpuChannelAppendEntry")
+# abort() writes the logs out and a backtrace first (source/cos_switch.cpp).
+target_link_options(switchwaker PRIVATE "LINKER:--wrap=abort")
+# The shadows of Aurora's WebGPU textures, views, samplers and bind groups (switch/deko/aurora/dk_objects.cpp).
+foreach (_fn wgpuDeviceCreateTexture wgpuTextureAddRef wgpuTextureRelease wgpuTextureCreateView
+        wgpuTextureViewAddRef wgpuTextureViewRelease wgpuDeviceCreateSampler wgpuSamplerAddRef wgpuSamplerRelease
+        wgpuDeviceCreateBindGroup wgpuBindGroupAddRef wgpuBindGroupRelease)
+    target_link_options(switchwaker PRIVATE "LINKER:--wrap=${_fn}")
+endforeach ()
+set_target_properties(switchwaker PROPERTIES OUTPUT_NAME "${COS_SWITCH_NRO_NAME}" SUFFIX ".elf")
+# The version the Homebrew Menu shows: scripts/switch/build_native.sh passes git describe's (the tag).
+set(COS_SWITCH_VERSION "0.0.0" CACHE STRING "NRO display version (NACP, at most 15 bytes)")
+if (COS_DK_DEBUG_LIB)
+    set(_nacp_name "SwitchWaker (deko3d debug)")
+else ()
+    set(_nacp_name "SwitchWaker")
+endif ()
+nx_generate_nacp(cos_native.nacp
+        NAME "${_nacp_name}" AUTHOR "SwitchWaker contributors" VERSION "${COS_SWITCH_VERSION}")
+nx_create_nro(cos_nro
+        TARGET switchwaker
+        OUTPUT "${CMAKE_BINARY_DIR}/${COS_SWITCH_NRO_NAME}.nro"
+        NACP cos_native.nacp
+        # Original art drawn by scripts/switch/make_icon.py; the HOME-menu forwarder uses it too
+        # (scripts/switch/build_forwarder.sh).
+        ICON "${CMAKE_CURRENT_SOURCE_DIR}/icon/icon.jpg")

@@ -1,0 +1,15 @@
+{
+  "step": "framegen-flip-rate-60hz",
+  "note": "0131's flip timing on a console output without 120 Hz: nine intervals of 16.67-16.69 ms, 59.943 flips a second, so frame generation plans at 59.94 Hz (the 120 target becomes 60) instead of assuming 119.88.",
+  "must_contain": [
+    "build identity: 1f81446ad708fb08f7dfbbb5a4239afd69b49e256b77b2b630ec5a95dd27dce3",
+    "119.88 Hz not offered on the console's present output (0)",
+    "[PS5] Flips timed 16.67 to 16.69 ms apart, median 16.68 ms.",
+    "[PS5] The output shows 59.943 flips a second in its 59.940 Hz mode.",
+    "Target Framerate 60: display 59.940 Hz"
+  ],
+  "must_not_contain": [
+    "display 119.880 Hz"
+  ],
+  "human_check": ""
+}

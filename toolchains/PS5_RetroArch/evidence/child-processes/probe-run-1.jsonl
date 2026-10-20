@@ -1,0 +1,12 @@
+{"pid":196,"t":0.00,"step":"start","app":16408,"list_count":1,"flexible_free":437256192,"direct_total":12884901888,"direct_largest_free":12882804736}
+{"pid":196,"t":2.02,"step":"display_held","opened":1,"width":1920,"height":1080,"matched":120}
+{"pid":196,"t":2.15,"step":"headless_child","service_id":335644465,"reported":1,"seconds":0.12,"child_pid":197,"socket_type":5,"child_flexible_free":299892736,"child_direct_total":12884901888,"child_direct_largest_free":12578095104,"parent_flexible_free":299892736,"parent_direct_largest_free":12578095104,"listed":1,"list_count":2}
+{"pid":196,"t":2.15,"step":"headless_child_answer","answered":1}
+{"pid":196,"t":2.35,"step":"headless_child_closed","service_id":335644465,"kill_status":0,"present_after":0,"list_count":1}
+{"pid":196,"t":2.55,"step":"live_child","service_id":335644481,"reported":1,"child_pid":198}
+{"pid":196,"t":2.56,"step":"loadexec_with_live_child","service_id":335644481}
+{"pid":199,"t":0.00,"step":"after_loadexec","service_id":335644481,"child_listed":0,"list_count":1,"flexible_free":437256192}
+{"pid":199,"t":2.02,"step":"display_before_handover","opened":1,"width":1920,"height":1080,"frames":120,"matched":120,"seconds":2.02,"error":""}
+{"pid":199,"t":2.06,"step":"display_released"}
+{"pid":199,"t":2.25,"step":"graphics_child_spawned","service_id":335644513}
+{"pid":199,"t":2.77,"step":"graphics_child","service_id":335644513,"reported":0,"seconds":0.71,"child_pid":0,"opened":0,"frames":0,"matched":0,"width":0,"height":0,"child_flexible_free":0}

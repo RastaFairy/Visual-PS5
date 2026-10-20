@@ -1,0 +1,263 @@
+#pragma once
+
+#include "pcm_out.h"
+
+#include <atomic>
+#include <condition_variable>
+#include <cstdint>
+#include <deque>
+#include <functional>
+#include <map>
+#include <memory>
+#include <mutex>
+#include <string>
+#include <thread>
+#include <vector>
+
+struct AVFrame;
+
+#include "hwdec_ps5.h"
+#include "netstream.h"
+#include "subtitles.h"
+#include "yuv_convert.h"
+
+struct AVFormatContext;
+struct AVCodecContext;
+struct AVPacket;
+struct SwsContext;
+struct SwrContext;
+
+// Plays one URL with FFmpeg; video on the PS5's hardware decoder when it
+// takes the stream (hwdec_ps5.h), else FFmpeg's software decoder. Threads:
+// demux, video decode (+ scale to screen size), audio decode (+ resample
+// into the audio output's queue). The audio queue is the master clock; without
+// audio, the wall clock. The UI thread calls present() every frame and shows
+// the picture it returns.
+class Player {
+public:
+	struct Track {
+		int stream = -1;
+		std::string label, lang;
+	};
+	struct Options {
+		std::string url;
+		std::vector<std::string> headers;
+		double start = 0;
+		std::vector<std::string> audio_langs;  // preferred, ISO 639-2
+		// A direct link (not the streaming server): a big file may be
+		// downloaded over several connections (netstream.h).
+		bool parallel = false;
+	};
+	enum class State { Idle, Opening, Playing, Ended, Failed };
+
+	~Player();
+
+	void open(const Options& opts);
+	void close();
+
+	State state() const { return state_.load(); }
+	std::string error() const;
+
+	bool paused() const { return paused_; }
+	void set_paused(bool p);
+	bool buffering(int* percent = nullptr) const;
+
+	double position();  // seconds; the seek target while a seek is pending
+	double duration() const { return duration_; }
+	void seek(double t);
+
+	std::vector<Track> audio_tracks() const;
+	int audio_stream() const { return audio_stream_.load(); }
+	void select_audio(int stream);
+
+	// Text subtitles inside the file (SRT/ASS/WebVTT/mov_text).
+	std::vector<Track> subtitle_tracks() const;
+	std::string embedded_subtitle(int stream, double t);
+
+	// A picture to show: tightly packed RGBA at its display size, valid until the
+	// next present().
+	struct Picture {
+		const uint8_t* rgba = nullptr;  // hdr: 32-bit words, 10 bits per colour (yuv_convert.h), BT.2020 PQ
+		int w = 0, h = 0;
+		bool hdr = false;
+		// gpu: the picture as the decoder made it, for the HDR pass to convert (as PS5MC's renderer does): rgba
+		// holds the Y plane (w x h, 16-bit words) and then the UV plane (w/2 x h/2, interleaved 16-bit pairs).
+		// w, h are the planes' size; dw, dh the size to show it at (fitted to the screen).
+		bool gpu = false;
+		bool high_aligned = false;  // the 10-bit samples sit in the high bits of each word (else the low bits)
+		bool hlg = false;
+		bool bt601 = false;  // gpu without hdr: SDR planes for the video pass; which matrix
+		int dw = 0, dh = 0;
+	};
+	// The HDR pass cannot take planes (the graphics driver refused them): HDR pictures are made on the CPU instead.
+	void set_hdr_gpu(bool on) { hdr_gpu_ = on; }
+	// 10-bit SDR pictures (BT.709/601) go as planes to the GPU, which converts them (Nuvio's way); off: the CPU does.
+	void set_sdr_gpu(bool on) { sdr_gpu_ = on; }
+	// The screen is (or is no longer) in HDR: from then on, HDR10 and HLG pictures are made for the HDR output,
+	// without tone mapping. Other pictures stay SDR.
+	void set_hdr_output(bool on) { hdr_output_ = on; }
+	bool hdr_capable() const { return colors_ == YuvColors::Hdr10 || colors_ == YuvColors::Hlg; }
+	// UI thread, every frame: picks the frame due now. Returns it when it is a new
+	// one, nullptr when the one already shown is still the right one.
+	const Picture* present();
+
+	std::string stats();
+	std::string codec_summary() const;
+	// Every 30 s while playing: frame rate shown, drops, buffer, decoder (to the log).
+	void log_stats();
+	bool too_heavy() const { return too_heavy_; }
+	double fps() const { return fps_; }  // the video's frame rate (0 until known)
+	// How the colours are treated ("HDR10", "HLG", "Dolby Vision 5"...), and a warning when they cannot be right.
+	const std::string& colour_label() const { return colour_label_; }
+	const std::string& colour_warning() const { return colour_warning_; }
+
+private:
+	class PacketQueue {
+	public:
+		void put(AVPacket* pkt, double pts_s, double dur_s);
+		// 1: packet, 0: timed out/empty, -1: end of input reached and empty
+		int get(AVPacket** pkt, int* serial, int timeout_ms);
+		void flush();
+		void set_eof(bool eof);
+		void abort();
+		size_t count() const;
+		size_t bytes() const;
+		double duration() const;
+		int serial() const;
+		void reset();
+
+	private:
+		struct Item {
+			AVPacket* pkt;
+			double pts, dur;
+		};
+		mutable std::mutex m_;
+		std::condition_variable cv_;
+		std::deque<Item> q_;
+		size_t bytes_ = 0;
+		double last_pts_ = -1, dur_sum_ = 0;
+		int serial_ = 0;
+		bool eof_ = false, abort_ = false;
+	};
+	struct Frame {
+		std::vector<uint8_t> pixels;  // RGBA, or (hdr) one 32-bit 10-bit word per pixel
+		bool hdr = false;
+		bool gpu = false, high = false;
+		int dw = 0, dh = 0;
+		int w = 0, h = 0;
+		double pts = 0;
+		int serial = 0;
+	};
+
+	static int interrupt_cb(void* opaque);
+	void demux_thread();
+	void demux_run();
+	void video_thread();
+	bool video_thread_hw();  // false: the hardware decoder gave up, carry on in software
+	bool emit_frame(double pts, int serial, const std::function<void(Frame&)>& fill, int src_w, int src_h,
+	                double sar);
+	void hw_to_rgba(const HwDecoder::Picture& pic, Frame& f);
+	bool fast_convert(const YuvPicture& pic, Frame& f);
+	YuvColors colors_ = YuvColors::Bt709;  // of the video being played
+	std::atomic<bool> hdr_output_{false};
+	std::atomic<bool> hdr_gpu_{true};
+	std::atomic<bool> sdr_gpu_{true};
+	bool sdr10_gpu() const {
+		return sdr_gpu_ && (colors_ == YuvColors::Bt709 || colors_ == YuvColors::Bt601) && !(hdr_output_ && hdr_capable());
+	}
+	std::vector<uint8_t> p010_tmp_;  // low-aligned 10-bit words moved up for swscale's P010
+	void planes_from_hw(const HwDecoder::Picture& pic, Frame& f, bool high);
+	void planes_from_av(const AVFrame* frame, Frame& f);
+	std::string colour_label_, colour_warning_;
+	void audio_thread();
+	void fail(const std::string& msg);
+	bool open_stream_codec(int stream, AVCodecContext** out);
+	void handle_subtitle_packet(AVPacket* pkt);
+	void update_buffering();
+	double clock_locked();
+	void set_clock_running(bool running);
+	std::string track_label(int stream) const;
+
+	Options opts_;
+	std::atomic<State> state_{State::Idle};
+	mutable std::mutex err_m_;
+	std::string error_;
+
+	std::thread demux_, video_, audio_;
+	std::atomic<bool> abort_{false};
+	double open_started_ = 0;
+
+	AVFormatContext* fmt_ = nullptr;
+	AVIOContext* main_pb_ = nullptr;  // our network input (NetStream)
+	std::atomic<bool> quick_{false};  // opened without the index: seeking reopens
+	NetStream::IoHooks io_hooks_;
+	std::atomic<int> video_stream_{-1}, audio_stream_{-1};
+	AVCodecContext* vctx_ = nullptr;
+	std::unique_ptr<HwDecoder> hw_;      // the hardware decoder, while it decodes
+	std::atomic<bool> hw_active_{false};  // for the stats line
+	int hw_shift_ = -1;                   // 10-bit samples: shift to 8 bits (2 or 8, found on the first picture)
+	SwsContext* hw_sws_ = nullptr;        // hardware pictures at sizes the fast path doesn't do
+	AVCodecContext* actx_ = nullptr;
+	std::mutex actx_m_;
+	std::map<int, AVCodecContext*> sctx_;
+	double duration_ = 0;
+
+	PacketQueue vq_, aq_;
+	std::atomic<bool> eof_{false};
+
+	// Seeking
+	std::mutex seek_m_;
+	bool seek_req_ = false;
+	double seek_target_ = 0;
+	// Accurate seeking: each decoder discards output before its target.
+	std::atomic<double> vdrop_{-1}, adrop_{-1};
+	std::atomic<int> audio_switch_{-1};
+	double start_offset_ = 0;  // container start time; all times shown are relative to it
+	double to_sec(int64_t ts, double tb) const;
+	void do_seek(double target);
+	void apply_run_state();
+	double queued_audio_seconds() const;
+
+	// Video frames
+	std::mutex fq_m_;
+	std::condition_variable fq_cv_;
+	std::deque<Frame> frames_;
+	std::vector<Frame> pool_;
+	std::atomic<bool> video_drained_{false};
+	Frame current_;  // the picture on show
+	Picture pic_;
+	bool have_picture_ = false;
+	SwsContext* sws_ = nullptr;
+
+	// Audio
+	PcmOut pcm_;
+	SwrContext* swr_ = nullptr;
+	std::mutex clock_m_;
+	double audio_end_pts_ = -1;  // pts at the end of what's queued for output
+	std::atomic<bool> audio_drained_{false};
+
+	// Wall clock (no audio)
+	double wall_base_pts_ = 0, wall_base_time_ = 0;
+	bool wall_running_ = false;
+
+	std::atomic<bool> paused_{false};
+	std::atomic<bool> buffering_{true};
+	std::atomic<int> buffer_percent_{0};
+	int stalls_ = 0;       // index into kBufferTargets: grows each time the stream falls behind
+	int stall_count_ = 0;  // for the log
+	double start_target_ = 0;  // seconds to buffer at least, from the file's bitrate
+
+	// Subtitles inside the file
+	mutable std::mutex sub_m_;
+	std::map<int, std::vector<Cue>> embedded_;
+
+	// Stats
+	std::atomic<int> dropped_{0}, decoded_{0}, shown_{0};
+	// log_stats(): counts at the previous call
+	double log_at_ = 0;
+	int log_shown_ = 0, log_dropped_ = 0;
+	std::atomic<bool> too_heavy_{false};
+	double heavy_window_start_ = 0;
+	int heavy_window_dropped_ = 0, heavy_window_decoded_ = 0;
+	double fps_ = 0;
+};

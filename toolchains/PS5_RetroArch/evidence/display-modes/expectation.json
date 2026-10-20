@@ -1,0 +1,18 @@
+{
+  "step": "display-modes",
+  "note": "The Vulkan driver's display offers 3840x2160, 2560x1440 and 1920x1080; each registers as its own VideoOut buffer set, presents at the display's rate and fills the screen; a size used again reuses its set.",
+  "must_contain": [
+    "display modes test: 3 modes: 3840x2160@59940 2560x1440@59940 1920x1080@59940",
+    "wsi/videoout: 1920x1080 framebuffers registered as set 2, buffers 10-14",
+    "1920x1080@59940: 180 frames in 2.997 s, 3 images, ok",
+    "2560x1440@59940: 180 frames in 2.990 s, 3 images, ok",
+    "3840x2160@59940: 180 frames in 2.994 s, 3 images, ok",
+    "record: {\"result\": \"PASS\"}",
+    "Owner: each size filled the TV",
+    "Owner: RetroArch after the test steady, no flicker"
+  ],
+  "must_not_contain": [
+    "FAIL"
+  ],
+  "human_check": "The console's owner watched the run: each size filled the TV with the border on all four edges and the split centred, and RetroArch afterwards did not flicker."
+}

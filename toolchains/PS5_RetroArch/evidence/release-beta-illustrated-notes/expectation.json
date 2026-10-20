@@ -1,0 +1,16 @@
+{
+  "step": "release-beta-illustrated-notes",
+  "must_contain": [
+    "Public-facing captions shortened; build, test-runner and memory internals removed",
+    "Permanent warning and compatibility warning unchanged",
+    "All 18 core entries retained in the illustrated systems table",
+    "All ten screenshots and captions retained; three supplementary views expandable",
+    "All local icon/image paths and 12 contents/closing anchors resolve",
+    "Browser preview: 57 images loaded, no horizontal overflow at the current viewport",
+    "Normal In this release contents section; no creator-specific section"
+  ],
+  "must_not_contain": [
+    "FAILED"
+  ],
+  "human_check": "Highlights, linked contents, heading icons and grouped hardware table reviewed in the local preview. Screenshot width is consistent; supplementary captures expand. Actual GitHub publication is not claimed."
+}

@@ -1,0 +1,6 @@
+out/
+out_isolated/
+*.o
+*.elf
+eboot.bin
+sign.log

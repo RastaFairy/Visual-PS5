@@ -1,0 +1,13 @@
+{
+  "step": "game-library",
+  "note": "ES-DE's systems and game lists come from RetroArch's playlists and core info through the library every frontend shares (src/ps5_library.h): 14 systems and 16 games from the base console's 5 playlists, a mixed DETECT playlist split by folder, ES-DE's own play history kept across rewrites, and games still started through game mode.",
+  "must_contain": [
+    "14 systems, 16 games (16 with ES-DE's details kept), 15 cores, 0 failures",
+    "es_log: Parsed configuration for 209 systems, loaded 14 systems",
+    "custom_systems/es_systems.xml: 14 systems: arcade cps fbneo gb gba gbc mame n3ds neogeo nes ps2 psp psx snes",
+    "gamelist snes: playcount 2, playtime 21",
+    "fatal signals 0"
+  ],
+  "must_not_contain": [],
+  "human_check": "The 4 s capture of the first ES-DE shows the carousel of playlist systems (Game Boy Color, SNES, Neo-Geo, PlayStation, PlayStation 2, PSP)."
+}

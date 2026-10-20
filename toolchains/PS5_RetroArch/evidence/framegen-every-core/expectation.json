@@ -1,0 +1,42 @@
+{
+  "step": "framegen-every-core",
+  "note": "Frame generation on every core, build c480fe1c (0137 and the Dolphin image size): each core ran a game with two recordings of the presented pictures; a core fails on a crash, on a window with no real frame at 2 pictures a frame, or when its generated pictures differ from their neighbours by more than twice what its real pictures do plus 3 (the crop fault: 31.5 against 6.7). 32 pass; DOSBox Pure (70 Hz) and ScummVM (120 Hz) correctly make no pictures; NeoCD has no disc to run.",
+  "must_contain": [
+    "PASS a5200: ",
+    "PASS azahar: ",
+    "PASS desmume: ",
+    "PASS dolphin: ",
+    "PASS fbneo: ",
+    "PASS fceumm: ",
+    "PASS flycast: ",
+    "PASS genesis_plus_gx: ",
+    "PASS handy: ",
+    "PASS mame: ",
+    "PASS mednafen_ngp: ",
+    "PASS mednafen_pce: ",
+    "PASS mednafen_pcfx: ",
+    "PASS mednafen_psx_hw: ",
+    "PASS mednafen_saturn: ",
+    "PASS mednafen_vb: ",
+    "PASS mednafen_wswan: ",
+    "PASS melondsds: ",
+    "PASS mgba: ",
+    "PASS mupen64plus_next: ",
+    "PASS opera: ",
+    "PASS picodrive: ",
+    "PASS pokemini: ",
+    "PASS ppsspp: ",
+    "PASS prosystem: ",
+    "PASS ps5sx2: ",
+    "PASS puae: ",
+    "PASS snes9x: ",
+    "PASS stella: ",
+    "PASS swanstation: ",
+    "PASS vice_x64sc: ",
+    "PASS virtualjaguar: "
+  ],
+  "must_not_contain": [
+    "FAIL "
+  ],
+  "human_check": "Play a game with frame generation on: no doubled picture."
+}

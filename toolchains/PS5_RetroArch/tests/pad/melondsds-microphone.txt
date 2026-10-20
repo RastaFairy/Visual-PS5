@@ -1,0 +1,8 @@
+# melonDS DS with its microphone always on (its default listens only while the
+# microphone button is held): the ps5 driver opens the first user's AudioIn port and
+# delivers samples, which its closing line counts. Started with --game=melondsds:<content>.
+2.0 OPTION melonds_mic_input_active always
+5.0 MARK
+15.0 MARK
+16.0 SCREENSHOT
+18.0 STOP

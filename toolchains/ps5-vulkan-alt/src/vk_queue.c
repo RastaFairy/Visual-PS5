@@ -1,0 +1,1389 @@
+#include "vk_queue.h"
+#include "vk_buffer_transfer.h"
+#include "vk_indirect.h"
+#include "vk_query_pool.h"
+#if defined(PS5VK_TARGET_PS5)
+#include "ps5log.h"
+#define QUEUE_DIAG(...) ps5log_printf(PS5LOG_ERR, __VA_ARGS__)
+#else
+#define QUEUE_DIAG(...) ((void)0)
+#endif
+#include "vk_image_transfer.h"
+#include "dxvk_clear_pass.h"
+#include <stdlib.h>
+#include <string.h>
+
+#define INVALID VK_ERROR_UNKNOWN
+static int event_operation(int type);
+static int frontend_operation(int type);
+static void free_submission(struct ps5vk_submission *s)
+{
+    if (s->reserved) {
+        for (uint32_t j = 0; j < s->wait_count; ++j) --s->waits[j]->pending;
+        for (uint32_t j = 0; j < s->signal_count; ++j) --s->signals[j]->pending;
+    }
+    VkAllocationCallbacks a = s->allocator; VkBool32 custom = s->custom_allocator;
+    ps5vk_object_free(s, &a, custom);
+}
+static void pin(struct ps5vk_submission *s, int acquire)
+{
+    for (unsigned j = 0; j < s->count; ++j) {
+        VkCommandBuffer c = s->buffers[j];
+        /* Event host-transition valid usage and lifetime are expressed in
+         * terms of a command buffer remaining pending, not merely the short
+         * segment that executes the event opcode.  Pin all event references
+         * on the 0 -> 1 transition and release them only on 1 -> 0. */
+        if (acquire && !c->pending_count) {
+            for (uint32_t k = 0; k < c->operation_count; ++k) {
+                struct ps5vk_operation *op = &c->operations[k];
+                if (!event_operation(op->type)) continue;
+                ++op->event->pending;
+                if (op->type == PS5VK_EVENT_WAIT) ++op->event->pending_waits;
+            }
+        }
+        uint32_t first = ps5vk_submission_first_operation(s, j);
+        uint32_t end = first + ps5vk_submission_operation_count(s, j);
+        for (uint32_t k = first; k < end; ++k) {
+            struct ps5vk_operation *op = &c->operations[k];
+            if (event_operation(op->type)) continue;
+            if (op->type == PS5VK_BEGIN_RENDER_PASS) {
+                VkFramebuffer original = ps5vk_framebuffer_original(op->framebuffer);
+                if (acquire) { ++op->render_pass->pending; ++original->pending; }
+                else { --op->render_pass->pending; --original->pending; }
+                for (uint32_t n = 0; n < op->framebuffer->attachment_count; ++n) {
+                    VkImageView view = op->framebuffer->attachments[n];
+                    if (acquire) { ++view->pending; ++view->image->pending; }
+                    else { --view->pending; --view->image->pending; }
+                }
+            }
+            if (op->type == PS5VK_DRAW || op->type == PS5VK_DRAW_INDEXED ||
+                ps5vk_indirect_graphics_operation(op->type)) {
+                if (acquire) ++op->pipeline->pending;
+                else --op->pipeline->pending;
+                for(unsigned set=0;set<PS5VK_MAX_SETS;++set)if(op->sets[set]) {
+                    if(acquire)++op->sets[set]->pending;else --op->sets[set]->pending;
+                }
+            }
+            if (op->type != PS5VK_DISPATCH &&
+                !ps5vk_indirect_compute_operation(op->type)) continue;
+            if (acquire) ++op->pipeline->pending; else --op->pipeline->pending;
+            for (uint32_t set=0;set<PS5VK_MAX_SETS;++set) if(op->sets[set]) {
+                if(acquire)++op->sets[set]->pending;else --op->sets[set]->pending;
+            }
+        }
+        if (acquire) {
+            ++c->pending_count;
+            c->state = PS5VK_PENDING;
+        } else {
+            --c->pending_count;
+            if (!c->pending_count) {
+                for (uint32_t k = 0; k < c->operation_count; ++k) {
+                    struct ps5vk_operation *op = &c->operations[k];
+                    if (!event_operation(op->type)) continue;
+                    --op->event->pending;
+                    if (op->type == PS5VK_EVENT_WAIT) --op->event->pending_waits;
+                }
+                c->state = c->usage & VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT ?
+                    PS5VK_INVALID : PS5VK_EXECUTABLE;
+            }
+        }
+    }
+}
+
+static int timeline(VkSemaphore semaphore)
+{ return semaphore->type == VK_SEMAPHORE_TYPE_TIMELINE; }
+
+/* Publish a retired record's signals. The backend has already reported exact
+ * completion with visibility, so this is the first point at which a timeline
+ * payload may advance; it only ever moves forward. */
+static void retire_signals(const struct ps5vk_submission *s)
+{
+    for (uint32_t j = 0; j < s->signal_count; ++j) {
+        VkSemaphore semaphore = s->signals[j];
+        if (!timeline(semaphore)) semaphore->signaled = VK_TRUE;
+        else if (s->signal_values[j] > semaphore->value)
+            semaphore->value = s->signal_values[j];
+    }
+}
+
+/* The queue head is waiting for a timeline value nothing has published yet.
+ * Only a host signal (or retirement of earlier work, which is already done at
+ * the head) can satisfy it, so nothing the queue itself does makes progress. */
+static int head_waits_on_timeline(const VkDevice d)
+{
+    const struct ps5vk_submission *s = d->submission;
+    if (!s || s->waits_consumed) return 0;
+    for (uint32_t j = 0; j < s->wait_count; ++j)
+        if (timeline(s->waits[j]) && s->waits[j]->value < s->wait_values[j]) return 1;
+    return 0;
+}
+
+static VkResult start_submission(VkDevice d)
+{
+    while (d->submission) {
+        struct ps5vk_submission *s = d->submission;
+        if (!s->waits_consumed) {
+            /* An unsatisfied timeline wait leaves the head in place without
+             * consuming anything; it is re-evaluated on every progress call. */
+            if (head_waits_on_timeline(d)) return VK_SUCCESS;
+            for (uint32_t j = 0; j < s->wait_count; ++j) {
+                if (timeline(s->waits[j])) continue;
+                if (!s->waits[j]->signaled) { d->lost = VK_TRUE; return VK_ERROR_DEVICE_LOST; }
+                s->waits[j]->signaled = VK_FALSE;
+            }
+            s->waits_consumed = VK_TRUE;
+        }
+        if (s->frontend_only) {
+            for (uint32_t b = 0; b < s->count; ++b) {
+                VkCommandBuffer command = s->buffers[b];
+                uint32_t first = ps5vk_submission_first_operation(s, b);
+                uint32_t end = first + ps5vk_submission_operation_count(s, b);
+                for (uint32_t k = first; k < end; ++k) {
+                    struct ps5vk_operation *op = &command->operations[k];
+                    if (op->type == PS5VK_EVENT_WAIT &&
+                        !(op->event->host_signaled || op->event->device_signaled)) {
+                        return VK_SUCCESS;
+                    }
+                    if (op->type == PS5VK_EVENT_SET) op->event->device_signaled = VK_TRUE;
+                    if (op->type == PS5VK_EVENT_RESET) {
+                        op->event->host_signaled = VK_FALSE;
+                        op->event->device_signaled = VK_FALSE;
+                    }
+                    if (ps5vk_buffer_transfer_operation(op->type) &&
+                        ps5vk_buffer_transfer_execute(d, op) != VK_SUCCESS) {
+                        d->lost = VK_TRUE;
+                        return VK_ERROR_DEVICE_LOST;
+                    }
+                    if ((op->type == PS5VK_QUERY_RESET || op->type == PS5VK_QUERY_COPY) &&
+                        ps5vk_query_operation_execute(d, op) != VK_SUCCESS) {
+                        QUEUE_DIAG("PS5VK_QUEUE_FRONTEND_QUERY_FAILED serial=%llu type=%u first=%u count=%u",
+                            (unsigned long long)s->serial,(unsigned)op->type,
+                            op->query_first,op->query_count);
+                        d->lost = VK_TRUE;
+                        return VK_ERROR_DEVICE_LOST;
+                    }
+                    /* Exactly one image domain owns the operation: the pure
+                     * transfer role's row memcpy, or the linear frontend that
+                     * also performs the colour-attachment readback copy. */
+                    if (ps5vk_image_domain(op) == PS5VK_IMAGE_DOMAIN_TRANSFER &&
+                        ps5vk_image_transfer_execute(d, op) != VK_SUCCESS) {
+                        d->lost = VK_TRUE;
+                        return VK_ERROR_DEVICE_LOST;
+                    }
+                    if (ps5vk_image_domain(op) == PS5VK_IMAGE_DOMAIN_LINEAR &&
+                        ps5vk_image_linear_execute(d, op) != VK_SUCCESS) {
+                        d->lost = VK_TRUE;
+                        return VK_ERROR_DEVICE_LOST;
+                    }
+                }
+            }
+            pin(s, 0);
+        } else if (s->count) {
+            if (!s->backend_job) {
+                if (!s->deferred_prepare || !d->submit_backend.prepare ||
+                    !d->submit_backend.launch || !d->submit_backend.poll ||
+                    !d->submit_backend.release) {
+                    QUEUE_DIAG("PS5VK_QUEUE_BACKEND_UNAVAILABLE serial=%llu deferred=%u",
+                        (unsigned long long)s->serial,s->deferred_prepare);
+                    d->lost = VK_TRUE;
+                    return VK_ERROR_DEVICE_LOST;
+                }
+                VkResult prepared=d->submit_backend.prepare(d,s,&s->backend_job);
+                if(prepared!=VK_SUCCESS || !s->backend_job) {
+                    QUEUE_DIAG("PS5VK_QUEUE_BACKEND_PREPARE_FAILED serial=%llu rc=%d job=%u",
+                        (unsigned long long)s->serial,prepared,s->backend_job!=NULL);
+                    d->lost = VK_TRUE;
+                    return VK_ERROR_DEVICE_LOST;
+                }
+            }
+            /* HOST_COHERENT: host writes reach memory before the GPU runs. */
+            if (ps5vk_coherent_host_writeback(d) != VK_SUCCESS) {
+                d->lost = VK_TRUE;
+                return VK_ERROR_DEVICE_LOST;
+            }
+            VkResult result = d->submit_backend.launch(d, s->backend_job);
+            if (result != VK_SUCCESS) {
+                QUEUE_DIAG("PS5VK_QUEUE_BACKEND_LAUNCH_FAILED serial=%llu rc=%d",
+                    (unsigned long long)s->serial,result);
+                d->lost = VK_TRUE;
+                return VK_ERROR_DEVICE_LOST;
+            }
+            return VK_SUCCESS;
+        }
+        d->queue.completed_serial = s->serial;
+        retire_signals(s);
+        if (s->fence) { s->fence->pending_serial = 0; s->fence->signaled = VK_TRUE; }
+        d->submission = s->next; free_submission(s);
+    }
+    return VK_SUCCESS;
+}
+
+/* Caller holds the device lock. */
+static VkResult poll_locked(VkDevice d)
+{
+    if (d->lost) {
+        QUEUE_DIAG("PS5VK_QUEUE_POLL_DEVICE_ALREADY_LOST");
+        return VK_ERROR_DEVICE_LOST;
+    }
+    struct ps5vk_submission *s = d->submission;
+    if (!s) return VK_SUCCESS;
+    /* A head that has not started yet (still waiting on a timeline value) has
+     * no launched job to poll: re-evaluate its waits instead. */
+    if (s->frontend_only || !s->waits_consumed || (s->count && !s->backend_job))
+        return start_submission(d);
+    if (!d->submit_backend.poll || !d->submit_backend.release) { d->lost = VK_TRUE; return VK_ERROR_DEVICE_LOST; }
+    uint64_t completed = 0;
+    VkResult result = d->submit_backend.poll(d, s->backend_job, &completed);
+    if (result != VK_SUCCESS) { d->lost = VK_TRUE; return VK_ERROR_DEVICE_LOST; }
+    if (!completed) return VK_SUCCESS;
+    if (completed != s->serial) { d->lost = VK_TRUE; return VK_ERROR_DEVICE_LOST; }
+    /* HOST_COHERENT: no stale CPU line survives the observed completion. */
+    if (ps5vk_coherent_host_invalidate(d) != VK_SUCCESS) {
+        d->lost = VK_TRUE;
+        return VK_ERROR_DEVICE_LOST;
+    }
+    /* The backend contract includes visibility and exact completion. */
+    d->submit_backend.release(d, s->backend_job);
+    pin(s, 0);
+    d->queue.completed_serial = s->serial;
+    retire_signals(s);
+    if (s->fence) { s->fence->pending_serial = 0; s->fence->signaled = VK_TRUE; }
+    d->submission = s->next; free_submission(s);
+
+    return start_submission(d);
+}
+
+VkResult ps5vk_queue_poll(VkDevice d)
+{
+    if (!d) return INVALID;
+    ps5vk_device_lock(d);
+    VkResult result = poll_locked(d);
+    ps5vk_device_unlock(d);
+    return result;
+}
+
+/* Retire queued work with the device lock held, releasing it around every
+ * pause so host signals and other waiters can run. With stop_at_timeline_wait
+ * the drain ends as soon as the head waits on a timeline value that only a
+ * later host signal can publish: waiting there would never end when that
+ * signal is issued by the same thread after vkQueueSubmit returns. */
+static VkResult drain_locked(VkDevice d, VkBool32 stop_at_timeline_wait)
+{
+    for (;;) {
+        VkResult result = poll_locked(d);
+        if (result != VK_SUCCESS) return result;
+        if (!d->submission) return VK_SUCCESS;
+        if (stop_at_timeline_wait && head_waits_on_timeline(d)) return VK_SUCCESS;
+        if (!d->progress.pause) return INVALID;
+        ps5vk_device_unlock(d);
+        d->progress.pause(d->progress.context, UINT64_MAX);
+        ps5vk_device_lock(d);
+    }
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL vkQueueWaitIdle(VkQueue queue)
+{
+    if (!queue || !queue->device) return INVALID;
+    VkDevice d = queue->device;
+    if (d->lost) {
+        QUEUE_DIAG("PS5VK_QUEUE_WAIT_DEVICE_ALREADY_LOST");
+        return VK_ERROR_DEVICE_LOST;
+    }
+    ps5vk_device_lock(d);
+    VkResult result = drain_locked(d, VK_FALSE);
+    ps5vk_device_unlock(d);
+    return result;
+}
+VKAPI_ATTR VkResult VKAPI_CALL vkDeviceWaitIdle(VkDevice d)
+{ return d ? vkQueueWaitIdle(&d->queue) : INVALID; }
+
+VKAPI_ATTR VkResult VKAPI_CALL vkQueueBindSparse(VkQueue queue, uint32_t count,
+    const VkBindSparseInfo *infos, VkFence fence)
+{
+    /* No queue family advertises VK_QUEUE_SPARSE_BINDING_BIT. Even count zero
+     * cannot waive that validity rule, so reject before inspecting batches or
+     * mutating fence/semaphore/submission state. */
+    (void)count; (void)infos; (void)fence;
+    if (!queue || !queue->device) return INVALID;
+    if (queue->device->lost) return VK_ERROR_DEVICE_LOST;
+    return VK_ERROR_VALIDATION_FAILED;
+}
+
+/* Everything a recorded draw needs to still be true at submission: a live
+ * graphics pipeline of this device, resolvable indirect parameters, and
+ * descriptor sets that are still the exact generation and signature the
+ * pipeline was recorded against. */
+static int draw_operation_valid(VkDevice d, const struct ps5vk_operation *op)
+{
+    if (!op->pipeline || op->pipeline->device != d || !op->pipeline->graphics ||
+        !op->pipeline->graphics_state) return 0;
+    /* The pipeline's subpass identity must still match the subpass the draw
+     * was recorded in, re-derived from the record rather than from recording
+     * state. */
+    if (op->pipeline->subpass != op->subpass) return 0;
+    if (ps5vk_indirect_graphics_operation(op->type) &&
+        ps5vk_indirect_validate(d, op) != VK_SUCCESS) return 0;
+    if (op->pipeline->set_count > PS5VK_MAX_SETS) return 0;
+    for (unsigned set = 0; set < op->pipeline->set_count; ++set)
+        if (ps5vk_graphics_set_required(op->pipeline,set) &&
+            (!op->sets[set] || !op->sets[set]->pool || op->sets[set]->pool->device != d ||
+             op->generations[set] != op->sets[set]->generation ||
+             memcmp(&op->sets[set]->signature, &op->pipeline->sets[set],
+                    sizeof(op->pipeline->sets[set])))) return 0;
+    return 1;
+}
+
+/* A secondary named inside a render pass must be a continuation recorded for
+ * the scope it is about to execute in, and it may carry nothing but draws of
+ * that pass: any other command would have no scope to execute in. The
+ * framebuffer is optional in the inheritance record, so the null handle is
+ * accepted and only a DIFFERENT one is refused. */
+static void apply_query_history(VkBool32 *reset, VkCommandBuffer command,
+    uint32_t end, VkQueryPool pool, uint32_t query)
+{
+    for (uint32_t i = 0; i < end; ++i) {
+        const struct ps5vk_operation *op = &command->operations[i];
+        if (op->query_pool != pool) continue;
+        if (op->type == PS5VK_QUERY_RESET && query >= op->query_first &&
+            query - op->query_first < op->query_count) {
+            *reset = VK_TRUE;
+        } else if ((op->type == PS5VK_QUERY_BEGIN ||
+                    op->type == PS5VK_QUERY_END) && op->query_first == query) {
+            *reset = VK_FALSE;
+        }
+    }
+}
+
+static int query_was_reset_before(VkCommandBuffer primary, uint32_t primary_end,
+    VkCommandBuffer const *siblings, uint32_t sibling_count,
+    VkCommandBuffer child, uint32_t child_end, VkQueryPool pool, uint32_t query)
+{
+    VkBool32 reset = pool->states[query] == PS5VK_QUERY_UNAVAILABLE;
+    apply_query_history(&reset, primary, primary_end, pool, query);
+    for (uint32_t i = 0; i < sibling_count; ++i)
+        if (siblings[i])
+            apply_query_history(&reset, siblings[i], siblings[i]->operation_count,
+                                pool, query);
+    apply_query_history(&reset, child, child_end, pool, query);
+    return reset;
+}
+
+static int continuation_child_valid(VkDevice d, VkCommandBuffer primary,
+    uint32_t primary_end, VkCommandBuffer const *siblings,
+    uint32_t sibling_count, VkCommandBuffer child, VkRenderPass active,
+    VkFramebuffer framebuffer, uint32_t subpass)
+{
+    if (!(child->usage & VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT) ||
+        !child->inheritance_valid ||
+        !ps5vk_render_pass_compatible(child->inheritance.renderPass, active) ||
+        /* Recorded for the subpass it is executing in, exactly. */
+        child->inheritance.subpass != subpass ||
+        (child->inheritance.framebuffer &&
+         child->inheritance.framebuffer != ps5vk_framebuffer_original(framebuffer))) return 0;
+    VkQueryPool query_pool = VK_NULL_HANDLE;
+    uint32_t query_index = 0;
+    for (unsigned j = 0; j < child->operation_count; ++j) {
+        const struct ps5vk_operation *op = &child->operations[j];
+        if (op->type == PS5VK_QUERY_BEGIN || op->type == PS5VK_QUERY_END) {
+            if (!ps5vk_render_pass_compatible(op->render_pass, active) ||
+                (op->framebuffer && ps5vk_framebuffer_original(op->framebuffer) !=
+                    ps5vk_framebuffer_original(framebuffer)) ||
+                op->subpass != subpass ||
+                ps5vk_query_operation_validate(d, op) != VK_SUCCESS)
+                return 0;
+            if (op->type == PS5VK_QUERY_BEGIN) {
+                if (query_pool || !query_was_reset_before(primary, primary_end,
+                        siblings, sibling_count, child, j, op->query_pool,
+                        op->query_first)) return 0;
+                query_pool = op->query_pool;
+                query_index = op->query_first;
+            } else {
+                if (!query_pool || query_pool != op->query_pool ||
+                    query_index != op->query_first) return 0;
+                query_pool = VK_NULL_HANDLE;
+            }
+            continue;
+        }
+        if (op->type != PS5VK_DRAW && op->type != PS5VK_DRAW_INDEXED &&
+            !ps5vk_indirect_graphics_operation(op->type)) return 0;
+        if (!ps5vk_render_pass_compatible(op->render_pass, active) ||
+            (op->framebuffer && ps5vk_framebuffer_original(op->framebuffer) !=
+                ps5vk_framebuffer_original(framebuffer)) ||
+            !draw_operation_valid(d, op)) return 0;
+    }
+    /* inheritedQueries is not advertised. A secondary-local query must be
+     * fully bracketed in this child; it cannot remain active at Execute. */
+    return query_pool == VK_NULL_HANDLE;
+}
+
+static int command_valid(VkDevice d, VkCommandBuffer c)
+{
+    /* A simultaneous-use buffer may still be pending when this submission is
+     * queued behind a timeline wait instead of after a full drain. */
+    if (!c || c->pool->device != d ||
+        (c->state != PS5VK_EXECUTABLE &&
+         !(c->state == PS5VK_PENDING &&
+           (c->usage & VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT)))) return 0;
+    VkRenderPass active = NULL;
+    VkFramebuffer framebuffer = NULL;
+    const struct ps5vk_operation *begin_op = NULL;
+    /* Contents mode of the active pass, read back from the immutable record
+     * rather than from recording state. */
+    VkSubpassContents contents = VK_SUBPASS_CONTENTS_INLINE;
+    uint32_t subpass = 0;
+    VkQueryPool active_query_pool = VK_NULL_HANDLE;
+    uint32_t active_query = 0;
+    /* Transform feedback capture is active (DXVK262-T14): between a BEGIN and
+     * an END of the same subpass, never across a subpass boundary. */
+    int xfb_active = 0;
+    VkQueryPool xfb_query_pool = VK_NULL_HANDLE;
+    uint32_t xfb_query = 0;
+    /* DRAW work seen since the pass began - what will execute, not how many
+     * commands were written. A vkCmdExecuteCommands marker naming only empty
+     * secondaries executes nothing, so counting markers here would accept the
+     * zero-body pass that record time refuses. Re-derived from the immutable
+     * record so a recording that somehow reaches submission with an empty pass
+     * is still refused before any backend sees it. */
+    unsigned pass_work = 0;
+    for (unsigned j = 0; j < c->operation_count; ++j) {
+        const struct ps5vk_operation *op = &c->operations[j];
+        if (op->type == PS5VK_EVENT_SET || op->type == PS5VK_EVENT_RESET ||
+            op->type == PS5VK_EVENT_WAIT) {
+            if (active || !op->event || op->event->device != d ||
+                !op->src_stage || !op->dst_stage) return 0;
+            continue;
+        }
+        if (op->type == PS5VK_BEGIN_RENDER_PASS || op->type == PS5VK_DRAW ||
+            op->type == PS5VK_CLEAR_ATTACHMENT ||
+            op->type == PS5VK_DRAW_INDEXED ||
+            ps5vk_indirect_graphics_operation(op->type) ||
+            op->type == PS5VK_NEXT_SUBPASS ||
+            op->type == PS5VK_END_RENDER_PASS) {
+            if (!d->graphics_enabled || !d->graphics_submit_enabled || !op->render_pass || !op->framebuffer ||
+                op->render_pass->device != d || op->framebuffer->device != d)
+                return 0;
+            if (op->type == PS5VK_BEGIN_RENDER_PASS) {
+                if (active) return 0;
+                /* Use the object model's bound at submission as well. */
+                if (!op->render_pass->subpass_count ||
+                    op->render_pass->subpass_count > PS5VK_MAX_SUBPASSES)
+                    return 0;
+                if (op->subpass) return 0;
+                active = op->render_pass; framebuffer = op->framebuffer;
+                begin_op = op;
+                contents = op->render_pass_contents;
+                subpass = 0;
+                pass_work = 0;
+                for (uint32_t n = 0; n < framebuffer->attachment_count; ++n) {
+                    VkImageView view = framebuffer->attachments[n];
+                    void *address; VkDeviceSize bytes;
+                    if (!view || view->device != d || !view->image || view->image->display_busy ||
+                        ps5vk_image_span(d, view->image, &address, &bytes) != VK_SUCCESS)
+                        return 0;
+                }
+            } else {
+                if (active != op->render_pass || framebuffer != op->framebuffer)
+                    return 0;
+                if (op->type == PS5VK_CLEAR_ATTACHMENT) {
+                    if(contents!=VK_SUBPASS_CONTENTS_INLINE || op->subpass!=subpass ||
+                       !ps5vk_clear_attachment_valid(op))return 0;
+                    ++pass_work;
+                } else if (op->type == PS5VK_DRAW || op->type == PS5VK_DRAW_INDEXED ||
+                    ps5vk_indirect_graphics_operation(op->type)) {
+                    /* A pass begun for secondary contents carries no inline
+                     * draws of its own. */
+                    if (contents == VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS)
+                        return 0;
+                    if (op->subpass != subpass) return 0;
+                    if (!draw_operation_valid(d, op)) return 0;
+                    ++pass_work;
+                } else if (op->type == PS5VK_NEXT_SUBPASS) {
+                    if (xfb_active) return 0;
+                    /* The immutable stream must advance by exactly one.  A
+                     * repeated boundary or a jump cannot be repaired by the
+                     * backend without changing the recorded program. */
+                    if (op->subpass != subpass + 1 ||
+                        op->subpass >= active->subpass_count)
+                        return 0;
+                    subpass = op->subpass;
+                    contents = op->render_pass_contents;
+                } else {
+                    if ((!pass_work && !ps5vk_dxvk_bgra8_clear_only_pass(begin_op)) ||
+                        xfb_active) return 0;
+                    /* A pass must end at its last subpass; ending earlier
+                     * would drop the subpasses never entered. */
+                    if (op->subpass != subpass ||
+                        op->subpass + 1 != active->subpass_count)
+                        return 0;
+                    active = NULL; framebuffer = NULL;
+                    contents = VK_SUBPASS_CONTENTS_INLINE;
+                    subpass = 0;
+                }
+            }
+            continue;
+        }
+        if (op->type == PS5VK_EXECUTE_COMMANDS) {
+            /* Re-validate the owned child array against live state. Each
+             * child's own operations are validated here when it executes
+             * inside a render pass, and by the head-of-queue re-validation of
+             * its own expanded segment when it executes outside one. */
+            VkCommandBuffer const *children = (VkCommandBuffer const *)op->owned_payload;
+            if (!children || !op->child_count ||
+                op->owned_payload_size != (size_t)op->child_count * sizeof(*children))
+                return 0;
+            /* The scope must be the one this call was recorded in, and inside
+             * a pass that pass must have been begun for secondary contents. */
+            if (op->render_pass != active || op->framebuffer != framebuffer) return 0;
+            if (active && contents != VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS) return 0;
+            for (uint32_t n = 0; n < op->child_count; ++n) {
+                VkCommandBuffer child = children[n];
+                const VkBool32 simultaneous = child &&
+                    (child->usage & VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT) ?
+                    VK_TRUE : VK_FALSE;
+                /* VUID-vkCmdExecuteCommands-pCommandBuffers-00089 allows a
+                 * child in the PENDING or executable state; 00091 restricts
+                 * pending to simultaneous-use buffers. Demanding EXECUTABLE
+                 * unconditionally would refuse a conformant submission. */
+                if (!child || child == c || !child->pool || child->pool->device != d ||
+                    child->level != VK_COMMAND_BUFFER_LEVEL_SECONDARY ||
+                    (child->state != PS5VK_EXECUTABLE &&
+                     !(child->state == PS5VK_PENDING && simultaneous)))
+                    return 0;
+                if (active) {
+                    /* The profile does not enable inheritedQueries, so a
+                     * primary query cannot span vkCmdExecuteCommands. */
+                    if (active_query_pool || !continuation_child_valid(d, c, j,
+                            children, n, child, active, framebuffer, op->subpass)) return 0;
+                    /* A continuation child carries nothing but draws, so its
+                     * operation count is the work it contributes - and an
+                     * empty child contributes none. */
+                    pass_work += child->operation_count;
+                } else if (child->usage & VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT)
+                    return 0;
+                if (!simultaneous) {
+                    if (child->pending_count) return 0;
+                    for (uint32_t k = 0; k < n; ++k) if (children[k] == child) return 0;
+                }
+            }
+            continue;
+        }
+        if (op->type == PS5VK_TRANSFORM_FEEDBACK_BEGIN ||
+            op->type == PS5VK_TRANSFORM_FEEDBACK_END) {
+            const int begin = op->type == PS5VK_TRANSFORM_FEEDBACK_BEGIN;
+            if (!active || contents != VK_SUBPASS_CONTENTS_INLINE ||
+                op->render_pass != active || op->framebuffer != framebuffer ||
+                op->subpass != subpass || begin == xfb_active ||
+                (!begin && xfb_query_pool) ||
+                !ps5vk_xfb_operation_valid(d, op))
+                return 0;
+            xfb_active = begin;
+            continue;
+        }
+        if ((op->type == PS5VK_QUERY_BEGIN || op->type == PS5VK_QUERY_END) && op->query_pool &&
+            op->query_pool->query_type == VK_QUERY_TYPE_TRANSFORM_FEEDBACK_STREAM_EXT) {
+            /* A stream query lives inside one capture session. */
+            const int begin = op->type == PS5VK_QUERY_BEGIN;
+            if (!active || contents != VK_SUBPASS_CONTENTS_INLINE ||
+                op->render_pass != active || op->framebuffer != framebuffer ||
+                op->subpass != subpass || !xfb_active ||
+                ps5vk_query_operation_validate(d, op) != VK_SUCCESS ||
+                (begin ? (xfb_query_pool ||
+                          !ps5vk_query_reset_before(c, j, op->query_pool, op->query_first)) :
+                         (xfb_query_pool != op->query_pool ||
+                          xfb_query != op->query_first)))
+                return 0;
+            xfb_query_pool = begin ? op->query_pool : VK_NULL_HANDLE;
+            xfb_query = op->query_first;
+            continue;
+        }
+        if (op->type == PS5VK_QUERY_BEGIN || op->type == PS5VK_QUERY_END) {
+            if (!active || contents != VK_SUBPASS_CONTENTS_INLINE ||
+                op->render_pass != active || op->framebuffer != framebuffer ||
+                op->subpass != subpass ||
+                ps5vk_query_operation_validate(d, op) != VK_SUCCESS)
+                return 0;
+            if (op->type == PS5VK_QUERY_BEGIN) {
+                if (active_query_pool ||
+                    !ps5vk_query_reset_before(c, j, op->query_pool, op->query_first))
+                    return 0;
+                active_query_pool = op->query_pool;
+                active_query = op->query_first;
+            } else {
+                if (!active_query_pool || active_query_pool != op->query_pool ||
+                    active_query != op->query_first) return 0;
+                active_query_pool = VK_NULL_HANDLE;
+            }
+            continue;
+        }
+        if (active) return 0;
+        if (ps5vk_image_domain(op) == PS5VK_IMAGE_DOMAIN_TRANSFER) {
+            /* Submit-time validation of the recorded image operation; execution
+             * re-validates at the head. Lifetime is protected by
+             * invalidate_resource, which sees op->image_source/_destination. */
+            if (ps5vk_image_transfer_validate(d, op) != VK_SUCCESS) return 0;
+            continue;
+        }
+        if (ps5vk_buffer_transfer_operation(op->type)) {
+            if (ps5vk_buffer_transfer_validate(d, op) != VK_SUCCESS) return 0;
+            continue;
+        }
+        if (ps5vk_query_operation(op->type)) {
+            if (ps5vk_query_operation_validate(d, op) != VK_SUCCESS) return 0;
+            continue;
+        }
+        if (ps5vk_image_domain(op) == PS5VK_IMAGE_DOMAIN_LINEAR) {
+            /* Host copies over the padded linear transfer role: no graphics
+             * backend submit is involved, so only the role, the resources and
+             * the region mapping are validated here. Recorded-order layout
+             * state is checked when the segment reaches the head. */
+            if (ps5vk_image_linear_validate(d, op) != VK_SUCCESS) return 0;
+            continue;
+        }
+        if(op->type==PS5VK_IMAGE_BARRIER || op->type==PS5VK_COPY_BUFFER_IMAGE ||
+           op->type==PS5VK_COPY_IMAGE_BUFFER ||
+           op->type==PS5VK_CLEAR_COLOR_IMAGE || op->type==PS5VK_CLEAR_DEPTH_STENCIL_IMAGE) {
+            VkImage image=op->type==PS5VK_IMAGE_BARRIER?op->image_barrier.image:
+                (op->type==PS5VK_CLEAR_DEPTH_STENCIL_IMAGE || op->type==PS5VK_CLEAR_COLOR_IMAGE)?
+                    op->image_destination:op->copy_image;
+            void *address;VkDeviceSize bytes;
+            if(!d->graphics_enabled || !d->graphics_submit_enabled || !image || image->display_busy ||
+                ps5vk_image_span(d,image,&address,&bytes)!=VK_SUCCESS)return 0;
+            if(op->type==PS5VK_CLEAR_COLOR_IMAGE && !ps5vk_array_color_clear(op))return 0;
+            /* The recorded depth clear is re-checked against live device state:
+             * the role, the owned range payload and the tracked layout. The
+             * value itself is already a validated D32 word. */
+            if(op->type==PS5VK_CLEAR_DEPTH_STENCIL_IMAGE) {
+                const VkImageSubresourceRange *ranges=
+                    (const VkImageSubresourceRange *)op->owned_payload;
+                if(!ps5vk_depth_clear_image(image) || !op->image_region_count || !ranges ||
+                   op->owned_payload_size!=(size_t)op->image_region_count*sizeof(*ranges) ||
+                   (op->image_destination_layout!=VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL &&
+                    op->image_destination_layout!=VK_IMAGE_LAYOUT_GENERAL))return 0;
+                for(uint32_t r=0;r<op->image_region_count;++r)
+                    if(ranges[r].aspectMask!=VK_IMAGE_ASPECT_DEPTH_BIT ||
+                       ranges[r].baseMipLevel || ranges[r].baseArrayLayer ||
+                       (ranges[r].levelCount!=1 &&
+                        ranges[r].levelCount!=VK_REMAINING_MIP_LEVELS) ||
+                       (ranges[r].layerCount!=1 &&
+                        ranges[r].layerCount!=VK_REMAINING_ARRAY_LAYERS))return 0;
+            }
+            if(op->type==PS5VK_COPY_IMAGE_BUFFER &&
+               ps5vk_buffer_span(d,op->copy_destination,0,VK_WHOLE_SIZE,&address,&bytes)!=VK_SUCCESS)
+                return 0;
+            continue;
+        }
+        if (op->type == PS5VK_BARRIER) {
+            if (op->buffer_barrier.buffer) {
+                void *address; VkDeviceSize bytes;
+                if (ps5vk_buffer_span(d, op->buffer_barrier.buffer, op->buffer_barrier.offset,
+                    op->buffer_barrier.size, &address, &bytes) != VK_SUCCESS) return 0;
+            }
+            continue;
+        }
+        if (op->type != PS5VK_DISPATCH &&
+            !ps5vk_indirect_compute_operation(op->type)) return 0;
+        if (ps5vk_indirect_compute_operation(op->type) &&
+            ps5vk_indirect_validate(d, op) != VK_SUCCESS) return 0;
+        if (!op->pipeline || op->pipeline->graphics ||
+            op->pipeline->device != d) return 0;
+        const struct ps5vk_compiled_program *p = &op->pipeline->program;
+        for(uint32_t set=0;set<PS5VK_MAX_SETS;++set) if(p->descriptor_set_mask&(1u<<set)) {
+            if(!op->sets[set] || op->sets[set]->pool->device!=d ||
+               op->sets[set]->generation!=op->generations[set])return 0;
+        }
+        for (uint32_t k = 0; k < p->descriptor_count; ++k) {
+            const struct ps5vk_program_descriptor *b = &p->descriptors[k];
+            VkDescriptorSet set=op->sets[b->set];
+            unsigned index = set->signature.binding[b->binding].first + b->element;
+            if (!set->defined[index]) return 0;
+        }
+    }
+    return active == NULL && active_query_pool == VK_NULL_HANDLE;
+}
+/* A semaphore's payload as it will be once everything already queued has
+ * executed: the state a new submission is validated against. */
+struct semaphore_state { VkSemaphore semaphore; VkBool32 signaled; uint64_t value; };
+
+static void discard_chain(VkDevice d, struct ps5vk_submission *head)
+{
+    while (head) {
+        struct ps5vk_submission *next = head->next;
+        if (head->backend_job && d->submit_backend.release)
+            d->submit_backend.release(d, head->backend_job);
+        free_submission(head); head = next;
+    }
+}
+
+static struct semaphore_state *find_state(VkDevice d, struct semaphore_state *states,
+    uint32_t *count, VkSemaphore semaphore)
+{
+    for (uint32_t j = 0; j < *count; ++j)
+        if (states[j].semaphore == semaphore) return &states[j];
+    struct semaphore_state *state = &states[(*count)++];
+    state->semaphore = semaphore;
+    state->signaled = semaphore->signaled;
+    state->value = semaphore->value;
+    /* Work may still be queued behind a head that waits on a timeline value.
+     * Replay its not-yet-executed operations in queue order: binary waits
+     * that have not been consumed and every pending signal. */
+    for (const struct ps5vk_submission *s = d->submission; s; s = s->next) {
+        if (!s->waits_consumed)
+            for (uint32_t j = 0; j < s->wait_count; ++j)
+                if (s->waits[j] == semaphore && !timeline(semaphore))
+                    state->signaled = VK_FALSE;
+        for (uint32_t j = 0; j < s->signal_count; ++j) {
+            if (s->signals[j] != semaphore) continue;
+            if (!timeline(semaphore)) state->signaled = VK_TRUE;
+            else if (s->signal_values[j] > state->value) state->value = s->signal_values[j];
+        }
+    }
+    return state;
+}
+
+/* waits and signals share one array of handles followed by one array of
+ * timeline values, both sized for every reference of the record. */
+static void layout_references(struct ps5vk_submission *s, size_t refs, uint32_t waits)
+{
+    s->waits = (VkSemaphore *)(s + 1);
+    s->signals = s->waits + waits;
+    s->wait_values = (uint64_t *)(s->waits + refs);
+    s->signal_values = s->wait_values + waits;
+}
+
+static struct ps5vk_submission *allocate_submission(VkDevice d, size_t refs,
+    VkResult *result)
+{
+    const size_t per_reference = sizeof(VkSemaphore) + sizeof(uint64_t);
+    if (refs > (SIZE_MAX - sizeof(struct ps5vk_submission)) / per_reference) {
+        *result = VK_ERROR_OUT_OF_HOST_MEMORY; return NULL;
+    }
+    VkAllocationCallbacks saved = {0}; VkBool32 custom = VK_FALSE;
+    struct ps5vk_submission *submission = ps5vk_object_alloc(
+        d->custom_allocator ? &d->allocator : NULL, NULL,
+        sizeof(*submission) + refs * per_reference,
+        VK_SYSTEM_ALLOCATION_SCOPE_DEVICE, &saved, &custom);
+    if (!submission) { *result = VK_ERROR_OUT_OF_HOST_MEMORY; return NULL; }
+    submission->allocator = saved; submission->custom_allocator = custom;
+    layout_references(submission, refs, 0);
+    return submission;
+}
+
+static int event_operation(int type)
+{
+    return type == PS5VK_EVENT_SET || type == PS5VK_EVENT_RESET ||
+        type == PS5VK_EVENT_WAIT;
+}
+
+static int frontend_operation(int type)
+{
+    return event_operation(type) ||
+        ps5vk_buffer_transfer_operation((enum ps5vk_operation_type)type) ||
+        type == PS5VK_QUERY_RESET || type == PS5VK_QUERY_COPY ||
+        ps5vk_image_transfer_operation((enum ps5vk_operation_type)type);
+}
+
+/* Frontend work of one recorded operation: the type-level frontend families plus
+ * the pure transfer role's image <-> buffer transfers and layout bookkeeping,
+ * which are host copies over the same padded linear layout. The tiled
+ * render-target readback and the sampled upload keep their GPU path. */
+static int frontend_record(const struct ps5vk_operation *op)
+{
+    if(op->type==PS5VK_CLEAR_COLOR_IMAGE &&
+       (ps5vk_array_color_image(op->image_destination) ||
+        ps5vk_bgra8_transfer_target(op->image_destination)))
+        return 0;
+    return frontend_operation(op->type) || ps5vk_image_linear_operation(op);
+}
+
+static int deferred_boundary(int type)
+{ return ps5vk_indirect_compute_operation((enum ps5vk_operation_type)type); }
+
+/* vkCmdExecuteCommands names children instead of carrying work, so it ends the
+ * primary's current segment: the children are expanded into their own segments
+ * in recorded order and the primary resumes after them. */
+static int execute_boundary(int type)
+{ return type == PS5VK_EXECUTE_COMMANDS; }
+
+static VkBool32 range_has_indirect(const VkCommandBuffer command,
+    uint32_t first, uint32_t count)
+{
+    for (uint32_t k = first; k < first + count; ++k)
+        if (ps5vk_indirect_operation(command->operations[k].type)) return VK_TRUE;
+    return VK_FALSE;
+}
+
+/* Emit one ordered segment naming exactly one command buffer and range. */
+static VkResult emit_segment(VkDevice d, VkCommandBuffer command, size_t refs,
+    uint32_t begin, uint32_t count, VkBool32 frontend_only, VkBool32 deferred,
+    struct ps5vk_submission **first, struct ps5vk_submission **last,
+    struct ps5vk_submission ***tail, uint32_t *segment_count)
+{
+    VkResult result = VK_SUCCESS;
+    struct ps5vk_submission *s = allocate_submission(d, refs, &result);
+    if (!s) return result;
+    s->count = 1; s->buffers[0] = command;
+    s->first_operation[0] = (uint16_t)begin;
+    s->operation_count[0] = (uint16_t)count;
+    s->frontend_only = frontend_only;
+    s->deferred_prepare = deferred;
+    if (*segment_count == UINT32_MAX) { free_submission(s); return VK_ERROR_OUT_OF_HOST_MEMORY; }
+    if (!*first) *first = s;
+    **tail = s; *tail = &s->next; *last = s; ++*segment_count;
+    return VK_SUCCESS;
+}
+
+/* Index of the PS5VK_END_RENDER_PASS that closes the pass opened at `begin`,
+ * or the operation count when the recording carries none. */
+static uint32_t render_pass_end(const VkCommandBuffer command, uint32_t begin)
+{
+    uint32_t end = begin + 1;
+    while (end < command->operation_count &&
+           command->operations[end].type != PS5VK_END_RENDER_PASS) ++end;
+    return end;
+}
+
+static VkBool32 range_names_children(const VkCommandBuffer command,
+    uint32_t first, uint32_t count)
+{
+    for (uint32_t k = first; k < first + count; ++k)
+        if (command->operations[k].type == PS5VK_EXECUTE_COMMANDS) return VK_TRUE;
+    return VK_FALSE;
+}
+
+/* Emit ONE segment for a whole render pass whose work is named by secondaries.
+ *
+ * A render pass is a single scope and the backend builds one command stream
+ * for it, so it cannot be split the way vkCmdExecuteCommands splits work
+ * OUTSIDE a pass: the primary's BEGIN..END range becomes buffer 0 and every
+ * named child follows in recorded order with its own range. Nothing is copied
+ * or flattened into the primary, so each buffer keeps its identity and pin()
+ * still does per-buffer pending ownership, one-time-submit consumption and
+ * reset/free protection exactly as it does for a separate segment. Retiring
+ * together is the correct lifetime here: the children ARE the pass. */
+static VkResult emit_render_pass_segment(VkDevice d, VkCommandBuffer command,
+    size_t refs, uint32_t begin, uint32_t count,
+    struct ps5vk_submission **first, struct ps5vk_submission **last,
+    struct ps5vk_submission ***tail, uint32_t *segment_count)
+{
+    VkResult result = VK_SUCCESS;
+    struct ps5vk_submission *s = allocate_submission(d, refs, &result);
+    if (!s) return result;
+    s->count = 1; s->buffers[0] = command;
+    s->first_operation[0] = (uint16_t)begin;
+    s->operation_count[0] = (uint16_t)count;
+    VkBool32 indirect = range_has_indirect(command, begin, count);
+    for (uint32_t k = begin; k < begin + count; ++k) {
+        const struct ps5vk_operation *op = &command->operations[k];
+        if (op->type != PS5VK_EXECUTE_COMMANDS) continue;
+        VkCommandBuffer const *children = (VkCommandBuffer const *)op->owned_payload;
+        if (!children || !op->child_count ||
+            op->owned_payload_size != (size_t)op->child_count * sizeof(*children))
+            { free_submission(s); return VK_ERROR_UNKNOWN; }
+        for (uint32_t n = 0; n < op->child_count; ++n) {
+            /* The submission record holds a bounded number of buffers. This is
+             * a real limit of this representation, reported as a resource
+             * failure rather than silently dropping a child. */
+            if (!children[n]) { free_submission(s); return VK_ERROR_UNKNOWN; }
+            if (s->count == PS5VK_MAX_SUBMITTED_BUFFERS)
+                { free_submission(s); return VK_ERROR_OUT_OF_HOST_MEMORY; }
+            s->buffers[s->count] = children[n];
+            s->first_operation[s->count] = 0;
+            s->operation_count[s->count] = (uint16_t)children[n]->operation_count;
+            ++s->count;
+            indirect |= range_has_indirect(children[n], 0, children[n]->operation_count);
+        }
+    }
+    s->frontend_only = VK_FALSE;
+    s->deferred_prepare = indirect;
+    if (*segment_count == UINT32_MAX) { free_submission(s); return VK_ERROR_OUT_OF_HOST_MEMORY; }
+    if (!*first) *first = s;
+    **tail = s; *tail = &s->next; *last = s; ++*segment_count;
+    return VK_SUCCESS;
+}
+
+/* Walk ONE command buffer's operations and emit its ordered segments.
+ *
+ * Shared by a primary and, recursively, by every secondary it names, so a
+ * child is segmented by exactly the same rules instead of being classified as
+ * a whole. That matters because a child is not uniform: a legal event followed
+ * by a barrier is part frontend and part backend, and judging the child by its
+ * first operation would execute one half and silently drop the other.
+ * Children cannot nest, so the recursion is one level deep. */
+static VkResult segment_operations(VkDevice d, VkCommandBuffer command, size_t refs,
+    struct ps5vk_submission **first, struct ps5vk_submission **last,
+    struct ps5vk_submission ***tail, uint32_t *segment_count)
+{
+    /* An empty buffer still gets a segment. Executing it is a no-op, but its
+     * pending ownership and one-time-submit consumption are not, and skipping
+     * it would silently lose both. */
+    if (!command->operation_count)
+        return emit_segment(d, command, refs, 0, 0, VK_TRUE, VK_FALSE,
+                            first, last, tail, segment_count);
+    uint32_t operation = 0;
+    while (operation < command->operation_count) {
+        uint32_t begin = operation;
+        /* A render pass whose work is named by secondaries is emitted whole,
+         * before the generic boundary rules get a chance to split it. */
+        if (command->operations[operation].type == PS5VK_BEGIN_RENDER_PASS) {
+            uint32_t end = render_pass_end(command, operation);
+            if (end < command->operation_count &&
+                range_names_children(command, operation, end - operation + 1)) {
+                VkResult composed = emit_render_pass_segment(d, command, refs,
+                    operation, end - operation + 1, first, last, tail, segment_count);
+                if (composed != VK_SUCCESS) return composed;
+                operation = end + 1;
+                continue;
+            }
+        }
+        VkBool32 frontend = frontend_record(&command->operations[operation]);
+        VkBool32 deferred = deferred_boundary(command->operations[operation].type);
+        VkBool32 execute = execute_boundary(command->operations[operation].type);
+        VkResult rc;
+        if (frontend || deferred || execute) ++operation;
+        else while (operation < command->operation_count &&
+            !frontend_record(&command->operations[operation]) &&
+            !execute_boundary(command->operations[operation].type) &&
+            !deferred_boundary(command->operations[operation].type)) ++operation;
+        if (execute) {
+            const struct ps5vk_operation *ex = &command->operations[begin];
+            VkCommandBuffer const *children = (VkCommandBuffer const *)ex->owned_payload;
+            if (!children || !ex->child_count ||
+                ex->owned_payload_size != (size_t)ex->child_count * sizeof(*children))
+                return VK_ERROR_UNKNOWN;
+            for (uint32_t n = 0; n < ex->child_count; ++n) {
+                if (!children[n]) return VK_ERROR_UNKNOWN;
+                rc = segment_operations(d, children[n], refs, first, last, tail,
+                                        segment_count);
+                if (rc != VK_SUCCESS) return rc;
+            }
+            /* Then a segment for the primary covering just this operation. It
+             * carries no work, but it is what keeps the PARENT pinned: without
+             * it a primary whose only operation is vkCmdExecuteCommands never
+             * appears in any segment, so pin() never sees it and its pending
+             * state, reset/free protection and one-time-submit consumption are
+             * all wrong. Emitting it AFTER the children also makes the parent
+             * outlive them, because segments retire in order. */
+            rc = emit_segment(d, command, refs, begin, 1, VK_TRUE, VK_FALSE,
+                              first, last, tail, segment_count);
+            if (rc != VK_SUCCESS) return rc;
+            continue;
+        }
+        rc = emit_segment(d, command, refs, begin, operation - begin, frontend,
+            !frontend && range_has_indirect(command, begin, operation - begin),
+            first, last, tail, segment_count);
+        if (rc != VK_SUCCESS) return rc;
+    }
+    return VK_SUCCESS;
+}
+
+static VkResult expand_records(VkDevice d, struct ps5vk_submission *original,
+    struct ps5vk_submission **expanded, uint32_t *segment_count)
+{
+    struct ps5vk_submission *head = NULL, **tail = &head;
+    VkResult result = VK_SUCCESS;
+    for (struct ps5vk_submission *record = original; record; record = record->next) {
+        size_t refs = (size_t)record->wait_count + record->signal_count;
+        VkBool32 contains_special = VK_FALSE;
+        for (uint32_t b = 0; b < record->count; ++b)
+            for (uint32_t k = 0; k < record->buffers[b]->operation_count; ++k)
+                contains_special |= frontend_record(&record->buffers[b]->operations[k]) ||
+                    execute_boundary(record->buffers[b]->operations[k].type) ||
+                    ps5vk_indirect_operation(record->buffers[b]->operations[k].type);
+        struct ps5vk_submission *first = NULL, *last = NULL;
+        if (!contains_special) {
+            last = allocate_submission(d, refs, &result);
+            if (!last) goto fail;
+            last->count = record->count;
+            for (uint32_t b = 0; b < record->count; ++b) last->buffers[b] = record->buffers[b];
+            if (*segment_count == UINT32_MAX) {
+                free_submission(last); result = VK_ERROR_OUT_OF_HOST_MEMORY; goto fail;
+            }
+            first = last; *tail = last; tail = &last->next; ++*segment_count;
+        } else {
+            for (uint32_t b = 0; b < record->count; ++b) {
+                result = segment_operations(d, record->buffers[b], refs,
+                                            &first, &last, &tail, segment_count);
+                if (result != VK_SUCCESS) goto fail;
+            }
+            if (!first) {
+                last = allocate_submission(d, refs, &result); if (!last) goto fail;
+                if (*segment_count == UINT32_MAX) {
+                    free_submission(last); result = VK_ERROR_OUT_OF_HOST_MEMORY; goto fail;
+                }
+                first = last; *tail = last; tail = &last->next; ++*segment_count;
+            }
+        }
+        first->wait_count = record->wait_count;
+        layout_references(first, refs, first->wait_count);
+        memcpy(first->waits, record->waits, record->wait_count * sizeof(VkSemaphore));
+        memcpy(first->wait_values, record->wait_values, record->wait_count * sizeof(uint64_t));
+        last->signal_count = record->signal_count;
+        layout_references(last, refs, last->wait_count);
+        memcpy(last->signals, record->signals, record->signal_count * sizeof(VkSemaphore));
+        memcpy(last->signal_values, record->signal_values,
+               record->signal_count * sizeof(uint64_t));
+    }
+    *expanded = head; return VK_SUCCESS;
+fail:
+    discard_chain(d, head); return result;
+}
+
+/* The extension structures one VkSubmitInfo may chain, each at most once. */
+struct submit_chain {
+    const VkDeviceGroupSubmitInfo *group;
+    const VkTimelineSemaphoreSubmitInfo *timeline;
+};
+static int parse_submit_chain(VkDevice d, const VkSubmitInfo *info,
+                              struct submit_chain *chain)
+{
+    *chain = (struct submit_chain){0};
+    for (const VkBaseInStructure *next = (const VkBaseInStructure *)info->pNext;
+         next; next = next->pNext) {
+        if (next->sType == VK_STRUCTURE_TYPE_DEVICE_GROUP_SUBMIT_INFO &&
+            !chain->group && d->device_group_extension_enabled)
+            chain->group = (const VkDeviceGroupSubmitInfo *)next;
+        else if (next->sType == VK_STRUCTURE_TYPE_TIMELINE_SEMAPHORE_SUBMIT_INFO &&
+                 !chain->timeline && d->timeline_extension_enabled)
+            chain->timeline = (const VkTimelineSemaphoreSubmitInfo *)next;
+        else return 0;
+    }
+    const VkTimelineSemaphoreSubmitInfo *timeline = chain->timeline;
+    /* Value arrays may be absent only when their count is zero. Whether a
+     * count must match is decided per semaphore, once its type is known. */
+    if (timeline && ((timeline->waitSemaphoreValueCount && !timeline->pWaitSemaphoreValues) ||
+                     (timeline->signalSemaphoreValueCount &&
+                      !timeline->pSignalSemaphoreValues)))
+        return 0;
+    return 1;
+}
+
+static VkResult queue_submit_locked(VkDevice d, uint32_t count,
+    const VkSubmitInfo *infos, VkFence fence)
+{
+    if (d->lost) {
+        QUEUE_DIAG("PS5VK_QUEUE_SUBMIT_DEVICE_ALREADY_LOST");
+        return VK_ERROR_DEVICE_LOST;
+    }
+    if (fence && (fence->device != d || fence->signaled || fence->pending_serial)) return INVALID;
+
+    uint32_t records = count ? count : 1, reference_count = 0;
+    for (uint32_t j = 0; j < count; ++j) {
+        const VkSubmitInfo *info = &infos[j];
+        if (info->sType != VK_STRUCTURE_TYPE_SUBMIT_INFO ||
+            (info->waitSemaphoreCount && (!info->pWaitSemaphores || !info->pWaitDstStageMask)) ||
+            (info->signalSemaphoreCount && !info->pSignalSemaphores) ||
+            (info->commandBufferCount && !info->pCommandBuffers) ||
+            info->commandBufferCount > PS5VK_MAX_SUBMITTED_BUFFERS ||
+            UINT32_MAX - reference_count < info->waitSemaphoreCount ||
+            UINT32_MAX - reference_count - info->waitSemaphoreCount < info->signalSemaphoreCount)
+            return INVALID;
+        struct submit_chain chain;
+        if (!parse_submit_chain(d, info, &chain)) return INVALID;
+        if (chain.group) {
+            const VkDeviceGroupSubmitInfo *group = chain.group;
+            if (group->waitSemaphoreCount != info->waitSemaphoreCount ||
+                group->commandBufferCount != info->commandBufferCount ||
+                group->signalSemaphoreCount != info->signalSemaphoreCount ||
+                (group->waitSemaphoreCount && !group->pWaitSemaphoreDeviceIndices) ||
+                (group->commandBufferCount && !group->pCommandBufferDeviceMasks) ||
+                (group->signalSemaphoreCount && !group->pSignalSemaphoreDeviceIndices))
+                return INVALID;
+            for (uint32_t k = 0; k < group->waitSemaphoreCount; ++k)
+                if (group->pWaitSemaphoreDeviceIndices[k]) return INVALID;
+            for (uint32_t k = 0; k < group->commandBufferCount; ++k)
+                if (group->pCommandBufferDeviceMasks[k] != 1) return INVALID;
+            for (uint32_t k = 0; k < group->signalSemaphoreCount; ++k)
+                if (group->pSignalSemaphoreDeviceIndices[k]) return INVALID;
+        }
+        reference_count += info->waitSemaphoreCount + info->signalSemaphoreCount;
+        for (uint32_t k = 0; k < info->waitSemaphoreCount; ++k)
+            if (!info->pWaitDstStageMask[k]) return INVALID;
+        for (uint32_t k = 0; k < info->commandBufferCount; ++k) {
+            VkCommandBuffer command = info->pCommandBuffers[k];
+            /* Only a primary is submittable. A secondary reaches the queue
+             * through vkCmdExecuteCommands, which is still fail-closed, so
+             * submitting one directly is refused rather than silently run. */
+            if (command && command->level != VK_COMMAND_BUFFER_LEVEL_PRIMARY)
+                return INVALID;
+            if (command && command->pool && command->pool->device == d &&
+                command->state == PS5VK_PENDING &&
+                !(command->usage & VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT))
+                return INVALID;
+        }
+    }
+    if (!d->queue.next_serial) return INVALID;
+
+    /* This implementation has one native batch in flight. Retire the previous
+     * call before validating this call, preserving queue order - except work
+     * whose head waits on a timeline value no queued operation will publish.
+     * Blocking there would deadlock an application that host-signals the
+     * value after this call returns, so the new records are appended behind
+     * it instead and validated against the queue's pending end state. */
+    VkResult result = drain_locked(d, VK_TRUE);
+    if (result != VK_SUCCESS) return result;
+    const VkBool32 queue_blocked = d->submission != NULL;
+
+    size_t state_bytes = (size_t)reference_count * sizeof(struct semaphore_state);
+    if (reference_count && state_bytes / sizeof(struct semaphore_state) != reference_count)
+        return VK_ERROR_OUT_OF_HOST_MEMORY;
+    VkAllocationCallbacks state_allocator = {0}; VkBool32 state_custom = VK_FALSE;
+    struct semaphore_state *states = reference_count ? ps5vk_object_alloc(
+        d->custom_allocator ? &d->allocator : NULL, NULL, state_bytes,
+        VK_SYSTEM_ALLOCATION_SCOPE_COMMAND, &state_allocator, &state_custom) : NULL;
+    if (reference_count && !states) return VK_ERROR_OUT_OF_HOST_MEMORY;
+
+    struct ps5vk_submission *head = NULL, **tail = &head;
+    uint32_t state_count = 0;
+    for (uint32_t j = 0; j < records; ++j) {
+        const VkSubmitInfo *info = count ? &infos[j] : NULL;
+        uint32_t waits = info ? info->waitSemaphoreCount : 0;
+        uint32_t signals = info ? info->signalSemaphoreCount : 0;
+        size_t refs = (size_t)waits + signals;
+        struct ps5vk_submission *s = allocate_submission(d, refs, &result);
+        if (!s) goto fail;
+        s->wait_count = waits; s->signal_count = signals;
+        layout_references(s, refs, waits);
+        *tail = s; tail = &s->next;
+        if (!info) continue;
+        struct submit_chain chain;
+        (void)parse_submit_chain(d, info, &chain);
+        const VkTimelineSemaphoreSubmitInfo *values = chain.timeline;
+
+        for (uint32_t k = 0; k < waits; ++k) {
+            VkSemaphore semaphore = info->pWaitSemaphores[k];
+            if (!semaphore || semaphore->device != d) { result = INVALID; goto fail; }
+            struct semaphore_state *state = find_state(d, states, &state_count, semaphore);
+            if (timeline(semaphore)) {
+                /* VUID-VkSubmitInfo-pWaitSemaphores-03239/03240. Any value
+                 * may be waited on, including one not signalled yet. */
+                if (!values || values->waitSemaphoreValueCount != waits) {
+                    result = INVALID; goto fail;
+                }
+                s->wait_values[k] = values->pWaitSemaphoreValues[k];
+            } else {
+                if (!state->signaled) { result = INVALID; goto fail; }
+                state->signaled = VK_FALSE;
+            }
+            s->waits[k] = semaphore;
+        }
+        for (uint32_t k = 0; k < signals; ++k) {
+            VkSemaphore semaphore = info->pSignalSemaphores[k];
+            if (!semaphore || semaphore->device != d) { result = INVALID; goto fail; }
+            struct semaphore_state *state = find_state(d, states, &state_count, semaphore);
+            if (timeline(semaphore)) {
+                /* VUID-VkSubmitInfo-pSignalSemaphores-03241/03242: the value
+                 * must exceed the payload it will find when it executes, i.e.
+                 * the current payload and every signal queued before it. */
+                if (!values || values->signalSemaphoreValueCount != signals ||
+                    values->pSignalSemaphoreValues[k] <= state->value) {
+                    result = INVALID; goto fail;
+                }
+                state->value = s->signal_values[k] = values->pSignalSemaphoreValues[k];
+            } else {
+                if (state->signaled) { result = INVALID; goto fail; }
+                state->signaled = VK_TRUE;
+            }
+            s->signals[k] = semaphore;
+        }
+        for (uint32_t k = 0; k < info->commandBufferCount; ++k) {
+            VkCommandBuffer command = info->pCommandBuffers[k];
+            if (!command_valid(d, command)) { result = INVALID; goto fail; }
+            for (struct ps5vk_submission *prior = head; prior; prior = prior->next)
+                for (uint32_t n = 0; n < prior->count; ++n)
+                    if (prior->buffers[n] == command &&
+                        !(command->usage & VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT)) {
+                        result = INVALID; goto fail;
+                    }
+            s->buffers[s->count++] = command;
+        }
+    }
+
+    struct ps5vk_submission *expanded = NULL;
+    uint32_t segments = 0;
+    result = expand_records(d, head, &expanded, &segments);
+    if (result != VK_SUCCESS) goto fail;
+    discard_chain(d, head); head = expanded;
+    if (!segments || segments > UINT64_MAX - d->queue.next_serial) {
+        result = INVALID; goto fail;
+    }
+    uint32_t segment = 0;
+    VkBool32 seen_frontend = VK_FALSE;
+    /* A native job queued behind a timeline wait is prepared only when it
+     * reaches the head: the host may legally write what it reads (indirect
+     * parameters, for one) before issuing the signal that releases it. */
+    VkBool32 behind_timeline_wait = queue_blocked;
+    for (struct ps5vk_submission *s = head; s; s = s->next, ++segment) {
+        s->serial = d->queue.next_serial + segment;
+        for (uint32_t j = 0; j < s->wait_count; ++j)
+            if (timeline(s->waits[j]) && s->waits[j]->value < s->wait_values[j])
+                behind_timeline_wait = VK_TRUE;
+        if (s->frontend_only) seen_frontend = VK_TRUE;
+        else if (seen_frontend || behind_timeline_wait) s->deferred_prepare = VK_TRUE;
+        if (s->count && !s->frontend_only && !s->deferred_prepare) {
+            if (!d->submit_backend.prepare || !d->submit_backend.launch ||
+                !d->submit_backend.poll || !d->submit_backend.release) {
+                result = INVALID; goto fail;
+            }
+            result = d->submit_backend.prepare(d, s, &s->backend_job);
+            if (result != VK_SUCCESS) { if (result >= 0) result = INVALID; goto fail; }
+            if (!s->backend_job) { result = INVALID; goto fail; }
+        }
+    }
+    if (states) { ps5vk_object_free(states, &state_allocator, state_custom); states = NULL; }
+
+    struct ps5vk_submission *last = head;
+    while (last->next) last = last->next;
+    last->fence = fence;
+    for (struct ps5vk_submission *s = head; s; s = s->next) {
+        for (uint32_t j = 0; j < s->wait_count; ++j) ++s->waits[j]->pending;
+        for (uint32_t j = 0; j < s->signal_count; ++j) ++s->signals[j]->pending;
+        s->reserved = VK_TRUE;
+        pin(s, 1);
+    }
+    d->queue.next_serial += segments;
+    struct ps5vk_submission **queue_tail = &d->submission;
+    while (*queue_tail) queue_tail = &(*queue_tail)->next;
+    *queue_tail = head;
+    if (fence) fence->pending_serial = last->serial;
+    /* Written only when it changes: other threads read the hook unlocked. */
+    if (d->progress.poll != ps5vk_queue_poll) d->progress.poll = ps5vk_queue_poll;
+    return start_submission(d);
+
+fail:
+    if (states) ps5vk_object_free(states, &state_allocator, state_custom);
+    discard_chain(d, head);
+    return result;
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL vkQueueSubmit(VkQueue queue, uint32_t count,
+    const VkSubmitInfo *infos, VkFence fence)
+{
+    if (!queue || !queue->device || (count && !infos)) return INVALID;
+    VkDevice d = queue->device;
+    /* Validation reads fence, command-buffer and semaphore state that another
+     * thread's progress call may retire concurrently, so it runs locked too. */
+    ps5vk_device_lock(d);
+    VkResult result = queue_submit_locked(d, count, infos, fence);
+    ps5vk_device_unlock(d);
+    return result;
+}
+
+/* The single-queue backend already implements ordered binary/timeline waits,
+ * command execution and signals in vkQueueSubmit. Keep the synchronization2
+ * submission shape on that same path, with the scope and metadata limited to
+ * forms whose semantics the backend can preserve. This helper stays internal
+ * until the remaining synchronization2 commands and feature route exist. */
+struct submit2_legacy {
+    VkSubmitInfo submit;
+    VkTimelineSemaphoreSubmitInfo timeline;
+    VkSemaphore *waits, *signals;
+    VkPipelineStageFlags *stages;
+    VkCommandBuffer *commands;
+    uint64_t *wait_values, *signal_values;
+};
+
+static void free_submit2_legacy(struct submit2_legacy *entries, uint32_t count)
+{
+    if (!entries) return;
+    for (uint32_t i = 0; i < count; ++i) {
+        free(entries[i].waits); free(entries[i].signals);
+        free(entries[i].stages); free(entries[i].commands);
+        free(entries[i].wait_values); free(entries[i].signal_values);
+    }
+    free(entries);
+}
+
+static void *submit2_array(uint32_t count, size_t size)
+{
+    return count && (size_t)count <= SIZE_MAX / size ? calloc(count, size) : NULL;
+}
+
+static int submit2_stage(VkPipelineStageFlags2 stage, VkBool32 wait,
+                         VkPipelineStageFlags *legacy)
+{
+    /* DXVK's queue submits use TOP_OF_PIPE for waits and BOTTOM_OF_PIPE
+     * for signals. ALL_COMMANDS is also serially equivalent here. A wait at
+     * BOTTOM_OF_PIPE or signal at TOP_OF_PIPE would require partial-batch
+     * scheduling; serializing the entire batch would change its scope. */
+    if (stage != VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT &&
+        stage != (wait ? VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT :
+                         VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT)) return 0;
+    *legacy = (VkPipelineStageFlags)stage;
+    return 1;
+}
+
+VkResult ps5vk_queue_submit2_bounded(VkQueue queue, uint32_t count,
+    const VkSubmitInfo2 *infos, VkFence fence)
+{
+    if (!queue || !queue->device || (count && !infos)) return INVALID;
+    VkDevice d = queue->device;
+    struct submit2_legacy *entries = count ? submit2_array(count, sizeof(*entries)) : NULL;
+    VkSubmitInfo *submits = count ? submit2_array(count, sizeof(*submits)) : NULL;
+    if (count && (!entries || !submits)) {
+        free(entries); free(submits); return VK_ERROR_OUT_OF_HOST_MEMORY;
+    }
+    VkResult result = INVALID;
+    for (uint32_t i = 0; i < count; ++i) {
+        const VkSubmitInfo2 *src = &infos[i];
+        struct submit2_legacy *dst = &entries[i];
+        if (src->sType != VK_STRUCTURE_TYPE_SUBMIT_INFO_2 || src->pNext || src->flags ||
+            (src->waitSemaphoreInfoCount && !src->pWaitSemaphoreInfos) ||
+            (src->commandBufferInfoCount && !src->pCommandBufferInfos) ||
+            (src->signalSemaphoreInfoCount && !src->pSignalSemaphoreInfos) ||
+            src->commandBufferInfoCount > PS5VK_MAX_SUBMITTED_BUFFERS)
+            goto done;
+        const uint32_t nw = src->waitSemaphoreInfoCount;
+        const uint32_t nc = src->commandBufferInfoCount;
+        const uint32_t ns = src->signalSemaphoreInfoCount;
+        dst->waits = submit2_array(nw, sizeof(*dst->waits));
+        dst->stages = submit2_array(nw, sizeof(*dst->stages));
+        dst->wait_values = submit2_array(nw, sizeof(*dst->wait_values));
+        dst->commands = submit2_array(nc, sizeof(*dst->commands));
+        dst->signals = submit2_array(ns, sizeof(*dst->signals));
+        dst->signal_values = submit2_array(ns, sizeof(*dst->signal_values));
+        if ((nw && (!dst->waits || !dst->stages || !dst->wait_values)) ||
+            (nc && !dst->commands) ||
+            (ns && (!dst->signals || !dst->signal_values))) {
+            result = VK_ERROR_OUT_OF_HOST_MEMORY; goto done;
+        }
+        for (uint32_t j = 0; j < nw; ++j) {
+            const VkSemaphoreSubmitInfo *s = &src->pWaitSemaphoreInfos[j];
+            if (s->sType != VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO || s->pNext ||
+                s->deviceIndex || !submit2_stage(s->stageMask, VK_TRUE,
+                    &dst->stages[j])) goto done;
+            dst->waits[j] = s->semaphore; dst->wait_values[j] = s->value;
+        }
+        for (uint32_t j = 0; j < nc; ++j) {
+            const VkCommandBufferSubmitInfo *c = &src->pCommandBufferInfos[j];
+            /* DXVK leaves deviceMask zero on its single-device submissions.
+             * Vulkan's non-device-group path treats that as device zero. */
+            if (c->sType != VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO || c->pNext ||
+                (c->deviceMask != 0 && c->deviceMask != 1)) goto done;
+            dst->commands[j] = c->commandBuffer;
+        }
+        for (uint32_t j = 0; j < ns; ++j) {
+            const VkSemaphoreSubmitInfo *s = &src->pSignalSemaphoreInfos[j];
+            VkPipelineStageFlags stage;
+            if (s->sType != VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO || s->pNext ||
+                s->deviceIndex || !submit2_stage(s->stageMask, VK_FALSE,
+                    &stage)) goto done;
+            dst->signals[j] = s->semaphore; dst->signal_values[j] = s->value;
+        }
+        dst->timeline = (VkTimelineSemaphoreSubmitInfo){
+            .sType = VK_STRUCTURE_TYPE_TIMELINE_SEMAPHORE_SUBMIT_INFO,
+            .waitSemaphoreValueCount = nw, .pWaitSemaphoreValues = dst->wait_values,
+            .signalSemaphoreValueCount = ns, .pSignalSemaphoreValues = dst->signal_values};
+        dst->submit = (VkSubmitInfo){.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+            .pNext = d->timeline_extension_enabled ? &dst->timeline : NULL,
+            .waitSemaphoreCount = nw,
+            .pWaitSemaphores = dst->waits, .pWaitDstStageMask = dst->stages,
+            .commandBufferCount = nc, .pCommandBuffers = dst->commands,
+            .signalSemaphoreCount = ns, .pSignalSemaphores = dst->signals};
+        submits[i] = dst->submit;
+    }
+    /* Conversion and rejection are complete before touching queue state. */
+    result = vkQueueSubmit(queue, count, submits, fence);
+done:
+    free(submits); free_submit2_legacy(entries, count);
+    return result;
+}

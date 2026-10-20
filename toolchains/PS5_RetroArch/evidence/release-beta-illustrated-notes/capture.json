@@ -1,0 +1,16 @@
+{
+  "step": "release-beta-illustrated-notes",
+  "command": "python3 build/validate-release-polish.py; browser image/overflow inspection",
+  "revision": "working tree on b0904bc",
+  "lines": [
+    "Public-facing captions shortened; build, test-runner and memory internals removed",
+    "Permanent warning and compatibility warning unchanged",
+    "All 18 core entries retained in the illustrated systems table",
+    "All ten screenshots and captions retained; three supplementary views expandable",
+    "All local icon/image paths and 12 contents/closing anchors resolve",
+    "Browser preview: 57 images loaded, no horizontal overflow at the current viewport",
+    "Normal In this release contents section; no creator-specific section"
+  ],
+  "release_note_sha256": "318f41f388df1d71aa9e8c458ceaabfd67b53907385c05df8f8ef2a07c3e3d71",
+  "scope": "Release prose and local preview only. Existing bundled Fluent and Linear ES-DE artwork reused with attribution. No publication."
+}

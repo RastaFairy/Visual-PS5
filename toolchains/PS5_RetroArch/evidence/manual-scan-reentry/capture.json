@@ -1,0 +1,27 @@
+{
+  "step": "manual-scan-reentry",
+  "recorded": "2026-10-04T23:33:20Z",
+  "console_run": "base PS5 13.40, runs 192114 (before) and 193202 (after)",
+  "revision": "f35915a + manual scan re-entry fix",
+  "command": "PS5_FRONTENDS='es-de picker' tools/build-title.sh; tools/run-title.sh --no-build --pad-script=tests/pad/manual-scan-reentry.txt --watch 40",
+  "raw_capture": "klog/manual-scan/summary.txt",
+  "raw_lines": 15,
+  "raw_bytes": 1364,
+  "lines": [
+    "==> tools/run-title.sh --no-build --pad-script=tests/pad/manual-scan-reentry.txt --watch 40   (base PS5, 13.40)",
+    "before (f35915a + MENU action, build 71f4bedc, klog/run-PPSA99169-192114.log):",
+    "  MENU at 17.01 s: depth 4, list 'manual_content_scan_dir' '/app0/assets', entry 1 of 7 '<Scan This Directory>'",
+    "  MENU at 19.01 s: depth 2, list 'deferred_manual_content_scan_list' 'Manual Scan', entry 0 of 12 'Content Directory'",
+    "  crash: signal 11 fault=0x0 rip=0x0 [rsp]=0x100e207 handler=0x4a3c50 (slide 0x400000)",
+    "  0xc0e207 = menu_entries_list_search, after callq *0x2306c40; 0x2306c40 = R_X86_64_GLOB_DAT strcasestr",
+    "  kernel: # signal: 11 (SIGSEGV), # fault address: 0000000000000000",
+    "  old build, imports no loaded module exports: link mkstemp pathconf readlink strcasestr symlink",
+    "after (this commit, build 10a05e61, klog/run-PPSA99169-193202.log):",
+    "  fixed build, imports no loaded module exports: none; libScePosixForWebKit.prx no longer needed",
+    "  MENU at 17.00 s: depth 4, list 'manual_content_scan_dir' '/app0/assets', entry 1 of 7 '<Scan This Directory>'",
+    "  MENU at 19.01 s: depth 2, list 'deferred_manual_content_scan_list' 'Manual Scan', entry 0 of 12 'Content Directory'",
+    "  MENU at 21.01 s: depth 3, list 'manual_content_scan_dir' '/app0/', entry 2 of 23 'assets', pending ''",
+    "  STOP at 22.01 s; native quit: frontend status = 0",
+    "  fatal signals in the fixed run: 0"
+  ]
+}

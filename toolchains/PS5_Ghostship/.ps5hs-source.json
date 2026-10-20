@@ -1,0 +1,14 @@
+{
+  "repository": "griches/PS5_Ghostship",
+  "branch": "main",
+  "commit": "4cb586e7e5c722ba90fd86f66459569de564fc93",
+  "sourceCommit": "4cb586e7e5c722ba90fd86f66459569de564fc93",
+  "sourceRef": "main",
+  "method": "vendored-snapshot",
+  "vendoredSnapshot": true,
+  "vendorRepository": "RastaFairy/Visual-PS5",
+  "vendoredAt": "2026-10-20T15:43:39Z",
+  "submodulesMaterialized": true,
+  "originalMethod": "vendored-snapshot",
+  "sourceRevisionRecorded": true
+}

@@ -1,0 +1,13 @@
+{
+  "step": "webui-library-edits",
+  "note": "Issues 55 and 57 on the Base PS5 through the console's WebUI, with a test ROM made by the check: Add Game stores it, a rename becomes its RetroArch playlist label, and Delete game takes the file, its playlist entry and its details, so it leaves the library. Issue 58 could not be shown here: the console has no RetroAchievements account (the host test covers it). Afterwards the temporary playlist and the test files are removed.",
+  "must_contain": [
+    "add game: 201",
+    "55 rename: (200, 'Claude Test Renamed')",
+    "57 delete: (200, '{\"deleted\":1}', 'file gone', '0 playlist entries left', 'details gone')",
+    "57 library: gone from the library",
+    "cleanup: playlist and test files removed"
+  ],
+  "must_not_contain": [],
+  "human_check": "In the WebUI's Games page, rename a game and delete another from its Files tab: the XMB shows the new name; the deleted game is gone from RetroArch and EmulationStation."
+}

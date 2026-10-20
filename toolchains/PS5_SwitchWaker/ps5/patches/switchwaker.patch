@@ -1,0 +1,944 @@
+diff --git a/game/src/SSystem/SComponent/c_lib.cpp b/game/src/SSystem/SComponent/c_lib.cpp
+index 0f1f94f..02eaf89 100644
+--- a/game/src/SSystem/SComponent/c_lib.cpp
++++ b/game/src/SSystem/SComponent/c_lib.cpp
+@@ -8,6 +8,18 @@
+ #include "SSystem/SComponent/c_math.h"
+ #include "dolphin/mtx/mtxvec.h"
+ 
++#if TARGET_PC
++// A scale of 0 reaches these (the first cLib_addCalcAngleS2 of d_a_btd.cpp: m5E92 is still 0). The
++// GameCube's divw and ARM's sdiv give a quotient without a fault, x86-64's idiv raises SIGFPE: the
++// quotient is 0 here, as on ARM.
++static inline s32 cLib_div(s32 a, s32 b) {
++    return b != 0 ? a / b : 0;
++}
++#define CLIB_DIV(a, b) cLib_div((a), (b))
++#else
++#define CLIB_DIV(a, b) ((a) / (b))
++#endif
++
+ /* 802528A4-802528C4       .text cLib_memCpy__FPvPCvUl */
+ void cLib_memCpy(void* dst, const void* src, unsigned long size) {
+     memcpy(dst, src, size);
+@@ -160,7 +172,7 @@ void cLib_addCalcPosXZ2(cXyz* pValue, cXyz const& target, f32 scale, f32 maxStep
+ s16 cLib_addCalcAngleS(s16* pValue, s16 target, s16 scale, s16 maxStep, s16 minStep) {
+     s16 diff = target - *pValue;
+     if (*pValue != target) {
+-        s16 step = (diff) / scale;
++        s16 step = CLIB_DIV(diff, scale);
+         if (step > minStep || step < -minStep) {
+             if (step > maxStep) {
+                 step = maxStep;
+@@ -191,7 +203,7 @@ s16 cLib_addCalcAngleS(s16* pValue, s16 target, s16 scale, s16 maxStep, s16 minS
+ /* 80253270-802532C4       .text cLib_addCalcAngleS2__FPssss */
+ void cLib_addCalcAngleS2(s16* pValue, s16 target, s16 scale, s16 maxStep) {
+     s16 diff = target - *pValue;
+-    s16 step = diff / scale;
++    s16 step = CLIB_DIV(diff, scale);
+     if (step > maxStep) {
+         *pValue += maxStep;
+     } else if (step < -maxStep) {
+@@ -205,7 +217,7 @@ void cLib_addCalcAngleS2(s16* pValue, s16 target, s16 scale, s16 maxStep) {
+ s32 cLib_addCalcAngleL(s32* pValue, s32 target, s32 scale, s32 maxStep, s32 minStep) {
+     s32 diff = target - *pValue;
+     if (*pValue != target) {
+-        scale = (diff) / scale;
++        scale = CLIB_DIV(diff, scale);
+         if (scale > minStep || scale < -minStep) {
+             if (scale > maxStep) {
+                 scale = maxStep;
+diff --git a/game/src/SSystem/SComponent/c_math.cpp b/game/src/SSystem/SComponent/c_math.cpp
+index 5129f61..8c7e218 100644
+--- a/game/src/SSystem/SComponent/c_math.cpp
++++ b/game/src/SSystem/SComponent/c_math.cpp
+@@ -111,7 +111,18 @@ static u16 atntable[] = {
+ 
+ /* 8024609C-802460D0       .text U_GetAtanTable__Fff */
+ u16 U_GetAtanTable(float f0, float f1) {
++#if TARGET_PC
++    // A NaN reaches this (the cut ropes of d_a_mflft.cpp). The conversion gives 0x80000000 on the
++    // GameCube and on x86-64: the GameCube's 32 bit address wraps back to entry 0, x86-64 reads 4 GB
++    // below the table and faults. Entry 0 here, as on the GameCube.
++    f32 ratio = f0 / f1 * 1024;
++    if (!(ratio >= 0.0f && ratio <= 1024.0f)) {
++        return atntable[0];
++    }
++    return atntable[(int)ratio];
++#else
+     return atntable[(int)(f0 / f1 * 1024)];
++#endif
+ }
+ 
+ /* 802460D0-80246270       .text cM_atan2s__Fff */
+diff --git a/game/src/d/d_meter.cpp b/game/src/d/d_meter.cpp
+index 05ecca5..292ce89 100644
+--- a/game/src/d/d_meter.cpp
++++ b/game/src/d/d_meter.cpp
+@@ -1177,6 +1177,31 @@ void dMeter_parentPaneTrans(fopMsgM_pane_class* pane, f32 scale) {
+     j2dPane->rotate(pane->mSize.x / 2.0f, pane->mSize.y / 2.0f, ROTATE_Z, j2dPane->getRotate());
+ }
+ 
++#if TARGET_PC
++// PS5 port: the X and Y buttons' symbols. The layout puts each at the inner corner of its bubble,
++// clear of the item's picture; with no item in the slot the symbol sits off-centre in an empty
++// bubble, which shows with the DualSense's symbols. An empty slot's symbol moves to the bubble's
++// middle; with an item it stays where the layout has it. (COS_HUD_CENTRE_EMPTY=1 elsewhere.)
++static fopMsgM_f2d_class sPs5SymbolOrig[2];
++
++static void ps5CentreEmptySymbols(sub_meter_class* i_Meter) {
++#if defined(__PROSPERO__)
++    static const bool on = true;
++#else
++    static const bool on = getenv("COS_HUD_CENTRE_EMPTY") != NULL;
++#endif
++    if (!on) {
++        return;
++    }
++    static const f32 offset[2][2] = {{10.0f, -2.0f}, {-4.0f, -11.0f}}; // X (Circle), Y (Triangle)
++    for (int i = 0; i < 2; i++) {
++        const bool empty = dComIfGp_getSelectItem(i) == dItemNo_NONE_e;
++        i_Meter->field_0x2550[i].mPosCenterOrig.x = sPs5SymbolOrig[i].x + (empty ? offset[i][0] : 0.0f);
++        i_Meter->field_0x2550[i].mPosCenterOrig.y = sPs5SymbolOrig[i].y + (empty ? offset[i][1] : 0.0f);
++    }
++}
++#endif
++
+ /* 801F08DC-801F09D8       .text dMeter_childPaneTrans__FP18fopMsgM_pane_classP18fopMsgM_pane_classf */
+ void dMeter_childPaneTrans(fopMsgM_pane_class* pane, fopMsgM_pane_class* parent, f32 scale) {
+     f32 x = pane->mPosCenterOrig.x - parent->mPosCenterOrig.x;
+@@ -3484,6 +3509,9 @@ void dMeter_xyTrans(sub_meter_class* i_Meter) {
+         fopMsgM_paneTrans(&i_Meter->field_0x2470[i], x, dVar8);
+     }
+     fopMsgM_paneTrans(&i_Meter->field_0x2518, x, dVar8);
++#if TARGET_PC
++    ps5CentreEmptySymbols(i_Meter);
++#endif
+     for (s32 i = 0; i < 2; i++) {
+         fopMsgM_paneTrans(&i_Meter->field_0x2550[i], x, dVar8);
+         fopMsgM_paneTrans(&i_Meter->field_0x25c0[i], x, dVar8);
+@@ -7433,6 +7461,10 @@ void dMeter_screenDataSet(sub_meter_class* i_Meter) {
+     fopMsgM_setPaneData(&i_Meter->field_0x2550[0], sMainParts1, 'bax1');
+     fopMsgM_setPaneData(&i_Meter->field_0x25c0[0], sMainParts1, 'b001');
+     fopMsgM_setPaneData(&i_Meter->field_0x2630[0], sMainParts1, 'ba01');
++#if TARGET_PC
++    sPs5SymbolOrig[0] = i_Meter->field_0x2550[0].mPosCenterOrig;
++    sPs5SymbolOrig[1] = i_Meter->field_0x2550[1].mPosCenterOrig;
++#endif
+     fopMsgM_setPaneData(&i_Meter->field_0x1da8[0], sMainParts1, 'baa');
+     fopMsgM_setPaneData(&i_Meter->field_0x1e18[0], sMainParts1, 'bawe');
+     fopMsgM_setPaneData(&i_Meter->field_0x26a0, sMainParts1, 'bar1');
+diff --git a/game/src/f_op/f_op_scene_req.cpp b/game/src/f_op/f_op_scene_req.cpp
+index 08b0cee..0febd75 100644
+--- a/game/src/f_op/f_op_scene_req.cpp
++++ b/game/src/f_op/f_op_scene_req.cpp
+@@ -35,7 +35,46 @@ static cPhs_State fopScnRq_phase_Done(scene_request_class* i_sceneReq) {
+     return cPhs_NEXT_e;
+ }
+ 
++#if TARGET_PC
++#include "f_pc/f_pc_base.h"
++#include "f_pc/f_pc_delete_tag.h"
++#include <cstdio>
++// A scene request that stays in one step: every 300 calls, which step and what the delete queue holds.
++static void pc_fopScnRq_watch(scene_request_class* i_sceneReq) {
++    static scene_request_class* sReq;
++    static int sScene = -2, sNode = -2;
++    static unsigned sCalls;
++    const int scene = i_sceneReq->mReqPhsProcCls.id, node = i_sceneReq->mCrtReq.mReqPhsProc.id;
++    if (i_sceneReq != sReq || scene != sScene || node != sNode) {
++        sReq = i_sceneReq;
++        sScene = scene;
++        sNode = node;
++        sCalls = 0;
++        return;
++    }
++    if (++sCalls % 300 != 0) {
++        return;
++    }
++    fprintf(stderr, "[cos] scene-req-watch: %u calls in one step: fade %d, scene step %d, node step %d, proc %d, "
++                    "delete queue %d, overlap doing %d done %d\n", sCalls, i_sceneReq->mFadeRequest != NULL, scene,
++            node, (int)i_sceneReq->mCrtReq.mProcName, (int)g_fpcDtTg_Queue.mSize, (int)fopOvlpM_IsDoingReq(),
++            (int)fopOvlpM_IsDone());
++    int shown = 0;
++    for (node_class* n = g_fpcDtTg_Queue.mpHead; n != NULL && shown < 12; n = n->mpNextNode, shown++) {
++        delete_tag_class* tag = (delete_tag_class*)n;
++        base_process_class* proc = (base_process_class*)tag->base.mpTagData;
++        fprintf(stderr, "[cos] scene-req-watch:   deleting proc name %d id %u timer %d\n",
++                proc != NULL ? (int)proc->mProfName : -1, proc != NULL ? (unsigned)proc->mBsPcId : 0u,
++                (int)tag->mTimer);
++    }
++    fflush(stderr);
++}
++#endif
++
+ static cPhs_State fopScnRq_Execute(scene_request_class* i_sceneReq) {
++#if TARGET_PC
++    pc_fopScnRq_watch(i_sceneReq);
++#endif
+     cPhs_State phase_state = cPhs_Do(&i_sceneReq->mReqPhsProcCls, i_sceneReq);
+     switch (phase_state) {
+     case cPhs_NEXT_e:
+diff --git a/game/src/f_pc/f_pc_method.cpp b/game/src/f_pc/f_pc_method.cpp
+index 355f0e7..57070e1 100644
+--- a/game/src/f_pc/f_pc_method.cpp
++++ b/game/src/f_pc/f_pc_method.cpp
+@@ -5,6 +5,16 @@
+ 
+ #include "f_pc/f_pc_method.h"
+ 
++#if TARGET_PC
++// Some actors declare these methods as returning bool (one byte) and are called here as
++// returning int: on x86-64 the rest of the register is whatever was there, so TRUE can read as
++// something other than 1 and e.g. a delete is retried for ever (d_a_tag_attention's Mthd_Delete
++// at the end of A_mori's MEET_TETORA: the next scene never came). Only the low byte counts.
++#define PC_MTD_BOOL(x) ((x) & 0xFF)
++#else
++#define PC_MTD_BOOL(x) (x)
++#endif
++
+ /* 8003EF00-8003EF38       .text fpcMtd_Method__FPFPv_iPv */
+ int fpcMtd_Method(process_method_func i_methodFunc, void* i_data) {
+     if (i_methodFunc != NULL)
+@@ -15,17 +25,17 @@ int fpcMtd_Method(process_method_func i_methodFunc, void* i_data) {
+ 
+ /* 8003EF38-8003EF5C       .text fpcMtd_Execute__FP20process_method_classPv */
+ BOOL fpcMtd_Execute(process_method_class* i_methods, void* i_data) {
+-    return fpcMtd_Method(i_methods->mpExecuteFunc, i_data);
++    return PC_MTD_BOOL(fpcMtd_Method(i_methods->mpExecuteFunc, i_data));
+ }
+ 
+ /* 8003EF5C-8003EF80       .text fpcMtd_IsDelete__FP20process_method_classPv */
+ BOOL fpcMtd_IsDelete(process_method_class* i_methods, void* i_data) {
+-    return fpcMtd_Method(i_methods->mpIsDeleteFunc, i_data);
++    return PC_MTD_BOOL(fpcMtd_Method(i_methods->mpIsDeleteFunc, i_data));
+ }
+ 
+ /* 8003EF80-8003EFA4       .text fpcMtd_Delete__FP20process_method_classPv */
+ BOOL fpcMtd_Delete(process_method_class* i_methods, void* i_data) {
+-    return fpcMtd_Method(i_methods->mpDeleteFunc, i_data);
++    return PC_MTD_BOOL(fpcMtd_Method(i_methods->mpDeleteFunc, i_data));
+ }
+ 
+ /* 8003EFA4-8003EFC8       .text fpcMtd_Create__FP20process_method_classPv */
+diff --git a/native/src/pc/features/pc_menu.cpp b/native/src/pc/features/pc_menu.cpp
+index 3a26b60..fb9c5f0 100644
+--- a/native/src/pc/features/pc_menu.cpp
++++ b/native/src/pc/features/pc_menu.cpp
+@@ -144,6 +144,10 @@ uint32_t readGamepads() {
+         // Minus alone: the SDL shim shows every controller as a Pro Controller, whose mapping gives
+         // Minus (BACK) to no game button.
+         bool combo = SDL_GetGamepadButton(gp, SDL_GAMEPAD_BUTTON_BACK);
++#elif defined(__PROSPERO__)
++        // PlayStation 5: the touch pad's click, which the port's SDL driver reports as BACK and
++        // the game's default mapping gives to no button.
++        bool combo = SDL_GetGamepadButton(gp, SDL_GAMEPAD_BUTTON_BACK);
+ #else
+         const bool lt = SDL_GetGamepadAxis(gp, SDL_GAMEPAD_AXIS_LEFT_TRIGGER) > 16000;
+         const bool rt = SDL_GetGamepadAxis(gp, SDL_GAMEPAD_AXIS_RIGHT_TRIGGER) > 16000;
+@@ -448,7 +452,14 @@ const PcSettingChoice kFbScale[] = {
+ #endif
+     {"1.0", "854x480 (1.0)"},  {"1.125", "960x540 (1.125)"}, {"1.25", "1067x600 (1.25)"},
+     {"1.5", "1280x720 (1.5)"}, {"2.0", "1707x960 (2.0)"},    {"2.25", "1920x1080 (2.25)"},
++#if defined(__PROSPERO__)
++    {"3.0", "2560x1440 (3.0)"}, {"4.5", "3840x2160 (4K, 4.5)"},
++#endif
+ };
++#if defined(__PROSPERO__)
++// PlayStation 5: the size of the picture the port hands to the console (ps5/src/startup.c reads it)
++const PcSettingChoice kPs5Output[] = {{"2160", "3840x2160 (4K)"}, {"1440", "2560x1440"}, {"1080", "1920x1080"}};
++#endif
+ const PcSettingChoice kAspect[] = {{"16:9", "16:9 (panorámica)", "16:9 (widescreen)"}, {"4:3", "4:3 (GameCube)"}, {"16:10", "16:10"}};
+ const PcSettingChoice kOnOff[] = {{"0", "Desactivado", "Off"}, {"1", "Activado", "On"}};
+ const PcSettingChoice kHdMaxSize[] = {{"auto", "Automático (512 / 1024)", "Automatic (512 / 1024)"}, {"256", "256"}, {"512", "512"},
+@@ -528,6 +539,13 @@ const PcSettingDesc kBuiltins[] = {
+      70,
+      "Aspect ratio",
+      "16:9 widescreen or the GameCube's original 4:3."},
++#if defined(__PROSPERO__)
++    {"COS_PS5_OUTPUT", "Resolución de salida",
++     "Tamaño de la imagen que el juego entrega a la consola. La resolución interna «Tamaño de la ventana» es esta.",
++     PC_SETTING_TAB_GRAPHICS, PC_SETTING_RESTART, CHOICES(kPs5Output), "2160", nullptr, nullptr, 71,
++     "Output resolution",
++     "The size of the picture the game hands to the console. The internal resolution \"Window size\" is this one."},
++#endif
+     {"COS_HD_TEXTURES", "Texturas HD", "Usa el paquete de texturas en alta resolución si está instalado.",
+      PC_SETTING_TAB_GRAPHICS, 0, CHOICES(kOnOff), "0", nullptr, nullptr, 80,
+      "HD textures",
+@@ -1122,11 +1140,18 @@ void drawMenu() {
+     }
+     ImGui::SetCursorPosY(ImGui::GetWindowHeight() - ImGui::GetTextLineHeightWithSpacing() -
+                          ImGui::GetStyle().WindowPadding.y);
++#if defined(__PROSPERO__)
++    // PlayStation 5: the DualSense's names (A is Cross and B is Square: Aurora's PS5 mapping)
++    ImGui::TextColored(kDim, "%s",
++                       T("Cruz: cambiar   Cuadrado: cerrar   L2/R2: pestaña   Panel táctil: cerrar",
++                         "Cross: change   Square: close   L2/R2: tab   Touch pad: close"));
++#else
+     ImGui::TextColored(kDim, "%s",
+                        kSwitch ? T("A: cambiar   B: cerrar   L/R: pestaña   Menos: cerrar",
+                                    "A: change   B: close   L/R: tab   Minus: close")
+                                : T("A/Intro: cambiar   B/Esc: cerrar   L/R, Q/E: pestaña   F1: cerrar",
+                                    "A/Enter: change   B/Esc: close   L/R, Q/E: tab   F1: close"));
++#endif
+     ImGui::End();
+ }
+ 
+diff --git a/native/src/pc/features/pc_overlay.cpp b/native/src/pc/features/pc_overlay.cpp
+index 43728f2..b3ce94c 100644
+--- a/native/src/pc/features/pc_overlay.cpp
++++ b/native/src/pc/features/pc_overlay.cpp
+@@ -13,6 +13,7 @@
+ // per frame of the frames read back in the half second (GL_TIME_ELAPSED_EXT, a few frames late).
+ #include "pc_internal.h"
+ 
++#include <algorithm>
+ #include <imgui.h>
+ 
+ #if defined(__SWITCH__)
+@@ -110,12 +111,19 @@ void overlayFrame(uint64_t busyNs, bool gameFrame) {
+         overlayUpdate(now);
+     }
+ 
+-    ImGui::SetNextWindowPos(ImVec2(8.0f, 8.0f), ImGuiCond_Always);
++#if defined(__PROSPERO__)
++    // PlayStation 5: a television at up to 3840x2160; the font's own size is for a 720-line window
++    const float scale = std::max(1.0f, ImGui::GetIO().DisplaySize.y / 720.0f);
++#else
++    const float scale = 1.0f;
++#endif
++    ImGui::SetNextWindowPos(ImVec2(8.0f * scale, 8.0f * scale), ImGuiCond_Always);
+     ImGui::SetNextWindowBgAlpha(0.55f);
+     constexpr ImGuiWindowFlags kFlags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize |
+                                         ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing |
+                                         ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoInputs;
+     if (ImGui::Begin("##cos_fps_overlay", nullptr, kFlags)) {
++        ImGui::SetWindowFontScale(scale);
+         if (!s.measured) {
+             // Turned on a moment ago (options menu): nothing measured yet.
+             ImGui::TextUnformatted("-- fps");
+diff --git a/native/src/pc/harness/pc_shot.cpp b/native/src/pc/harness/pc_shot.cpp
+index aef4e19..c2c3de0 100644
+--- a/native/src/pc/harness/pc_shot.cpp
++++ b/native/src/pc/harness/pc_shot.cpp
+@@ -47,6 +47,7 @@
+ #include <cstdlib>
+ #include <cstring>
+ #include <fcntl.h>
++#include <sys/stat.h>
+ #include <functional>
+ #include <string>
+ #include <unistd.h>
+@@ -568,7 +569,48 @@ void debugShotFrameEnd(unsigned int frame) {
+     sDebugShotOk = ok ? ticket : sDebugShotOk;
+ }
+ 
++#if defined(__PROSPERO__)
++// PlayStation 5: PS5 DevLoop's grab and quit (PS5_DevLoop/AGENTS.md, "Giving a title grab"). Once
++// every few frames the title tries to remove a request file in its own folder: removing it is the
++// check, one system call that fails on every ordinary launch. devloop-shot: this frame's picture,
++// with the options menu and overlays, becomes a new PNG in a folder that holds nothing else.
++// devloop-quit: a clean exit.
++void ps5DevLoop(unsigned int frame) {
++    static unsigned int grabs = 0;
++    if (frame % 4 != 0) {
++        return;
++    }
++    if (unlink("/app0/devloop-quit") == 0) {
++        writef(STDERR_FILENO, "[cos] ps5: devloop-quit\n");
++        pc_exit(PC_EXIT_REACHED);
++    }
++    if (unlink("/app0/devloop-shot") != 0) {
++        return;
++    }
++    const char* partial = "/app0/user/grab.partial";
++    mkdir("/app0/user/screenshots", 0777);
++    chmod("/app0/user", 0777);
++    chmod("/app0/user/screenshots", 0777);
++    {
++        std::lock_guard<std::mutex> lk(sDebugShotMu);
++        sDebugShotPath = partial;
++        sDebugShotOverlay = true;
++        sDebugShotAsked++;
++    }
++    debugShotFrameEnd(frame);
++    char name[64];
++    snprintf(name, sizeof(name), "/app0/user/screenshots/grab-%04u.png", grabs++);
++    chmod(partial, 0666);
++    if (rename(partial, name) != 0) {
++        writef(STDERR_FILENO, "[cos] ps5: grab: no picture written\n");
++    }
++}
++#endif
++
+ void shotFrameEnd(unsigned int frame) {
++#if defined(__PROSPERO__)
++    ps5DevLoop(frame);
++#endif
+     debugShotFrameEnd(frame);
+     if (!sShotOn || !wanted(frame)) {
+         return;
+diff --git a/native/src/pc/harness/sweeps/pc_event_sweep.cpp b/native/src/pc/harness/sweeps/pc_event_sweep.cpp
+index aeba943..b972772 100644
+--- a/native/src/pc/harness/sweeps/pc_event_sweep.cpp
++++ b/native/src/pc/harness/sweeps/pc_event_sweep.cpp
+@@ -504,10 +504,23 @@ int demoBank(const char* file) {
+ }
+ 
+ // A stage change asked for by the running event (or anything else): the run ends here.
++bool sFollowing = false;
++
+ bool checkStageChange() {
+     if (!dComIfGp_isEnableNextStage()) {
+         return false;
+     }
++    // COS_EVENT_SWEEP_FOLLOW=1: go on through the change instead (the run ends with --frames).
++    if (getenv("COS_EVENT_SWEEP_FOLLOW") != nullptr) {
++        if (!sFollowing) {
++            sFollowing = true;
++            setDrivenPad(true, 0, 0, 0);
++            writef(STDERR_FILENO, "[cos] event-sweep: following the stage change to %s room %d point %d layer %d\n",
++                   dComIfGp_getNextStageName(), (int)dComIfGp_getNextStageRoomNo(),
++                   (int)dComIfGp_getNextStagePoint(), (int)dComIfGp_getNextStageLayer());
++        }
++        return true;
++    }
+     detail(" next=%s", dComIfGp_getNextStageName());
+     result("stage-change");
+     stopRun("a stage change");
+@@ -516,6 +529,9 @@ bool checkStageChange() {
+ } // namespace
+ 
+ void eventSweepFrame(unsigned int frames) {
++    if (sFollowing) {
++        return;
++    }
+     if (!sChecked) {
+         sChecked = true;
+         if (gConfig.smoke == nullptr || strcmp(gConfig.smoke, "event-sweep") != 0) {
+diff --git a/native/src/pc/harness/sweeps/pc_save_sweep.cpp b/native/src/pc/harness/sweeps/pc_save_sweep.cpp
+index 9a9f11f..6720a15 100644
+--- a/native/src/pc/harness/sweeps/pc_save_sweep.cpp
++++ b/native/src/pc/harness/sweeps/pc_save_sweep.cpp
+@@ -110,6 +110,7 @@ enum State {
+     kTitle,     // save-load: START until the name scene
+     kName,      // A until the PLAY scene
+     kPlay,      // the PLAY scene: wait for the player in the return room
++    kWalk,      // COS_SAVE_LOAD_WALK: forward from the loaded save
+     kDone,
+ };
+ 
+@@ -403,6 +404,8 @@ void compareLoaded() {
+            slot + 1);
+ }
+ 
++unsigned int sWalkFrames = 0;
++
+ void loadFrame(unsigned int frames) {
+     ++sSince;
+     if (sState == kTitle) {
+@@ -463,8 +466,34 @@ void loadFrame(unsigned int frames) {
+         }
+         writef(STDERR_FILENO, "[cos] save-load: PASS loaded %s room %d point %d\n", sReturnName, sReturnRoom,
+                sReturnPoint);
++        // COS_SAVE_LOAD_WALK=<frames>: go on from the loaded save, the stick held forward and A
++        // tapped (through the door ahead), to reproduce a fault a player reports after a save.
++        const char* walk = getenv("COS_SAVE_LOAD_WALK");
++        if (walk != nullptr && atoi(walk) > 0) {
++            sWalkFrames = (unsigned int)atoi(walk);
++            sState = kWalk;
++            sSince = 0;
++            return;
++        }
+         pc_exit(PC_EXIT_REACHED);
+     }
++    if (sState == kWalk) {
++        fopAc_ac_c* player = dComIfGp_getPlayer(0);
++        setDrivenPad(true, sSince % kAEvery < 2 ? PAD_BUTTON_A : 0, 0, 127);
++        if (sSince % 60 == 0) {
++            if (player != nullptr) {
++                writef(STDERR_FILENO, "[cos] save-load: walk %u: %s room %d at (%.0f, %.0f, %.0f)\n", sSince,
++                       dComIfGp_getStartStageName(), (int)fopAcM_GetRoomNo(player), player->current.pos.x,
++                       player->current.pos.y, player->current.pos.z);
++            } else {
++                writef(STDERR_FILENO, "[cos] save-load: walk %u: no player\n", sSince);
++            }
++        }
++        if (sSince >= sWalkFrames) {
++            writef(STDERR_FILENO, "[cos] save-load: walk done\n");
++            pc_exit(PC_EXIT_REACHED);
++        }
++    }
+ }
+ 
+ } // namespace
+diff --git a/native/src/pc/runtime/pc_crash.cpp b/native/src/pc/runtime/pc_crash.cpp
+index 094f649..08447d8 100644
+--- a/native/src/pc/runtime/pc_crash.cpp
++++ b/native/src/pc/runtime/pc_crash.cpp
+@@ -36,6 +36,10 @@
+ #include <signal.h>
+ #endif
+ 
++#if defined(__PROSPERO__)
++#include <cstdlib>
++#include <ucontext.h>
++#endif
+ #if defined(__APPLE__)
+ #include <mach-o/dyld.h>
+ #include <mach/mach.h>
+@@ -45,6 +49,11 @@
+ #include <sys/uio.h>
+ #endif
+ 
++#if defined(__PROSPERO__)
++// The function whose address gives the title's load offset (ps5/tools/make-div-table.py).
++extern "C" __attribute__((noinline, used)) void pc_div_table_anchor() {}
++#endif
++
+ namespace pc {
+ 
+ namespace {
+@@ -221,6 +230,9 @@ void writeFrames(int fd, void** frames, int n, int exact) {
+ void writeThreadName(int fd) {
+ #if defined(__SWITCH__)
+     writef(fd, "[cos] thread %llu\n", (unsigned long long)cos_switch_thread_id());
++#elif defined(__PROSPERO__)
++    // PlayStation 5: the console's libc has no pthread_getname_np
++    writef(fd, "[cos] thread %p\n", (void*)pthread_self());
+ #else
+     char name[64] = "";
+     pthread_getname_np(pthread_self(), name, sizeof(name));
+@@ -338,6 +350,14 @@ void writef(int fd, const char* fmt, ...) {
+     if (len >= (int)sizeof(buf)) {
+         len = sizeof(buf) - 1;
+     }
++#ifdef __PROSPERO__
++    // The console's log takes standard error through stdio only (ps5/src/platform.c).
++    if (fd == STDERR_FILENO) {
++        fwrite(buf, 1, (size_t)len, stderr);
++        fflush(stderr);
++        return;
++    }
++#endif
+     const char* p = buf;
+     while (len > 0) {
+         ssize_t w = write(fd, p, (size_t)len);
+@@ -394,11 +414,126 @@ void traceLastResource(char* out, size_t size) {
+     out[n - 1] = '\0';
+ }
+ 
++#if defined(__PROSPERO__)
++// The game divides integers by zero in places (the first cLib_addCalcAngleS2 of d_a_btd.cpp, before
++// c_lib.cpp guarded it): the GameCube's divw and ARM's sdiv give a quotient without a fault, x86-64's
++// div/idiv raises SIGFPE. This finishes the instruction as ARM does (quotient 0, remainder the
++// dividend) and goes on, with a log line for the first faults. Anything it cannot read as a
++// div/idiv gets the default action back, so the console still writes its crash record.
++
++// The console's code is execute-only, so the handler cannot read the instruction to learn its
++// length: the title ships a table of its div/idiv instructions made after the link
++// (ps5/tools/make-div-table.py, res/div-table.bin: ELF address, length, operand size).
++#pragma pack(push, 1)
++struct DivEntry {
++    uint32_t address;
++    uint8_t length;
++    uint8_t size;
++};
++#pragma pack(pop)
++DivEntry* sDivTable = nullptr;
++uint32_t sDivCount = 0;
++uintptr_t sDivBase = 0; // the load address of ELF address 0
++
++void loadDivTable() {
++    const int fd = open("/app0/res/div-table.bin", O_RDONLY);
++    if (fd < 0) {
++        writef(STDERR_FILENO, "[cos] no res/div-table.bin: an integer division by zero is a crash\n");
++        return;
++    }
++    struct {
++        char magic[8];
++        uint64_t anchor;
++        uint32_t count;
++    } __attribute__((packed)) head;
++    if (read(fd, &head, sizeof(head)) == (ssize_t)sizeof(head) && memcmp(head.magic, "COSDIV1", 8) == 0 &&
++        head.count > 0 && head.count < 4000000) {
++        const size_t bytes = (size_t)head.count * sizeof(DivEntry);
++        DivEntry* table = static_cast<DivEntry*>(malloc(bytes));
++        size_t got = 0;
++        while (table != nullptr && got < bytes) {
++            const ssize_t n = read(fd, reinterpret_cast<char*>(table) + got, bytes - got);
++            if (n <= 0) {
++                break;
++            }
++            got += (size_t)n;
++        }
++        if (table != nullptr && got == bytes) {
++            sDivBase = reinterpret_cast<uintptr_t>(&pc_div_table_anchor) - (uintptr_t)head.anchor;
++            sDivCount = head.count;
++            sDivTable = table;
++        }
++    }
++    close(fd);
++    writef(STDERR_FILENO, "[cos] division table: %u instruction(s), load offset 0x%llx\n", sDivCount,
++           (unsigned long long)sDivBase);
++}
++
++void divFaultHandler(int sig, siginfo_t* info, void* context) {
++    (void)info;
++    ucontext_t* uc = static_cast<ucontext_t*>(context);
++    const uintptr_t rip = (uintptr_t)uc->uc_mcontext.mc_rip;
++    const uint64_t address = rip - sDivBase;
++    int length = 0, size = 0;
++    for (uint32_t lo = 0, hi = sDivCount; lo < hi;) {
++        const uint32_t mid = lo + (hi - lo) / 2;
++        if (sDivTable[mid].address == address) {
++            length = sDivTable[mid].length;
++            size = sDivTable[mid].size;
++            break;
++        }
++        if (sDivTable[mid].address < address) {
++            lo = mid + 1;
++        } else {
++            hi = mid;
++        }
++    }
++    if (length == 0) {
++        signal(sig, SIG_DFL); // not a listed division: it faults again, into the console's record
++        return;
++    }
++    static unsigned int sCount = 0;
++    if (sCount++ < 16) {
++        writef(STDERR_FILENO, "[cos] integer division fault at ELF address 0x%llx (%d-byte operand): quotient 0, going on\n",
++               (unsigned long long)address, size);
++    }
++    uint64_t& rax = reinterpret_cast<uint64_t&>(uc->uc_mcontext.mc_rax);
++    uint64_t& rdx = reinterpret_cast<uint64_t&>(uc->uc_mcontext.mc_rdx);
++    switch (size) {
++    case 1: rax = (rax & ~0xFFFFull) | ((rax & 0xFF) << 8); break; // AL = 0, AH = the dividend's low byte
++    case 2: rdx = (rdx & ~0xFFFFull) | (rax & 0xFFFF); rax &= ~0xFFFFull; break;
++    case 4: rdx = rax & 0xFFFFFFFFull; rax = 0; break;
++    default: rdx = rax; rax = 0; break;
++    }
++    uc->uc_mcontext.mc_rip += length;
++}
++#endif
++
+ void installCrashHandler() {
+ #if defined(__SWITCH__)
+     // libnx's exception handler (switch/native/source/cos_switch.cpp) reports crashes; it adds
+     // this state line.
+     cos_switch_set_crash_state_writer(writeState);
++#elif defined(__PROSPERO__)
++    // PlayStation 5: no crash handler. The console writes a crash record of its own to klog
++    // (registers and a frame-pointer walk), which the port's ps5/tools/run.sh symbolises; a handler
++    // here would take the signal first and exit without one. SIGFPE alone is handled, to finish an
++    // integer division by zero as the other machines do (divFaultHandler).
++    {
++        loadDivTable();
++        struct sigaction sa = {};
++        sa.sa_sigaction = divFaultHandler;
++        sa.sa_flags = SA_SIGINFO;
++        sigemptyset(&sa.sa_mask);
++        sigaction(SIGFPE, &sa, nullptr);
++        const char* test = getenv("COS_DIV_TEST");
++        if (test != nullptr && atoi(test) > 0) {
++            volatile int a = 1234, b = 0;
++            volatile int q = a / b;
++            volatile int r = a % b;
++            writef(STDERR_FILENO, "[cos] div-test: 1234 / 0 = %d, 1234 %% 0 = %d\n", (int)q, (int)r);
++        }
++    }
+ #else
+     // Alternate signal stack for this (the main) thread, so a stack overflow still reports.
+     static char sAltStack[256 * 1024];
+diff --git a/native/src/pc/runtime/pc_disc.cpp b/native/src/pc/runtime/pc_disc.cpp
+index 8d3e3b5..4ee3265 100644
+--- a/native/src/pc/runtime/pc_disc.cpp
++++ b/native/src/pc/runtime/pc_disc.cpp
+@@ -10,6 +10,7 @@
+ #include <cerrno>
+ #include <cstdarg>
+ #include <cstdio>
++#include <cstdlib>
+ #include <cstring>
+ #include <fcntl.h>
+ #include <sys/stat.h>
+@@ -19,6 +20,13 @@
+ #include "cos_switch.h"
+ #endif
+ 
++#if defined(__PROSPERO__)
++extern "C" int sceKernelSendNotificationRequest(int device, void* request, size_t size, int blocking);
++#ifndef PS5_TITLE_ID
++#define PS5_TITLE_ID "PPSA99309" // ps5/sce_sys/param.json
++#endif
++#endif
++
+ namespace pc {
+ 
+ namespace {
+@@ -43,6 +51,28 @@ void exitDisc() {
+              "imagen sin comprimir en sdmc:/switch/switchwaker/GZLE01.iso.",
+              sDiscError);
+     cos_switch_show_error(text);
++#endif
++#if defined(__PROSPERO__)
++    // PlayStation 5: the title has no picture yet, so the console's own notification says it; it
++    // stays on the home screen after the title has gone.
++    {
++        static struct {
++            char unused[45];
++            char message[3075];
++        } request;
++        if (gConfig.disc == nullptr) {
++            snprintf(request.message, sizeof request.message,
++                     "Wind Waker: no game found.\nCopy your own disc image of The Wind Waker (USA, GZLE01, "
++                     ".iso) into /data/homebrew/" PS5_TITLE_ID "/ or onto a USB drive, then start again.");
++        } else {
++            snprintf(request.message, sizeof request.message,
++                     "Wind Waker: this disc image cannot be used.\n%s\nIt needs The Wind Waker (USA, GZLE01, "
++                     "revision 0) in /data/homebrew/" PS5_TITLE_ID "/.",
++                     sDiscError);
++        }
++        sceKernelSendNotificationRequest(0, &request, sizeof request, 0);
++        sleep(2);
++    }
+ #endif
+     pc_exit(PC_EXIT_DISC);
+     __builtin_unreachable();
+@@ -76,8 +106,30 @@ int checkDisc() {
+         return PC_EXIT_DISC;
+     }
+     if (memcmp(header, "CISO", 4) == 0) {
+-        discMessage("%s is a CISO image; convert it to a plain .iso (decision H9)", path);
+-        return PC_EXIT_DISC;
++        // The PS5 port reads CISO images (its nod, ps5/nod, does; so does the desktop hosts' nod,
++        // with COS_ALLOW_CISO=1 to try it there): the disc's own header is the first block, which
++        // follows the 0x8000-byte block map. Decision H9 stands elsewhere (the Switch's reader
++        // takes plain images only).
++#if defined(__PROSPERO__)
++        bool ciso = true;
++#else
++        const char* allow = getenv("COS_ALLOW_CISO");
++        bool ciso = allow != nullptr && strcmp(allow, "1") == 0;
++#endif
++        if (ciso) {
++            ciso = header[8] != 0; // the first block must be present
++            fd = ciso ? open(path, O_RDONLY | O_CLOEXEC) : -1;
++            if (fd >= 0) {
++                ciso = pread(fd, header, sizeof(header), 0x8000) == (ssize_t)sizeof(header);
++                close(fd);
++            } else {
++                ciso = false;
++            }
++        }
++        if (!ciso) {
++            discMessage("%s is a CISO image; convert it to a plain .iso (decision H9)", path);
++            return PC_EXIT_DISC;
++        }
+     }
+     const uint32_t magic = ((uint32_t)header[0x1C] << 24) | ((uint32_t)header[0x1D] << 16) |
+                            ((uint32_t)header[0x1E] << 8) | (uint32_t)header[0x1F];
+diff --git a/native/src/pc/runtime/pc_harness.cpp b/native/src/pc/runtime/pc_harness.cpp
+index e21ec1b..fe8251c 100644
+--- a/native/src/pc/runtime/pc_harness.cpp
++++ b/native/src/pc/runtime/pc_harness.cpp
+@@ -15,6 +15,10 @@
+ #if defined(__SWITCH__)
+ #include "cos_switch.h"
+ #endif
++#if defined(__PROSPERO__)
++#include <dirent.h>
++#include <strings.h>
++#endif
+ #if defined(__APPLE__)
+ #include <mach-o/dyld.h>
+ #include <pthread.h>
+@@ -128,11 +132,81 @@ bool executablePath(char* out, size_t size) {
+     }
+     out[n] = '\0';
+     return true;
++#elif defined(__PROSPERO__)
++    // PlayStation 5: a title's own folder is /app0 (which is /data/homebrew/<TITLE_ID>), the one
++    // place it may write: user/ (saves, settings, caches) and the bundled pipeline cache go there.
++    snprintf(out, size, "/app0/eboot.bin");
++    return true;
+ #else
+     return false;
+ #endif
+ }
+ 
++#if defined(__PROSPERO__)
++namespace {
++void ps5Default(const char* name, const char* value) {
++    if (getenv(name) == nullptr) {
++        setenv(name, value, 0);
++        writef(STDERR_FILENO, "[cos] ps5 default: %s=%s\n", name, value);
++    }
++}
++
++// There is no file dialog and no command line: the disc is the first .iso, .gcm or .ciso in the
++// title's folder, then on a USB drive. checkDisc says what is wrong with it, if anything.
++void ps5FindDisc() {
++    if (getenv("COS_DISC") != nullptr) {
++        return;
++    }
++    for (const char* dir : {"/app0", "/mnt/usb0", "/mnt/usb1"}) {
++        DIR* d = opendir(dir);
++        if (d == nullptr) {
++            continue;
++        }
++        char found[512] = "";
++        while (const dirent* e = readdir(d)) {
++            const char* dot = strrchr(e->d_name, '.');
++            if (dot != nullptr && (strcasecmp(dot, ".iso") == 0 || strcasecmp(dot, ".gcm") == 0 ||
++                                   strcasecmp(dot, ".ciso") == 0)) {
++                snprintf(found, sizeof(found), "%s/%s", dir, e->d_name);
++                break;
++            }
++        }
++        closedir(d);
++        if (found[0] != '\0') {
++            ps5Default("COS_DISC", found);
++            return;
++        }
++    }
++}
++} // namespace
++
++// The console's defaults, for what the settings file (the options menu) has not set: as the
++// Switch's (switch/native/source/cos_switch.cpp), for a television and a faster machine.
++void ps5Defaults() {
++    ps5FindDisc();
++    ps5Default("COS_RUN_DIR", "/app0/user");
++    ps5Default("COS_ASPECT", "16:9");
++    // 60 images a second by interpolation (docs/FPS60_PLAN.md); the game's logic stays at 30
++    ps5Default("COS_FPS60", "1");
++    // the internal resolution is the output's (0: the window's size)
++    ps5Default("COS_FB_SCALE", "0");
++    // the render pipelines of the bundled list are compiled while the game starts
++    ps5Default("COS_PRECOMPILE", "boot");
++    // a texture pack the player has copied in (user/hd_textures) is used unless the options menu
++    // has said otherwise
++    if (DIR* d = opendir("/app0/user/hd_textures")) {
++        bool any = false;
++        while (const dirent* e = readdir(d)) {
++            any = any || e->d_name[0] != '.';
++        }
++        closedir(d);
++        if (any) {
++            ps5Default("COS_HD_TEXTURES", "1");
++        }
++    }
++}
++#endif
++
+ } // namespace pc
+ 
+ using namespace pc;
+@@ -145,7 +219,14 @@ void pc_harness_init(int argc, char* argv[]) {
+     sStartNs = monotonicNs();
+     // The options menu's settings file (pc_settings.h) into the environment before anything reads
+     // it (on the Switch cos_switch_start did it already, before its defaults).
++#if defined(__PROSPERO__)
++    // A television, always: the mode the per-mode settings are read for (before the file is)
++    setenv("COS_OPERATION_MODE", "docked", 0);
++#endif
+     pc_settings_load_early();
++#if defined(__PROSPERO__)
++    ps5Defaults();
++#endif
+ 
+     // Line-buffered stdout: the game reports with printf/OSReport into a pipe or file; a watchdog
+     // or crash exit must not lose the last lines in a full buffer.
+@@ -257,6 +338,10 @@ int pc_env_audio(void) {
+     return gConfig.audio ? 1 : 0;
+ }
+ 
++#if defined(__PROSPERO__)
++void catchReturnFromMain(int status);
++#endif
++
+ void pc_exit(int code) {
+     int expected = 0;
+     if (!sExiting.compare_exchange_strong(expected, 1)) {
+@@ -281,6 +366,13 @@ void pc_exit(int code) {
+ #if defined(__SWITCH__)
+     // Writes the logs out (SD card, USB) and ends the process (switch/native/source).
+     cos_switch_exit(code);
++#elif defined(__PROSPERO__)
++    // The shell closes the title (ps5/src/platform.c): _Exit kills it, and the console then
++    // reports a crash over an exit the title chose.
++    catchReturnFromMain(code);
++    for (;;) {
++        pause();
++    }
+ #else
+     _Exit(code);
+ #endif
+diff --git a/native/src/pc/runtime/pc_main.cpp b/native/src/pc/runtime/pc_main.cpp
+index 9cfa47a..0a822c8 100644
+--- a/native/src/pc/runtime/pc_main.cpp
++++ b/native/src/pc/runtime/pc_main.cpp
+@@ -42,6 +42,8 @@
+ #include <sys/stat.h>
+ #include <unistd.h>
+ 
++#include <aurora/texture.hpp> // the PS5 port's button glyphs (pc_aurora_init)
++
+ #if defined(__SWITCH__)
+ #include "JSystem/JAudio/JASAudioThread.h"
+ #include "m_Do/m_Do_dvd_thread.h"
+@@ -232,7 +234,25 @@ void pc_aurora_init(int argc, char* argv[]) {
+     config.windowWidth = (int)(480 * 3 / 2 * pc_aspect_ratio() + 0.5f);
+     config.windowHeight = 480 * 3 / 2;
+     config.logLevel = LOG_INFO;
+-    config.allowTextureDumps = false;
++    // COS_TEXTURE_DUMPS=1 (the PS5 port's addition, for every host): Aurora writes each texture it
++    // draws into the cache folder's texture_dumps, named as a replacement for it must be named.
++    {
++        const char* dumps = getenv("COS_TEXTURE_DUMPS");
++        config.allowTextureDumps = dumps != nullptr && strcmp(dumps, "1") == 0;
++    }
++#if defined(__PROSPERO__)
++    // PlayStation 5: a file named texture-dumps in the title's folder turns them on too ...
++    config.allowTextureDumps = config.allowTextureDumps || access("/app0/texture-dumps", F_OK) == 0;
++    if (config.allowTextureDumps) {
++        // ... and FTP may read them: the title's folders are its owner's alone otherwise
++        char dumps[PATH_MAX + 32];
++        snprintf(dumps, sizeof(dumps), "%s/texture_dumps", sCachePath);
++        for (const char* dir : {(const char*)sUserPath, (const char*)sCachePath, (const char*)dumps}) {
++            mkdir(dir, 0777);
++            chmod(dir, 0777);
++        }
++    }
++#endif
+     config.mem1Size = kMem1Size;
+     config.mem2Size = kMem2Size;
+     config.blockingPipelines = gConfig.syncPipelines;
+@@ -249,6 +269,25 @@ void pc_aurora_init(int argc, char* argv[]) {
+         }
+     });
+ #endif
++    // The PS5 port's button prompts: the DualSense's symbols in place of the game's letters,
++    // pictures the port ships in the title's folder (res/ps5-glyphs, named as Aurora names a
++    // replacement: tex1_<w>x<h>_<hash>_<format>.png). COS_BUTTON_GLYPHS names another folder, on
++    // any host (to try them without the console). An HD texture pack (pc_hd_textures.cpp) is a
++    // group of its own.
++    {
++        const char* glyphs = getenv("COS_BUTTON_GLYPHS");
++#if defined(__PROSPERO__)
++        if (glyphs == nullptr || glyphs[0] == '\0') {
++            glyphs = "/app0/res/ps5-glyphs";
++        }
++#endif
++        if (glyphs != nullptr && glyphs[0] != '\0' && access(glyphs, F_OK) == 0) {
++            static aurora::texture::ReplacementGroup sGlyphs;
++            sGlyphs = aurora::texture::load_replacement_directory(glyphs);
++            writef(STDERR_FILENO, "[cos] button glyphs: %zu replacement(s) from %s\n", sGlyphs.registrations.size(),
++                   glyphs);
++        }
++    }
+     applyFrameBufferScale(info.windowSize);
+     if (pc_aspect_wide()) {
+         // The game draws an anamorphic picture into the 640x480 EFB (pc_aspect.h): Aurora presents

@@ -1,0 +1,14 @@
+{
+  "repository": "griches/PS5_Sunshine",
+  "branch": "main",
+  "commit": "e01f5db1702ac21f2683666abc10917ff9dd206b",
+  "sourceCommit": "e01f5db1702ac21f2683666abc10917ff9dd206b",
+  "sourceRef": "main",
+  "method": "vendored-snapshot",
+  "vendoredSnapshot": true,
+  "vendorRepository": "RastaFairy/Visual-PS5",
+  "vendoredAt": "2026-10-20T15:43:39Z",
+  "submodulesMaterialized": true,
+  "originalMethod": "vendored-snapshot",
+  "sourceRevisionRecorded": true
+}

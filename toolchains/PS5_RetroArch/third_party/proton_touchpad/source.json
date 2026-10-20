@@ -1,0 +1,9 @@
+{
+  "repository": "https://github.com/mihawk-99/PS5_Proton",
+  "revision": "a25fce0f9c270e221e82cd43af7252afe2bf2c88",
+  "files": [
+    "src/proton_touchpad.h",
+    "ps5/src/platform.c"
+  ],
+  "adaptation": "src/input_ps5.cpp: contact identity, relative movement, physical press and verified raw touch layout."
+}

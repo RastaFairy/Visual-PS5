@@ -1,0 +1,24 @@
+{
+  "name": "Arctic Glass",
+  "colors": {
+    "bg_top": "#E6EEF6FF",
+    "bg_bottom": "#BCD0E0FF",
+    "bg_grid": "#9BB2C6FF",
+    "panel": "#D6E2ECFF",
+    "panel_soft": "#C4D6E2FF",
+    "panel_strong": "#E0ECF4FF",
+    "border": "#7896B0FF",
+    "border_active": "#0090D8FF",
+    "text": "#1C2C3AFF",
+    "text_soft": "#344F62FF",
+    "text_muted": "#5C7080FF",
+    "accent": "#009DE0FF",
+    "accent_alt": "#2B5DFFFF",
+    "accent_soft": "#0090D836",
+    "ps_cross": "#2B5DFFFF",
+    "ps_circle": "#E05070FF",
+    "ps_square": "#FF9A46FF",
+    "ps_triangle": "#00C48AFF",
+    "status_bg": "#C6D6E2D2"
+  }
+}

@@ -1,0 +1,17 @@
+# Flycast with Dreamcast Test Game (USA, Rev A), started with --game=flycast:<the .cue>.
+# The intro film ends and the title screen shows by about 31 s (the first presses
+# land on the film or its fade); START is pressed on the title screen and again on
+# what follows, so the pictures show the input reaching the game. MARK lines give
+# the frames made over each stretch.
+10.0 MARK
+20.0 MARK
+30.0 MARK
+33.0 SCREENSHOT
+34.0 START 0.3
+37.0 SCREENSHOT
+38.0 START 0.3
+41.0 SCREENSHOT
+42.0 START 0.3
+45.0 SCREENSHOT
+50.0 MARK
+52.0 STOP

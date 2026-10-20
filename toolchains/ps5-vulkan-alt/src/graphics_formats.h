@@ -1,0 +1,304 @@
+/*
+ * Copyright (C) 2026 BlackBearReloaded
+ * Copyright (C) 2026 Manuel Pereira
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ *
+ * Vertex numeric categories follow the PSBC/Gallium contract in the pinned
+ * GPL ps5-opengl reference; ps5-vulkan owns the Vulkan-facing validation.
+ */
+#ifndef PS5VK_GRAPHICS_FORMATS_H
+#define PS5VK_GRAPHICS_FORMATS_H
+#include <vulkan/vulkan_core.h>
+#include "graphics_limits.h"
+#include "vk_internal.h"
+#include "texture_format.h"
+#include "texture_layout.h"
+
+struct ps5vk_vertex_format {
+    uint32_t bytes, components;
+    enum ps5vk_vertex_numeric numeric;
+};
+
+/* Vertex format metadata is shared by capability queries, SPIR-V interface
+ * matching, the PSBC adapter and the bounded fetch descriptor.  The 32-bit
+ * integer rows follow the PSBC/Gallium mapping used by the pinned GPL
+ * ps5-opengl implementation. The 8/16-bit families are exposed only together
+ * with the pinned PSBC lowering and ps5-vulkan's conversion oracles.
+ *
+ * Whether a format is a vertex format at all is decided by the authoritative
+ * capability table (VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT is published only for
+ * a witnessed PS5VK_FORMAT_CAP_VERTEX_BUFFER row); this switch only carries
+ * the numeric metadata the PSBC/native vertex mapping needs. */
+static inline struct ps5vk_vertex_format ps5vk_vertex_format_info(VkFormat format)
+{
+    if (!ps5vk_texture_format_witnessed(format, PS5VK_FORMAT_CAP_VERTEX_BUFFER))
+        return (struct ps5vk_vertex_format){0};
+    switch (format) {
+    case VK_FORMAT_R32_SFLOAT: return (struct ps5vk_vertex_format){4,1,PS5VK_VERTEX_NUMERIC_FLOAT};
+    case VK_FORMAT_R32G32_SFLOAT: return (struct ps5vk_vertex_format){8,2,PS5VK_VERTEX_NUMERIC_FLOAT};
+    case VK_FORMAT_R32G32B32_SFLOAT: return (struct ps5vk_vertex_format){12,3,PS5VK_VERTEX_NUMERIC_FLOAT};
+    case VK_FORMAT_R32G32B32A32_SFLOAT: return (struct ps5vk_vertex_format){16,4,PS5VK_VERTEX_NUMERIC_FLOAT};
+    case VK_FORMAT_R32_SINT: return (struct ps5vk_vertex_format){4,1,PS5VK_VERTEX_NUMERIC_SINT};
+    case VK_FORMAT_R32G32_SINT: return (struct ps5vk_vertex_format){8,2,PS5VK_VERTEX_NUMERIC_SINT};
+    case VK_FORMAT_R32G32B32_SINT: return (struct ps5vk_vertex_format){12,3,PS5VK_VERTEX_NUMERIC_SINT};
+    case VK_FORMAT_R32G32B32A32_SINT: return (struct ps5vk_vertex_format){16,4,PS5VK_VERTEX_NUMERIC_SINT};
+    case VK_FORMAT_R32_UINT: return (struct ps5vk_vertex_format){4,1,PS5VK_VERTEX_NUMERIC_UINT};
+    case VK_FORMAT_R32G32_UINT: return (struct ps5vk_vertex_format){8,2,PS5VK_VERTEX_NUMERIC_UINT};
+    case VK_FORMAT_R32G32B32_UINT: return (struct ps5vk_vertex_format){12,3,PS5VK_VERTEX_NUMERIC_UINT};
+    case VK_FORMAT_R32G32B32A32_UINT: return (struct ps5vk_vertex_format){16,4,PS5VK_VERTEX_NUMERIC_UINT};
+    case VK_FORMAT_R8_UNORM:
+    case VK_FORMAT_R8_SNORM:
+        return (struct ps5vk_vertex_format){1,1,PS5VK_VERTEX_NUMERIC_FLOAT};
+    case VK_FORMAT_R8_UINT:
+        return (struct ps5vk_vertex_format){1,1,PS5VK_VERTEX_NUMERIC_UINT};
+    case VK_FORMAT_R8_SINT:
+        return (struct ps5vk_vertex_format){1,1,PS5VK_VERTEX_NUMERIC_SINT};
+    case VK_FORMAT_R8G8_UNORM:
+    case VK_FORMAT_R8G8_SNORM:
+        return (struct ps5vk_vertex_format){2,2,PS5VK_VERTEX_NUMERIC_FLOAT};
+    case VK_FORMAT_R8G8_UINT:
+        return (struct ps5vk_vertex_format){2,2,PS5VK_VERTEX_NUMERIC_UINT};
+    case VK_FORMAT_R8G8_SINT:
+        return (struct ps5vk_vertex_format){2,2,PS5VK_VERTEX_NUMERIC_SINT};
+    case VK_FORMAT_R8G8B8A8_UNORM:
+    case VK_FORMAT_B8G8R8A8_UNORM:
+    case VK_FORMAT_R8G8B8A8_SNORM:
+    case VK_FORMAT_A8B8G8R8_UNORM_PACK32:
+    case VK_FORMAT_A8B8G8R8_SNORM_PACK32:
+    case VK_FORMAT_A2B10G10R10_UNORM_PACK32:
+        return (struct ps5vk_vertex_format){4,4,PS5VK_VERTEX_NUMERIC_FLOAT};
+    case VK_FORMAT_R8G8B8A8_UINT:
+    case VK_FORMAT_A8B8G8R8_UINT_PACK32:
+        return (struct ps5vk_vertex_format){4,4,PS5VK_VERTEX_NUMERIC_UINT};
+    case VK_FORMAT_R8G8B8A8_SINT:
+    case VK_FORMAT_A8B8G8R8_SINT_PACK32:
+        return (struct ps5vk_vertex_format){4,4,PS5VK_VERTEX_NUMERIC_SINT};
+    case VK_FORMAT_R16_UNORM:
+    case VK_FORMAT_R16_SNORM:
+    case VK_FORMAT_R16_SFLOAT:
+        return (struct ps5vk_vertex_format){2,1,PS5VK_VERTEX_NUMERIC_FLOAT};
+    case VK_FORMAT_R16_UINT:
+        return (struct ps5vk_vertex_format){2,1,PS5VK_VERTEX_NUMERIC_UINT};
+    case VK_FORMAT_R16_SINT:
+        return (struct ps5vk_vertex_format){2,1,PS5VK_VERTEX_NUMERIC_SINT};
+    case VK_FORMAT_R16G16_UNORM:
+    case VK_FORMAT_R16G16_SNORM:
+    case VK_FORMAT_R16G16_SFLOAT:
+        return (struct ps5vk_vertex_format){4,2,PS5VK_VERTEX_NUMERIC_FLOAT};
+    case VK_FORMAT_R16G16_UINT:
+        return (struct ps5vk_vertex_format){4,2,PS5VK_VERTEX_NUMERIC_UINT};
+    case VK_FORMAT_R16G16_SINT:
+        return (struct ps5vk_vertex_format){4,2,PS5VK_VERTEX_NUMERIC_SINT};
+    case VK_FORMAT_R16G16B16A16_UNORM:
+    case VK_FORMAT_R16G16B16A16_SNORM:
+    case VK_FORMAT_R16G16B16A16_SFLOAT:
+        return (struct ps5vk_vertex_format){8,4,PS5VK_VERTEX_NUMERIC_FLOAT};
+    case VK_FORMAT_R16G16B16A16_UINT:
+        return (struct ps5vk_vertex_format){8,4,PS5VK_VERTEX_NUMERIC_UINT};
+    case VK_FORMAT_R16G16B16A16_SINT:
+        return (struct ps5vk_vertex_format){8,4,PS5VK_VERTEX_NUMERIC_SINT};
+    default: return (struct ps5vk_vertex_format){0};
+    }
+}
+static inline uint32_t ps5vk_vertex_format_size(VkFormat format)
+{ return ps5vk_vertex_format_info(format).bytes; }
+
+/* Native executable image roles. RGBA8 and BGRA8 have bounded colour-target,
+ * sampled and readback paths; BGRA8 also serves native presentation. */
+static inline int ps5vk_graphics_image_usage(VkFormat format, VkImageUsageFlags usage)
+{
+    /* The exact accepted combinations come from the witnessed capability rows:
+     * sampled upload, the pure transfer role, the tiled colour attachment and
+     * its readback pair, and the depth/stencil target. Anything else is
+     * rejected before the object exists. */
+    return ps5vk_texture_format_image_usage(format, usage);
+}
+
+/* The pinned imageCubeArray object-management CTS leaf creates one RGBA8
+ * cube-compatible image with both sampled and colour-attachment usage. Keep
+ * this exception tied to that exact resource shape; it does not widen the
+ * ordinary sampled/attachment usage table or imply that tiled attachments can
+ * be sampled by the runtime descriptor path. */
+static inline int ps5vk_graphics_image_usage_with_flags(
+    VkFormat format, VkImageType type, VkImageTiling tiling,
+    VkImageUsageFlags usage, VkImageCreateFlags flags)
+{
+    if (ps5vk_graphics_image_usage(format, usage)) return 1;
+    return format == VK_FORMAT_R8G8B8A8_UNORM &&
+        type == VK_IMAGE_TYPE_2D && tiling == VK_IMAGE_TILING_OPTIMAL &&
+        flags == VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT &&
+        usage == (VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT) &&
+        ps5vk_texture_format_has(format, PS5VK_FORMAT_CAP_SAMPLED_IMAGE) &&
+        ps5vk_texture_format_has(format, PS5VK_FORMAT_CAP_COLOR_ATTACHMENT);
+}
+
+/* Multi-subresource transfer storage for BC and its RGBA8 destinations. */
+static inline VkBool32 ps5vk_bc_transfer_subresources(VkFormat format)
+{
+    return ps5vk_texture_format_block_compressed(format) ||
+        format == VK_FORMAT_R8G8B8A8_UNORM || format == VK_FORMAT_R8G8B8A8_SRGB;
+}
+
+/* Implementation ceilings from the encoders/layout arithmetic, not a hardware
+ * certification at maximum dimensions. The resource-size budget also applies. */
+static inline VkResult ps5vk_graphics_image_properties(VkFormat format,
+    VkImageType type,VkImageTiling tiling,VkImageUsageFlags usage,
+    VkImageCreateFlags flags,VkDeviceSize budget,VkImageFormatProperties *out)
+{
+    *out=(VkImageFormatProperties){0};
+    /* The one linear-tiling combination this profile publishes: the pinned
+     * upstream draw module's host-readback staging image. The query reports
+     * exactly what creation accepts - RGBA8, 2D, one mip, one layer, one
+     * sample, TRANSFER_DST alone - and nothing more, so a caller cannot be told
+     * a linear shape exists that vkCreateImage would then refuse. */
+    if (tiling == VK_IMAGE_TILING_LINEAR) {
+        struct ps5vk_texture_layout layout;
+        if (!budget || format != VK_FORMAT_R8G8B8A8_UNORM ||
+            type != VK_IMAGE_TYPE_2D || flags ||
+            usage != VK_IMAGE_USAGE_TRANSFER_DST_BIT ||
+            ps5vk_texture_layout_for_format(format, PS5VK_MAX_IMAGE_2D,
+                PS5VK_MAX_IMAGE_2D, &layout))
+            return VK_ERROR_FORMAT_NOT_SUPPORTED;
+        *out=(VkImageFormatProperties){
+            .maxExtent={PS5VK_MAX_IMAGE_2D,PS5VK_MAX_IMAGE_2D,1},
+            .maxMipLevels=1,.maxArrayLayers=1,.sampleCounts=VK_SAMPLE_COUNT_1_BIT,
+            .maxResourceSize=budget};
+        return VK_SUCCESS;
+    }
+    if(format==VK_FORMAT_D32_SFLOAT && type==VK_IMAGE_TYPE_2D &&
+       tiling==VK_IMAGE_TILING_OPTIMAL && !flags &&
+       (usage==VK_IMAGE_USAGE_SAMPLED_BIT ||
+        usage==(VK_IMAGE_USAGE_SAMPLED_BIT|VK_IMAGE_USAGE_TRANSFER_DST_BIT))) {
+        if(!budget)return VK_ERROR_FORMAT_NOT_SUPPORTED;
+        *out=(VkImageFormatProperties){.maxExtent={64,64,1},.maxMipLevels=7,
+            .maxArrayLayers=1,.sampleCounts=VK_SAMPLE_COUNT_1_BIT,
+            .maxResourceSize=budget};
+        return VK_SUCCESS;
+    }
+    if(tiling!=VK_IMAGE_TILING_OPTIMAL || !budget ||
+       !ps5vk_graphics_image_usage_with_flags(format,type,tiling,usage,flags))
+        return VK_ERROR_FORMAT_NOT_SUPPORTED;
+    if (format == VK_FORMAT_R32_UINT && type == VK_IMAGE_TYPE_2D && !flags &&
+        usage == (VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+                  VK_IMAGE_USAGE_TRANSFER_DST_BIT)) {
+        *out = (VkImageFormatProperties){.maxExtent={8,8,1},.maxMipLevels=1,
+            .maxArrayLayers=1,.sampleCounts=VK_SAMPLE_COUNT_1_BIT,
+            .maxResourceSize=budget};
+        return VK_SUCCESS;
+    }
+    /* The combined depth/stencil surface is one 2D mip and layer, one
+     * sample: the shape image creation accepts. */
+    if (format == VK_FORMAT_D32_SFLOAT_S8_UINT) {
+        if (type != VK_IMAGE_TYPE_2D || flags) return VK_ERROR_FORMAT_NOT_SUPPORTED;
+        *out = (VkImageFormatProperties){.maxExtent={PS5VK_MAX_IMAGE_2D,PS5VK_MAX_IMAGE_2D,1},
+            .maxMipLevels=1,.maxArrayLayers=1,.sampleCounts=VK_SAMPLE_COUNT_1_BIT,
+            .maxResourceSize=budget};
+        return VK_SUCCESS;
+    }
+    /* The measurement-only D16 profile serves one physical 128x128 64KB_Z_X
+     * depth attachment. Keep the queried extent identical to the creation
+     * gate; reporting the generic 2D ceiling here would promise unsupported
+     * D16 sizes to Vulkan callers. */
+    if (format == VK_FORMAT_D16_UNORM && type == VK_IMAGE_TYPE_2D && !flags &&
+        usage == VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) {
+        *out = (VkImageFormatProperties){.maxExtent={128,128,1},.maxMipLevels=1,
+            .maxArrayLayers=1,.sampleCounts=VK_SAMPLE_COUNT_1_BIT,
+            .maxResourceSize=budget};
+        return VK_SUCCESS;
+    }
+    const VkBool32 attachment=(usage&(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|
+        VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT))!=0 ||
+        (format == VK_FORMAT_B8G8R8A8_UNORM &&
+         usage == VK_IMAGE_USAGE_TRANSFER_DST_BIT);
+    const VkBool32 cube_sampled_attachment =
+        format == VK_FORMAT_R8G8B8A8_UNORM && type == VK_IMAGE_TYPE_2D &&
+        flags == VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT &&
+        usage == (VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
+    const VkBool32 sampled=ps5vk_texture_format_sampled_image(format) &&
+        (usage&(VK_IMAGE_USAGE_SAMPLED_BIT|VK_IMAGE_USAGE_TRANSFER_DST_BIT))!=0 &&
+        !attachment;
+    /* Pure transfer role: the padded linear layout used by the upload path,
+     * which also serves vkCmdCopyImage, vkCmdClearColorImage and the buffer
+     * transfers without pretending the tiled colour-attachment layout is
+     * linear. The role is host-visible memory that no GPU stage touches, so a
+     * copy source alone is a real (if write-less) role. */
+    const VkBool32 transfer_only=ps5vk_texture_format_witnessed(format,
+        PS5VK_FORMAT_CAP_TRANSFER_SRC) && usage &&
+        !(usage&~(VkImageUsageFlags)(VK_IMAGE_USAGE_TRANSFER_SRC_BIT|
+                                    VK_IMAGE_USAGE_TRANSFER_DST_BIT));
+    /* The whole-subresource depth clear destination: a D32 target created only
+     * as a transfer destination is still the tiled depth surface, so it keeps
+     * the depth attachment's dimensions rather than the padded linear ones. */
+    const VkBool32 depth_clear_target=ps5vk_texture_format_witnessed(format,
+        PS5VK_FORMAT_CAP_DEPTH_STENCIL_ATTACHMENT) &&
+        ps5vk_texture_format_witnessed(format,PS5VK_FORMAT_CAP_TRANSFER_DST) &&
+        usage==VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+    /* The one input-attachment shape this profile publishes: the readback
+     * colour attachment plus the input role. Its layer ceiling is the measured
+     * multiview view-count floor, and every other attachment stays
+     * single-layer. */
+    const VkBool32 input_attachment_shape =
+        format == VK_FORMAT_R8G8B8A8_UNORM &&
+        ps5vk_texture_format_witnessed(format, PS5VK_FORMAT_CAP_COLOR_ATTACHMENT_READBACK) &&
+        usage == (VkImageUsageFlags)(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+                                     VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+                                     VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT |
+                                     VK_IMAGE_USAGE_TRANSFER_DST_BIT);
+    uint32_t width=0,height=0,depth=1,layers=1;
+    if(cube_sampled_attachment) {
+        width=height=PS5VK_MAX_IMAGE_CUBE;
+        layers=PS5VK_MAX_IMAGE_ARRAY_LAYERS;
+    } else if(attachment || depth_clear_target) {
+        if(type!=VK_IMAGE_TYPE_2D || flags)return VK_ERROR_FORMAT_NOT_SUPPORTED;
+        if (format == VK_FORMAT_D16_UNORM) {
+            /* Diagnostic resource profile from the pinned sync clear leaf:
+             * exact 128x128 optimal depth-only attachment. */
+            width=height=128;
+        } else {
+            width=height=format==VK_FORMAT_B8G8R8A8_UNORM?
+                PS5VK_MAX_COLOR_DIMENSION:PS5VK_MAX_IMAGE_2D;
+        }
+        if(input_attachment_shape) layers=PS5VK_MULTIVIEW_VIEW_COUNT_FLOOR;
+    } else if(transfer_only && type==VK_IMAGE_TYPE_2D && !flags) {
+        width=height=PS5VK_MAX_IMAGE_2D;
+        if(ps5vk_bc_transfer_subresources(format)) layers=PS5VK_MAX_IMAGE_ARRAY_LAYERS;
+    } else if(sampled && type==VK_IMAGE_TYPE_1D && !flags) {
+        width=PS5VK_MAX_IMAGE_1D;height=1;layers=PS5VK_MAX_IMAGE_ARRAY_LAYERS;
+    } else if(sampled && type==VK_IMAGE_TYPE_2D && !flags) {
+        width=height=PS5VK_MAX_IMAGE_2D;layers=PS5VK_MAX_IMAGE_ARRAY_LAYERS;
+    } else if(sampled && type==VK_IMAGE_TYPE_2D &&
+              flags==VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT) {
+        width=height=PS5VK_MAX_IMAGE_CUBE;
+        /* Cube-compatible storage may have any layer count >= 6. The
+         * multiple-of-six rule belongs to CUBE_ARRAY view layerCount, not
+         * image creation or this format query. */
+        layers=PS5VK_MAX_IMAGE_ARRAY_LAYERS;
+    } else if(sampled && type==VK_IMAGE_TYPE_3D && !flags) {
+        width=height=depth=PS5VK_MAX_IMAGE_3D;
+    } else return VK_ERROR_FORMAT_NOT_SUPPORTED;
+    uint32_t mip_levels=1;
+    if((sampled && (usage&VK_IMAGE_USAGE_SAMPLED_BIT)) ||
+       (transfer_only && ps5vk_bc_transfer_subresources(format))) {
+        uint32_t dimension=width>height?width:height;
+        if(depth>dimension)dimension=depth;
+        mip_levels=0;
+        while(dimension){++mip_levels;dimension>>=1;}
+        if(mip_levels>PS5VK_MAX_TEXTURE_MIP_LEVELS)
+            mip_levels=PS5VK_MAX_TEXTURE_MIP_LEVELS;
+    }
+    *out=(VkImageFormatProperties){.maxExtent={width,height,depth},
+        .maxMipLevels=mip_levels,.maxArrayLayers=layers,.sampleCounts=VK_SAMPLE_COUNT_1_BIT,
+        .maxResourceSize=budget};
+    return VK_SUCCESS;
+}
+
+/* Bounded execution profile, not all states accepted by host object creation.
+ * In particular: no BGRA sampling or depth sampling. */
+static inline void ps5vk_graphics_format_properties(VkFormat format,
+                                                    VkFormatProperties *out)
+{
+    /* Single derivation from the authoritative capability table: only
+     * witnessed capabilities are published. */
+    ps5vk_texture_format_properties(format, out);
+}
+#endif

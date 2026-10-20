@@ -1,0 +1,17 @@
+{
+  "step": "smb-load-content",
+  "note": "SMB end to end on the Base PS5: the WebUI's SMB routes on the console list the PC's shares and save one; RetroArch's file browser lists the share under SMB, and a homebrew NES ROM on it runs under FCEUmm, read through RetroArch's VFS (smb://).",
+  "must_contain": [
+    "POST /api/smb/shares (guest, <pc>): 200 {'shares': ['share']}",
+    "'share': 'share', 'folder': 'smb-test', 'user': '', 'workgroup': '', 'password': False",
+    "[SMB] smb://<pc>/share/smb-test: listed 2 entries",
+    "[Core] Using content: \"smb://<pc>/share/smb-test/homebrew.nes\".",
+    "Loading dynamic libretro core from: \"/app0/cores/fceumm_libretro.so\".",
+    "[Content] Loading content file: \"smb://<pc>/share/smb-test/homebrew.nes\".",
+    "[SRAM] Saved successfully to \"/app0/savefiles/FCEUmm/homebrew.srm\"."
+  ],
+  "must_not_contain": [
+    "did not answer. Check its address and that it shares files. ["
+  ],
+  "human_check": "The owner saves a share in the WebUI's SMB page, opens Load Content > SMB on the console and starts a game from it."
+}

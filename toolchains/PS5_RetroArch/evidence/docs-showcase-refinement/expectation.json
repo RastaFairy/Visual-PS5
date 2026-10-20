@@ -1,0 +1,15 @@
+{
+  "step": "docs-showcase-refinement",
+  "must_contain": [
+    "README warning and reminders unchanged",
+    "Four requested README sections removed",
+    "Frontend picker heading and screenshot visible outside disclosures",
+    "All 33 renderer entries match the original core table: Vulkan GPU or software",
+    "Both local previews refreshed; no broken images; README has no page overflow",
+    "Frontend showcase precedes At a glance"
+  ],
+  "must_not_contain": [
+    "FAIL"
+  ],
+  "human_check": "README renderer table and expanded frontend showcase checked visually; frontend appears above highlights."
+}

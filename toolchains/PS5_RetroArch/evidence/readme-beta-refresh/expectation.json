@@ -1,0 +1,17 @@
+{
+  "step": "readme-beta-refresh",
+  "must_contain": [
+    "PASS: Games screenshot replaces old Overview hero",
+    "PASS: all permanent warning paragraphs retained verbatim",
+    "PASS: 33 core entries retained and grouped with system artwork",
+    "PASS: 69 local images and all local Markdown links resolve",
+    "PASS: four balanced expandable sections; navigation anchors resolve",
+    "PASS: current Add Game, default media download, editable details, saves and QR features documented",
+    "PASS: beta development status distinguished from packaged releases",
+    "PASS: browser loaded 69 images without failures; no page overflow at 816x604"
+  ],
+  "must_not_contain": [
+    "FAIL:"
+  ],
+  "human_check": "Local README preview visually checked for colorful headings, system hardware artwork, current screenshots and concise user-facing descriptions. Warning banner remains first; original legal reminders retained."
+}

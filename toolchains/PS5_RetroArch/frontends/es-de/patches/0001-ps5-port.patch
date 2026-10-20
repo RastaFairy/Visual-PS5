@@ -1,0 +1,419 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 31b0e4b..00e01d0 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -104,7 +104,11 @@ set_property(CACHE GLSYSTEM PROPERTY STRINGS "Desktop OpenGL" "Embedded OpenGL")
+ #---------------------------------------------------------------------------------------------------
+ # Package dependencies.
+ 
+-if(GLSYSTEM MATCHES "Desktop OpenGL")
++if(PS5)
++    # PS5 RetroArch's port (its frontends/es-de): every dependency is a static
++    # archive that project builds, named by its ps5.cmake; nothing is searched for.
++    include(${PS5_PORT_DIR}/ps5.cmake)
++elseif(GLSYSTEM MATCHES "Desktop OpenGL")
+     set(OpenGL_GL_PREFERENCE GLVND)
+     find_package(OpenGL REQUIRED)
+ elseif(ANDROID)
+@@ -123,7 +127,7 @@ elseif(WIN32)
+     if(NOT EXISTS ${PROJECT_SOURCE_DIR}/external/pugixml/pugixml.dll)
+         message(FATAL_ERROR "-- You need to build the dependencies in ./external first")
+     endif()
+-elseif(NOT EMSCRIPTEN AND NOT ANDROID AND NOT IOS)
++elseif(NOT EMSCRIPTEN AND NOT ANDROID AND NOT IOS AND NOT PS5)
+     find_package(CURL REQUIRED)
+     find_package(FFmpeg REQUIRED)
+     find_package(FreeImage REQUIRED)
+@@ -491,6 +495,8 @@ elseif(ANDROID)
+                             ${CMAKE_CURRENT_SOURCE_DIR}/external/libgit2/include
+                             ${CMAKE_CURRENT_SOURCE_DIR}/external/pugixml/src
+                             ${CMAKE_CURRENT_SOURCE_DIR}/external/SDL_Android)
++elseif(PS5)
++    set(COMMON_INCLUDE_DIRS ${COMMON_INCLUDE_DIRS} ${PS5_INCLUDE_DIRS})
+ else()
+     set(COMMON_INCLUDE_DIRS ${COMMON_INCLUDE_DIRS}
+                             ${BLUEZ_INCLUDE_DIRS}
+@@ -633,6 +639,9 @@ elseif(EMSCRIPTEN)
+                          ${PROJECT_SOURCE_DIR}/libFreeImage.a
+                          ${PROJECT_SOURCE_DIR}/libfreetype.a
+                          ${PROJECT_SOURCE_DIR}/libpugixml.a)
++elseif(PS5)
++    # The executable is linked by PS5 RetroArch's tools/build-frontend.sh.
++    set(COMMON_LIBRARIES "")
+ else()
+     set(COMMON_LIBRARIES ${BLUEZ_LIBRARIES}
+                          ${CURL_LIBRARIES}
+@@ -701,16 +710,20 @@ if(COMPILE_LOCALIZATIONS)
+     add_subdirectory(locale)
+ endif()
+ 
+-add_subdirectory(es-pdf-converter)
++if(NOT PS5)
++    add_subdirectory(es-pdf-converter)
++endif()
+ add_subdirectory(external)
+ add_subdirectory(es-core)
+ add_subdirectory(es-app)
+ 
+ # Make sure that es-pdf-convert is built first, and then that rlottie is built before es-core.
+-add_dependencies(lunasvg es-pdf-convert)
++if(NOT PS5)
++    add_dependencies(lunasvg es-pdf-convert)
+ 
+-if(COMPILE_LOCALIZATIONS)
+-    add_dependencies(es-pdf-convert localization)
++    if(COMPILE_LOCALIZATIONS)
++        add_dependencies(es-pdf-convert localization)
++    endif()
+ endif()
+ 
+ add_dependencies(es-core rlottie)
+diff --git a/es-app/CMakeLists.txt b/es-app/CMakeLists.txt
+index fdebe01..66c6792 100644
+--- a/es-app/CMakeLists.txt
++++ b/es-app/CMakeLists.txt
+@@ -139,6 +139,12 @@ elseif(WIN32)
+     add_executable(ES-DE WIN32 ${ES_SOURCES} ${ES_HEADERS})
+     target_link_libraries(ES-DE ${COMMON_LIBRARIES} es-core lunasvg::lunasvg)
+     set_target_properties(ES-DE PROPERTIES INSTALL_RPATH_USE_LINK_PATH TRUE)
++elseif(PS5)
++    # A static library; PS5 RetroArch's tools/build-frontend.sh links the executable.
++    # The theme downloader needs libgit2, which the port does not build.
++    list(REMOVE_ITEM ES_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/guis/GuiThemeDownloader.cpp)
++    include_directories(${COMMON_INCLUDE_DIRS} ${CMAKE_CURRENT_SOURCE_DIR}/src)
++    add_library(es-de STATIC ${ES_SOURCES} ${ES_HEADERS})
+ elseif(ANDROID)
+     include_directories(${COMMON_INCLUDE_DIRS} ${CMAKE_CURRENT_SOURCE_DIR}/src)
+     add_library(main MODULE ${ES_SOURCES} ${ES_HEADERS})
+@@ -151,6 +157,11 @@ else()
+     set_target_properties(es-de PROPERTIES INSTALL_RPATH_USE_LINK_PATH TRUE)
+ endif()
+ 
++if(PS5)
++    # Installed into the title folder by PS5 RetroArch's build, not by CMake.
++    return()
++endif()
++
+ # Setup for installation and package generation.
+ if(WIN32)
+     install(TARGETS ES-DE RUNTIME DESTINATION .)
+diff --git a/es-app/src/FileData.cpp b/es-app/src/FileData.cpp
+index 67bd3c5..0f708de 100644
+--- a/es-app/src/FileData.cpp
++++ b/es-app/src/FileData.cpp
+@@ -34,6 +34,12 @@
+ #include <assert.h>
+ #include <regex>
+ 
++#if defined(__PROSPERO__)
++// PS5: games run in RetroArch through the title's game mode (frontends/es-de/ps5/game_ps5.cpp).
++extern "C" int ps5_esde_launch_game(const char* command, const char* system, const char* path,
++                                    char* error, size_t errorSize);
++#endif
++
+ FileData::FileData(FileType type,
+                    const std::string& path,
+                    SystemEnvironmentData* envData,
+@@ -2301,7 +2307,25 @@ void FileData::launchGame()
+         androidExtrasInteger, androidExtrasBool, androidActivityFlags, launchOnOtherScreen);
+ #else
+ 
+-#if defined(DEINIT_ON_LAUNCH)
++#if defined(__PROSPERO__)
++    // PS5: the game runs in RetroArch, in a process of its own (game mode, src/ps5_game.h).
++    // The game lists are saved and the display released, then the title restarts as
++    // RetroArch; it comes back to ES-DE when the game is closed (ViewController::goToStart).
++    // Only a launch that did not happen returns here.
++    for (auto system : SystemData::sSystemVector)
++        system->writeMetaData();
++    AudioManager::getInstance().deinit();
++    window->deinit();
++    {
++        char ps5Error[256] {};
++        returnValue = ps5_esde_launch_game(command.c_str(), mSystem->getName().c_str(),
++                                           getSourceFileData()->getPath().c_str(), ps5Error,
++                                           sizeof(ps5Error));
++        LOG(LogError) << "Game mode did not start the game: " << ps5Error;
++    }
++    AudioManager::getInstance().init();
++    window->init();
++#elif defined(DEINIT_ON_LAUNCH)
+ // Deinit both the AudioManager and the window which allows emulators to launch in KMS mode.
+ AudioManager::getInstance().deinit();
+ window->deinit();
+diff --git a/es-app/src/guis/GuiMenu.cpp b/es-app/src/guis/GuiMenu.cpp
+index a23c64a..1d602df 100644
+--- a/es-app/src/guis/GuiMenu.cpp
++++ b/es-app/src/guis/GuiMenu.cpp
+@@ -8,6 +8,10 @@
+ //
+ 
+ #include "guis/GuiMenu.h"
++#ifdef __PROSPERO__
++#include "GuiFrameGen.h"
++#include "GuiWebUI.h"
++#endif
+ 
+ #if defined(_WIN64)
+ // Why this is needed here is anyone's guess but without it the compilation fails.
+@@ -38,7 +41,9 @@
+ #include "guis/GuiSystemStatusOptions.h"
+ #include "guis/GuiTextEditKeyboardPopup.h"
+ #include "guis/GuiTextEditPopup.h"
++#if !defined(__PROSPERO__)
+ #include "guis/GuiThemeDownloader.h"
++#endif
+ #include "utils/LocalizationUtil.h"
+ #include "utils/PlatformUtil.h"
+ 
+@@ -62,7 +68,15 @@ GuiMenu::GuiMenu()
+     const bool isFullUI {UIModeController::getInstance()->isUIModeFull()};
+ 
+     if (isFullUI)
++#ifdef __PROSPERO__
++    {
++        addEntry("FRAME GENERATION", mMenuColorPrimary, true,
++                 [this] { mWindow->pushGui(new GuiFrameGen()); });
++        addEntry("WebUI", mMenuColorPrimary, true, [this] { mWindow->pushGui(new GuiWebUI()); });
++    }
++#else
+         addEntry(_("SCRAPER"), mMenuColorPrimary, true, [this] { openScraperOptions(); });
++#endif
+ 
+     if (isFullUI)
+         addEntry(_("UI SETTINGS"), mMenuColorPrimary, true, [this] { openUIOptions(); });
+@@ -136,6 +145,8 @@ void GuiMenu::openUIOptions()
+ 
+     auto theme = std::make_shared<OptionListComponent<std::string>>(_("THEME"), false);
+ 
++#if !defined(__PROSPERO__)
++    // The PS5 port has no theme downloader (it needs libgit2): themes are copied in.
+     ComponentListRow themeDownloaderInputRow;
+     themeDownloaderInputRow.elements.clear();
+     themeDownloaderInputRow.addElement(std::make_shared<TextComponent>(_("THEME DOWNLOADER"),
+@@ -147,6 +158,7 @@ void GuiMenu::openUIOptions()
+     themeDownloaderInputRow.makeAcceptInputHandler(
+         std::bind(&GuiMenu::openThemeDownloader, this, s));
+     s->addRow(themeDownloaderInputRow);
++#endif
+ 
+     // Theme.
+     if (!themes.empty()) {
+@@ -2609,7 +2621,9 @@ void GuiMenu::openThemeDownloader(GuiSettings* settings)
+         }
+     };
+ 
++#if !defined(__PROSPERO__)
+     mWindow->pushGui(new GuiThemeDownloader(updateFunc));
++#endif
+ }
+ 
+ void GuiMenu::openSystemStatusOptions()
+diff --git a/es-app/src/main.cpp b/es-app/src/main.cpp
+index c7ed13a..a60159a 100644
+--- a/es-app/src/main.cpp
++++ b/es-app/src/main.cpp
+@@ -577,6 +577,11 @@ void applicationLoop()
+ #endif
+ }
+ 
++#if defined(__PROSPERO__)
++// PS5 RetroArch's port starts ES-DE from its own main (frontends/es-de/ps5/main_ps5.cpp):
++// LoadExec's arguments arrive as the whole argv there, with no program name in front.
++#define main esde_main
++#endif
+ int main(int argc, char* argv[])
+ {
+     const auto applicationStartTime {std::chrono::system_clock::now()};
+diff --git a/es-app/src/views/ViewController.cpp b/es-app/src/views/ViewController.cpp
+index a9af826..f911a41 100644
+--- a/es-app/src/views/ViewController.cpp
++++ b/es-app/src/views/ViewController.cpp
+@@ -495,6 +495,14 @@ void ViewController::updateAvailableDialog()
+     }
+ }
+ 
++#if defined(__PROSPERO__)
++#include "utils/StringUtil.h"
++#include "utils/TimeUtil.h"
++// PS5: a game RetroArch ran for ES-DE (game mode, frontends/es-de/ps5/game_ps5.cpp).
++extern "C" int ps5_esde_game_return(char* system, size_t systemSize, char* path, size_t pathSize,
++                                    long* seconds, int* status, char* error, size_t errorSize);
++#endif
++
+ void ViewController::goToStart(bool playTransition)
+ {
+     // Needed to avoid segfaults during emergency shutdown.
+@@ -506,6 +514,62 @@ void ViewController::goToStart(bool playTransition)
+     if (!mSystemListView)
+         getSystemListView();
+ 
++#if defined(__PROSPERO__)
++    // PS5: back from a game RetroArch ran (game mode): count the play, add the time
++    // RetroArch ran, and open the system's game list on the game.
++    {
++        char systemName[256] {};
++        char gamePath[1024] {};
++        char error[256] {};
++        long seconds {0};
++        int status {0};
++        if (ps5_esde_game_return(systemName, sizeof(systemName), gamePath, sizeof(gamePath),
++                                 &seconds, &status, error, sizeof(error))) {
++            SystemData* system {nullptr};
++            for (auto it : SystemData::sSystemVector) {
++                if (it->getName() == systemName)
++                    system = it;
++            }
++            FileData* game {nullptr};
++            if (system != nullptr) {
++                for (auto file : system->getRootFolder()->getFilesRecursive(GAME)) {
++                    if (file->getSourceFileData()->getPath() == gamePath) {
++                        game = file;
++                        break;
++                    }
++                }
++            }
++            if (status < 0) {
++                LOG(LogError) << "Game mode refused the game: " << error;
++                Window::getInstance()->queueInfoPopup(
++                    Utils::String::format(_("ERROR LAUNCHING GAME: %s"),
++                                          Utils::String::toUpper(error).c_str()),
++                    8000);
++            }
++            if (game != nullptr) {
++                goToGamelist(system);
++                getGamelistView(system)->setCursor(game);
++                if (status >= 0) {
++                    FileData* source {game->getSourceFileData()};
++                    LOG(LogInfo) << "Back from \"" << source->metadata.get("name") << "\" after "
++                                 << seconds << " seconds in RetroArch (status " << status << ")";
++                    source->metadata.set(
++                        "playcount",
++                        std::to_string(static_cast<long long>(source->metadata.getInt("playcount") + 1)));
++                    Settings::getInstance()->setInt(
++                        "GameLaunchTime",
++                        static_cast<int>(Utils::Time::DateTime(Utils::Time::now()).getTime() - seconds));
++                    game->setPlayMetadata(false);
++                    CollectionSystemsManager::getInstance()->refreshCollectionSystems(source);
++                    source->getSystem()->onMetaDataSavePoint();
++                }
++                cancelViewTransitions();
++                return;
++            }
++        }
++    }
++#endif
++
+     // If a specific system is requested then go directly to this system, which could be either
+     // the system view or the gamelist view.
+     std::string requestedSystem {Settings::getInstance()->getString("StartupSystem")};
+diff --git a/es-core/src/Settings.cpp b/es-core/src/Settings.cpp
+index d0c8264..cfeadd0 100644
+--- a/es-core/src/Settings.cpp
++++ b/es-core/src/Settings.cpp
+@@ -161,7 +161,12 @@ void Settings::setDefaults()
+     mBoolMap["ScraperRegionFallback"] = {true, true};
+ 
+     // UI settings.
++#if defined(__PROSPERO__)
++    // PS5: the theme the frontend picker's EmulationStation card shows.
++    mStringMap["Theme"] = {"alekfull-nx-es-de", "alekfull-nx-es-de"};
++#else
+     mStringMap["Theme"] = {"linear-es-de", "linear-es-de"};
++#endif
+     mStringMap["ThemeVariant"] = {"", ""};
+     mStringMap["ThemeColorScheme"] = {"", ""};
+     mStringMap["ThemeFontSize"] = {"", ""};
+@@ -256,7 +261,13 @@ void Settings::setDefaults()
+     mBoolMap["InputDeviceNotifications"] = {true, true};
+ 
+     // Game collection settings.
++#if defined(__PROSPERO__)
++    // PS5: RetroArch's favourites and last played games, which the port writes into the
++    // game lists (frontends/es-de/ps5/library_ps5.cpp), as collections from the start.
++    mStringMap["CollectionSystemsAuto"] = {"favorites,recent", "favorites,recent"};
++#else
+     mStringMap["CollectionSystemsAuto"] = {"", ""};
++#endif
+     mStringMap["CollectionSystemsCustom"] = {"", ""};
+     mStringMap["CollectionCustomGrouping"] = {"unthemed", "unthemed"};
+     mBoolMap["FavFirstCustom"] = {false, false};
+diff --git a/es-core/src/renderers/RendererOpenGL.cpp b/es-core/src/renderers/RendererOpenGL.cpp
+index 6e78440..3216de8 100644
+--- a/es-core/src/renderers/RendererOpenGL.cpp
++++ b/es-core/src/renderers/RendererOpenGL.cpp
+@@ -198,7 +198,12 @@ void RendererOpenGL::setup()
+     SDL_GL_SetAttribute(SDL_GL_RED_SIZE, 8);
+     SDL_GL_SetAttribute(SDL_GL_GREEN_SIZE, 8);
+     SDL_GL_SetAttribute(SDL_GL_BLUE_SIZE, 8);
++#if defined(__PROSPERO__)
++    // PS5: ES-DE never tests depth, so no depth buffer is asked for or cleared.
++    SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 0);
++#else
+     SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
++#endif
+     SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
+ 
+ #if !defined(USE_OPENGLES)
+@@ -425,7 +430,11 @@ void RendererOpenGL::swapBuffers()
+ #else
+     SDL_GL_SwapWindow(getSDLWindow());
+ #endif
++#if defined(__PROSPERO__)
++    GL_CHECK_ERROR(glClear(GL_COLOR_BUFFER_BIT));
++#else
+     GL_CHECK_ERROR(glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT));
++#endif
+ }
+ 
+ unsigned int RendererOpenGL::createTexture(const unsigned int texUnit,
+diff --git a/es-core/src/utils/FileSystemUtil.cpp b/es-core/src/utils/FileSystemUtil.cpp
+index ba0a43f..5b91645 100644
+--- a/es-core/src/utils/FileSystemUtil.cpp
++++ b/es-core/src/utils/FileSystemUtil.cpp
+@@ -576,6 +576,12 @@ namespace Utils
+         std::string getAbsolutePath(const std::string& path, const std::string& base)
+         {
+             const std::string& absolutePath {getGenericPath(path)};
++#if defined(__PROSPERO__)
++            // An unknown working directory (getcwd failed) is an empty base: making it
++            // absolute against itself would recurse until the stack runs out.
++            if (base.empty())
++                return absolutePath;
++#endif
+             const std::string& baseVar {isAbsolute(base) ? getGenericPath(base) :
+                                                            getAbsolutePath(base)};
+ 
+diff --git a/es-core/src/utils/LocalizationUtil.cpp b/es-core/src/utils/LocalizationUtil.cpp
+index 757b8bc..872e0f3 100644
+--- a/es-core/src/utils/LocalizationUtil.cpp
++++ b/es-core/src/utils/LocalizationUtil.cpp
+@@ -247,10 +247,16 @@ namespace Utils
+                 .append(locale)
+                 .append(".mo");
+ 
++#if defined(__PROSPERO__)
++            // PS5: no message catalogs ship, and the port's gettext returns its argument
++            // (frontends/es-de/ps5/include/libintl.h): the interface is in English.
++            std::string objectPath;
++#else
+             // If the message catalog file is not found then an emergency shutdown will be
+             // initiated by ResourceManager.
+             std::string objectPath {
+                 ResourceManager::getInstance().getResourcePath(":/locale" + localePath)};
++#endif
+ 
+             // This makes it possible to override the message catalog with a file in the
+             // application data directory.
+@@ -278,9 +284,11 @@ namespace Utils
+             // we set it to the requested locale as some specific locales like pt_BR and zh_CN
+             // otherwise won't work consistently. This must be some kind of library or OS bug as
+             // it only happens on regular Linux, and not on macOS, Windows, Android or FreeBSD.
++#if !defined(__PROSPERO__)
+             setlocale(LC_MESSAGES, std::string {"en_US.UTF-8"}.c_str());
+ 
+             setlocale(LC_MESSAGES, std::string {locale + ".UTF-8"}.c_str());
++#endif
+ #endif
+             textdomain(locale.c_str());
+             bindtextdomain(locale.c_str(), objectPath.c_str());

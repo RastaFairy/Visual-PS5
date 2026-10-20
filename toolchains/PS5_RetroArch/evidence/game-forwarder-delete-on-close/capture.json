@@ -1,0 +1,25 @@
+{
+  "step": "game-forwarder-delete-on-close",
+  "recorded": "2026-10-18T12:18:38Z",
+  "console_run": "",
+  "revision": "the commit after 001bbcf (the daemon's early tile work)",
+  "command": "a tile made and installed, deleted through the WebUI while RetroArch ran, RetroArch closed through the control payload; /user/appmeta/<tile> polled once a second",
+  "raw_capture": "klog/game-forwarder-delete-on-close/record.txt",
+  "raw_lines": 13,
+  "raw_bytes": 1735,
+  "lines": [
+    "==> a tile made and installed, deleted through the WebUI while RetroArch ran, RetroArch closed through the control payload; /user/appmeta/<tile> polled once a second",
+    "Console: the owner's base PS5, firmware 13.40, ShadowMountPlus 1.7-beta5fix1, 2026-10-18, this build (the daemon tries a tile's pending work as soon as no program of the title is linked).",
+    "The owner's report on 2026-10-18 (build 57fc257a): tiles deleted in the page were still on the home screen after closing RetroArch (from the home screen, and with the picker's Quit). That build's daemon log: the removals ran only at its stop, 20 s after the title closed (\"13:06:44 forwarder PPSA99170: removed\", \"13:06:45 forwarder PPSA99172: removed\"), and a title reopened within those 20 s left them for the next close; ShadowMountPlus then accepted both (\"uninstall requested\") and app.db and /user/appmeta held no trace of them.",
+    "POST /api/forwarders (a SNES game): 201 {'id': 'PPSA99170'}; RetroArch closed: /user/appmeta/PPSA99170 there after 1.0 s",
+    "RetroArch started; POST /api/forwarders/delete?id=PPSA99170: 200 {\"state\":\"pending\"}; GET /api/forwarders: PPSA99170 removing",
+    "RetroArch closed: /user/appmeta/PPSA99170 gone after 3.0 s",
+    "daemon: 13:18:48 unlinked: picker",
+    "daemon: 13:18:48 forwarder PPSA99170: not removed yet: a game is active or awaiting exit; close the game and try again (game_active)",
+    "daemon: 13:18:51 forwarder PPSA99170: removed",
+    "daemon: 13:19:08 no program of the title linked for 20 s: the title is closed",
+    "ShadowMountPlus: [09:18:51] [API] uninstall requested: title=PPSA99170",
+    "ShadowMountPlus: [09:19:01] [CACHE] source removed: PPSA99170 (/data/homebrew/PPSA99170)",
+    "Left on the console: no tile (/data/homebrew holds none of the range; manual.lst empty)."
+  ]
+}

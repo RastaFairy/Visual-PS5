@@ -1,0 +1,14 @@
+{
+  "repository": "griches/PS5_Dusklight",
+  "branch": "main",
+  "commit": "577c76212bec33198d69ca727433573ec00beb78",
+  "sourceCommit": "577c76212bec33198d69ca727433573ec00beb78",
+  "sourceRef": "main",
+  "method": "vendored-snapshot",
+  "vendoredSnapshot": true,
+  "vendorRepository": "RastaFairy/Visual-PS5",
+  "vendoredAt": "2026-10-20T15:43:39Z",
+  "submodulesMaterialized": true,
+  "originalMethod": "vendored-snapshot",
+  "sourceRevisionRecorded": true
+}

@@ -1,0 +1,13 @@
+# Frame generation check for content that waits on a title screen: START and A into play, pictures, two recordings
+12 START
+16 A
+20 START
+24 A
+28 SCREENSHOT
+30 RECORD 120
+42 START
+46 A
+50 A
+58 SCREENSHOT
+60 RECORD 120
+75 STOP

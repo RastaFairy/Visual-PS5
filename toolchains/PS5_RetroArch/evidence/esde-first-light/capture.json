@@ -1,0 +1,32 @@
+{
+  "step": "esde-first-light",
+  "recorded": "2026-10-04T20:29:35Z",
+  "console_run": "base PS5 13.40, run frontend-20261004-162717",
+  "revision": "c0dbb26 + ES-DE port (uncommitted at capture)",
+  "command": "PS5_FRONTENDS=es-de tools/build-title.sh; tools/esde-settings.py Theme=alekfull-nx-es-de StartupSystem=snes; tools/run-title.sh --no-build --relaunch-test=1 --relaunch-image=es-de/es-de.bin --frontend-capture=15,30,50 --watch 70",
+  "raw_capture": "klog/esde-first-light-summary.txt",
+  "raw_lines": 20,
+  "raw_bytes": 1436,
+  "lines": [
+    "==> PS5_FRONTENDS=es-de tools/build-title.sh; tools/esde-settings.py Theme=alekfull-nx-es-de StartupSystem=snes; tools/run-title.sh --no-build --relaunch-test=1 --relaunch-image=es-de/es-de.bin --frontend-capture=15,30,50 --watch 70   (base PS5, 13.40)",
+    "es-de/es-de.bin: 48,040,117 bytes, sha256 167667843b4a64e6; deployed and verified as stored",
+    "kernel log: EXEC /app0/eboot.bin",
+    "kernel log: EXEC /app0/es-de/es-de.bin",
+    "kernel log: fatal signals 0, heap refusals 0",
+    "es_log: ES-DE 3.5.0 (r52)",
+    "es_log: GL renderer: PS5 AGC",
+    "es_log: GL version: 4.6 (Core Profile) Mesa 26.2.0",
+    "es_log: Display resolution: 1920x1080",
+    "es_log: Parsed configuration for 24 systems, loaded 24 systems (collections not included)",
+    "es_log: Total game count: 46",
+    "es_log: Added controller with default configuration: \"ffashiofile\" (GUID: 0300d0424c050000e60c000011810000, serial number: n/a, instance ID: 0, device index: 0)",
+    "es_log: Finished loading theme \"alekfull-nx-es-de\"",
+    "es_log: Application startup time: 1438 ms",
+    "es_log: Couldn't initialize SDL audio: SDL not built with audio support",
+    "es_log: 134 lines, 0 isSymlink refusals, 0 images not loaded",
+    "capture 15 s: frame 800, 1920x1080, GL error 0, 377792 colours",
+    "capture 30 s: frame 1677, 1920x1080, GL error 0, 377792 colours",
+    "capture 50 s: frame 2854, 1920x1080, GL error 0, 377792 colours",
+    "frontend capture PASS: 3 pictures (the 30 s one is the Alekfull NX SNES system view: klog/previews/esde-alekfull-snes-1920x1080.png)"
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "step": "webui-release-collapsed-recap",
+  "revision": "working tree on eda2a17",
+  "command": "Collapse the Game Boy Advance details element, capture full Download Media page, and inspect image and preview",
+  "lines": [
+    "Game Boy Advance recap is collapsed in the replacement screenshot",
+    "Game name and matched title are not visible",
+    "Updated screenshot loads in the release preview",
+    "Release prose and permanent warning unchanged"
+  ],
+  "screenshot": {
+    "file": "webui-download-media.jpg",
+    "resolution": [
+      807,
+      3218
+    ],
+    "sha256": "ab9d2a5f1e432090acd4a28e4f5a5c81eb526da6ad8f9b485616b4ae3cf67a45",
+    "recap": "Nintendo - Game Boy Advance collapsed; game name and matched title hidden."
+  }
+}

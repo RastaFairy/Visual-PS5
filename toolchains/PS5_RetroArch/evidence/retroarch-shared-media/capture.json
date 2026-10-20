@@ -1,0 +1,17 @@
+{
+  "step": "retroarch-shared-media",
+  "recorded": "2026-10-07T15:17:57Z",
+  "console_run": "base PS5 13.40, RetroArch XMB, no content, frame capture at 900",
+  "revision": "working tree on ce06e66 (this commit)",
+  "command": "tools/run-title.sh --no-build --no-deploy --pad-script=<History tab> --menu-capture=900",
+  "raw_capture": "klog/retroarch-shared-media/raw.txt",
+  "raw_lines": 5,
+  "raw_bytes": 609,
+  "lines": [
+    "run-title --no-build --no-deploy --pad-script=build/tmp/scraper/xmb-hist.txt --menu-capture=900: menu capture: klog/menu-20261007-105446.png",
+    "pad script MENU at 10.01 s: depth 1, list 'history_tab' '', entry 0 of 43 'Jungle Run 2 - Partner's Island Quest (USA) (En,Fr) (Rev 1)'",
+    "the capture: the XMB History tab with Jungle Run 2's SNES box art drawn beside the entry (checked by eye)",
+    "/app0/thumbnails on the console: 550 No such file or directory (RetroArch's own folder absent: the art is the shared library's, patch 0114)",
+    "library/snes/covers holds the game's .png (scraped by the WebUI daemon)"
+  ]
+}

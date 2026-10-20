@@ -1,0 +1,17 @@
+{
+  "step": "webui-qr-actions",
+  "note": "Fix the common RetroArch action registration, preserving picker/ES-DE binaries confirmed working by owner. Production action flow regression reproduced before the fix and passes after.",
+  "must_contain": [
+    "test_retroarch_entry_opens_modal_and_cancel_closes",
+    "Regression reproduced on bf859b0: WebUI entry action was not bound.",
+    "Working picker and ES-DE binaries remain byte-identical: PASS",
+    "Ran 177 tests",
+    "verify: PASS (format integration evidence)",
+    "Deployed eboot.bin stored-byte SHA-256 matches corrected staged build: PASS"
+  ],
+  "must_not_contain": [
+    "FAILED",
+    "ERROR"
+  ],
+  "human_check": "After restarting the title, select WebUI in XMB and RGUI; confirm the QR opens and Circle closes it. Picker and ES-DE were confirmed working by the owner."
+}

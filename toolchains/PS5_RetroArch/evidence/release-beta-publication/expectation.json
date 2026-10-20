@@ -1,0 +1,14 @@
+{
+  "step": "release-beta-publication",
+  "must_contain": [
+    "Release published as normal Latest release: v1.0.0-beta.1",
+    "Only uploaded asset: PS5_RetroArch-v1.0.0-beta1.zip",
+    "Downloaded ZIP SHA-256 matches the verified local package",
+    "185 unit tests and 185 integration tests passed; 118 existing evidence captures replayed",
+    "Package contains 33 cores, RetroArch, Picker and ES-DE; release notices pass",
+    "README and approved release notes pushed; opening warning optional in release notes by owner approval",
+    "All 26 core repositories publicly verified at their exact pushed main revisions; deferred fork publication complete"
+  ],
+  "must_not_contain": [],
+  "human_check": "Owner approved README and release notes, optional opening warning in release notes, single ZIP, normal release, and deferred fork publication via watch job."
+}

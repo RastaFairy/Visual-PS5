@@ -1,0 +1,3 @@
+[submodule "vendor/ghostship"]
+	path = vendor/ghostship
+	url = https://github.com/HarbourMasters/Ghostship

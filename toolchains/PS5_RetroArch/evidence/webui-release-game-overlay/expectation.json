@@ -1,0 +1,14 @@
+{
+  "step": "webui-release-game-overlay",
+  "must_contain": [
+    "Four game inspector screenshots recaptured for Puzzle Test Game",
+    "Media shows 10 of 10 available types",
+    "Details, Files and savestate controls captured without saving changes",
+    "All 15 release preview images load",
+    "Release prose changed only Shooter Test Game to Puzzle Test Game; permanent warning unchanged"
+  ],
+  "must_not_contain": [
+    "FAILED"
+  ],
+  "human_check": "Four screenshots show Puzzle Test Game (puzzle1.zip), replacing Shooter Test Game in One game. Everything within reach. No game files or metadata changed."
+}

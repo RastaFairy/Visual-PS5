@@ -1,0 +1,11 @@
+{
+  "step": "sdk-iswctype",
+  "note": "The payload SDK's iswctype_l answers FreeBSD's masks from the rune type (PS5_PayloadSDK b5efad5, now this project's pin); EmulationStation uses it in place of its own shim and still starts, and RetroArch with a core runs on the new pin.",
+  "must_contain": [
+    "Audio driver: ps5 (ES-DE ran past std::locale",
+    "game mode: RetroArch quit (status 0) after 11 s; back to the frontend",
+    "fatal lines in the run's kernel log: 0"
+  ],
+  "must_not_contain": [],
+  "human_check": ""
+}

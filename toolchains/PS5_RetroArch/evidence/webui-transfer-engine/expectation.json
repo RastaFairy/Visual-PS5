@@ -1,0 +1,15 @@
+{
+  "step": "webui-transfer-engine",
+  "note": "Parallel transfer engine (thread pool, 1 MiB blocks, batches, upload sessions, ranges). Large uploads 13 -> 26-30 MB/s (the link's FTP ceiling); small files 76/117 -> 89/215 files/s (2x FTP); the page's engine delivers 605 files whole on the console.",
+  "must_contain": [
+    "\"label\": \"baseline\", \"test\": \"upload 1 x 256 MiB, 1 connection\", \"seconds\": 20.59",
+    "\"label\": \"engine\", \"test\": \"upload 1 x 256 MiB, 1 connection\", \"seconds\": 10.31",
+    "as 8 parts on 6 connections",
+    "\"files_per_s\": 215.4",
+    "605 entries; mismatched [] ; leftovers []"
+  ],
+  "must_not_contain": [
+    "\"errors\": 1"
+  ],
+  "human_check": "none"
+}

@@ -1,0 +1,12 @@
+{
+  "step": "release-frontends",
+  "note": "A release build carries the picker and ES-DE by default, licenses/ lists every part they ship with its licence and committed source, the release check passes, and the source bundle plan archives each frontend source.",
+  "must_contain": [
+    "check-notices.py dist/PPSA99169 --release: covers every shipped executable",
+    "part alekfull-nx-es-de: CC-BY-NC-SA-2.0 (non-commercial)",
+    "part ffmpeg: LGPL-2.1-or-later",
+    "part frontend-picker:"
+  ],
+  "must_not_contain": [],
+  "human_check": ""
+}

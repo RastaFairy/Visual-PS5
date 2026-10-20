@@ -1,0 +1,10 @@
+{
+  "step": "permissions-0777",
+  "note": "Every file and folder the title, a core or a frontend makes is 0777; the start-up repair finishes before any handover (it was cut short by LoadExec into the picker or ES-DE); the picker opens RADV's shader cache to FTP after its first frames.",
+  "must_contain": [
+    "permissions: handover waited",
+    "after picker-held launch and close: 17992 entries, 0 not 0777"
+  ],
+  "must_not_contain": [],
+  "human_check": "FTP audit by the agent over the whole title folder."
+}

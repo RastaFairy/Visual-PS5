@@ -1,0 +1,30 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 877c77f..1defb18 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -412,7 +412,7 @@ FetchContent_Declare(
+ FetchContent_MakeAvailable(tinyxml2)
+ 
+ # Link zlib
+-if(EMSCRIPTEN OR ANDROID)
++if(EMSCRIPTEN OR ANDROID OR PS5)
+     find_package(ZLIB REQUIRED)
+     set(TORCH_ZLIB_TARGET ZLIB::ZLIB)
+ else()
+diff --git a/src/Companion.cpp b/src/Companion.cpp
+index 2f6c5bf..2e16924 100644
+--- a/src/Companion.cpp
++++ b/src/Companion.cpp
+@@ -191,7 +191,12 @@ void Companion::Init(const ExportType type) {
+ 
+ void Companion::Init(const ExportType type, std::atomic<size_t>& assetCount, bool shouldProcess) {
+     this->mShouldProcess = shouldProcess;
++#ifdef __PROSPERO__
++    // PlayStation 5: one line for every asset is a megabyte of log nobody reads on a console
++    spdlog::set_level(spdlog::level::warn);
++#else
+     spdlog::set_level(spdlog::level::debug);
++#endif
+     spdlog::set_pattern("[%Y-%m-%d %H:%M:%S.%e] [%l] %v");
+ 
+     this->gConfig.exporterType = type;

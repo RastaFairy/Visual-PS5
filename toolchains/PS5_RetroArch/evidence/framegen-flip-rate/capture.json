@@ -1,0 +1,33 @@
+{
+  "step": "framegen-flip-rate",
+  "recorded": "2026-10-17T21:00:57Z",
+  "console_run": "",
+  "revision": "7d45412 (v2.0.0-beta-2) with patch 0131, the commit this record lands in",
+  "command": "PATH=<scratch python3 wrapper that keeps build/webui-core-metadata>:$PATH PS5_REUSE_STAGED_CORES='<the 33 cores>' bash tools/build-title.sh; sha256sum dist/PPSA99169/eboot.bin; grep -a -c -F '<each format string>' dist/PPSA99169/eboot.bin; python3 -m unittest tests.test_framegen_plan",
+  "raw_capture": "klog/framegen-flip-rate/record.txt",
+  "raw_lines": 21,
+  "raw_bytes": 2367,
+  "lines": [
+    "Hotfix eboot.bin: build identity 1f81446ad708fb08f7dfbbb5a4239afd69b49e256b77b2b630ec5a95dd27dce3, sha256 d3dc2a31ab7e66ae0a8431a0706d214eec7787585c3bcc09cdf19e67e9badba6.",
+    "Hotfix zip: PS5_RetroArch-v2.0.0-beta-2-hotfix1.zip, 12218002 bytes, sha256 53f8902c7bf4efc9732f1b74c9381804bfb6e1b94f0cfd56ce0aa7c016596517; PPSA99169/eboot.bin only, over v2.0.0-beta-2.",
+    "eboot.bin carries (grep -a -c -F, once each): [PS5] The output shows %.3f flips a second in its %.3f Hz mode.",
+    "eboot.bin carries: [PS5] Flips timed %.2f to %.2f ms apart, median %.2f ms.",
+    "eboot.bin carries: [PS5] Flips could not be timed (VkResult %d).",
+    "Before, a tester's 60 Hz output (v2.0.0-beta-2, build identity b285ff74):",
+    "  wsi/videoout: 119.88 Hz not offered on the console's present output (0); presenting at 59.94 Hz",
+    "  [INFO] [PS5] Display runs at 59.940 Hz; video_refresh_rate follows it (was 119.880).",
+    "  [INFO] [FrameGen] Target Framerate 60: display 119.880 Hz, game 58.944 fps -> 1.02 pictures per game frame, each shown 2x",
+    "  [INFO] [FrameGen] pace: 58.8 presents/s, 0.0 generated/s, 1.5 new frames/s, core 29.6 calls/s, governor level 0 (0.01 ms a picture)",
+    "  Across four logs: 64 two-second windows near 30 core calls/s and 46 between 35 and 55.",
+    "Before, the owner's base PS5 (1440p VRR display, v2.0.0-beta-2, klog 210908):",
+    "  [AvControl] 119.88Hz request is converted to VRR 119.88Hz",
+    "  [AvControl] video: 1440P_11988 with VRR(peg:120 range:48 - 120); after the driver's restore VRR(peg:60 range:48 - 120), still 1440P_11988",
+    "  [INFO] [PS5] Display runs at 59.940 Hz; video_refresh_rate follows it (was 119.880).",
+    "  [INFO] [FrameGen] pace: 118.8 presents/s, 59.9 generated/s, 59.4 new frames/s, core 59.4 calls/s, governor level 0 (3.28 ms a picture)",
+    "  Same console and driver, a PS5_FrameGen run (2026-10-11): wsi/videoout: 119.88 Hz accepted, but a vblank comes every 20.877 ms; 59.94 Hz restored",
+    "Host: python3 -m unittest tests.test_framegen_plan: OK. With 0131's edits left out it fails at plan(59940, 59940, 120, 58.944, &refresh) == 1.",
+    "Gates: format PASS; evidence PASS; unit 192 of 197, the 5 errors being tests that read .deps/{ppsspp,azahar,desmume}-src, deleted with .deps on 2026-10-15.",
+    "Owner: the tester's run of the hotfix worked perfectly (2026-10-17). No log of that run was received.",
+    "Not run: 0131 on the owner's base PS5 (its VRR display); the console did not answer on 2026-10-17."
+  ]
+}

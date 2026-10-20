@@ -1,0 +1,20 @@
+# Frame generation turned off from its XMB tab while a game runs (0132): the video output
+# is reinitialized and each game frame is presented once again. The Quick Menu is L3+R3
+# (input_menu_toggle_gamepad_combo 2, set for the run), the XMB opens inside it, OK is B and
+# back is A (menu_swap_ok_cancel_buttons), and frame generation's tab is left of the main
+# menu, its first entry Enable. Each MENU line prints where the menu is.
+# Started with --game=<core>:<content>.
+5.0 MARK
+6.0 L3+R3 0.3
+8.0 MENU
+8.5 A
+9.5 MENU
+10.0 LEFT
+11.0 MENU
+11.5 B
+13.5 MENU
+14.0 L3+R3 0.3
+17.0 MARK
+27.0 MARK
+28.0 SCREENSHOT
+30.0 STOP

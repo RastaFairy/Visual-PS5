@@ -1,0 +1,7 @@
+#ifndef PS5_HOME_HUB_FONT_DATA_H
+#define PS5_HOME_HUB_FONT_DATA_H
+
+extern unsigned char ps5_homebrew_launcher_assets_fonts_NotoSansDisplay_Regular_ttf[];
+extern unsigned int ps5_homebrew_launcher_assets_fonts_NotoSansDisplay_Regular_ttf_len;
+
+#endif

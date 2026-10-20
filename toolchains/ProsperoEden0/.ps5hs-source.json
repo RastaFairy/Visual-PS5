@@ -1,0 +1,14 @@
+{
+  "repository": "Tiang-88/ProsperoEden0",
+  "branch": "main",
+  "commit": "a26ba788222465ec7fb94dc813958fc749734e07",
+  "sourceCommit": "a26ba788222465ec7fb94dc813958fc749734e07",
+  "sourceRef": "main",
+  "method": "vendored-snapshot",
+  "vendoredSnapshot": true,
+  "vendorRepository": "RastaFairy/Visual-PS5",
+  "vendoredAt": "2026-10-20T15:43:39Z",
+  "submodulesMaterialized": true,
+  "originalMethod": "vendored-snapshot",
+  "sourceRevisionRecorded": true
+}

@@ -1,0 +1,48 @@
+name: MacOS Validation
+on: [pull_request]
+
+jobs:
+  build:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+          fetch-depth: 0 # full history so the libultraship submodule gitlink resolves
+      - name: Setup MacPorts
+        uses: melusina-org/setup-macports@v1
+        with:
+          parameters: '.github/macports.yml'
+      - name: Configure ccache
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          create-symlink: true
+          save: ${{ github.ref_name == github.event.repository.default_branch }}
+          key: ${{ runner.os }}-14-ccache-${{ github.ref }}-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-14-ccache-${{ github.ref }}
+            ${{ runner.os }}-14-ccache
+      - name: Install Python dependencies
+        run: python3 -m pip install -r libultraship/requirements.txt --break-system-packages || python3 -m pip install -r libultraship/requirements.txt
+      - name: Install dependencies
+        run: |
+          brew uninstall --ignore-dependencies libpng
+          brew install ninja
+      - name: Build (Universal)
+        run: |
+          export PATH="/usr/lib/ccache:/opt/homebrew/opt/ccache/libexec:/usr/local/opt/ccache/libexec:$PATH"
+          # MacPorts installs the (universal) Vulkan SDK under /opt/local; point the build
+          # at it so find_package(Vulkan) + shaderc resolve and the Vulkan backend is built.
+          export VULKAN_SDK=/opt/local
+          cmake --no-warn-unused-cli -H. -Bbuild-cmake -GNinja -DCMAKE_BUILD_TYPE:STRING=Release -DCMAKE_OSX_ARCHITECTURES="x86_64;arm64" -DPython3_EXECUTABLE=$(which python3)
+          cmake --build build-cmake --config Release --parallel 10
+      - name: Create Package
+        run: |
+          mkdir ghostship-release
+          mv build-cmake/Ghostship ghostship-release/
+      - name: Publish packaged artifacts
+        uses: actions/upload-artifact@v4
+        with:
+            name: ghostship-mac-universal
+            path: ghostship-release
+            retention-days: 1

@@ -1,0 +1,11 @@
+{
+  "step": "picker-template-pin",
+  "note": "The picker is built from PS5_VulkanTemplate b577e950, its current main, in place of a6c32497. Between them: commit ids rewritten (its SDK and UI kit pins name the same trees: PS5_PayloadSDK 611893f = adc8dd7, PS5_VKHomebrewUI 2188642 = 4451c26), docs, and new-title.py's 1 GiB flexible-memory param.json default.",
+  "must_contain": [
+    "generating its title from PS5_VulkanTemplate b577e950",
+    "picker test PASS: 300 frames",
+    "frontend: RetroArch quit"
+  ],
+  "must_not_contain": [],
+  "human_check": "Agent inspected klog/picker-204853/picker.png: both cards, previews and the button bar drawn."
+}

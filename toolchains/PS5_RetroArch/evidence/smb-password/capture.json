@@ -1,0 +1,27 @@
+{
+  "step": "smb-password",
+  "recorded": "2026-10-18T21:50:53Z",
+  "console_run": "",
+  "revision": "aa7f0b2 (build a2c7800a)",
+  "command": "smbpasswd and a guest-refusing share on the PC (the owner, sudo); the console's WebUI SMB page in a browser and Load Content > SMB on the console (the owner); config/smb.cfg and retroarch.log read back over FTP, GET /api/smb from the PC",
+  "raw_capture": "klog/smb-password/record.txt",
+  "raw_lines": 15,
+  "raw_bytes": 1550,
+  "lines": [
+    "==> SMB with a password on the Base PS5: a Samba user and a share that refuses guests on the owner's PC, the server saved by the owner in the console's WebUI SMB page, then Load Content > SMB on the console by the owner",
+    "Console: the owner's base PS5, firmware 13.40, build a2c7800a, 2026-10-18. Server: Samba on the owner's PC (<pc>): smbpasswd -a mihawk; share [locked], valid users = mihawk, guest ok = no, over the same folder as [share].",
+    "-- the PC: a guest is refused",
+    "smbclient -N //<pc>/locked: tree connect failed: NT_STATUS_ACCESS_DENIED",
+    "-- the WebUI SMB page (owner, in a browser): a wrong password refused with an NT status; the right one lists locked and share; locked, folder smb-test saved; the password field says Saved on your PS5",
+    "config/smb.cfg on the console: smb_server <pc>, smb_share locked, smb_folder smb-test, smb_user mihawk, smb_password set; GET /api/smb answers only that one is",
+    "GET /api/smb: 200 {'server': '<pc>', 'share': 'locked', 'folder': 'smb-test', 'user': 'mihawk', 'workgroup': '', 'password': True}",
+    "-- retroarch.log of the run",
+    "[INFO] [PS5] build identity: a2c7800a344aa5ddb08c175f9fa8543edadf271d79895da3bf15fbf5995c2093",
+    "[INFO] [SMB] smb://<pc>/locked/smb-test: opened",
+    "[INFO] [SMB] smb://<pc>/locked/smb-test: listed 2 entries",
+    "[INFO] [Core] Using content: \"smb://<pc>/locked/smb-test/homebrew.nes\".",
+    "[INFO] [Core] Loading dynamic libretro core from: \"/app0/cores/fceumm_libretro.so\".",
+    "[INFO] [Content] Loading content file: \"smb://<pc>/locked/smb-test/homebrew.nes\".",
+    "-- the game ran under FCEUmm (owner, on screen)"
+  ]
+}

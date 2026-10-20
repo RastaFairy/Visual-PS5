@@ -1,0 +1,127 @@
+{
+  "step": "webui-add-game",
+  "recorded": "2026-10-08T15:27:03.133715+00:00",
+  "revision": "working tree on 28bfcc9",
+  "command": "PS5_FRONTENDS='es-de picker' PS5_VULKAN_TEMPLATE=\"$PWD/build/picker-template\" bash tools/verify.sh format unit build integration evidence; python3 tools/deploy-title.py; python3 build/check-add-game-console.py",
+  "console_run": "Base PS5, idle or at Picker before restart, Picker after. Disposable synthetic backup, state and PNG fixture only; no game launched. Public LaunchBox database lookup.",
+  "raw_capture": "klog/webui-add-game/console-check.log",
+  "raw_lines": 8,
+  "lines": [
+    "== format",
+    "   PASS (9s)",
+    "== unit",
+    "Ran 185 tests in 301.651s",
+    "   PASS (302s)",
+    "== build",
+    "   PASS (89s)",
+    "== integration",
+    "Ran 185 tests in 237.645s",
+    "   PASS (245s)",
+    "== evidence",
+    "108 capture(s) replayed, 0 failed",
+    "   PASS (0s)",
+    "verify: PASS (format unit build integration evidence)",
+    "Running console daemon matches staged build: ef4668acefa32f93654097f3e956aed03b741dfd75ad9fcc3701e9eba3a1a4f7",
+    "Running daemon and all changed WebUI assets match staged build",
+    "Add Game registers backup in library; duplicate refused; original bytes preserved",
+    "Manual metadata and partial-edit preservation round trip",
+    "Manual cover upload succeeds",
+    "Savestate sibling screenshot is listed and preview bytes match",
+    "Replacing state invalidates old screenshot; unrelated preview rejected",
+    "Console LaunchBox database search puts the exact title first",
+    "All disposable probe files removed",
+    "RetroArch and frontend configuration bytes unchanged",
+    "Browser progress, edited metadata and source-isolation regressions passed in the current full unit/integration runs",
+    "build/webui-add-exact-title.log: PASS",
+    "licenses/components.json      1,134,157 bytes  3830b4ca6128e72b  ok",
+    "manifest.sha256               1,806,518 bytes  21ac53bff7933ab2  ok",
+    "webui/ps5-retroarch-webui.elf  3,372,016 bytes  bcee7775b5aebb43  ok",
+    "webui/version.json                  134 bytes  7bf61199110a2938  ok",
+    "eboot.bin                    39,449,916 bytes stored; all 4 of this build's markers present  ok",
+    "==> [deploy] 13830 unchanged files skipped (already verified on this console; --all uploads everything)",
+    "==> [deploy] published what changed; everything else was verified by an earlier deployment"
+  ],
+  "staged_artifacts": {
+    "webui/index.html": {
+      "bytes": 29950,
+      "sha256": "4c629ea9966c3fd827d1cfda98891ad5b47a519ebcba9a804be0b5f850cc2ecc"
+    },
+    "webui/app.css": {
+      "bytes": 72179,
+      "sha256": "a5f28171b22482d071962326f8d376d3b53a9ffd7da09a9f8f73e644552c486b"
+    },
+    "webui/app.js": {
+      "bytes": 123336,
+      "sha256": "3a37ee0a0e19adf026135e362b434ca41beb0266386ca497b5cf9d638bf68546"
+    },
+    "webui/add-game.js": {
+      "bytes": 23629,
+      "sha256": "37d829643603a778bf4fd9b669c877c12c94d2c84f2b6781edfdecdeb5b6dbd8"
+    },
+    "webui/icons.js": {
+      "bytes": 14549,
+      "sha256": "477e03808157333b6d5798194d837441586b7e2173428aec68ae0fb1b54e8e73"
+    },
+    "webui/assets/ICON-CREDITS.txt": {
+      "bytes": 6715,
+      "sha256": "5751b7acc272db65320e88194dc86ef8e99e07f83f0bba13ad9193545fc61e7f"
+    },
+    "webui/assets/fluent/SOURCE.json": {
+      "bytes": 1222,
+      "sha256": "0b55f838bf5c746e3cc601758c165bc63d9d7a15e6e6ba0bd488e78e90c398b3"
+    },
+    "webui/assets/flags/SOURCE.json": {
+      "bytes": 283,
+      "sha256": "74211ac5113e15d3aad8921dd9de535aac715430074780ad351fc19a62817936"
+    },
+    "webui/assets/systems/SOURCE.json": {
+      "bytes": 6463,
+      "sha256": "6b3fb5163cbb0b7fd34d8f7639ac853689b0f112bb1c86f9b632764b88656b94"
+    },
+    "webui/version.json": {
+      "bytes": 134,
+      "sha256": "7bf61199110a2938e73bc18d8a8a1d380c14fabac27ad499b51253c0d78a80d8"
+    },
+    "webui/ps5-retroarch-webui.elf": {
+      "bytes": 3372016,
+      "sha256": "bcee7775b5aebb438bf98abf9474aea95bd60e9d7c70926c16b82b4fb40898e3"
+    },
+    "eboot.bin": {
+      "bytes": 38866604,
+      "sha256": "89760cc5a1ea6a37cf1ace7d950c4476ef1edeeac42a01bfd9284e3a290bcf6c"
+    },
+    "manifest.sha256": {
+      "bytes": 1806518,
+      "sha256": "21ac53bff7933ab2976ff33d71a8b19ce030b51e62f470fc8b517e854083dafb"
+    }
+  },
+  "config_sha256": {
+    "retroarch.cfg": "a0b19a85a5d1af2ad85a50a403dd30913df9e3ee4dc9ac42fd84078f29ca2f8e",
+    "frontend.cfg": "4b46b4c945f76786ddb024e4e4da5f3153a1a50484e2c23a88dc874ffa9633ab"
+  },
+  "browser_captures": [
+    ".impeccable/review/colorful-progress/artwork-desktop.png",
+    ".impeccable/review/colorful-progress/media-mobile.png",
+    ".impeccable/review/colorful-progress/progress-desktop.png",
+    ".impeccable/review/colorful-progress/progress-mobile.png",
+    "klog/webui-add-game/add-game-console.jpg"
+  ],
+  "resolved_failures": [
+    "Initial full unit run: automatic scraped names changed subsequent matching/cache behavior (three scraper tests failed). Restrict title override to explicitly edited name; final focused/full runs pass.",
+    "LaunchBox title lookup initially missed aliases; index lookup includes alternate titles.",
+    "Browser assertions raced refresh/metadata loading or counted both dialog thumbnail sets; wait for intended content and scope to game dialog.",
+    "Add-first sign-in had no Download Media state: update the account independently; browser test covers it.",
+    "User rejected monochrome Lucide pictograms. Replaced semantic icons with approved colorful artwork, accurate flags and all 50 recognized system images. Utility controls retain simple strokes; RetroArch branding restored.",
+    "Backend review found accidental LaunchBox-ID use in ScreenScraper and blank IDs bypassing ambiguity resolution. Fixed and covered with source-isolation/selection tests.",
+    "Live console browsing exposed exact titles crowded out by 20 variants. A later console assertion also found parenthesized enhanced editions sharing the normalized exact-title key. Literal case-insensitive titles now rank before exact aliases/normalized editions, then partials; the regression includes 30 variants, an enhanced edition and an exact original.",
+    "Deployment eboot read-back initially differed; standard deployment retried and verified all four build markers.",
+    "Add Game opened before downloads finished: prominent download CTA and live per-game job view now wait for terminal state and fetch fresh media before opening the game. Browser test covers no-reload artwork.",
+    "New regression exposed edited fields parsed as media kinds, discarding the manual-name marker and prior metadata edit markers. Separate comma parsing preserves fields and exact matching; browser and metadata tests pass.",
+    "Initial preflight HTTP was refused because console had no title running; process control confirmed idle. No gameplay interrupted."
+  ],
+  "limits": [
+    "Add Game accepts one supported backup file; complete multi-file discs and folder-based games use Content.",
+    "Preview needs a RetroArch-generated PNG sidecar. Importing a state invalidates its old screenshot. Test PNGs are synthetic; no in-game save compatibility or screenshot creation claimed.",
+    "Console media upload and database lookup verified; actual multi-source download paths verified with host HTTP fixtures."
+  ]
+}

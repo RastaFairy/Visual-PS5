@@ -1,0 +1,32 @@
+{
+  "step": "esde-folder-names",
+  "recorded": "2026-10-17T23:18:12Z",
+  "console_run": "",
+  "revision": "the commits this record lands with (content folders as ES-DE names them; a cartridge system's archives; ES-DE's first start)",
+  "command": "tools/run-title.sh --no-build --no-deploy --home-launch --watch 30; tools/run-title.sh --no-build --no-deploy --picker-test=300:es-de --frontend-capture=25,40 --watch 60; FTP reads of content/, playlists/, config/ and es-de/ES-DE/custom_systems/es_systems.xml",
+  "raw_capture": "klog/esde-folder-names/record.txt",
+  "raw_lines": 20,
+  "raw_bytes": 2224,
+  "lines": [
+    "Console: the owner's base PS5 (1440p, 120 Hz, VRR), a fresh install (no config/frontend.cfg), 325 of the owner's game backups in 34 ES-DE folders, 2026-10-17.",
+    "Seeded as an earlier build left it: content/Sega - Dreamcast (a placeholder; no dreamcast folder), content/Nintendo - Game Boy (a placeholder; gb held 10 backups), content/Sony - PlayStation (a placeholder; psx held 10), playlists/Nintendo - Game Boy.lpl naming the placeholder, config/mGBA/Nintendo - Game Boy.opt.",
+    "Home-screen launch, build identity 02db7d47f5efd5e42dc17f121cd19125fa99a09ed80aeaae5786494d68b8f54e:",
+    "  startup: system folders renamed as ES-DE names them = 3",
+    "  startup: system folders made in content = 12",
+    "  frontend: mode '', test run 0, picker test 0, picker 1, es-de 1, remembered ask, L1 0 -> picker",
+    "  EXEC /app0/picker/picker.bin; [Frontend Picker] starts",
+    "After: no Sega - Dreamcast, Nintendo - Game Boy or Sony - PlayStation folder; dreamcast 1 file, gb 11, psx 11.",
+    "  playlist: \"scan_content_dir\": \"/app0/content/gb\", \"path\": \"/app0/content/gb/placeholder-a.gb\"",
+    "  config/mGBA/gb.opt",
+    "ES-DE's first start on that build (its folder not made yet):",
+    "  start: library from RetroArch's playlists: 28 systems, 255 games (0 with ES-DE's details kept), 33 cores, 0 favourites, 0 played, 29 failures",
+    "  start: systems written -1",
+    "ES-DE's second start (ES-DE had made its folder by then): 28 systems, 255 games, 0 failures; systems written 28.",
+    "ES-DE's first start after the fixes (build identity 22b5d1229342dc01e94a5b023dd9534b17836c1b70f038246a92ed5f811a9c61, ES-DE's folder moved aside):",
+    "  start: library from RetroArch's playlists: 34 systems, 317 games (0 with ES-DE's details kept), 33 cores, 0 favourites, 0 played, 0 failures",
+    "  start: systems written 34",
+    "es_systems.xml: 34 systems, every path /app0/content/<name>: amiga atari2600 atari5200 atari7800 atarijaguar atarilynx c64 dreamcast fds gamegear gb gba gbc gc genesis mastersystem n3ds n64 nds nes ngp ngpc pcengine pokemini psp psx sega32x sg-1000 snes supergrafx virtualboy wii wonderswan wonderswancolor",
+    "Host: python3 -m unittest tests.test_ps5_library tests.test_esde_library: OK; each new case fails without its fix.",
+    "Test files removed from the console afterwards; the owner's backups kept."
+  ]
+}

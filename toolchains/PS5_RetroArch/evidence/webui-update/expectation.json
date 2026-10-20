@@ -1,0 +1,20 @@
+{
+  "step": "webui-update",
+  "note": "Native HTTPS download, package validation, executable permission and relaunch after installation; user config preserved. Browser updater states use mocked transport.",
+  "must_contain": [
+    "native HTTPS package download: 600520132 bytes",
+    "release ZIP SHA-256 and all packaged file hashes: verified",
+    "installed managed replacements: 6",
+    "installed eboot.bin permissions: 0755",
+    "package readback matches: true",
+    "configuration unchanged: true",
+    "installed release relaunch: v0.6.0-alpha.6",
+    "console installation and relaunch: PASS",
+    "host tests: 118 PASS; format/build/integration/evidence PASS",
+    "browser desktop/mobile: PASS (installer transport mocked, native BIOS handlers)",
+    "final development build running: 0e3423d78a8046a1ae9d8ae849282a57c25b9b79ccb52d40bf5ccfaba7fa46cf",
+    "final updater state: idle",
+    "native BIOS alerts: 3"
+  ],
+  "must_not_contain": []
+}

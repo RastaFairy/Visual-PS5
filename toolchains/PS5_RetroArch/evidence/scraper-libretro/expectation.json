@@ -1,0 +1,14 @@
+{
+  "step": "scraper-libretro",
+  "note": "Scraping on the console from libretro thumbnails into the shared library every frontend reads; both download methods; resumes without repeats; runs with the title closed; HTTPS through curl in the daemon; one library without duplicates.",
+  "must_contain": [
+    "duplicated 0",
+    "downloaded {'files': 9",
+    "skipped 43, downloaded files 0",
+    "downloaded 90 transferred 90",
+    "saved state: done",
+    "0x8095f00c"
+  ],
+  "must_not_contain": [],
+  "human_check": "RetroArch and ES-DE showing the media: the owner on the TV (pending)"
+}

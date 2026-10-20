@@ -1,0 +1,22 @@
+{
+  "step": "game-forwarder-webui",
+  "note": "Game Forwarder on the console: tiles made, renamed, given a picture and deleted through the WebUI; ShadowMountPlus installs and uninstalls them once RetroArch closes, the WebUI's daemon finishes what waited; a tile opens its game in RetroArch with its core and closes after it; the home screen shows the picture the page drew, the system's icon in its corner.",
+  "must_contain": [
+    "shadowmount answers, version 1.7-beta5fix1",
+    "NOTIFY: installed game PPSA99171",
+    "launch PPSA99171: 5 argument(s) from forward.txt",
+    "forwarder: /app0/content/snes/<game> with /app0/cores/snes9x_libretro.so, closing after it",
+    "daemon: forwarder PPSA99170: removed",
+    "forwarder PPSA99171: installed again with its new name or icon",
+    "titleName: Forwarder renamed",
+    "33 systems in the picker, each with its icon",
+    "Tile created. It appears on the home screen once RetroArch closes.",
+    "The tile leaves the home screen once RetroArch closes.",
+    "daemon: forwarder PPSA99171: removed",
+    "[API] uninstall requested: title=PPSA99171",
+    "icon0.png: 71761 bytes, 512x512, the tile's own: True",
+    "forwarder: /app0/content/genesis/<game> with /app0/cores/genesis_plus_gx_libretro.so, closing after it"
+  ],
+  "must_not_contain": [],
+  "human_check": "The owner opens a tile on the home screen while RetroArch is open: the console asks to close RetroArch first, then the game starts. Not checked here: the control payload cannot press the home screen."
+}

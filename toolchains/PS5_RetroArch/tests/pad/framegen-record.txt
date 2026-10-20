@@ -1,0 +1,4 @@
+# Frame generation check: two recordings of the pictures the display is given
+30 RECORD 120
+60 RECORD 120
+75 STOP

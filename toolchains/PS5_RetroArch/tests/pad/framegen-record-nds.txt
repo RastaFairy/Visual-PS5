@@ -1,0 +1,6 @@
+# Frame generation check, a DS game started from its menus (START, then A), then two recordings
+12 START
+20 A
+30 RECORD 120
+60 RECORD 120
+75 STOP

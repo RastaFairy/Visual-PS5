@@ -1,0 +1,4 @@
+# Issue 5: texture pack loading (Load Custom Textures on)
+40 SCREENSHOT
+60 SCREENSHOT
+70 STOP

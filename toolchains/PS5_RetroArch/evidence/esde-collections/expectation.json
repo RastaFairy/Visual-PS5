@@ -1,0 +1,12 @@
+{
+  "step": "esde-collections",
+  "note": "RetroArch's favourites, history and runtime logs reach ES-DE's game lists through the shared library: a favourite added in RetroArch's menu is ES-DE's favourite, RetroArch's play counts, times and last played show there, and ES-DE shows its Favorites and Last Played collections.",
+  "must_contain": [
+    "1 favourites, 15 played, 0 failures",
+    "CollectionSystemsAuto = favorites,recent",
+    "favorite true, lastplayed 20261004T221855",
+    "playcount 8 (the runtime log's), playtime 838"
+  ],
+  "must_not_contain": [],
+  "human_check": "klog/frontend-20261004-223054 pictures: the carousel shows a heart (Favorites) and a clock (Last Played) card after PSP; klog/frontend-20261004-222946 shows '1 GAME (1 FAVORITE)' under SNES."
+}

@@ -1,0 +1,498 @@
+/*
+ * ps5-native-app-boilerplate - ProsperoLight component.
+ * Copyright (C) 2026 BlackBearReloaded
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
+#include "app_storage.hpp"
+#include "lan_http_report.hpp"
+#include "crash_report.hpp"
+#include "forwarded_launch.hpp"
+#if PROSPEROLIGHT_TEST_LAB
+#include "test_lab_profile.hpp"
+#include "test_lab_lifecycle.hpp"
+#endif
+#if PROSPEROLIGHT_LAUNCH_PROOF
+#include "launch_proof.hpp"
+#endif
+#include "connecting_plate.hpp"
+#include "launcher/launcher.hpp"
+#include "moonlight_stream.hpp"
+#include "native_agc_present.hpp"
+#include "native_modules.hpp"
+#include "presentation_preferences.hpp"
+
+#include <chrono>
+#include <cstddef>
+#include <cstdint>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <ctime>
+#include <pthread.h>
+
+extern "C" int sceKernelUsleep(std::uint32_t microseconds);
+extern "C" int sceKernelDebugOutText(int channel, const char *text);
+extern "C" std::int64_t sceKernelGetDirectMemorySize(void);
+extern "C" int sceKernelAllocateDirectMemory(std::int64_t search_start, std::int64_t search_end,
+                                             std::size_t length, std::size_t alignment,
+                                             int memory_type, std::int64_t *direct_memory_start);
+extern "C" int sceKernelMapDirectMemory(void **address, std::size_t length, int protection,
+                                        int flags, std::int64_t direct_memory_start,
+                                        std::size_t alignment);
+extern "C" int sceKernelReleaseDirectMemory(std::int64_t direct_memory_start, std::size_t length);
+extern "C" int munmap(void *address, std::size_t length);
+extern "C" void prosperolight_release_splash(void);
+extern "C" int sceSystemServiceHideSplashScreen(void);
+extern "C" int sceSystemServiceLoadExec(const char *path, const char **arguments);
+extern "C" void *__dso_handle = nullptr;
+
+#ifndef PROSPEROLIGHT_VIDEO_OUTPUT_SELF_TEST_FPS
+#define PROSPEROLIGHT_VIDEO_OUTPUT_SELF_TEST_FPS 0
+#endif
+// How long the display is left alone after a stream above 60 Hz or in HDR,
+// before the launcher opens it again: the television is switching back.
+#ifndef PROSPEROLIGHT_HFR_SETTLE_MS
+#define PROSPEROLIGHT_HFR_SETTLE_MS 100
+#endif
+
+static_assert(PROSPEROLIGHT_VIDEO_OUTPUT_SELF_TEST_FPS == 0 ||
+                  PROSPEROLIGHT_VIDEO_OUTPUT_SELF_TEST_FPS == 90 ||
+                  PROSPEROLIGHT_VIDEO_OUTPUT_SELF_TEST_FPS == 120,
+              "VIDEO_OUTPUT_SELF_TEST_FPS must be 0, 90, or 120");
+
+extern "C" int pthread_once(pthread_once_t *once_control, void (*init_routine)(void))
+{
+    constexpr int running = 2;
+    int state = __atomic_load_n(&once_control->state, __ATOMIC_ACQUIRE);
+    if (state == PTHREAD_DONE_INIT)
+        return 0;
+
+    int expected = PTHREAD_NEEDS_INIT;
+    if (__atomic_compare_exchange_n(&once_control->state, &expected, running, false,
+                                    __ATOMIC_ACQ_REL, __ATOMIC_ACQUIRE))
+    {
+        init_routine();
+        __atomic_store_n(&once_control->state, PTHREAD_DONE_INIT, __ATOMIC_RELEASE);
+        return 0;
+    }
+
+    while (__atomic_load_n(&once_control->state, __ATOMIC_ACQUIRE) != PTHREAD_DONE_INIT)
+    {
+        sceKernelUsleep(100);
+    }
+    return 0;
+}
+
+extern "C" float strtof(const char *value, char **end)
+{
+    return static_cast<float>(strtod(value, end));
+}
+
+extern "C" int fseek(std::FILE *file, long offset, int origin)
+{
+    return fseeko(file, offset, origin);
+}
+
+extern "C" long ftell(std::FILE *file)
+{
+    return static_cast<long>(ftello(file));
+}
+
+extern "C" char *strcasestr(const char *haystack, const char *needle)
+{
+    if (!*needle)
+        return const_cast<char *>(haystack);
+    for (; *haystack; ++haystack)
+    {
+        const char *h = haystack;
+        const char *n = needle;
+        while (*h && *n)
+        {
+            const char hc = *h >= 'A' && *h <= 'Z' ? static_cast<char>(*h + ('a' - 'A')) : *h;
+            const char nc = *n >= 'A' && *n <= 'Z' ? static_cast<char>(*n + ('a' - 'A')) : *n;
+            if (hc != nc)
+                break;
+            ++h;
+            ++n;
+        }
+        if (!*n)
+            return const_cast<char *>(haystack);
+    }
+    return nullptr;
+}
+
+namespace
+{
+
+[[noreturn]] void KeepProcessAlive()
+{
+    for (;;)
+        sceKernelUsleep(1000000);
+}
+
+[[maybe_unused]] std::uint64_t MonotonicMicroseconds()
+{
+    timespec now{};
+    (void)clock_gettime(CLOCK_MONOTONIC, &now);
+    return static_cast<std::uint64_t>(now.tv_sec) * 1000000u +
+           static_cast<std::uint64_t>(now.tv_nsec) / 1000u;
+}
+
+void Log(const char *text)
+{
+    prosperolight_debug_line("main", "%s", text);
+    prosperolight_debug_flush();
+    char line[200];
+    std::snprintf(line, sizeof(line), "%s\n", text);
+    (void)sceKernelDebugOutText(0, line);
+}
+
+#if PROSPEROLIGHT_VIDEO_OUTPUT_SELF_TEST_FPS != 0
+void RunVideoOutputSelfTest()
+{
+    constexpr std::uint32_t pitch =
+        PROSPEROLIGHT_STREAM_SELF_TEST_RESOLUTION == MOONLIGHT_STREAM_RESOLUTION_2160P   ? 3840
+        : PROSPEROLIGHT_STREAM_SELF_TEST_RESOLUTION == MOONLIGHT_STREAM_RESOLUTION_1440P ? 2560
+                                                                                         : 1920;
+    constexpr std::uint32_t visible_height =
+        PROSPEROLIGHT_STREAM_SELF_TEST_RESOLUTION == MOONLIGHT_STREAM_RESOLUTION_2160P   ? 2160
+        : PROSPEROLIGHT_STREAM_SELF_TEST_RESOLUTION == MOONLIGHT_STREAM_RESOLUTION_1440P ? 1440
+                                                                                         : 1080;
+    constexpr std::uint32_t surface_height =
+        PROSPEROLIGHT_STREAM_SELF_TEST_RESOLUTION == MOONLIGHT_STREAM_RESOLUTION_2160P ? 2176
+        : visible_height == 1080                                                       ? 1088
+                                 : visible_height;
+    constexpr std::size_t visible_surface_bytes =
+        static_cast<std::size_t>(pitch) * surface_height * 3 / 2;
+    constexpr std::size_t surface_bytes = (visible_surface_bytes + 0x3fff) & ~std::size_t(0x3fff);
+    constexpr std::uint32_t surface_count = 3;
+    constexpr std::size_t surface_pool_bytes = surface_bytes * surface_count;
+    constexpr std::uint32_t frame_count = PROSPEROLIGHT_VIDEO_OUTPUT_SELF_TEST_FPS * 5;
+    std::int64_t surface_start = -1;
+    void *surface = nullptr;
+    char receipt_path[176];
+    std::snprintf(receipt_path, sizeof(receipt_path), "%s/prosperolight-agc-selftest.log",
+                  storage::paths().logs);
+    (void)std::remove(receipt_path);
+    std::snprintf(receipt_path, sizeof(receipt_path), "%s/prosperolight-videoout-selftest.txt",
+                  storage::paths().logs);
+    FILE *receipt = std::fopen(receipt_path, "w");
+
+    int result = sceKernelAllocateDirectMemory(0, sceKernelGetDirectMemorySize(),
+                                               surface_pool_bytes, 0x4000, 12, &surface_start);
+    if (result == 0)
+        result =
+            sceKernelMapDirectMemory(&surface, surface_pool_bytes, 0x32, 0, surface_start, 0x4000);
+    if (receipt)
+    {
+        std::fprintf(receipt, "requested=%u width=%u height=%u allocation_rc=%08x surface=%p\n",
+                     PROSPEROLIGHT_VIDEO_OUTPUT_SELF_TEST_FPS, pitch, visible_height,
+                     static_cast<unsigned>(result), surface);
+        std::fflush(receipt);
+    }
+    if (result != 0 || !surface)
+    {
+        if (surface_start >= 0)
+            (void)sceKernelReleaseDirectMemory(surface_start, surface_pool_bytes);
+        KeepProcessAlive();
+    }
+
+    int present_result = 0;
+    for (std::uint32_t index = 0; index < surface_count; ++index)
+    {
+        void *frame_surface = static_cast<std::uint8_t *>(surface) + index * surface_bytes;
+        present_result =
+            native_agc_present_blank(frame_surface, visible_surface_bytes, 0, pitch, visible_height,
+                                     PROSPEROLIGHT_VIDEO_OUTPUT_SELF_TEST_FPS);
+        if (present_result != 0)
+            break;
+    }
+
+    const std::uint64_t frequency = 1000000;
+    const std::uint64_t started = MonotonicMicroseconds();
+    std::uint32_t presented = 0;
+    for (std::uint32_t frame = 0; frame < frame_count && present_result == 0; ++frame)
+    {
+        void *frame_surface =
+            static_cast<std::uint8_t *>(surface) + (frame % surface_count) * surface_bytes;
+        present_result = native_agc_wait_source_idle(frame_surface);
+        if (present_result == 0)
+            present_result = native_agc_present_nv12(
+                frame_surface, visible_surface_bytes, pitch, surface_height, pitch, visible_height,
+                PROSPEROLIGHT_VIDEO_OUTPUT_SELF_TEST_FPS, nullptr);
+        if (present_result != 0)
+            break;
+        ++presented;
+        const std::uint64_t deadline = started + static_cast<std::uint64_t>(presented) * frequency /
+                                                     PROSPEROLIGHT_VIDEO_OUTPUT_SELF_TEST_FPS;
+        const std::uint64_t now = MonotonicMicroseconds();
+        if (deadline > now)
+        {
+            const std::uint64_t remaining_us = (deadline - now) * 1000000 / frequency;
+            if (remaining_us != 0)
+                sceKernelUsleep(static_cast<std::uint32_t>(remaining_us));
+        }
+    }
+    const std::uint64_t elapsed = MonotonicMicroseconds() - started;
+    const std::uint64_t measured_fps_x100 =
+        elapsed != 0 ? static_cast<std::uint64_t>(presented) * frequency * 100 / elapsed : 0;
+    const int shutdown_result = native_agc_present_shutdown();
+    const int unmap_result = munmap(surface, surface_pool_bytes);
+    const int release_result = sceKernelReleaseDirectMemory(surface_start, surface_pool_bytes);
+    if (receipt)
+    {
+        std::fprintf(receipt,
+                     "presented=%u present_rc=%08x measured=%llu.%02llu shutdown_rc=%08x "
+                     "unmap_rc=%08x release_rc=%08x\n",
+                     presented, static_cast<unsigned>(present_result),
+                     static_cast<unsigned long long>(measured_fps_x100 / 100),
+                     static_cast<unsigned long long>(measured_fps_x100 % 100),
+                     static_cast<unsigned>(shutdown_result), static_cast<unsigned>(unmap_result),
+                     static_cast<unsigned>(release_result));
+        std::fclose(receipt);
+    }
+    KeepProcessAlive();
+}
+#endif
+
+} // namespace
+
+int main(int argc, char **argv)
+{
+    // Where the time before the first frame goes, for the diagnostic log.
+    const auto entered = std::chrono::steady_clock::now();
+    const auto since_entry = [entered]
+    {
+        return static_cast<long long>(std::chrono::duration_cast<std::chrono::milliseconds>(
+                                          std::chrono::steady_clock::now() - entered)
+                                          .count());
+    };
+    // Resolve process-owned system modules before storage grants filesystem access.
+    prosperolight::native_modules::PrepareBeforeStorage();
+    const long long modules_ms = since_entry();
+    int decoder_warmup[4] = {-1, -1, -1, -1};
+    if (prosperolight::native_modules::Result(prosperolight::native_modules::video_decoder) == 0)
+        moonlight_native_decoder_warmup(decoder_warmup);
+    const long long warmup_ms = since_entry();
+    storage::Initialize();
+#if PROSPEROLIGHT_LAUNCH_PROOF
+    (void)prosperolight::write_launch_proof(argc, argv);
+#endif
+    prosperolight_debug_line(
+        "main", "start-up: system modules %lld ms, decoder warm-up %lld ms, storage %lld ms",
+        modules_ms, warmup_ms - modules_ms, since_entry() - warmup_ms);
+    prosperolight::native_modules::LogResults();
+    std::printf("[PL] decoder libraries: before-storage core=%08x h264=%08x hevc=%08x hdr=%08x\n",
+                static_cast<unsigned>(decoder_warmup[0]), static_cast<unsigned>(decoder_warmup[1]),
+                static_cast<unsigned>(decoder_warmup[2]), static_cast<unsigned>(decoder_warmup[3]));
+    // From here a fault leaves a report beside the log.
+    crash::Install(storage::paths().logs, storage::log_descriptor());
+    // A home-screen forwarder names the stream to start (docs/FORWARDER.md).
+    prosperolight::pending_forwarded_launch() = prosperolight::parse_forwarded_launch(argc, argv);
+#if PROSPEROLIGHT_TEST_LAB
+    {
+        auto &launch = prosperolight::pending_forwarded_launch();
+        if (launch.test_requested)
+        {
+            auto reject = [&](const std::string &reason)
+            {
+                prosperolight::test_lab::write_profile_status(launch.test_run, "failed", 1, nullptr,
+                                                              reason);
+                prosperolight_debug_line("test-lab", "profile rejected: %s", reason.c_str());
+                if (prosperolight::test_lab::safe_run_id(launch.test_run))
+                {
+                    prosperolight::test_lab::TestProfile failed;
+                    failed.run_id = launch.test_run;
+                    prosperolight::test_lab::context().begin(failed);
+                    prosperolight::test_lab::context().fail(reason.c_str());
+                    prosperolight_debug_flush();
+                    prosperolight::test_lab::context().finish(nullptr, -1);
+                }
+                (void)sceSystemServiceLoadExec("exit", nullptr);
+                KeepProcessAlive();
+            };
+            std::string error;
+            if (!prosperolight::test_lab::read_profile(
+                    launch.test_run, prosperolight::test_lab::active_profile(), error))
+            {
+                reject(error);
+            }
+            moonlight_config_t saved_config{};
+            const auto &expected_label = prosperolight::test_lab::active_profile().build_label;
+            if (!expected_label.empty())
+            {
+                const std::string path = std::string(storage::paths().app) + "/build-label.txt";
+                char label[257]{};
+                FILE *file = std::fopen(path.c_str(), "rb");
+                const std::size_t size = file ? std::fread(label, 1, sizeof(label) - 1, file) : 0;
+                if (file)
+                    std::fclose(file);
+                std::string actual(label, size);
+                while (!actual.empty() && (actual.back() == '\n' || actual.back() == '\r'))
+                    actual.pop_back();
+                if (actual != expected_label)
+                {
+                    reject("BUILD_LABEL_MISMATCH");
+                }
+            }
+            (void)moonlight_config_load(&saved_config);
+            if (prosperolight::forwarded_host(saved_config,
+                                              prosperolight::test_lab::active_profile().host) < 0)
+            {
+                reject("NOT_SAVED_HOST");
+            }
+            prosperolight_test_logs_override(1);
+            if (!prosperolight::test_lab::context().begin(prosperolight::test_lab::active_profile(),
+                                                          &error))
+            {
+                prosperolight::test_lab::write_profile_status(launch.test_run, "failed", 1, nullptr,
+                                                              error);
+                prosperolight_debug_line("test-lab", "initialization failed: %s", error.c_str());
+                prosperolight_debug_flush();
+                (void)sceSystemServiceLoadExec("exit", nullptr);
+                KeepProcessAlive();
+            }
+            prosperolight::test_lab::active() = true;
+            prosperolight_debug_line("test-lab", "run=%s profile validated",
+                                     launch.test_run.c_str());
+            prosperolight::test_lab::write_profile_status(launch.test_run, "profile_validated", 1,
+                                                          nullptr);
+            launch.pc = prosperolight::test_lab::active_profile().host;
+            launch.app = prosperolight::test_lab::active_profile().app;
+            launch.exit_after_stream = true;
+        }
+    }
+#endif
+    if (prosperolight::pending_forwarded_launch().requested())
+        std::printf("[PL] main: forwarded launch pc=\"%s\" app=\"%s\" exit_after_stream=%d\n",
+                    prosperolight::pending_forwarded_launch().pc.c_str(),
+                    prosperolight::pending_forwarded_launch().app.c_str(),
+                    prosperolight::pending_forwarded_launch().exit_after_stream ? 1 : 0);
+#if PROSPEROLIGHT_VIDEO_OUTPUT_SELF_TEST_FPS != 0
+    RunVideoOutputSelfTest();
+#endif
+
+    char stream_error[192]{};
+    bool first_start = true;
+    unsigned streams = 0;
+    unsigned launcher_failures = 0;
+    bool awaiting_display_handoff = false;
+    for (;;)
+    {
+        launcher::Selection selection;
+        const launcher::Result result = launcher::Run(&selection, stream_error, first_start);
+        first_start = false;
+        stream_error[0] = '\0';
+        if (result == launcher::Result::update_exit || result == launcher::Result::app_exit)
+        {
+#if PROSPEROLIGHT_TEST_LAB
+            if (prosperolight::test_lab::active())
+            {
+                prosperolight_debug_flush();
+                prosperolight::test_lab::context().finish(nullptr, -1);
+            }
+#endif
+            // The self-update helper waits for this process to end, then puts
+            // the new version's files in place (third_party/update-check).
+            Log(result == launcher::Result::update_exit ? "[PL] main: closing for the update"
+                                                        : "[PL] main: closing by request");
+            (void)sceSystemServiceLoadExec("exit", nullptr);
+            KeepProcessAlive();
+        }
+        if (result != launcher::Result::start_stream)
+        {
+            // Nothing was drawn: the splash picture must not hide the home screen's way out.
+            prosperolight_release_splash();
+            (void)sceSystemServiceHideSplashScreen();
+            // The display can refuse while the television changes mode.
+            ++launcher_failures;
+            // Do not add latency to successful launches; allow a failed reopen
+            // after HFR/HDR/VRR an extra bounded settling attempt.
+            const unsigned retry_limit = awaiting_display_handoff ? 4u : 3u;
+            if (launcher_failures < retry_limit)
+            {
+                const unsigned delay_ms =
+                    awaiting_display_handoff && launcher_failures == 1 ? 500u : 2000u;
+                Log("[PL] main: launcher reopen failed; retry after display settle");
+                sceKernelUsleep(delay_ms * 1000u);
+                continue;
+            }
+            Log("[PL] main: the launcher could not run; waiting to be closed");
+            KeepProcessAlive();
+        }
+        launcher_failures = 0;
+        awaiting_display_handoff = false;
+
+        // Give the launcher's display teardown one final display interval
+        // before the stream opens the display for itself.
+        sceKernelUsleep(100000);
+        moonlight_stream_options_t options{};
+        moonlight_stream_metrics_t metrics{};
+        options.host = selection.host;
+        options.host_port = selection.host_port;
+        options.app_name = selection.app_name;
+        options.app_id = selection.app_id;
+        options.bitrate_kbps = selection.bitrate_kbps;
+        options.display_area = selection.display_area;
+        options.video_codec = selection.video_codec;
+        options.stream_resolution = selection.stream_resolution;
+        options.stream_fps = selection.stream_fps;
+        options.hdr_enabled = selection.hdr_enabled;
+        options.chroma_sampling = selection.chroma_sampling;
+        options.audio_configuration = selection.audio_configuration;
+        options.vsync_enabled = selection.vsync_enabled;
+        options.decoder_pipeline = selection.decoder_pipeline;
+        options.decoder_cores = selection.decoder_cores;
+        options.session_overrides = selection.session_overrides;
+        moonlight_connecting_picture_t picture{};
+        if (selection.connecting_rgba.size() ==
+            static_cast<std::size_t>(connecting::kWidth) * connecting::kHeight * 4u)
+        {
+            picture.rgba = selection.connecting_rgba.data();
+            picture.bar_x = selection.connecting_bar[0];
+            picture.bar_y = selection.connecting_bar[1];
+            picture.bar_width = selection.connecting_bar[2];
+            picture.bar_height = selection.connecting_bar[3];
+            std::memcpy(picture.fill, selection.connecting_fill, sizeof(picture.fill));
+            picture.progress = selection.connecting_progress;
+            options.connecting = &picture;
+        }
+        ++streams;
+        char line[160];
+        std::snprintf(line, sizeof(line), "[PL] main: stream %u starts (%u FPS, hdr=%u)", streams,
+                      selection.stream_fps, selection.hdr_enabled);
+        Log(line);
+        const int stream_result = moonlight_stream_run(&options, &metrics);
+        std::snprintf(stream_error, sizeof(stream_error), "%s", metrics.error);
+        const bool mode_changed = selection.stream_fps > MOONLIGHT_STREAM_FPS_60 ||
+                                  selection.hdr_enabled != 0 ||
+                                  moonlight::presentation_mode() == 2u;
+        awaiting_display_handoff = mode_changed;
+        const unsigned settle_ms = mode_changed ? PROSPEROLIGHT_HFR_SETTLE_MS : 100;
+        std::snprintf(line, sizeof(line),
+                      "[PL] main: stream %u ended result=%d frames=%u; display settles %u ms",
+                      streams, stream_result, metrics.presented_frames, settle_ms);
+        Log(line);
+        sceKernelUsleep(settle_ms * 1000u);
+        // A forwarder asked to return to the home screen once its stream is over. A
+        // stream that failed opens the launcher instead, which says why.
+#if PROSPEROLIGHT_TEST_LAB
+        if (prosperolight::test_lab::active())
+        {
+            prosperolight_debug_flush();
+            prosperolight::test_lab::context().finish(&metrics, stream_result);
+            prosperolight_release_splash();
+            (void)sceSystemServiceLoadExec("exit", nullptr);
+            KeepProcessAlive();
+        }
+#endif
+        if (selection.exit_after_stream && stream_result == 0)
+        {
+            Log("[PL] main: closing after the forwarded stream");
+            prosperolight_release_splash();
+            (void)sceSystemServiceLoadExec("exit", nullptr);
+            KeepProcessAlive();
+        }
+    }
+}

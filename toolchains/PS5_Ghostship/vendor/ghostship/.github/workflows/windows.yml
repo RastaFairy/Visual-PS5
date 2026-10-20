@@ -1,0 +1,98 @@
+name: Windows Validation
+
+on:
+  pull_request:
+    branches: [ "*" ]
+
+jobs:
+  build:
+    runs-on: windows-2022
+    env:
+      WINDOWS_CERT_PFX_BASE64: ${{ secrets.WINDOWS_CERT_PFX_BASE64 }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+          fetch-depth: 0 # full history so the libultraship submodule gitlink resolves
+      - name: Setup MSVC
+        uses: ilammy/msvc-dev-cmd@v1
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install Python dependencies
+        run: pip install -r libultraship/requirements.txt
+      - name: Cache Vulkan SDK
+        uses: actions/cache@v6
+        with:
+          key: windows-vulkan-sdk-v1
+          path: C:\VulkanSDK
+      - name: Install Vulkan SDK
+        shell: pwsh
+        run: |
+          # Skip the (large) download+install when the cache already restored the SDK.
+          if (-not (Test-Path "C:\VulkanSDK\Lib")) {
+            $url = "https://sdk.lunarg.com/sdk/download/latest/windows/vulkan_sdk.exe"
+            Invoke-WebRequest -Uri $url -OutFile "$env:RUNNER_TEMP\vulkan_sdk.exe"
+            $p = Start-Process -FilePath "$env:RUNNER_TEMP\vulkan_sdk.exe" -ArgumentList "--root","C:\VulkanSDK","--accept-licenses","--default-answer","--confirm-command","install" -Wait -PassThru
+            if ($p.ExitCode -ne 0) { throw "Vulkan SDK install failed with exit code $($p.ExitCode)" }
+          }
+          "VULKAN_SDK=C:\VulkanSDK" | Out-File -FilePath $env:GITHUB_ENV -Append
+      - name: Cache vcpkg binaries
+        uses: actions/cache@v6
+        with:
+          key: windows-validation-vcpkg-${{ github.ref }}-${{ github.sha }}
+          restore-keys: |
+            windows-validation-vcpkg-${{ github.ref }}
+            windows-validation-vcpkg-
+          path: |
+            ~\AppData\Local\vcpkg\archives
+      - name: sccache
+        uses: hendrikmuhs/ccache-action@v1.2.14
+        with:
+          variant: sccache
+          key: windows-validation-sccache-${{ github.ref }}-${{ github.sha }}
+          restore-keys: |
+            windows-validation-sccache-${{ github.ref }}
+            windows-validation-sccache-
+      - name: Build
+        run: |
+          # Use the runner's preinstalled vcpkg (blanking VCPKG_ROOT made automate-vcpkg
+          # try to clone into an empty path and fail).
+          $env:VCPKG_ROOT=$env:VCPKG_INSTALLATION_ROOT
+          # Ninja (single-config) so the compiler launcher works; sccache caches MSVC objects.
+          cmake -S . -B "build/x64" -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER_LAUNCHER=sccache -DCMAKE_CXX_COMPILER_LAUNCHER=sccache -DPython3_EXECUTABLE="$(python -c 'import sys; print(sys.executable)')"
+          cmake --build ./build/x64 --parallel 10
+      - name: Stage runtime deps
+        shell: pwsh
+        run: |
+          Write-Host "=== build/x64 contents (top level) ==="
+          Get-ChildItem build/x64 -Force | Format-Table Name, Length, Mode
+          # Ensure shaderc ships even if the CMake POST_BUILD didn't stage it.
+          if ((Test-Path "$env:VULKAN_SDK/Bin/shaderc_shared.dll") -and -not (Test-Path "build/x64/shaderc_shared.dll")) {
+            Copy-Item "$env:VULKAN_SDK/Bin/shaderc_shared.dll" build/x64/ -Force
+            Write-Host "Copied shaderc_shared.dll from the Vulkan SDK."
+          }
+          if (-not (Test-Path build/x64/.tcc)) { Write-Warning ".tcc was not produced in build/x64!" }
+      - name: Sign binaries
+        if: ${{ env.WINDOWS_CERT_PFX_BASE64 != '' }}
+        env:
+          WINDOWS_CERT_PASSWORD: ${{ secrets.WINDOWS_CERT_PASSWORD }}
+        shell: pwsh
+        run: |
+          $pfx = "$env:RUNNER_TEMP\codesign.pfx"
+          [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:WINDOWS_CERT_PFX_BASE64))
+          $signtool = (Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin\*\x64\signtool.exe" | Sort-Object FullName -Descending | Select-Object -First 1).FullName
+          # Sign the exe and the bundled DLLs we ship (tcc.dll is the usual AV trigger).
+          Get-ChildItem "build/x64" -Include Ghostship.exe,tcc.dll,shaderc_shared.dll -Recurse | ForEach-Object {
+            & $signtool sign /f $pfx /p $env:WINDOWS_CERT_PASSWORD /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 $_.FullName
+            if ($LASTEXITCODE -ne 0) { throw "signtool failed for $($_.FullName)" }
+          }
+          Remove-Item $pfx -Force
+      - name: Upload build
+        uses: actions/upload-artifact@v4
+        with:
+          name: ghostship-windows
+          path: ./build/x64
+          include-hidden-files: true
+          retention-days: 1

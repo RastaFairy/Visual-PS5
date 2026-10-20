@@ -1,0 +1,13 @@
+{
+  "step": "manual-scan-reentry",
+  "note": "Import Content -> Manual Scan -> Content Directory, a folder chosen, then Content Directory again: the second visit selects the folder with strcasestr, whose import was null in the title (libScePosixForWebKit's stub), and jumped to address 0. The title now binds strcasestr, mkstemp, link, symlink, readlink and pathconf to the platform layer, and tools/build.sh refuses an import no loaded module exports.",
+  "must_contain": [
+    "0xc0e207 = menu_entries_list_search, after callq *0x2306c40; 0x2306c40 = R_X86_64_GLOB_DAT strcasestr",
+    "fixed build, imports no loaded module exports: none",
+    "MENU at 21.01 s: depth 3, list 'manual_content_scan_dir' '/app0/', entry 2 of 23 'assets'",
+    "native quit: frontend status = 0",
+    "fatal signals in the fixed run: 0"
+  ],
+  "must_not_contain": [],
+  "human_check": ""
+}

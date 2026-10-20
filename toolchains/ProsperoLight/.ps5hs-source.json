@@ -1,0 +1,15 @@
+{
+  "repository": "blackbearreloaded/ProsperoLight",
+  "branch": "main",
+  "commit": "bb3d1d6b3c6986524e56307e7c570f9cd17718ce",
+  "sourceCommit": "bb3d1d6b3c6986524e56307e7c570f9cd17718ce",
+  "sourceRef": "main",
+  "method": "vendored-snapshot",
+  "vendoredSnapshot": true,
+  "vendorRepository": "RastaFairy/Visual-PS5",
+  "vendoredAt": "2026-10-20T15:43:39Z",
+  "submodulesMaterialized": true,
+  "mirrorRepository": "LedyBacer/ProsperoLight",
+  "originalMethod": "vendored-snapshot",
+  "sourceRevisionRecorded": true
+}

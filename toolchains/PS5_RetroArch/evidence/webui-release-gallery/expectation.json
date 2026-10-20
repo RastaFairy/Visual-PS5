@@ -1,0 +1,14 @@
+{
+  "step": "webui-release-gallery",
+  "must_contain": [
+    "10 unedited WebUI screenshots cataloged and linked with captions",
+    "All 15 preview images loaded in browser, including 4 existing QR captures",
+    "Permanent warning text matches README and stays above every other image",
+    "No warning-related lines removed",
+    "No game uploaded, metadata saved, files transferred, or scrape job started"
+  ],
+  "must_not_contain": [
+    "FAILED"
+  ],
+  "human_check": "All ten screenshots visually inspected. Neo Geo B filter has 14 games. Add Game uses unsaved Space Hunter database details. Shooter Test Game illustrates Media, Details and Files; no existing savestate is claimed. Local release preview shows each caption and preserves its QR gallery."
+}

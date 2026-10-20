@@ -1,0 +1,479 @@
+#include "package_ps5.hpp"
+#include "vktApiSmokeTests.hpp"
+#include "vktApiFeatureInfo.hpp"
+#include "vktApiBufferViewAccessTests.hpp"
+#include "vktApiPipelineTests.hpp"
+#include "vktApiObjectManagementTests.hpp"
+#include "vktApiCopiesAndBlittingTests.hpp"
+#include "vktApiFillBufferTests.hpp"
+#include "vktTextureCompressedFormatTests.hpp"
+#include "vktTextureFilteringTests.hpp"
+#include "vktImagelessFramebufferTests.hpp"
+#include "vktBindingShaderAccessTests.hpp"
+#include "vktBindingBufferDeviceAddressTests.hpp"
+#include "vktSynchronizationBasicFenceTests.hpp"
+#include "vktSynchronizationBasicEventTests.hpp"
+#include "vktSynchronizationBasicSemaphoreTests.hpp"
+#include "vktSynchronizationTimelineSemaphoreTests.hpp"
+#include "vktMemoryMappingTests.hpp"
+#include "vktComputeBasicComputeShaderTests.hpp"
+#include "vktComputeIndirectComputeDispatchTests.hpp"
+#include "vktPipelinePushConstantTests.hpp"
+#include "vktPipelineCacheTests.hpp"
+#include "vktPipelineBlendTests.hpp"
+#include "vktPipelineMultisampleTests.hpp"
+
+#include "vktPipelineSamplerTests.hpp"
+
+#include "vktPipelineStencilTests.hpp"
+#include "vktPipelineDepthTests.hpp"
+
+#include "vktSpvAsmWorkgroupMemoryTests.hpp"
+#include "vktSpvAsmIndexingTests.hpp"
+#include "vktDynamicStateComputeTests.hpp"
+#include "vktRobustnessBufferAccessTests.hpp"
+#include "vktDrawShaderDrawParametersTests.hpp"
+#include "vktDrawIndirectTest.hpp"
+#include "vktMultiViewTests.hpp"
+#include "vktClippingTests.hpp"
+#include "vktGeometryTests.hpp"
+#include "vktTessellationWindingTests.hpp"
+#include "vktTessellationShaderInputOutputTests.hpp"
+#include "vktTessellationMiscDrawTests.hpp"
+#include "vktTessellationPrimitiveDiscardTests.hpp"
+#include "vktTessellationGeometryPassthroughTests.hpp"
+#include "vktTessellationCommonEdgeTests.hpp"
+#include "vktRasterizationTests.hpp"
+#include "vktDrawScissorTests.hpp"
+#include "vktDrawDepthClampTests.hpp"
+#include "vktFragmentOperationsTests.hpp"
+#include "vktRenderPassTests.hpp"
+#include "vktUniformBlockTests.hpp"
+#include "subgroups/vktSubgroupsBallotBroadcastTests.hpp"
+#include "subgroups/vktSubgroupsArithmeticTests.hpp"
+#include "vktQueryPoolTests.hpp"
+#include "vktShaderRenderTextureGatherTests.hpp"
+#include "vktTestGroupUtil.hpp"
+#include "storage_width_focus.hpp"
+#include "tcuTestPackage.hpp"
+#include "deUniquePtr.hpp"
+
+namespace vkt
+{
+namespace SpirVAssembly
+{
+tcu::TestCaseGroup *createFocusedVolatileAtomicComputeGroup(tcu::TestContext &testCtx);
+}
+}
+
+namespace cts
+{
+namespace ps5
+{
+
+namespace
+{
+
+void createDynamicStateMonolithicChildren(tcu::TestCaseGroup *group,
+                                          vk::PipelineConstructionType pipelineConstructionType)
+{
+    group->addChild(vkt::DynamicState::createDynamicStateComputeTests(
+        group->getTestContext(), pipelineConstructionType));
+}
+
+void cleanupDynamicStateGroup(tcu::TestCaseGroup *)
+{
+    // The upstream module holds device helpers in file-local singletons.  Keep
+    // the same outer-group cleanup lifetime as vktDynamicStateTests.cpp.
+    vkt::DynamicState::cleanupDevice();
+}
+
+void initDynamicStateGroup(tcu::TestCaseGroup *group)
+{
+    group->addChild(vkt::createTestGroup(
+        group->getTestContext(), "monolithic", createDynamicStateMonolithicChildren,
+        vk::PIPELINE_CONSTRUCTION_TYPE_MONOLITHIC));
+}
+
+} // namespace
+
+FocusedVkTestPackage::FocusedVkTestPackage(tcu::TestContext &testCtx)
+    : BaseTestPackage(testCtx, "dEQP-VK")
+{
+}
+
+FocusedVkTestPackage::~FocusedVkTestPackage(void)
+{
+}
+
+void FocusedVkTestPackage::init(void)
+{
+    // Original subgroup Broadcast and arithmetic factories and support checks. No subgroup
+    // leaves enter the frozen selection until the public API/profile gate is
+    // satisfied and their unchanged oracles pass on hardware.
+    {
+        de::MovePtr<tcu::TestCaseGroup> subgroupGroup(
+            new tcu::TestCaseGroup(m_testCtx, "subgroups"));
+        subgroupGroup->addChild(vkt::subgroups::createSubgroupsBallotBroadcastTests(m_testCtx));
+        subgroupGroup->addChild(vkt::subgroups::createSubgroupsArithmeticTests(m_testCtx));
+        addChild(subgroupGroup.release());
+    }
+
+    // ubo: unchanged upstream standard-layout cases and their buffer oracle.
+    // The case list selects a bounded subset; registration alone changes no
+    // public feature report or frozen acceptance selection.
+    addChild(vkt::ubo::createTests(m_testCtx, "ubo"));
+
+    // dynamic_state.monolithic.compute_transfer: unchanged upstream compute /
+    // transfer non-interference bodies and oracles.  The outer cleanup callback
+    // releases the module's singleton device helpers at the upstream lifetime.
+    addChild(vkt::createTestGroup(m_testCtx, "dynamic_state", initDynamicStateGroup,
+                                  cleanupDynamicStateGroup));
+
+    // renderpass: the original upstream render-pass module, registered for the
+    // DXVK262-T06 independentBlend oracles. Its attachment_write_mask family is
+    // the only upstream coverage in the pinned tree that REQUIRES
+    // VkPhysicalDeviceFeatures.independentBlend (vktRenderPassTests.cpp:6504),
+    // and the two-attachment variants draw into two colour attachments with a
+    // different write mask each - the shape the served profile now carries.
+    // cases.txt remains the leaf filter: the registerpass2 and dynamic-rendering
+    // variants live in other modules and stay out, and only the selected leaves
+    // below execute.
+    addChild(vkt::createRenderPassTests(m_testCtx, "renderpass"));
+    // renderpass2: the same original module through VK_KHR_create_renderpass2
+    // (DXVK262-T09). Registering it only makes the leaves addressable;
+    // cases.txt remains the execution filter.
+    addChild(vkt::createRenderPass2Tests(m_testCtx, "renderpass2"));
+
+    // info group: original upstream enumeration and physical-device query
+    // bodies. cases.txt remains the execution filter; registering these
+    // factories does not replace their result oracles.
+    {
+        de::MovePtr<tcu::TestCaseGroup> infoGroup(
+            new tcu::TestCaseGroup(m_testCtx, "info"));
+        vkt::api::createFeatureInfoInstanceTests(infoGroup.get());
+        vkt::api::createFeatureInfoDeviceTests(infoGroup.get());
+        addChild(infoGroup.release());
+    }
+
+    // api.smoke group
+    {
+        de::MovePtr<tcu::TestCaseGroup> apiGroup(new tcu::TestCaseGroup(m_testCtx, "api"));
+        apiGroup->addChild(vkt::api::createSmokeTests(m_testCtx));
+        // api.buffer_view.access: upstream buffer-view resource tests. The
+        // focused selection only runs the compute ones; the group is registered
+        // whole so the packaged case list stays the single source of selection.
+        de::MovePtr<tcu::TestCaseGroup> bufferViewGroup(new tcu::TestCaseGroup(m_testCtx, "buffer_view"));
+        bufferViewGroup->addChild(vkt::api::createBufferViewAccessTests(m_testCtx));
+        apiGroup->addChild(bufferViewGroup.release());
+        apiGroup->addChild(vkt::api::createPipelineTests(m_testCtx));
+        // Keep the original image-view factory and support gate registered;
+        // the focused cases manifest selects only the cube-array leaf.
+        apiGroup->addChild(vkt::api::createObjectManagementTests(m_testCtx));
+        // Original upstream buffer-copy and fill/update cases. The build-time
+        // focused copy module prunes only unrelated image/blit/resolve
+        // registration so the package stays within the PS5 application heap.
+        apiGroup->addChild(vkt::api::createCopiesAndBlittingTests(m_testCtx));
+        apiGroup->addChild(vkt::api::createFillAndUpdateBufferTests(m_testCtx));
+        addChild(apiGroup.release());
+    }
+
+    // Original compressed-texture tests and their support gates/oracles. The
+    // focused cases manifest selects only the BC1/BC3 sampling leaves.
+    {
+        de::MovePtr<tcu::TestCaseGroup> textureGroup(new tcu::TestCaseGroup(m_testCtx, "texture"));
+        textureGroup->addChild(vkt::texture::createTextureCompressedFormatTests(m_testCtx));
+        textureGroup->addChild(vkt::texture::createTextureFilteringTests(m_testCtx));
+        addChild(textureGroup.release());
+    }
+
+    // binding_model.shader_access group
+    {
+        de::MovePtr<tcu::TestCaseGroup> bindingModelGroup(new tcu::TestCaseGroup(m_testCtx, "binding_model"));
+        bindingModelGroup->addChild(vkt::BindingModel::createShaderAccessTests(m_testCtx));
+        // Original BDA test body, support gate and GPU oracle. The build copy
+        // bounds registration to two base-address compute cases; cases.txt
+        // remains the execution filter for measurement versus acceptance.
+        bindingModelGroup->addChild(vkt::BindingModel::createBufferDeviceAddressTests(m_testCtx));
+        addChild(bindingModelGroup.release());
+    }
+
+    // synchronization.basic: original legacy event, fence and binary-semaphore
+    // factories. cases.txt remains the only leaf filter, so timeline,
+    // synchronization2, secondary-command-buffer and multi-queue variants are
+    // not silently substituted for the audited Vulkan 1.0 cases.
+    {
+        de::MovePtr<tcu::TestCaseGroup> syncGroup(new tcu::TestCaseGroup(m_testCtx, "synchronization"));
+        de::MovePtr<tcu::TestCaseGroup> syncBasicGroup(new tcu::TestCaseGroup(m_testCtx, "basic"));
+        syncBasicGroup->addChild(vkt::synchronization::createBasicEventTests(m_testCtx, 0));
+        syncBasicGroup->addChild(vkt::synchronization::createBasicFenceTests(m_testCtx, 0));
+        syncBasicGroup->addChild(vkt::synchronization::createBasicBinarySemaphoreTests(
+            m_testCtx, vkt::synchronization::SynchronizationType::LEGACY, 0));
+        // DXVK262-T09 timelineSemaphore: the original legacy timeline bodies,
+        // basic and full families. cases.txt remains the leaf filter.
+        syncBasicGroup->addChild(vkt::synchronization::createBasicTimelineSemaphoreTests(
+            m_testCtx, vkt::synchronization::SynchronizationType::LEGACY, 0));
+        syncGroup->addChild(syncBasicGroup.release());
+        syncGroup->addChild(vkt::synchronization::createTimelineSemaphoreTests(m_testCtx));
+        addChild(syncGroup.release());
+    }
+
+    // memory.mapping group
+    {
+        de::MovePtr<tcu::TestCaseGroup> memGroup(new tcu::TestCaseGroup(m_testCtx, "memory"));
+        memGroup->addChild(vkt::memory::createMappingTests(m_testCtx));
+        addChild(memGroup.release());
+    }
+
+    // robustness.buffer_access: original upstream Vulkan 1.0 robust-buffer
+    // bodies and result oracles.  The generated build copy prunes registration
+    // to compute/scalar_copy/R32_UINT; cases.txt remains the leaf filter.
+    {
+        de::MovePtr<tcu::TestCaseGroup> robustnessGroup(
+            new tcu::TestCaseGroup(m_testCtx, "robustness"));
+        robustnessGroup->addChild(vkt::robustness::createBufferAccessTests(m_testCtx));
+        addChild(robustnessGroup.release());
+    }
+
+    // draw.renderpass.shader_draw_parameters: the original upstream
+    // draw-parameter bodies and their reference-rasterizer image oracle,
+    // registered under the render-pass group parameters only. The
+    // dynamic-rendering variants need VK_KHR_dynamic_rendering, which this
+    // profile does not advertise, and cases.txt remains the leaf filter.
+    {
+        de::MovePtr<tcu::TestCaseGroup> drawGroup(new tcu::TestCaseGroup(m_testCtx, "draw"));
+        de::MovePtr<tcu::TestCaseGroup> renderPassGroup(
+            new tcu::TestCaseGroup(m_testCtx, "renderpass"));
+        renderPassGroup->addChild(new vkt::Draw::ShaderDrawParametersTests(
+            m_testCtx,
+            vkt::Draw::SharedGroupParams(new vkt::Draw::GroupParams{
+                false, // useDynamicRendering
+                false, // useSecondaryCmdBuffer
+                false, // secondaryCmdBufferCompletelyContainsDynamicRenderpass
+                false, // nestedSecondaryCmdBuffer
+            })));
+        // draw.renderpass.indirect_draw: the original upstream indirect-draw
+        // module under the same render-pass group parameters. The module
+        // registers every variant (compute-generated arguments, draw-count
+        // extension, multiview); cases.txt remains the leaf filter, so only the
+        // selected sequential/indexed, first-instance and instanced leaves run
+        // and every unselected variant stays out without a modified oracle.
+        renderPassGroup->addChild(new vkt::Draw::IndirectDrawTests(
+            m_testCtx,
+            vkt::Draw::SharedGroupParams(new vkt::Draw::GroupParams{
+                false, // useDynamicRendering
+                false, // useSecondaryCmdBuffer
+                false, // secondaryCmdBufferCompletelyContainsDynamicRenderpass
+                false, // nestedSecondaryCmdBuffer
+            })));
+        // draw.renderpass.scissor: the original upstream scissor module under
+        // the same render-pass group parameters. Six of its leaves are an
+        // upstream oracle for multiViewport by a second route - an instanced
+        // geometry stage writing gl_ViewportIndex = gl_InvocationID over up to
+        // sixteen static or dynamic scissors - and the rest are single-scissor
+        // state coverage. cases.txt remains the leaf filter: every leaf is a
+        // diagnostic in cts/upstream/manifest.json until its acceptance run is
+        // green, and the dynamic-rendering variants are not registered.
+        renderPassGroup->addChild(vkt::Draw::createScissorTests(
+            m_testCtx,
+            vkt::Draw::SharedGroupParams(new vkt::Draw::GroupParams{
+                false, // useDynamicRendering
+                false, // useSecondaryCmdBuffer
+                false, // secondaryCmdBufferCompletelyContainsDynamicRenderpass
+                false, // nestedSecondaryCmdBuffer
+            })));
+        // draw.renderpass.depth_clamp: the original upstream depth-clamp module
+        // under the same render-pass group parameters. Its D32 leaves are the
+        // upstream oracles for depthClamp and depthBiasClamp, and they read the
+        // depth attachment back over the DEPTH aspect - the capability this
+        // tranche implemented (src/depth_detile.c carries the SW_64K_Z_X pixel
+        // addressing). cases.txt remains the leaf filter, so only the D32 leaves
+        // are selected and every other format stays out.
+        renderPassGroup->addChild(vkt::Draw::createDepthClampTests(
+            m_testCtx,
+            vkt::Draw::SharedGroupParams(new vkt::Draw::GroupParams{
+                false, // useDynamicRendering
+                false, // useSecondaryCmdBuffer
+                false, // secondaryCmdBufferCompletelyContainsDynamicRenderpass
+                false, // nestedSecondaryCmdBuffer
+            })));
+        drawGroup->addChild(renderPassGroup.release());
+        addChild(drawGroup.release());
+    }
+
+    // multiview group: the original upstream multiview module, registered
+    // whole under its own name; cases.txt remains the only leaf filter, so this
+    // selects the 48 legacy render-pass leaves this device can run - the
+    // clear_attachments, masks, index.vertex_shader and index.fragment_shader
+    // families - and nothing else. Its own support gate and per-view oracle are
+    // untouched.
+    addChild(vkt::MultiView::createTests(m_testCtx, "multiview"));
+
+    // clipping group: the original upstream user-defined clip/cull distance
+    // module, registered whole under its own name. Both features are advertised
+    // (the export, the dynamically indexed write and the fragment-stage read are
+    // implemented and hardware-witnessed), so the family's vertex-only,
+    // static-index and dynamic-index leaves, with and without the fragment read,
+    // are acceptance cases in cts/upstream/manifest.json. Only the
+    // complementarity and misc leaves stay diagnostics: the pinned binary does
+    // not report them when they are filtered by the name the module's
+    // construction implies.
+    addChild(vkt::clipping::createTests(m_testCtx, "clipping"));
+
+    // geometry group: the original upstream geometry shader module, registered
+    // whole under its own name. Its reference images are embedded at build time
+    // (tools/embed_cts_reference_images.py, served by cts/upstream/image_io_ps5.cpp),
+    // so the leaves whose input primitive, built-ins and envelope this profile
+    // compiles are acceptance cases in cts/upstream/manifest.json and every other
+    // leaf stays a diagnostic there with the gate that refuses it.
+    addChild(vkt::geometry::createTests(m_testCtx, "geometry"));
+
+    // Original upstream bodies, shaders and image oracle. Registration alone
+    // is not execution or acceptance; the canonical case filter and feature
+    // negotiation remain unchanged until native contracts are demonstrated.
+    {
+        de::MovePtr<tcu::TestCaseGroup> tessGroup(new tcu::TestCaseGroup(m_testCtx, "tessellation"));
+        tessGroup->addChild(vkt::tessellation::createWindingTests(m_testCtx));
+        tessGroup->addChild(vkt::tessellation::createCommonEdgeTests(m_testCtx));
+        tessGroup->addChild(vkt::tessellation::createShaderInputOutputTests(m_testCtx));
+        tessGroup->addChild(vkt::tessellation::createMiscDrawTests(m_testCtx));
+        tessGroup->addChild(vkt::tessellation::createPrimitiveDiscardTests(m_testCtx));
+        de::MovePtr<tcu::TestCaseGroup> interaction(new tcu::TestCaseGroup(m_testCtx, "geometry_interaction"));
+        interaction->addChild(vkt::tessellation::createGeometryPassthroughTests(m_testCtx));
+        tessGroup->addChild(interaction.release());
+        addChild(tessGroup.release());
+    }
+
+    // rasterization group: the original upstream rasterization module, registered
+    // whole under its own name, because it is the only module that covers the
+    // polygon modes fillModeNonSolid turns on - every other family that exercises
+    // LINE or POINT polygon rasterization either needs a D16_UNORM depth
+    // attachment this profile does not offer or needs depth-image sampling it
+    // does not claim. The factory is registered unmodified and cases.txt remains
+    // the only execution filter, so only the culling leaves this profile can run
+    // are selected; the rest stay diagnostics in cts/upstream/manifest.json.
+    addChild(vkt::rasterization::createTests(m_testCtx, "rasterization"));
+
+    // fragment_ops group: the original upstream fragment-operations module,
+    // registered whole under its own name, because its
+    // scissor.multi_viewport.scissor_1..16 family is the upstream oracle for
+    // multiViewport: a geometry stage routing one primitive per viewport
+    // through gl_ViewportIndex, the shape the consumer witness measured on
+    // hardware. The factory is registered unmodified and cases.txt remains the
+    // only execution filter; the sixteen leaves are diagnostics in
+    // cts/upstream/manifest.json until their acceptance run is green, and no
+    // other leaf of the module is selected.
+    addChild(vkt::FragmentOperations::createTests(m_testCtx, "fragment_ops"));
+
+    // compute.basic group
+    {
+        de::MovePtr<tcu::TestCaseGroup> computeGroup(new tcu::TestCaseGroup(m_testCtx, "compute"));
+        computeGroup->addChild(vkt::compute::createBasicComputeShaderTests(m_testCtx, vk::COMPUTE_PIPELINE_CONSTRUCTION_TYPE_PIPELINE));
+        computeGroup->addChild(vkt::compute::createIndirectComputeDispatchTests(
+            m_testCtx, vk::COMPUTE_PIPELINE_CONSTRUCTION_TYPE_PIPELINE));
+        addChild(computeGroup.release());
+    }
+
+    // Original Vulkan 1.0 occlusion-query and shader texture-gather factories.
+    // Their support checks and result oracles stay upstream; the packaged case
+    // list selects the small measured leaves for these feature rows.
+    addChild(vkt::QueryPool::createTests(m_testCtx, "query_pool"));
+    addChild(vkt::imageless::createTests(m_testCtx, "imageless_framebuffer"));
+    {
+        de::MovePtr<tcu::TestCaseGroup> shaderRenderGroup(
+            new tcu::TestCaseGroup(m_testCtx, "shaderrender"));
+        shaderRenderGroup->addChild(vkt::sr::createTextureGatherTests(m_testCtx));
+        addChild(shaderRenderGroup.release());
+    }
+
+    // pipeline.push_constant group. The upstream factory is registered without
+    // replacing or wrapping individual test bodies; cases.txt remains the only
+    // execution filter.
+    {
+        de::MovePtr<tcu::TestCaseGroup> pipelineGroup(new tcu::TestCaseGroup(m_testCtx, "pipeline"));
+        pipelineGroup->addChild(vkt::pipeline::createPushConstantTests(
+            m_testCtx, vk::PIPELINE_CONSTRUCTION_TYPE_MONOLITHIC));
+        // pipeline.cache: the upstream factory registers its whole family; the
+        // packaged case list is the only execution filter, so the graphics cache
+        // cases stay unselected while the D16_UNORM prerequisite is missing.
+        pipelineGroup->addChild(vkt::pipeline::createCacheTests(
+            m_testCtx, vk::PIPELINE_CONSTRUCTION_TYPE_MONOLITHIC));
+        /* pipeline.monolithic.blend: the upstream blend factory under the
+         * construction-type group the pinned listing names its leaves with.
+         * The dual-source family inside it is the oracle for dualSrcBlend;
+         * registering the group only makes those leaves addressable, and
+         * cases.txt remains the execution filter. */
+        {
+            de::MovePtr<tcu::TestCaseGroup> monolithicGroup(
+                new tcu::TestCaseGroup(m_testCtx, "monolithic"));
+            monolithicGroup->addChild(vkt::pipeline::createBlendTests(
+                m_testCtx, vk::PIPELINE_CONSTRUCTION_TYPE_MONOLITHIC));
+            /* pipeline.monolithic.multisample: the upstream multisample factory
+             * under the same construction-type group. The sampleRateShading
+             * selection lives in this family (every min_sample_shading leaf
+             * gates on DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING), and the
+             * dual-source window proved what happens without the registration:
+             * dEQP silently drops a selected leaf whose factory was never
+             * registered, and the run reports fewer cases than cases.txt holds.
+             * Registering the group only makes the leaves addressable - cases.txt
+             * remains the execution filter, so a leaf that is not selected still
+             * does not run. */
+            monolithicGroup->addChild(vkt::pipeline::createMultisampleTests(
+                m_testCtx, vk::PIPELINE_CONSTRUCTION_TYPE_MONOLITHIC,
+                /* useFragmentShadingRate: the factory names its group
+                 * "multisample" when this is false and
+                 * "multisample_with_fragment_shading_rate" when it is true. The
+                 * pinned listing's leaves are pipeline.monolithic.multisample.*,
+                 * so registering the false form is what makes the selected
+                 * names addressable. */
+                false));
+
+            // The pinned address-modes factory includes a compact 8x8x8 3D
+            // mirror-clamp case. The case list selects its W sampling leaf.
+            monolithicGroup->addChild(vkt::pipeline::createSamplerTests(
+                m_testCtx, vk::PIPELINE_CONSTRUCTION_TYPE_MONOLITHIC));
+            /* pipeline.monolithic.stencil and .depth (DXVK262-T09): the
+             * d32_sfloat_s8_uint and d32_sfloat_s8_uint_separate_layouts
+             * families are the upstream oracle for the combined attachment and
+             * separateDepthStencilLayouts. cases.txt remains the filter. */
+            monolithicGroup->addChild(vkt::pipeline::createStencilTests(
+                m_testCtx, vk::PIPELINE_CONSTRUCTION_TYPE_MONOLITHIC));
+            monolithicGroup->addChild(vkt::pipeline::createDepthTests(
+                m_testCtx, vk::PIPELINE_CONSTRUCTION_TYPE_MONOLITHIC));
+            pipelineGroup->addChild(monolithicGroup.release());
+        }
+        addChild(pipelineGroup.release());
+    }
+
+    // spirv_assembly.instruction.compute: register generated focused groups.
+    // The generator prunes only leaf registration from pinned upstream source;
+    // selected shader bodies, support checks and result oracles stay upstream.
+    {
+        de::MovePtr<tcu::TestCaseGroup> spirvGroup(
+            new tcu::TestCaseGroup(m_testCtx, "spirv_assembly"));
+        de::MovePtr<tcu::TestCaseGroup> instructionGroup(
+            new tcu::TestCaseGroup(m_testCtx, "instruction"));
+        de::MovePtr<tcu::TestCaseGroup> computeGroup(
+            new tcu::TestCaseGroup(m_testCtx, "compute"));
+        computeGroup->addChild(vkt::SpirVAssembly::createFocused8BitStorageComputeGroup(m_testCtx));
+        computeGroup->addChild(vkt::SpirVAssembly::createFocused16BitStorageComputeGroup(m_testCtx));
+        computeGroup->addChild(vkt::SpirVAssembly::createWorkgroupMemoryComputeGroup(m_testCtx));
+        // Original Vulkan 1.0 Int16 indexing leaves give the dormant core
+        // shaderInt16 route an applicable CTS oracle once it is measured.
+        computeGroup->addChild(vkt::SpirVAssembly::createIndexingComputeGroup(m_testCtx));
+        computeGroup->addChild(vkt::SpirVAssembly::createFocusedVolatileAtomicComputeGroup(m_testCtx));
+        instructionGroup->addChild(computeGroup.release());
+        spirvGroup->addChild(instructionGroup.release());
+        addChild(spirvGroup.release());
+    }
+}
+
+static tcu::TestPackage *createTestPackage(tcu::TestContext &testCtx)
+{
+    return new FocusedVkTestPackage(testCtx);
+}
+
+static tcu::TestPackageDescriptor g_vktPackageDescriptor("dEQP-VK", createTestPackage);
+
+} // namespace ps5
+} // namespace cts

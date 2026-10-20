@@ -1,0 +1,22 @@
+{
+  "step": "webui-game-overlay",
+  "note": "Media Inspector and editable metadata; real ROM Replace/Export, native save/state Import/Export. Interrupted HTTP writes preserve the original; exact-library and path/link checks restrict transfers. Full gates plus real console disposable-file round trips and live browser review.",
+  "must_contain": [
+    "Ran 183 tests",
+    "verify: PASS (format unit build integration evidence)",
+    "Running console daemon matches staged build: 6717f52110aa29296d8bd0b397de7aecfb497eb2306dc793585ed26a289ae167",
+    "Live HTTP WebUI assets match staged bytes",
+    "ROM replace/export bytes match; overwrite requires confirmation",
+    "save import/export/replacement bytes match",
+    "state import/export/replacement bytes match",
+    "Metadata round trip preserves editable values",
+    "Unrelated file target rejected",
+    "All disposable probe files removed; existing game and save files untouched",
+    "RetroArch and frontend configuration bytes unchanged"
+  ],
+  "must_not_contain": [
+    "Traceback",
+    "FAILED"
+  ],
+  "human_check": "Live Media Inspector reviewed with console artwork; desktop/phone Media, Details and Files layouts reviewed. No gameplay or save-format conversion claimed."
+}

@@ -1,0 +1,22 @@
+{
+  "step": "flexible-memory-1g",
+  "note": "kernel.flexibleMemorySize = 1 GiB in param.json: the kernel gives the title 1 GiB of flexible memory (FMEM 0x40000000) and 576 MiB less direct memory (DMEM 0x2dc000000); Dolphin and the PS2 core keep their frame counts and end cleanly, with 2.6x and 2.5x the flexible memory free.",
+  "must_contain": [
+    "gc-1g: klog FMEM size 0x40000000 DMEM size 0x2dc000000",
+    "ps2-1g: klog FMEM size 0x40000000 DMEM size 0x2dc000000",
+    "gc-base: klog FMEM size 0x1c000000 DMEM size 0x300000000",
+    "gc-1g: memory: flexible_free=949248 KiB",
+    "gc-base: memory: flexible_free=359424 KiB",
+    "ps2-1g: memory: flexible_free=992256 KiB",
+    "ps2-base: memory: flexible_free=402432 KiB",
+    "gc-1g: input: pad script MARK at 80.007 s: frames=2603",
+    "ps2-1g: input: pad script MARK at 80.008 s: frames=4606 worst_ms=19.4 over_40ms=0",
+    "ps2-1g: rarch_main returned = 0",
+    "gc-1g: rarch_main returned = 0",
+    "param.json restored True"
+  ],
+  "must_not_contain": [
+    "param.json restored False"
+  ],
+  "human_check": "The 1g runs report FMEM 0x40000000 and about 2.6x the flexible memory free of the base runs, with the same MARK frame counts and a clean rarch_main return."
+}

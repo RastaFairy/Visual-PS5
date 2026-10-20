@@ -1,0 +1,11 @@
+{
+  "step": "framegen-hardware-image-size",
+  "note": "After: frame generation holds the frame at the image's own size; each generated picture lies between its two real neighbours (mean difference 2.9) and keeps the 4:3 picture's bars.",
+  "must_contain": [
+    "build identity: c480fe1c",
+    "network ready for 3840x2160 frames",
+    "mean difference from their neighbours 2.9, left bar 0.0"
+  ],
+  "must_not_contain": [],
+  "human_check": ""
+}

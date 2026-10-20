@@ -1,0 +1,524 @@
+include(FetchContent)
+
+find_package(OpenGL QUIET)
+
+#=================== ImGui ===================
+set(imgui_fixes_and_config_patch_file ${CMAKE_CURRENT_SOURCE_DIR}/cmake/dependencies/patches/imgui-fixes-and-config.patch)
+set(imgui_apply_patch_command ${CMAKE_COMMAND} -Dpatch_file=${imgui_fixes_and_config_patch_file} -Dwith_reset=TRUE -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/dependencies/git-patch.cmake)
+
+FetchContent_Declare(
+    ImGui
+    GIT_REPOSITORY https://github.com/ocornut/imgui.git
+    GIT_TAG v1.91.9b-docking
+    PATCH_COMMAND ${imgui_apply_patch_command}
+)
+FetchContent_MakeAvailable(ImGui)
+list(APPEND ADDITIONAL_LIB_INCLUDES ${imgui_SOURCE_DIR} ${imgui_SOURCE_DIR}/backends)
+
+add_library(ImGui STATIC)
+set_property(TARGET ImGui PROPERTY CXX_STANDARD 20)
+
+target_sources(ImGui
+    PRIVATE
+    ${imgui_SOURCE_DIR}/imgui_demo.cpp
+    ${imgui_SOURCE_DIR}/imgui_draw.cpp
+    ${imgui_SOURCE_DIR}/imgui_tables.cpp
+    ${imgui_SOURCE_DIR}/imgui_widgets.cpp
+    ${imgui_SOURCE_DIR}/imgui.cpp
+)
+
+target_sources(ImGui
+    PRIVATE
+    ${imgui_SOURCE_DIR}/backends/imgui_impl_sdl2.cpp
+)
+
+if(NOT CMAKE_SYSTEM_NAME STREQUAL "iOS")
+    target_sources(ImGui PRIVATE ${imgui_SOURCE_DIR}/backends/imgui_impl_opengl3.cpp)
+endif()
+
+target_include_directories(ImGui PUBLIC ${imgui_SOURCE_DIR} ${imgui_SOURCE_DIR}/backends PRIVATE ${SDL2_INCLUDE_DIRS})
+
+# ========= Vulkan =============
+if (NOT CMAKE_SYSTEM_NAME STREQUAL "iOS" AND NOT CMAKE_SYSTEM_NAME STREQUAL "Android")
+    list(INSERT CMAKE_MODULE_PATH 0 "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
+
+    if(WIN32 AND NOT DEFINED ENV{VULKAN_SDK} AND EXISTS "C:/VulkanSDK")
+        file(GLOB _lus_sdk_dirs LIST_DIRECTORIES true "C:/VulkanSDK/*")
+        list(SORT _lus_sdk_dirs ORDER DESCENDING)
+        foreach(_d IN LISTS _lus_sdk_dirs)
+            if(IS_DIRECTORY "${_d}")
+                set(ENV{VULKAN_SDK} "${_d}")
+                message(STATUS "Auto-detected Vulkan SDK: ${_d}")
+                break()
+            endif()
+        endforeach()
+    endif()
+
+    find_package(Vulkan QUIET)
+
+    if(Vulkan_FOUND)
+        set(LUS_ENABLE_VULKAN ON CACHE INTERNAL "Vulkan backend available")
+        target_sources(ImGui PRIVATE ${imgui_SOURCE_DIR}/backends/imgui_impl_vulkan.cpp)
+        target_link_libraries(ImGui PUBLIC Vulkan::Vulkan)
+
+            if(WIN32 AND DEFINED ENV{VULKAN_SDK})
+            find_library(Vulkan_shaderc_shared_LIBRARY   NAMES shaderc_shared   HINTS "$ENV{VULKAN_SDK}/Lib" NO_DEFAULT_PATH)
+            find_library(Vulkan_shaderc_shared_DEBUG_LIB NAMES shaderc_sharedd  HINTS "$ENV{VULKAN_SDK}/Lib" NO_DEFAULT_PATH)
+            find_file(Vulkan_shaderc_shared_DLL       NAMES shaderc_shared.dll  HINTS "$ENV{VULKAN_SDK}/Bin" NO_DEFAULT_PATH)
+            find_file(Vulkan_shaderc_shared_DEBUG_DLL NAMES shaderc_sharedd.dll HINTS "$ENV{VULKAN_SDK}/Bin" NO_DEFAULT_PATH)
+
+            if(Vulkan_shaderc_shared_LIBRARY AND Vulkan_shaderc_shared_DLL)
+                add_library(Vulkan::shaderc_shared SHARED IMPORTED GLOBAL)
+                target_include_directories(Vulkan::shaderc_shared INTERFACE "$ENV{VULKAN_SDK}/Include")
+
+                set_property(TARGET Vulkan::shaderc_shared APPEND PROPERTY IMPORTED_CONFIGURATIONS RELEASE)
+                set_target_properties(Vulkan::shaderc_shared PROPERTIES
+                    IMPORTED_LOCATION_RELEASE "${Vulkan_shaderc_shared_DLL}"
+                    IMPORTED_IMPLIB_RELEASE   "${Vulkan_shaderc_shared_LIBRARY}")
+
+                if(Vulkan_shaderc_shared_DEBUG_LIB AND Vulkan_shaderc_shared_DEBUG_DLL)
+                    set_property(TARGET Vulkan::shaderc_shared APPEND PROPERTY IMPORTED_CONFIGURATIONS DEBUG)
+                    set_target_properties(Vulkan::shaderc_shared PROPERTIES
+                        IMPORTED_LOCATION_DEBUG "${Vulkan_shaderc_shared_DEBUG_DLL}"
+                        IMPORTED_IMPLIB_DEBUG   "${Vulkan_shaderc_shared_DEBUG_LIB}")
+                else()
+                    set_property(TARGET Vulkan::shaderc_shared APPEND PROPERTY IMPORTED_CONFIGURATIONS DEBUG)
+                    set_target_properties(Vulkan::shaderc_shared PROPERTIES
+                        IMPORTED_LOCATION_DEBUG "${Vulkan_shaderc_shared_DLL}"
+                        IMPORTED_IMPLIB_DEBUG   "${Vulkan_shaderc_shared_LIBRARY}")
+                endif()
+
+                message(STATUS "Vulkan rendering backend enabled (shaderc_shared DLL)")
+            else()
+                message(STATUS "Vulkan rendering backend enabled (shaderc_shared not found, shader compilation unavailable)")
+            endif()
+        else()
+            if(DEFINED ENV{VULKAN_SDK})
+                find_library(Vulkan_shaderc_shared_LIBRARY NAMES shaderc_shared HINTS "$ENV{VULKAN_SDK}/lib" "$ENV{VULKAN_SDK}/lib64" NO_DEFAULT_PATH)
+                find_library(Vulkan_shaderc_combined_LIBRARY NAMES shaderc_combined HINTS "$ENV{VULKAN_SDK}/lib" "$ENV{VULKAN_SDK}/lib64" NO_DEFAULT_PATH)
+                find_library(Vulkan_shaderc_combined_DEBUG_LIBRARY NAMES shaderc_combinedd HINTS "$ENV{VULKAN_SDK}/lib" "$ENV{VULKAN_SDK}/lib64" NO_DEFAULT_PATH)
+            else()
+                find_library(Vulkan_shaderc_shared_LIBRARY NAMES shaderc_shared)
+                find_library(Vulkan_shaderc_combined_LIBRARY NAMES shaderc_combined)
+                find_library(Vulkan_shaderc_combined_DEBUG_LIBRARY NAMES shaderc_combinedd)
+            endif()
+
+            if(Vulkan_shaderc_shared_LIBRARY)
+                if(NOT TARGET Vulkan::shaderc_shared)
+                    add_library(Vulkan::shaderc_shared SHARED IMPORTED GLOBAL)
+                    set_target_properties(Vulkan::shaderc_shared PROPERTIES
+                        IMPORTED_LOCATION "${Vulkan_shaderc_shared_LIBRARY}")
+                endif()
+                message(STATUS "Vulkan rendering backend enabled (shaderc_shared)")
+            elseif(Vulkan_shaderc_combined_LIBRARY)
+                if(NOT TARGET Vulkan::shaderc_combined)
+                    foreach(_lib glslang MachineIndependent GenericCodeGen OSDependent OGLCompiler
+                                 SPVRemapper HLSL SPIRV SPIRV-Tools-opt SPIRV-Tools SPIRV-Tools-link)
+                        find_library(_lus_shaderc_dep_${_lib} NAMES ${_lib})
+                        if(_lus_shaderc_dep_${_lib})
+                            list(APPEND _lus_shaderc_deps "${_lus_shaderc_dep_${_lib}}")
+                        endif()
+                    endforeach()
+
+                    add_library(Vulkan::shaderc_combined INTERFACE IMPORTED GLOBAL)
+                    if(_lus_shaderc_deps AND NOT APPLE)
+                        set_property(TARGET Vulkan::shaderc_combined PROPERTY INTERFACE_LINK_LIBRARIES
+                            -Wl,--start-group "${Vulkan_shaderc_combined_LIBRARY}" ${_lus_shaderc_deps} -Wl,--end-group)
+                    else()
+                        set_property(TARGET Vulkan::shaderc_combined PROPERTY INTERFACE_LINK_LIBRARIES
+                            "${Vulkan_shaderc_combined_LIBRARY}" ${_lus_shaderc_deps})
+                    endif()
+                endif()
+                message(STATUS "Vulkan rendering backend enabled (shaderc_combined + glslang/SPIRV-Tools)")
+            else()
+                message(STATUS "Vulkan rendering backend enabled (shaderc not found, shader compilation unavailable)")
+            endif()
+        endif()
+    else()
+        set(LUS_ENABLE_VULKAN OFF CACHE INTERNAL "Vulkan backend available")
+        message(STATUS "Vulkan rendering backend disabled")
+    endif()
+else()
+    set(LUS_ENABLE_VULKAN OFF CACHE INTERNAL "Vulkan backend available")
+endif()
+
+# ========= StormLib =============
+if(INCLUDE_MPQ_SUPPORT)
+    set(stormlib_patch_file ${CMAKE_CURRENT_SOURCE_DIR}/cmake/dependencies/patches/stormlib-optimizations.patch)
+    set(stormlib_apply_patch_command ${CMAKE_COMMAND} -Dpatch_file=${stormlib_patch_file} -Dwith_reset=TRUE -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/dependencies/git-patch.cmake)
+
+    FetchContent_Declare(
+        StormLib
+        GIT_REPOSITORY https://github.com/ladislav-zezula/StormLib.git
+        GIT_TAG v9.25
+        PATCH_COMMAND ${stormlib_apply_patch_command}
+    )
+    FetchContent_MakeAvailable(StormLib)
+    list(APPEND ADDITIONAL_LIB_INCLUDES ${stormlib_SOURCE_DIR}/src)
+endif()
+
+#=================== STB ===================
+set(STB_DIR ${CMAKE_BINARY_DIR}/_deps/stb)
+file(DOWNLOAD "https://github.com/nothings/stb/raw/0bc88af4de5fb022db643c2d8e549a0927749354/stb_image.h" "${STB_DIR}/stb_image.h")
+file(WRITE "${STB_DIR}/stb_impl.c" "#define STB_IMAGE_IMPLEMENTATION\n#include \"stb_image.h\"")
+
+add_library(stb STATIC)
+
+target_sources(stb PRIVATE
+    ${STB_DIR}/stb_image.h
+    ${STB_DIR}/stb_impl.c
+)
+
+target_include_directories(stb PUBLIC ${STB_DIR})
+list(APPEND ADDITIONAL_LIB_INCLUDES ${STB_DIR})
+
+#=================== libgfxd ===================
+if (GFX_DEBUG_DISASSEMBLER)
+    FetchContent_Declare(
+        libgfxd
+        GIT_REPOSITORY https://github.com/glankk/libgfxd.git
+        GIT_TAG 008f73dca8ebc9151b205959b17773a19c5bd0da
+    )
+    FetchContent_MakeAvailable(libgfxd)
+
+    add_library(libgfxd STATIC)
+    set_property(TARGET libgfxd PROPERTY C_STANDARD 11)
+
+    target_sources(libgfxd PRIVATE
+        ${libgfxd_SOURCE_DIR}/gbi.h
+        ${libgfxd_SOURCE_DIR}/gfxd.h
+        ${libgfxd_SOURCE_DIR}/priv.h
+        ${libgfxd_SOURCE_DIR}/gfxd.c
+        ${libgfxd_SOURCE_DIR}/uc.c
+        ${libgfxd_SOURCE_DIR}/uc_f3d.c
+        ${libgfxd_SOURCE_DIR}/uc_f3db.c
+        ${libgfxd_SOURCE_DIR}/uc_f3dex.c
+        ${libgfxd_SOURCE_DIR}/uc_f3dex2.c
+        ${libgfxd_SOURCE_DIR}/uc_f3dexb.c
+    )
+
+    target_include_directories(libgfxd PUBLIC ${libgfxd_SOURCE_DIR})
+endif()
+
+#======== thread-pool ========
+FetchContent_Declare(
+    ThreadPool
+    GIT_REPOSITORY https://github.com/bshoshany/thread-pool.git
+    GIT_TAG v4.1.0
+)
+FetchContent_MakeAvailable(ThreadPool)
+
+list(APPEND ADDITIONAL_LIB_INCLUDES ${threadpool_SOURCE_DIR}/include)
+
+#=========== prism ===========
+option(PRISM_STANDALONE "Build prism as a standalone library" OFF)
+FetchContent_Declare(
+    prism
+    GIT_REPOSITORY https://github.com/KiritoDv/prism-processor.git
+    GIT_TAG aa8370981b2cf57c46172e6aa639d720137f9a92
+)
+FetchContent_MakeAvailable(prism)
+
+# prism's CMakeLists.txt calls cmake_minimum_required(VERSION <3.10), which causes
+# CMake to explicitly set CMP0141=OLD in prism's scope (cmake_policy(VERSION) disables
+# all policies newer than the specified version).  With CMP0141=OLD the compile
+# template always appends "/Fd <target>.pdb /FS" to every compile command.  sccache
+# parses the command line, sees "/Fd prism.pdb", and expects that file to exist after
+# compilation.  When our /Z7 override wins (no PDB written) sccache aborts with
+# "failed to open file prism.pdb".
+#
+# The simplest fix is to compile prism without sccache at all (clear the launcher).
+# With the launcher cleared, cl.exe compiles prism directly; /Z7 (embedded debug info)
+# is still applied so no PDB file is written and no race over a shared .pdb occurs.
+if(MSVC AND TARGET prism)
+    set_target_properties(prism PROPERTIES
+        C_COMPILER_LAUNCHER   ""
+        CXX_COMPILER_LAUNCHER ""
+    )
+    target_compile_options(prism PRIVATE $<$<CONFIG:Debug>:/Z7>)
+endif()
+
+#=========== monocypher ===========
+FetchContent_Declare(
+    monocypher
+    GIT_REPOSITORY https://github.com/LoupVaillant/Monocypher.git
+    GIT_TAG 0d85f98c9d9b0227e42cf795cb527dff372b40a4
+)
+FetchContent_MakeAvailable(monocypher)
+
+add_library(monocypher STATIC)
+set_property(TARGET monocypher PROPERTY C_STANDARD 11)
+
+target_sources(monocypher PRIVATE
+    ${monocypher_SOURCE_DIR}/src/monocypher.c
+    ${monocypher_SOURCE_DIR}/src/optional/monocypher-ed25519.c
+)
+
+target_include_directories(monocypher PUBLIC 
+    ${monocypher_SOURCE_DIR}/src
+    ${monocypher_SOURCE_DIR}/src/optional
+)
+
+#=========== libtcc ===========
+if(ENABLE_SCRIPTING AND ENABLE_TCC_COMPILER)
+
+FetchContent_Declare(
+    tinycc
+    GIT_REPOSITORY https://github.com/Net64DD/tinycc.git
+    GIT_TAG        mob
+)
+
+FetchContent_MakeAvailable(tinycc)
+if(NOT TARGET libtcc)
+    if(NOT EXISTS "${tinycc_SOURCE_DIR}/config.h" AND NOT EXISTS "${tinycc_SOURCE_DIR}/win32/config.h")
+        message(STATUS "Configuring TinyCC to generate config.h...")
+        if(WIN32)
+            execute_process(
+                COMMAND cmd /c build-tcc.bat -c cl
+                WORKING_DIRECTORY "${tinycc_SOURCE_DIR}/win32"
+                RESULT_VARIABLE tcc_config_result
+            )
+        else()
+            execute_process(
+                COMMAND ./configure
+                WORKING_DIRECTORY "${tinycc_SOURCE_DIR}"
+                RESULT_VARIABLE tcc_config_result
+            )
+        endif()
+
+        if(NOT tcc_config_result EQUAL 0)
+            message(WARNING "TinyCC configuration script returned non-zero. The build might fail.")
+        endif()
+
+        if(CMAKE_SYSTEM_NAME STREQUAL "iOS")
+            message(STATUS "iOS target detected: Disabling CONFIG_CODESIGN...")
+            file(APPEND "${tinycc_SOURCE_DIR}/config.h" "\n/* Force disable code signing for iOS cross-compilation */\n#undef CONFIG_CODESIGN\n")
+        endif()
+    endif()
+    if(UNIX AND NOT ANDROID AND NOT APPLE)
+        set(_tcc_crt_dir "")
+        foreach(_dir ${CMAKE_C_IMPLICIT_LINK_DIRECTORIES})
+            if(EXISTS "${_dir}/crti.o")
+                set(_tcc_crt_dir "${_dir}")
+                break()
+            endif()
+        endforeach()
+
+        if(NOT _tcc_crt_dir)
+            message(WARNING "TinyCC: crti.o not found in compiler implicit dirs — TCC mod compilation may fail at runtime")
+        endif()
+
+        file(READ "${tinycc_SOURCE_DIR}/config.h" _tcc_config_h)
+        if(NOT _tcc_config_h MATCHES "\\{B\\}/lib")
+            string(REGEX REPLACE "#define CONFIG_TCC_CRTPREFIX[^\n]*\n?" "" _tcc_config_h "${_tcc_config_h}")
+            set(_tcc_crt_prefix "{B}/lib")
+            if(_tcc_crt_dir)
+                string(APPEND _tcc_crt_prefix ":${_tcc_crt_dir}")
+            endif()
+            string(APPEND _tcc_config_h "\n/* Bundled .tcc/lib/ tried first; system dir as fallback */\n")
+            string(APPEND _tcc_config_h "#define CONFIG_TCC_CRTPREFIX \"${_tcc_crt_prefix}\"\n")
+            file(WRITE "${tinycc_SOURCE_DIR}/config.h" "${_tcc_config_h}")
+            message(STATUS "TinyCC: CONFIG_TCC_CRTPREFIX set to \"${_tcc_crt_prefix}\"")
+        endif()
+        unset(_tcc_config_h)
+        unset(_tcc_crt_dir)
+        unset(_tcc_crt_prefix)
+    endif()
+
+    # config.h (included before tcc.h's per-arch auto-detect) hardcodes the host
+    # codegen target, so it applies to every -arch slice. On a universal build that
+    # leaves the non-host slice a non-native cross-compiler with no runtime
+    # (tcc_relocate is compiled out), which breaks linking. Strip the codegen target
+    # so each slice selects its own from __x86_64__/__aarch64__; TCC_TARGET_MACHO and
+    # the CONFIG_* defines are kept.
+    if(APPLE AND EXISTS "${tinycc_SOURCE_DIR}/config.h")
+        file(READ "${tinycc_SOURCE_DIR}/config.h" _tcc_cfg)
+        string(REGEX REPLACE "#define TCC_TARGET_(I386|X86_64|ARM64|ARM|RISCV64|C67) [^\n]*\n" "" _tcc_cfg "${_tcc_cfg}")
+        file(WRITE "${tinycc_SOURCE_DIR}/config.h" "${_tcc_cfg}")
+        unset(_tcc_cfg)
+    endif()
+
+    if(CMAKE_CROSSCOMPILING)
+        find_program(HOST_C_COMPILER NAMES cc clang gcc REQUIRED)
+        set(C2STR_EXE "${tinycc_BINARY_DIR}/tcc_c2str_host")
+        if(CMAKE_HOST_WIN32)
+            set(C2STR_EXE "${C2STR_EXE}.exe")
+        endif()
+
+        set(SIGN_COMMAND "")
+        if(CMAKE_HOST_APPLE)
+            set(SIGN_COMMAND COMMAND codesign -f -s - "${C2STR_EXE}")
+        endif()
+
+        add_custom_command(
+            OUTPUT "${C2STR_EXE}"
+            COMMAND ${CMAKE_COMMAND} -E env --unset=SDKROOT --unset=IPHONEOS_DEPLOYMENT_TARGET --unset=TVOS_DEPLOYMENT_TARGET
+                    ${HOST_C_COMPILER} -DC2STR -o "${C2STR_EXE}" "${tinycc_SOURCE_DIR}/conftest.c"
+            ${SIGN_COMMAND}
+            DEPENDS "${tinycc_SOURCE_DIR}/conftest.c"
+            COMMENT "Compiling host tool c2str natively..."
+        )
+
+        add_custom_command(
+            OUTPUT "${tinycc_BINARY_DIR}/tccdefs_.h"
+            COMMAND "${C2STR_EXE}" "${tinycc_SOURCE_DIR}/include/tccdefs.h" "${tinycc_BINARY_DIR}/tccdefs_.h"
+            DEPENDS "${tinycc_SOURCE_DIR}/include/tccdefs.h" "${C2STR_EXE}"
+            COMMENT "Generating tccdefs_.h for TinyCC (Cross-compiling)..."
+        )
+    else()
+        add_executable(tcc_c2str "${tinycc_SOURCE_DIR}/conftest.c")
+        target_compile_definitions(tcc_c2str PRIVATE C2STR $<$<BOOL:${MSVC}>:_CRT_SECURE_NO_WARNINGS>)
+        target_include_directories(tcc_c2str PRIVATE "${tinycc_SOURCE_DIR}")
+
+        if(APPLE)
+            set_target_properties(tcc_c2str PROPERTIES
+                CODE_SIGNING_ALLOWED NO
+                CODE_SIGNING_REQUIRED NO
+                XCODE_ATTRIBUTE_CODE_SIGNING_ALLOWED "NO"
+                XCODE_ATTRIBUTE_CODE_SIGNING_REQUIRED "NO"
+                XCODE_ATTRIBUTE_CODE_SIGN_IDENTITY ""
+                XCODE_ATTRIBUTE_DEVELOPMENT_TEAM ""
+            )
+        endif()
+
+        add_custom_command(
+            OUTPUT "${tinycc_BINARY_DIR}/tccdefs_.h"
+            COMMAND tcc_c2str "${tinycc_SOURCE_DIR}/include/tccdefs.h" "${tinycc_BINARY_DIR}/tccdefs_.h"
+            DEPENDS "${tinycc_SOURCE_DIR}/include/tccdefs.h" tcc_c2str
+            COMMENT "Generating tccdefs_.h for TinyCC..."
+        )
+    endif()
+
+    # libtcc is LGPL — keep it as a shared library so users can replace it
+    # without relinking the application (LGPL §6).
+    add_library(libtcc SHARED
+        "${tinycc_SOURCE_DIR}/libtcc.c"
+        "${tinycc_BINARY_DIR}/tccdefs_.h"
+    )
+
+    if(UNIX AND NOT ANDROID AND NOT APPLE)
+        add_executable(tcc_native_bin "${tinycc_SOURCE_DIR}/tcc.c")
+        target_compile_definitions(tcc_native_bin PRIVATE ONE_SOURCE=0)
+        target_include_directories(tcc_native_bin PRIVATE
+            "${tinycc_SOURCE_DIR}"
+            "${tinycc_BINARY_DIR}"
+        )
+        target_link_libraries(tcc_native_bin PRIVATE libtcc)
+        if(NOT APPLE)
+            target_link_libraries(tcc_native_bin PRIVATE dl m pthread)
+        endif()
+        set_target_properties(tcc_native_bin PROPERTIES
+            OUTPUT_NAME "tcc"
+            RUNTIME_OUTPUT_DIRECTORY "${tinycc_SOURCE_DIR}"
+            BUILD_RPATH "$<TARGET_FILE_DIR:libtcc>"
+        )
+
+        find_program(GNU_MAKE_PROGRAM NAMES make gmake REQUIRED)
+        add_custom_command(
+            OUTPUT "${tinycc_SOURCE_DIR}/libtcc1.a"
+            COMMAND ${GNU_MAKE_PROGRAM} -C "${tinycc_SOURCE_DIR}/lib"
+            DEPENDS
+                tcc_native_bin
+                libtcc
+                "${tinycc_BINARY_DIR}/tccdefs_.h"
+            COMMENT "Building libtcc1.a via TinyCC Makefile..."
+            VERBATIM
+        )
+        add_custom_target(libtcc1_make_build
+            DEPENDS "${tinycc_SOURCE_DIR}/libtcc1.a"
+        )
+
+        add_library(libtcc1 STATIC IMPORTED GLOBAL)
+        set_target_properties(libtcc1 PROPERTIES
+            IMPORTED_LOCATION "${tinycc_SOURCE_DIR}/libtcc1.a"
+        )
+        add_dependencies(libtcc1 libtcc1_make_build)
+    else()
+        add_library(libtcc1 STATIC
+            "${tinycc_SOURCE_DIR}/lib/libtcc1.c"
+        )
+        target_include_directories(libtcc1 PRIVATE
+            "${tinycc_SOURCE_DIR}"
+            "${tinycc_BINARY_DIR}"
+            $<$<BOOL:${WIN32}>:${tinycc_SOURCE_DIR}/win32>
+        )
+        if(MSVC)
+            if(CMAKE_GENERATOR_PLATFORM MATCHES "ARM64" OR CMAKE_SYSTEM_PROCESSOR MATCHES "ARM64|aarch64")
+                target_compile_definitions(libtcc1 PRIVATE __aarch64__ _WIN64)
+                target_compile_definitions(libtcc  PRIVATE __aarch64__ TCC_TARGET_ARM64 TCC_TARGET_PE _WIN64)
+            else()
+                target_compile_definitions(libtcc1 PRIVATE __x86_64__ _WIN64)
+                target_compile_definitions(libtcc  PRIVATE __x86_64__ TCC_TARGET_X86_64 TCC_TARGET_PE _WIN64)
+            endif()
+            target_compile_definitions(libtcc1 PRIVATE "__faststorefence=__faststorefence_tcc_unused")
+            # MSVC's <assert.h> defines `__assert`, which collides with TCC's internal
+            # `__assert` symbol. Rename TCC's use the same way `__faststorefence` is above.
+            target_compile_definitions(libtcc PRIVATE "__assert=__assert_tcc_unused")
+        endif()
+        set_target_properties(libtcc1 PROPERTIES OUTPUT_NAME "tcc1")
+    endif()
+
+    set(TCC_SAFE_INCLUDE_DIR "${tinycc_BINARY_DIR}/safe_include")
+    configure_file(
+        "${tinycc_SOURCE_DIR}/libtcc.h"
+        "${TCC_SAFE_INCLUDE_DIR}/libtcc.h"
+        COPYONLY
+    )
+
+    target_include_directories(libtcc PRIVATE
+        "${tinycc_SOURCE_DIR}"
+        "${tinycc_BINARY_DIR}"
+        $<$<BOOL:${WIN32}>:${tinycc_SOURCE_DIR}/win32>
+    )
+    target_include_directories(libtcc PUBLIC
+        $<BUILD_INTERFACE:${TCC_SAFE_INCLUDE_DIR}>
+    )
+
+    if(WIN32)
+        set_target_properties(libtcc PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
+
+        # The GitHub TinyCC mirror omits the pre-built win32/tcc.exe that the
+        # official repo ships. Build it from source using the official batch
+        # script so SetupTccRuntime.cmake can use it for .def generation.
+        # cl.exe is guaranteed in PATH at build time (VS environment is active).
+        if(MSVC AND (NOT EXISTS "${tinycc_SOURCE_DIR}/win32/tcc.exe" OR NOT EXISTS "${tinycc_SOURCE_DIR}/win32/lib/libtcc1.a"))
+            add_custom_command(
+                OUTPUT
+                    "${tinycc_SOURCE_DIR}/win32/tcc.exe"
+                    "${tinycc_SOURCE_DIR}/win32/lib/libtcc1.a"
+                COMMAND cmd /c build-tcc.bat -c cl
+                WORKING_DIRECTORY "${tinycc_SOURCE_DIR}/win32"
+                DEPENDS
+                    "${tinycc_SOURCE_DIR}/tcc.c"
+                    "${tinycc_SOURCE_DIR}/libtcc.c"
+                COMMENT "Building tcc.exe and libtcc1.a via build-tcc.bat..."
+            )
+            add_custom_target(tcc_win32_exe
+                DEPENDS
+                    "${tinycc_SOURCE_DIR}/win32/tcc.exe"
+                    "${tinycc_SOURCE_DIR}/win32/lib/libtcc1.a"
+            )
+        endif()
+    endif()
+
+    if(ANDROID)
+        target_link_libraries(libtcc PRIVATE dl m)
+    elseif(UNIX AND NOT APPLE)
+        target_link_libraries(libtcc PRIVATE dl m pthread)
+    endif()
+    
+    set_target_properties(libtcc PROPERTIES OUTPUT_NAME "tcc")
+
+    if(APPLE)
+        set_target_properties(libtcc libtcc1 PROPERTIES
+            CODE_SIGNING_ALLOWED NO
+            CODE_SIGNING_REQUIRED NO
+            XCODE_ATTRIBUTE_CODE_SIGNING_ALLOWED "NO"
+            XCODE_ATTRIBUTE_CODE_SIGNING_REQUIRED "NO"
+            XCODE_ATTRIBUTE_CODE_SIGN_IDENTITY ""
+            XCODE_ATTRIBUTE_DEVELOPMENT_TEAM ""
+        )
+    endif()
+endif()
+
+endif() # ENABLE_SCRIPTING

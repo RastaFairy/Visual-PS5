@@ -1,0 +1,14 @@
+.DS_Store
+build/
+dist/
+klog/
+.deps/
+gamedata/
+*.log
+imgui.ini
+# never: disc images
+*.iso
+*.ciso
+*.gcm
+*.rvz
+*.gci

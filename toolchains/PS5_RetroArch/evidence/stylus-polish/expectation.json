@@ -1,0 +1,16 @@
+{
+  "step": "stylus-polish",
+  "note": "Verified cursor/movement fixes and production launch checks; does not assert that the original intermittent crash is fixed.",
+  "must_contain": [
+    "format: PASS",
+    "Unsigned negative Azahar movement regression: failed before the float cast; passes after",
+    "182 unit and 182 integration tests: PASS",
+    "Final native patches and build provenance: PASS",
+    "Production fresh Azahar launch: 600 frames, clean exit",
+    "Production DS Close Content -> Load Content -> Azahar: clean exit",
+    "Stored eboot.bin and both cores match staged SHA-256: PASS",
+    "Original owner Azahar crash: unresolved; not claimed fixed"
+  ],
+  "must_not_contain": [],
+  "human_check": "Check the DeSmuME pen on the TV and Azahar hover/press/drag. If Load Content crashes again after closing DS, capture that exact sequence; do not use RELOAD from inside an active core."
+}

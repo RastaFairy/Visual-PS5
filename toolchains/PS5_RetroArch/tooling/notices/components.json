@@ -1,0 +1,1202 @@
+{
+  "about": [
+    "What the title folder is made of, and for each part its licence, the licence texts that travel with it and where its source is.",
+    "tools/stage-notices.py reads this table after a build and writes licenses/ into the title folder: the texts, a",
+    "components.json that ties every executable file to the source revision it was built from, and a README.txt.",
+    "tools/check-notices.py verifies the result. Paths are relative to this repository; ${VULKAN} is ../PS5_Vulkan",
+    "(PS5_VULKAN_DIR), ${SDK_FORK} is ../PS5_PayloadSDK and ${LLVM} is .deps/llvm-project. A component is staged",
+    "when one of its 'artifacts' patterns matches a file in the title folder, or when 'always' is set.",
+    "'licence' is the licence the upstream project states for the part that ships; 'noncommercial' marks terms",
+    "that forbid commercial use, which the GPL does not allow a combined work to add (see the audit's counsel packet)."
+  ],
+  "schema": 1,
+  "components": [
+    {
+      "id": "webui-fluent",
+      "name": "Microsoft Fluent UI color icons",
+      "kind": "asset",
+      "artifacts": [
+        "webui/assets/fluent/*"
+      ],
+      "licence": "MIT",
+      "copyright": [
+        "Copyright (c) Microsoft Corporation."
+      ],
+      "texts": [
+        {
+          "from": "webui/assets/fluent/LICENSE",
+          "to": "LICENSE"
+        }
+      ],
+      "source": {
+        "kind": "fixed",
+        "revision": "cd332ec1f90cda2fad16f86754f8da52f1e9ab30",
+        "remote": "https://github.com/microsoft/fluentui-system-icons"
+      },
+      "modifications": "Bundled artwork; original colors preserved. System artwork is framed with CSS to show the hardware."
+    },
+    {
+      "id": "webui-flags",
+      "name": "Region flags by flag-icons",
+      "kind": "asset",
+      "artifacts": [
+        "webui/assets/flags/*"
+      ],
+      "licence": "MIT",
+      "copyright": [
+        "Copyright (c) 2013-2026 Panayiotis Lipiridis"
+      ],
+      "texts": [
+        {
+          "from": "webui/assets/flags/LICENSE",
+          "to": "LICENSE"
+        }
+      ],
+      "source": {
+        "kind": "fixed",
+        "revision": "086f7e97d657358203916dbe84f61c2bccaa81eb",
+        "remote": "https://github.com/lipis/flag-icons"
+      },
+      "modifications": "Bundled artwork; original colors preserved. System artwork is framed with CSS to show the hardware."
+    },
+    {
+      "id": "webui-systems",
+      "name": "Linear ES-DE system artwork",
+      "kind": "asset",
+      "artifacts": [
+        "webui/assets/systems/*"
+      ],
+      "licence": "MIT",
+      "copyright": [
+        "Copyright (c) 2024-2026 Northwestern Software AB",
+        "Copyright (c) 2024 Leon Styhre",
+        "Copyright (c) 2023 Weestuarty"
+      ],
+      "texts": [
+        {
+          "from": "webui/assets/systems/LICENSE",
+          "to": "LICENSE"
+        }
+      ],
+      "source": {
+        "kind": "fixed",
+        "revision": "bundled source snapshot; original SHA-256 manifest in webui/assets/systems/SOURCE.json",
+        "remote": "https://gitlab.com/es-de/themes/linear-es-de"
+      },
+      "modifications": "Bundled artwork; original colors preserved. System artwork is framed with CSS to show the hardware."
+    },
+    {
+      "id": "xmb-system-icons",
+      "name": "XMB playlist icons from the Linear ES-DE system artwork",
+      "kind": "asset",
+      "artifacts": [
+        "assets/xmb/monochrome/png/[A-KM-Z]*.png"
+      ],
+      "licence": "MIT",
+      "copyright": [
+        "Copyright (c) 2024-2026 Northwestern Software AB",
+        "Copyright (c) 2024 Leon Styhre",
+        "Copyright (c) 2023 Weestuarty"
+      ],
+      "texts": [
+        {
+          "from": "webui/assets/systems/LICENSE",
+          "to": "LICENSE"
+        }
+      ],
+      "source": {
+        "kind": "fixed",
+        "revision": "bundled source snapshot; original SHA-256 manifest in webui/assets/systems/SOURCE.json",
+        "remote": "https://gitlab.com/es-de/themes/linear-es-de"
+      },
+      "modifications": "Generated at build time by tools/xmb-system-icons.py: each system picture cropped to its hardware (the caption below it removed), centred and scaled to 256 x 256 PNG, named by RetroArch database."
+    },
+    {
+      "id": "webui-lucide",
+      "name": "Lucide WebUI icons (including Feather-derived icons)",
+      "kind": "asset",
+      "artifacts": [
+        "webui/icons.js",
+        "webui/assets/lucide/*"
+      ],
+      "licence": "ISC AND MIT",
+      "copyright": [
+        "Lucide Icons and Contributors",
+        "Copyright (c) 2013-present Cole Bemis (Feather)"
+      ],
+      "texts": [
+        {
+          "from": "webui/assets/lucide/LICENSE",
+          "to": "LICENSE"
+        }
+      ],
+      "source": {
+        "kind": "fixed",
+        "revision": "a04f228cd01185e09c188b7227b9600c08c565ec",
+        "remote": "https://github.com/lucide-icons/lucide"
+      },
+      "modifications": "Unmodified SVG geometry bundled locally in icons.js, rendered at a consistent 1.75 stroke width."
+    },
+    {
+      "id": "ps5-retroarch",
+      "name": "PS5 RetroArch (this port: title code, platform integration, build scripts and patches)",
+      "kind": "code",
+      "always": true,
+      "artifacts": ["eboot.bin", "retroarch.cfg", "LEGAL.txt", "sce_sys/param.json", "es-de/es-de.bin", "picker/picker.bin",
+        "forwarder/eboot.bin", "forwarder/launch.elf"],
+      "licence": "GPL-3.0-or-later",
+      "copyright": [
+        "Copyright (C) 2026 Mihawk",
+        "Copyright (C) 2026 BlackBearReloaded (the native title pipeline from ps5-native-app-boilerplate and ProsperoLight)"
+      ],
+      "texts": [{"from": "LICENSE", "to": "GPL-3.0.txt"}],
+      "source": {"kind": "git", "path": ".", "remote": "https://github.com/mihawk-99/PS5_RetroArch"},
+      "modifications": "This is the port itself. Its patches to RetroArch and the cores are patches/ and tools/apply-port-patches.py in this repository."
+    },
+    {
+      "id": "retroarch",
+      "name": "RetroArch 1.22.2 and bundled mbedTLS SHA-256",
+      "kind": "code",
+      "always": true,
+      "artifacts": ["eboot.bin", "assets/rgui/**"],
+      "licence": "GPL-3.0-or-later",
+      "copyright": ["Copyright (C) 2010-2026 The RetroArch team and contributors", "Copyright (C) 2006-2015 ARM Limited (mbedTLS SHA-256, Apache-2.0)"],
+      "texts": [{"from": "vendor/retroarch/COPYING", "to": "COPYING"}, {"from": "vendor/retroarch/deps/mbedtls/sha256.c", "to": "mbedtls-sha256-notice.txt", "head": 21}, {"from": "vendor/retroarch/deps/SPIRV-Cross/LICENSES/Apache-2.0.txt", "to": "Apache-2.0.txt"}],
+      "source": {"kind": "pin", "file": "tools/fetch-retroarch.sh", "var": "revision", "remote": "https://github.com/libretro/RetroArch"},
+      "modifications": "patches/series, applied by tools/fetch-retroarch.sh and tools/apply-port-patches.py (PS5_RetroArch)."
+    },
+    {
+      "id": "libc-prx-shim",
+      "name": "sce_module/libc.prx, the generated loader companion (ps5-native-app-boilerplate)",
+      "kind": "code",
+      "artifacts": ["sce_module/libc.prx"],
+      "licence": "GPL-3.0-or-later",
+      "copyright": ["Copyright (C) 2026 BlackBearReloaded"],
+      "texts": [{"from": "LICENSE", "to": "GPL-3.0.txt"}],
+      "source": {"kind": "git", "path": ".", "remote": "https://github.com/mihawk-99/PS5_RetroArch"},
+      "modifications": "Generated by tools/rebuild-libc.sh from tooling/native/libc_builder.cpp and the manifests in tooling/native/runtime/ (PS5_RetroArch); runtime/libc.prx.sha256 is the expected digest. It holds generated stubs and loader metadata (exported symbol NIDs and sizes), no code taken from a console."
+    },
+    {
+      "id": "payload-sdk",
+      "name": "PS5 payload SDK fork and its platform layer (libps5platform.a, headers, import stubs)",
+      "kind": "code",
+      "always": true,
+      "artifacts": ["eboot.bin", "cores/*.so", "es-de/es-de.bin", "forwarder/eboot.bin", "forwarder/launch.elf"],
+      "licence": "GPL-3.0-or-later",
+      "copyright": ["Copyright (C) 2022-2026 John Törnblom and ps5-payload-dev contributors", "Copyright (C) 2026 Mihawk (the platform layer)"],
+      "texts": [
+        {"from": "${SDK_FORK}/LICENSE", "to": "GPL-3.0.txt"},
+        {"from": "${SDK_FORK}/platform/src/regex/COPYRIGHT.musl", "to": "musl-regex-COPYRIGHT.txt"},
+        {"from": "${SDK_FORK}/platform/src/dlmalloc/SOURCE", "to": "dlmalloc-SOURCE.txt"}
+      ],
+      "source": {"kind": "stamp", "file": ".deps/native/ps5-payload-sdk/.ps5-sdk-revision", "pin": {"file": "tools/setup-native-dependencies.sh", "var": "sdk_revision"}, "remote": "https://github.com/mihawk-99/PS5_PayloadSDK"},
+      "modifications": "The fork installs over the ps5-payload-dev SDK v0.42 release binaries (tools/setup-native-dependencies.sh). The platform layer's regex is musl's (MIT, with TRE's BSD-2-Clause notice) and its heap is dlmalloc 2.8.6 (MIT)."
+    },
+    {
+      "id": "dlmalloc",
+      "name": "dlmalloc 2.8.6 (the title's overflow heap)",
+      "kind": "code",
+      "always": true,
+      "artifacts": ["eboot.bin"],
+      "licence": "MIT",
+      "copyright": ["Copyright 2023 Doug Lea"],
+      "texts": [{"from": "tooling/third_party/dlmalloc/malloc.c", "to": "malloc.c-header.txt", "head": 40}, {"from": "tooling/third_party/dlmalloc/SOURCE", "to": "SOURCE.txt"}],
+      "source": {"kind": "git", "path": ".", "remote": "https://github.com/mihawk-99/PS5_RetroArch"},
+      "modifications": "Unmodified; tooling/third_party/dlmalloc in PS5_RetroArch."
+    },
+    {
+      "id": "llvm-runtime",
+      "name": "LLVM libc++, libc++abi, libunwind and compiler-rt builtins (statically linked into eboot.bin; the cores resolve them from it)",
+      "kind": "code",
+      "always": true,
+      "artifacts": ["eboot.bin", "es-de/es-de.bin"],
+      "licence": "Apache-2.0 WITH LLVM-exception",
+      "copyright": ["Copyright (c) 2003-2026 University of Illinois at Urbana-Champaign and the LLVM project contributors"],
+      "texts": [{"from": ["${LLVM}/llvm/LICENSE.TXT", "../PS5_LLVM/llvm/LICENSE.TXT"], "to": "LICENSE.TXT"}],
+      "source": {"kind": "fixed", "revision": "ps5-payload-dev SDK v0.42 release archives", "url": "https://github.com/ps5-payload-dev/sdk/releases/tag/v0.42"},
+      "modifications": "Unmodified release archives of the SDK."
+    },
+    {
+      "id": "zlib",
+      "name": "zlib 1.3.2 and MiniZip (release extraction)",
+      "kind": "code",
+      "always": true,
+      "artifacts": ["eboot.bin"],
+      "licence": "Zlib",
+      "copyright": ["Copyright (C) 1995-2026 Jean-loup Gailly and Mark Adler", "Copyright (C) 1998-2026 Gilles Vollant; 2007-2008 Even Rouault; 2009-2010 Mathias Svensson"],
+      "texts": [{"from": ".deps/native/zlib/zlib-1.3.2/LICENSE", "to": "LICENSE"}, {"from": ".deps/native/zlib/zlib-1.3.2/contrib/minizip/MiniZip64_info.txt", "to": "MiniZip64_info.txt"}],
+      "source": {"kind": "pin", "file": "tools/setup-native-dependencies.sh", "var": "zlib_version", "url": "https://zlib.net/fossils/zlib-{rev}.tar.gz"},
+      "modifications": "Unmodified."
+    },
+    {
+      "id": "radv",
+      "name": "RADV, Mesa's Vulkan driver, and the parts of Mesa it links (PS5_Mesa fork with the PS5 winsys)",
+      "kind": "code",
+      "driver": "radv",
+      "artifacts": ["eboot.bin"],
+      "licence": "MIT AND others stated per file (see Mesa-license.rst)",
+      "copyright": ["Copyright the Mesa contributors (per-file notices in the source)"],
+      "texts": [
+        {"from": "../PS5_Mesa/docs/license.rst", "to": "Mesa-license.rst"},
+        {"from": "../PS5_Mesa/licenses", "to": "licenses"}
+      ],
+      "source": {"kind": "provenance", "file": "${VULKAN}/.deps/native/radv-release/PROVENANCE.txt", "key": "revision", "remote": "https://github.com/mihawk-99/PS5_Mesa", "archive": "${VULKAN}/.deps/native/radv-release/lib/libvulkan_radeon.ps5.a"},
+      "modifications": "The fork's commits on main over Mesa 26.2.0 (the PS5 winsys, src/amd/vulkan/winsys/ps5)."
+    },
+    {
+      "id": "ps5-vulkan",
+      "name": "PS5_Vulkan: the RADV link recipe and linker script (RADV builds), or ps5vk (ps5vk builds)",
+      "kind": "code",
+      "always": true,
+      "artifacts": ["eboot.bin"],
+      "licence": "GPL-3.0-or-later",
+      "copyright": ["Copyright (C) 2026 Mihawk", "Copyright (C) 2026 BlackBearReloaded"],
+      "texts": [{"from": "${VULKAN}/LICENSE", "to": "GPL-3.0.txt"}],
+      "source": {"kind": "git", "path": "${VULKAN}", "remote": "https://github.com/mihawk-99/PS5_Vulkan"},
+      "modifications": "tools/radv-link.sh and tooling/psbc/ps5-pie-unwind.ld (RADV builds); driver/ and its archives (ps5vk builds)."
+    },
+    {
+      "id": "ps5vk-mesa-runtime",
+      "name": "Mesa's common Vulkan runtime (ps5vk builds only)",
+      "kind": "code",
+      "driver": "ps5vk",
+      "artifacts": ["eboot.bin"],
+      "licence": "MIT",
+      "copyright": ["Copyright the Mesa contributors (per-file notices in the source)"],
+      "texts": [{"from": "${VULKAN}/.deps/native/mesa/mesa-26.2.0/docs/license.rst", "to": "Mesa-license.rst"}, {"from": "${VULKAN}/.deps/native/mesa/mesa-26.2.0/licenses", "to": "licenses"}],
+      "source": {"kind": "fixed", "revision": "26.2.0", "url": "https://archive.mesa3d.org/mesa-26.2.0.tar.xz"},
+      "modifications": "Built by PS5_Vulkan tools/build-vulkan-runtime.sh with its window-system stubs."
+    },
+    {
+      "id": "ps5vk-psbc",
+      "name": "OpenGNM PSBC shader compiler and ps5-opengl's package writer (ps5vk builds only)",
+      "kind": "code",
+      "driver": "ps5vk",
+      "artifacts": ["eboot.bin"],
+      "licence": "MIT AND GPL-3.0-or-later",
+      "copyright": ["Copyright (c) 2026 OpenGNM contributors", "Copyright (c) 2015-2024 Mesa contributors", "Copyright (C) 2026 BlackBearReloaded"],
+      "texts": [{"from": "${VULKAN}/.deps/native/opengl-sdk/third_party/opengnm-psbc/LICENSE", "to": "OpenGNM-PSBC-LICENSE.txt"}],
+      "source": {"kind": "provenance", "file": "${VULKAN}/.deps/native/opengl-sdk/PROVENANCE.txt", "key": "source revision", "remote": "https://github.com/blackbearreloaded/ps5-opengl"},
+      "modifications": "PS5_Vulkan tooling/psbc/patch-*.py over the SDK's compiler fork."
+    },
+    {
+      "id": "retroarch-assets",
+      "name": "RetroArch assets: the XMB monochrome theme and its font",
+      "kind": "asset",
+      "artifacts": ["assets/xmb/COPYING", "assets/xmb/source.json", "assets/xmb/monochrome/font.ttf", "assets/xmb/monochrome/FONT-LICENSE.txt", "assets/xmb/monochrome/README.md", "assets/xmb/monochrome/png/[a-z]*.png", "assets/xmb/monochrome/png/Libretro - Pad.png"],
+      "licence": "CC-BY-4.0 (icons); the M+ FONT LICENSE (font)",
+      "copyright": ["The RetroArch assets contributors (https://github.com/libretro/retroarch-assets)", "The M+ FONTS PROJECT (monochrome/font.ttf)"],
+      "texts": [{"from": "assets/xmb/COPYING", "to": "CC-BY-4.0.txt"}, {"from": "assets/xmb/monochrome/FONT-LICENSE.txt", "to": "M+-FONT-LICENSE.txt"}, {"from": "assets/xmb/source.json", "to": "source.json"}],
+      "source": {"kind": "json", "file": "assets/xmb/source.json", "key": "revision", "remote": "https://github.com/libretro/retroarch-assets"},
+      "modifications": "A selection of files, unmodified; assets/xmb/source.json lists each with its digest."
+    },
+    {
+      "id": "core-info",
+      "name": "libretro-core-info metadata (.info files)",
+      "kind": "metadata",
+      "artifacts": ["info/*.info", "cores/*.info"],
+      "licence": "MIT",
+      "copyright": ["Copyright (c) 2019 The RetroArch team"],
+      "texts": [{"from": "tooling/notices/texts/libretro-core-info-COPYING.txt", "to": "COPYING"}],
+      "source": {"kind": "pin", "file": "tools/core-fork.sh", "var": "core_info_revision", "remote": "https://github.com/libretro/libretro-core-info"},
+      "modifications": "Unmodified."
+    },
+    {
+      "id": "title-art",
+      "name": "Launcher artwork and selection music (sce_sys)",
+      "kind": "asset",
+      "artifacts": ["sce_sys/icon0.png", "sce_sys/pic0.dds", "sce_sys/pic1.dds", "sce_sys/snd0.at9"],
+      "licence": "see modifications",
+      "copyright": ["pic0.dds, pic1.dds: Copyright (C) 2026 Mihawk, GPL-3.0-or-later (drawn by tools/make-title-art.py)", "snd0.at9: Copyright (C) 2026 BlackBearReloaded, GPL-3.0-or-later according to ps5-native-app-boilerplate's NOTICE.md"],
+      "texts": [],
+      "source": {"kind": "git", "path": ".", "remote": "https://github.com/mihawk-99/PS5_RetroArch"},
+      "modifications": "icon0.png is the RetroArch logo (libretro's branding); pic0.dds and pic1.dds are a starry sky over a perspective grid, drawn from arithmetic and a fixed random seed by tools/make-title-art.py in this repository (they replaced, in v0.5.6-alpha.5, a background whose origin was not recorded); snd0.at9 is ps5-native-app-boilerplate's default selection track."
+    },
+    {
+      "id": "fceumm",
+      "name": "FCEUmm (NES)",
+      "kind": "code",
+      "artifacts": ["cores/fceumm_libretro.so"],
+      "licence": "GPL-2.0-or-later",
+      "copyright": ["Copyright the FCEU team, CaH4e3 and contributors (per-file notices)"],
+      "texts": [{"from": "build/cores/fceumm/Copying", "to": "Copying"}],
+      "source": {"kind": "core", "build": "fceumm", "remote": "https://github.com/libretro/libretro-fceumm"},
+      "modifications": "None beyond the build (tools/build-fceumm.sh)."
+    },
+    {
+      "id": "mgba",
+      "name": "mGBA (Game Boy, Game Boy Color, Game Boy Advance)",
+      "kind": "code",
+      "artifacts": ["cores/mgba_libretro.so"],
+      "licence": "MPL-2.0",
+      "copyright": ["Copyright (c) 2013-2026 Jeffrey Pfau and contributors"],
+      "texts": [{"from": "build/cores/mgba/LICENSE", "to": "LICENSE"}, {"from": "build/cores/mgba/res/licenses", "to": "licenses"}],
+      "source": {"kind": "core", "build": "mgba", "remote": "https://github.com/libretro/mgba"},
+      "modifications": "patches/mgba (PS5_RetroArch)."
+    },
+    {
+      "id": "snes9x",
+      "name": "Snes9x (SNES)",
+      "kind": "code",
+      "noncommercial": true,
+      "artifacts": ["cores/snes9x_libretro.so"],
+      "licence": "LicenseRef-Snes9x (non-commercial)",
+      "copyright": ["Copyright (c) 1996-2026 the Snes9x authors listed in LICENSE"],
+      "texts": [{"from": "build/cores/snes9x/LICENSE", "to": "LICENSE", "verbatim": true}],
+      "source": {"kind": "core", "build": "snes9x", "remote": "https://github.com/libretro/snes9x"},
+      "modifications": "patches/snes9x (PS5_RetroArch)."
+    },
+    {
+      "id": "fbneo",
+      "name": "FinalBurn Neo (arcade)",
+      "kind": "code",
+      "noncommercial": true,
+      "artifacts": ["cores/fbneo_libretro.so"],
+      "licence": "LicenseRef-FBNeo (non-commercial; includes MAME-derived code under MAME's licence)",
+      "copyright": ["Copyright Team FBNeo and the authors listed in src/license.txt"],
+      "texts": [{"from": "build/cores/fbneo/src/license.txt", "to": "license.txt", "verbatim": true}, {"from": "build/cores/fbneo/LICENSE.md", "to": "LICENSE.md"}],
+      "source": {"kind": "core", "build": "fbneo", "remote": "https://github.com/libretro/FBNeo"},
+      "modifications": "patches/fbneo (PS5_RetroArch). FBNeo's licence requires its full text, verbatim, with every copy."
+    },
+    {
+      "id": "genesis-plus-gx",
+      "name": "Genesis Plus GX (Mega Drive/Genesis, Master System, Game Gear, SG-1000, Sega CD)",
+      "kind": "code",
+      "noncommercial": true,
+      "artifacts": ["cores/genesis_plus_gx_libretro.so"],
+      "licence": "LicenseRef-GenesisPlusGX (non-commercial; parts LGPL-2.1-or-later and BSD, see LICENSE.txt)",
+      "copyright": ["Copyright (c) 1998-2003 Charles MacDonald", "Copyright (c) 2007-2026 Eke-Eke"],
+      "texts": [{"from": "build/cores/genesis_plus_gx/LICENSE.txt", "to": "LICENSE.txt", "verbatim": true}],
+      "source": {"kind": "core", "build": "genesis_plus_gx", "remote": "https://github.com/libretro/Genesis-Plus-GX"},
+      "modifications": "patches/genesis-plus-gx (PS5_RetroArch). Its licence requires the complete source of a modified redistribution: the release's source archives."
+    },
+    {
+      "id": "ppsspp",
+      "name": "PPSSPP v1.20.4 (PSP) and its system assets",
+      "kind": "code",
+      "artifacts": ["cores/ppsspp_libretro.so", "system/PPSSPP/**"],
+      "licence": "GPL-2.0-or-later (code); OFL-1.1 (fonts); others per file",
+      "copyright": ["Copyright (c) 2012- PPSSPP Project and contributors", "Roboto Condensed: Copyright 2011 The Roboto Project Authors", "Inconsolata: Copyright 2006 The Inconsolata Project Authors"],
+      "texts": [{"from": ".deps/ppsspp-src/LICENSE.TXT", "to": "LICENSE.TXT"}, {"from": "tooling/notices/texts/OFL-1.1.txt", "to": "fonts-OFL-1.1.txt"}],
+      "source": {"kind": "core", "build": "ppsspp", "tree": ".deps/ppsspp-src", "remote": "https://github.com/hrydgard/ppsspp"},
+      "modifications": "patches/ppsspp/ps5-port.patch (PS5_RetroArch); submodules at the revisions its build.json records."
+    },
+    {
+      "id": "dolphin",
+      "name": "Dolphin (GameCube, Wii), libretro/dolphin, and its Sys tree",
+      "kind": "code",
+      "artifacts": ["cores/dolphin_libretro.so", "system/dolphin-emu/**"],
+      "licence": "GPL-2.0-or-later (and the licences in LICENSES/ for bundled parts)",
+      "copyright": ["Copyright the Dolphin Emulator Project and contributors"],
+      "texts": [{"from": ".deps/dolphin-src/COPYING", "to": "COPYING"}, {"from": ".deps/dolphin-src/LICENSES", "to": "LICENSES"}],
+      "source": {"kind": "core", "build": "dolphin", "tree": ".deps/dolphin-src", "remote": "https://github.com/libretro/dolphin"},
+      "modifications": "patches/dolphin/ps5-port.patch (PS5_RetroArch)."
+    },
+    {
+      "id": "mihawkgen",
+      "name": "PS5_MihawkGen: neural frame generation and its trained network",
+      "kind": "code",
+      "always": true,
+      "artifacts": ["eboot.bin", "assets/framegen/**"],
+      "licence": "GPL-3.0-or-later",
+      "copyright": ["Copyright (C) 2026 Mihawk"],
+      "texts": [{"from": "../PS5_MihawkGen/LICENSE.md", "to": "LICENSE.md"}],
+      "source": {"kind": "git", "path": "../PS5_MihawkGen", "remote": "https://github.com/mihawk-99/PS5_MihawkGen"},
+      "modifications": "The generator (framegen/src, framegen/include) and the network (framegen/models/network.fgw) as published; the RetroArch driver shim is PS5_RetroArch's tooling/framegen."
+    },
+    {
+      "id": "ps5sx2",
+      "name": "PS5SX2 (PCSX2 for the PS5, PlayStation 2) and its game database",
+      "kind": "code",
+      "artifacts": ["cores/ps5sx2_libretro.so", "system/ps5sx2/**"],
+      "licence": "GPL-3.0-or-later (rapidyaml MIT, glslang BSD-3-Clause and others, AMD FidelityFX MIT)",
+      "copyright": ["Copyright the PCSX2 Dev Team and contributors", "Copyright Swordpdf (PS5SX2)"],
+      "texts": [{"from": ".deps/ps5sx2-src/COPYING.GPLv3", "to": "COPYING.GPLv3"},
+                {"from": ".deps/ps5sx2/ryml/LICENSE.txt", "to": "LICENSE.rapidyaml.txt"},
+                {"from": ".deps/ps5sx2/glslang/LICENSE.txt", "to": "LICENSE.glslang.txt"},
+                {"from": ".deps/ps5sx2-src/ps5/coreorbis/orbis-shims/framegen/LICENSE.txt", "to": "LICENSE.framegen.txt"}],
+      "source": {"kind": "core", "build": "ps5sx2", "tree": ".deps/ps5sx2-src", "remote": "https://github.com/mihawk-99/Libretro_PS5SX2"},
+      "modifications": "The fork's commits over Swordpdf/PS5SX2 on its main branch (ps5/libretro, the LIBRETRO hooks in GSDeviceVK and VKLoader)."
+    },
+    {
+      "id": "beetle-psx",
+      "name": "Beetle PSX HW (Mednafen PSX, PlayStation)",
+      "kind": "code",
+      "artifacts": ["cores/mednafen_psx_hw_libretro.so"],
+      "licence": "GPL-2.0-or-later",
+      "copyright": ["Copyright Mednafen Team and the beetle-psx-libretro contributors"],
+      "texts": [{"from": ".deps/beetle-psx-src/COPYING", "to": "COPYING"}, {"from": ".deps/beetle-psx-src/parallel-psx/COPYING", "to": "parallel-psx-COPYING"}],
+      "source": {"kind": "core", "build": "beetle-psx", "tree": ".deps/beetle-psx-src", "remote": "https://github.com/mihawk-99/PS5_BeetlePSX"},
+      "modifications": "The fork's commits over libretro/beetle-psx-libretro."
+    },
+    {
+      "id": "mupen64plus",
+      "name": "Mupen64Plus-Next (Nintendo 64), with GLideN64, ParaLLEl-RDP and ParaLLEl-RSP",
+      "kind": "code",
+      "artifacts": ["cores/mupen64plus_next_libretro.so"],
+      "licence": "GPL-2.0-or-later AND MIT AND LGPL-3.0-or-later (per component)",
+      "copyright": ["Copyright the Mupen64Plus, GLideN64 and ParaLLEl authors"],
+      "texts": [
+        {"from": ".deps/mupen64plus-src/LICENSE", "to": "LICENSE"},
+        {"from": ".deps/mupen64plus-src/GLideN64/LICENSE", "to": "GLideN64-LICENSE"},
+        {"from": ".deps/mupen64plus-src/mupen64plus-rsp-paraLLEl/LICENSE", "to": "paraLLEl-RSP-LICENSE"},
+        {"from": ".deps/mupen64plus-src/mupen64plus-rsp-paraLLEl/LICENSE.LESSER", "to": "paraLLEl-RSP-LICENSE.LESSER"},
+        {"from": ".deps/mupen64plus-src/mupen64plus-rsp-paraLLEl/LICENSE.MIT", "to": "paraLLEl-RSP-LICENSE.MIT"},
+        {"from": ".deps/mupen64plus-src/mupen64plus-core/LICENSES", "to": "mupen64plus-core-LICENSES"}
+      ],
+      "source": {"kind": "core", "build": "mupen64plus", "tree": ".deps/mupen64plus-src", "remote": "https://github.com/mihawk-99/PS5_Mupen64Plus"},
+      "modifications": "The fork's commits over libretro/mupen64plus-libretro-nx."
+    },
+    {
+      "id": "beetle-saturn",
+      "name": "Beetle Saturn (Mednafen Saturn)",
+      "kind": "code",
+      "artifacts": ["cores/mednafen_saturn_libretro.so"],
+      "licence": "GPL-2.0-or-later",
+      "copyright": ["Copyright Mednafen Team and the beetle-saturn-libretro contributors"],
+      "texts": [{"from": ".deps/beetle-saturn-src/COPYING", "to": "COPYING"}],
+      "source": {"kind": "core", "build": "beetle-saturn", "tree": ".deps/beetle-saturn-src", "remote": "https://github.com/mihawk-99/PS5_BeetleSaturn"},
+      "modifications": "The fork's commits over libretro/beetle-saturn-libretro, plus patches/beetle-saturn/ps5-executable-memory.patch for SDK executable memory and core-owned cropped video frames."
+    },
+    {
+      "id": "vice",
+      "name": "VICE x64sc (Commodore 64)",
+      "kind": "code",
+      "artifacts": ["cores/vice_x64sc_libretro.so"],
+      "licence": "GPL-2.0-or-later",
+      "copyright": ["Copyright the VICE Team and vice-libretro contributors"],
+      "texts": [{"from": ".deps/vice-src/COPYING", "to": "COPYING"}],
+      "source": {"kind": "core", "build": "vice", "tree": ".deps/vice-src", "remote": "https://github.com/mihawk-99/PS5_VICE"},
+      "modifications": "The fork's commits over libretro/vice-libretro."
+    },
+    {
+      "id": "desmume",
+      "name": "DeSmuME (Nintendo DS)",
+      "kind": "code",
+      "artifacts": ["cores/desmume_libretro.so"],
+      "licence": "GPL-2.0-or-later",
+      "copyright": ["Copyright the DeSmuME team and contributors"],
+      "texts": [{"from": ".deps/desmume-src/desmume/COPYING", "to": "COPYING"}],
+      "source": {"kind": "core", "build": "desmume", "tree": ".deps/desmume-src", "remote": "https://github.com/mihawk-99/PS5_DeSmuME"},
+      "modifications": "The fork's commits over libretro/desmume; tooling/desmume/touchpad-stylus.patch adds the PS5 touchpad scale and stylus cursor."
+    },
+    {
+      "id": "melondsds",
+      "name": "melonDS DS (Nintendo DS)",
+      "kind": "code",
+      "artifacts": [
+        "cores/melondsds_libretro.so",
+        "cores/melondsds_libretro.info",
+        "info/melondsds_libretro.info",
+        "info/melondsds-LICENSE.txt"
+      ],
+      "licence": "GPL-3.0-or-later; bundled dependencies under their included licences",
+      "copyright": [
+        "Copyright Jesse Talavera, the melonDS team and contributors; dependency notices in melondsds-LICENSE.txt"
+      ],
+      "texts": [
+        {
+          "from": "build/cores/stage/info/melondsds-LICENSE.txt",
+          "to": "melondsds-LICENSE.txt",
+          "verbatim": true
+        }
+      ],
+      "source": {
+        "kind": "core",
+        "build": "melondsds",
+        "tree": ".deps/melondsds-cache/melondsds",
+        "remote": "https://github.com/JesseTG/melonds-ds",
+        "extra": [
+          {
+            "name": "melondsds-melonds",
+            "git": ".deps/melondsds-cache/melonds",
+            "revision": "16f127dbb587a73371827ce79689c5d237c4b59b",
+            "remote": "https://github.com/JesseTG/melonDS"
+          },
+          {
+            "name": "melondsds-libretro-common",
+            "git": ".deps/melondsds-cache/libretro-common",
+            "revision": "fa8a1b572a444fcb552007019f8caf68281108aa",
+            "remote": "https://github.com/libretro/libretro-common"
+          },
+          {
+            "name": "melondsds-embed-binaries",
+            "git": ".deps/melondsds-cache/embed-binaries",
+            "revision": "078b62beba97e8192c99bfb16d5e17220cfc7598",
+            "remote": "https://github.com/andoalon/embed-binaries"
+          },
+          {
+            "name": "melondsds-glm",
+            "git": ".deps/melondsds-cache/glm",
+            "revision": "6f14f4792a0cde5d0cf2c910506724d61cb95834",
+            "remote": "https://github.com/g-truc/glm"
+          },
+          {
+            "name": "melondsds-libslirp",
+            "git": ".deps/melondsds-cache/libslirp",
+            "revision": "e61dbd459c8c06607b3a84694489427e8ec60f17",
+            "remote": "https://github.com/JesseTG/libslirp-mirror"
+          },
+          {
+            "name": "melondsds-pntr",
+            "git": ".deps/melondsds-cache/pntr",
+            "revision": "a47fe167703b0ac3bfad00785b20b0dce6712509",
+            "remote": "https://github.com/robloach/pntr"
+          },
+          {
+            "name": "melondsds-fmt",
+            "git": ".deps/melondsds-cache/fmt",
+            "revision": "1be298e1bd68957e4cd352e1f676f00e07dcfb57",
+            "remote": "https://github.com/fmtlib/fmt"
+          },
+          {
+            "name": "melondsds-yamc",
+            "git": ".deps/melondsds-cache/yamc",
+            "revision": "4e015a7e8eb0d61c34e6928676c8c78881a72d73",
+            "remote": "https://github.com/yohhoy/yamc"
+          },
+          {
+            "name": "melondsds-span-lite",
+            "git": ".deps/melondsds-cache/span-lite",
+            "revision": "f63fe2974943b5f555b928b10d910e457fbb93d4",
+            "remote": "https://github.com/martinmoene/span-lite"
+          },
+          {
+            "name": "melondsds-date",
+            "git": ".deps/melondsds-cache/date",
+            "revision": "179a6b921ccd6179b5b04dce812a89f71a51b4df",
+            "remote": "https://github.com/HowardHinnant/date"
+          },
+          {
+            "name": "melondsds-zlib",
+            "git": ".deps/melondsds-cache/zlib",
+            "revision": "da607da739fa6047df13e66a2af6b8bec7c2a498",
+            "remote": "https://github.com/madler/zlib"
+          }
+        ]
+      },
+      "modifications": "Pinned PS5 port and build recipe in tooling/melondsds and tools/build-melondsds.sh; native executable-memory JIT and software renderer."
+    },
+    {
+      "id": "azahar",
+      "name": "Azahar (Nintendo 3DS), with Dynarmic",
+      "kind": "code",
+      "artifacts": ["cores/azahar_libretro.so"],
+      "licence": "GPL-2.0-or-later (Azahar); 0BSD (Dynarmic); others per externals/",
+      "copyright": ["Copyright the Citra Emulator Project / Azahar Emulator Project", "Copyright MerryMage and the Dynarmic contributors"],
+      "texts": [{"from": ".deps/azahar-src/license.txt", "to": "license.txt"}, {"from": ".deps/azahar-src/externals/dynarmic/LICENSE.txt", "to": "dynarmic-LICENSE.txt"}],
+      "source": {"kind": "core", "build": "azahar", "tree": ".deps/azahar-src", "remote": "https://github.com/mihawk-99/PS5_Azahar"},
+      "modifications": "The fork's commits over azahar-emu/azahar; externals/dynarmic is mihawk-99/PS5_Dynarmic; tooling/azahar/touchpad-stylus.patch adds relative mouse hover and a stylus cursor."
+    },
+    {
+      "id": "flycast",
+      "name": "Flycast (Dreamcast, NAOMI, NAOMI 2, Atomiswave)",
+      "kind": "code",
+      "artifacts": ["cores/flycast_libretro.so"],
+      "licence": "GPL-2.0-or-later (Flycast); others per core/deps/",
+      "copyright": ["Copyright flyinghead and the Flycast contributors", "Copyright the reicast and nullDC authors"],
+      "texts": [{"from": ".deps/flycast-src/LICENSE", "to": "LICENSE"}],
+      "source": {"kind": "core", "build": "flycast", "tree": ".deps/flycast-src", "remote": "https://github.com/mihawk-99/PS5_Flycast"},
+      "modifications": "The fork's commits over flyinghead/flycast (the PS5 port begun by rpf16rj); submodules at the revisions the fork pins."
+    },
+    {
+      "id": "picodrive",
+      "name": "PicoDrive (Sega 32X, Mega Drive, Mega-CD, Master System, Pico)",
+      "kind": "code",
+      "noncommercial": true,
+      "artifacts": ["cores/picodrive_libretro.so"],
+      "licence": "LicenseRef-PicoDrive (non-commercial); others per its submodules",
+      "copyright": ["Copyright notaz, fDave, Chui, Stephane Dallongeville and the PicoDrive contributors"],
+      "texts": [{"from": ".deps/picodrive-src/COPYING", "to": "COPYING", "verbatim": true}],
+      "source": {"kind": "core", "build": "picodrive", "tree": ".deps/picodrive-src", "remote": "https://github.com/mihawk-99/PS5_PicoDrive"},
+      "modifications": "The fork's commits over libretro/picodrive; submodules at the revisions the fork pins."
+    },
+    {
+      "id": "beetle-pce",
+      "name": "Beetle PCE (Mednafen PC Engine, TurboGrafx-16, PC Engine CD, SuperGrafx)",
+      "kind": "code",
+      "artifacts": ["cores/mednafen_pce_libretro.so"],
+      "licence": "GPL-2.0-or-later",
+      "copyright": ["Copyright Mednafen Team and the beetle-pce-libretro contributors"],
+      "texts": [{"from": ".deps/beetle-pce-src/COPYING", "to": "COPYING"}],
+      "source": {"kind": "core", "build": "beetle-pce", "tree": ".deps/beetle-pce-src", "remote": "https://github.com/mihawk-99/PS5_BeetlePCE"},
+      "modifications": "The fork's commits over libretro/beetle-pce-libretro."
+    },
+    {
+      "id": "beetle-pcfx",
+      "name": "Beetle PC-FX (Mednafen PC-FX)",
+      "kind": "code",
+      "artifacts": ["cores/mednafen_pcfx_libretro.so"],
+      "licence": "GPL-2.0-or-later",
+      "copyright": ["Copyright Mednafen Team and the beetle-pcfx-libretro contributors"],
+      "texts": [{"from": ".deps/beetle-pcfx-src/COPYING", "to": "COPYING"}],
+      "source": {"kind": "core", "build": "beetle-pcfx", "tree": ".deps/beetle-pcfx-src", "remote": "https://github.com/mihawk-99/PS5_BeetlePCFX"},
+      "modifications": "The fork's commits over libretro/beetle-pcfx-libretro."
+    },
+    {"id": "beetle-vb", "name": "Beetle VB (Mednafen Virtual Boy)", "kind": "code", "artifacts": ["cores/mednafen_vb_libretro.so"], "licence": "GPL-2.0-or-later", "copyright": ["Copyright Mednafen Team and the beetle-vb-libretro contributors"], "texts": [{"from": ".deps/beetle-vb-src/COPYING", "to": "COPYING"}], "source": {"kind": "core", "build": "beetle-vb", "tree": ".deps/beetle-vb-src", "remote": "https://github.com/mihawk-99/PS5_BeetleVB"}, "modifications": "The fork's commits over libretro/beetle-vb-libretro."},
+    {"id": "beetle-ngp", "name": "Beetle NeoPop (Mednafen Neo Geo Pocket / Color)", "kind": "code", "artifacts": ["cores/mednafen_ngp_libretro.so"], "licence": "GPL-2.0-or-later", "copyright": ["Copyright neopop_uk, Mednafen Team and the beetle-ngp-libretro contributors"], "texts": [{"from": ".deps/beetle-ngp-src/COPYING", "to": "COPYING"}], "source": {"kind": "core", "build": "beetle-ngp", "tree": ".deps/beetle-ngp-src", "remote": "https://github.com/mihawk-99/PS5_BeetleNGP"}, "modifications": "The fork's commits over libretro/beetle-ngp-libretro."},
+    {"id": "beetle-wswan", "name": "Beetle Cygne (Mednafen WonderSwan / Color)", "kind": "code", "artifacts": ["cores/mednafen_wswan_libretro.so"], "licence": "GPL-2.0-or-later", "copyright": ["Copyright the Cygne authors, Mednafen Team and the beetle-wswan-libretro contributors"], "texts": [{"from": ".deps/beetle-wswan-src/COPYING", "to": "COPYING"}], "source": {"kind": "core", "build": "beetle-wswan", "tree": ".deps/beetle-wswan-src", "remote": "https://github.com/mihawk-99/PS5_BeetleWSwan"}, "modifications": "The fork's commits over libretro/beetle-wswan-libretro."},
+    {"id": "pokemini", "name": "PokeMini (Pokemon Mini)", "kind": "code", "artifacts": ["cores/pokemini_libretro.so"], "licence": "GPL-3.0-or-later", "copyright": ["Copyright (C) 2009-2015 JustBurn and the PokeMini contributors"], "texts": [{"from": ".deps/pokemini-src/LICENSE", "to": "LICENSE"}], "source": {"kind": "core", "build": "pokemini", "tree": ".deps/pokemini-src", "remote": "https://github.com/mihawk-99/PS5_PokeMini"}, "modifications": "The fork's commits over libretro/PokeMini."},
+    {"id": "handy", "name": "Handy (Atari Lynx)", "kind": "code", "artifacts": ["cores/handy_libretro.so"], "licence": "Zlib", "copyright": ["Copyright (c) 1996-2004 K. Wilkins and the libretro-handy contributors"], "texts": [{"from": "tooling/notices/texts/handy-zlib.txt", "to": "LICENSE"}], "source": {"kind": "core", "build": "handy", "tree": ".deps/handy-src", "remote": "https://github.com/mihawk-99/PS5_Handy"}, "modifications": "The fork's commits over libretro/libretro-handy. Its licence is the zlib licence in its sources' headers (lynx/system.h)."},
+    {"id": "virtualjaguar", "name": "Virtual Jaguar (Atari Jaguar)", "kind": "code", "artifacts": ["cores/virtualjaguar_libretro.so"], "licence": "GPL-3.0-or-later", "copyright": ["Copyright James Hammons, David Raingeard, Niels Wagenaar, Carwin Jones, Adam Green and the virtualjaguar-libretro contributors"], "texts": [{"from": ".deps/virtualjaguar-src/LICENSE", "to": "LICENSE"}], "source": {"kind": "core", "build": "virtualjaguar", "tree": ".deps/virtualjaguar-src", "remote": "https://github.com/mihawk-99/PS5_VirtualJaguar"}, "modifications": "The fork's commits over libretro/virtualjaguar-libretro."},
+    {"id": "stella", "name": "Stella (Atari 2600)", "kind": "code", "artifacts": ["cores/stella_libretro.so"], "licence": "GPL-2.0-or-later", "copyright": ["Copyright (c) 1995-2026 Bradford W. Mott, Stephen Anthony and the Stella Team"], "texts": [{"from": ".deps/stella-src/License.txt", "to": "License.txt"}], "source": {"kind": "core", "build": "stella", "tree": ".deps/stella-src", "remote": "https://github.com/mihawk-99/PS5_Stella"}, "modifications": "The fork's commits over stella-emu/stella (release 7.0c)."},
+    {"id": "a5200", "name": "a5200 (Atari 5200)", "kind": "code", "artifacts": ["cores/a5200_libretro.so"], "licence": "GPL-2.0-or-later", "copyright": ["Copyright the Atari800 team, the a5200 authors and contributors"], "texts": [{"from": ".deps/a5200-src/License.txt", "to": "License.txt"}], "source": {"kind": "core", "build": "a5200", "tree": ".deps/a5200-src", "remote": "https://github.com/mihawk-99/PS5_A5200"}, "modifications": "The fork's commits over libretro/a5200."},
+    {"id": "prosystem", "name": "ProSystem (Atari 7800)", "kind": "code", "artifacts": ["cores/prosystem_libretro.so"], "licence": "GPL-2.0-or-later", "copyright": ["Copyright (c) 2003-2004 Greg Stanton and the prosystem-libretro contributors"], "texts": [{"from": ".deps/prosystem-src/License.txt", "to": "License.txt"}], "source": {"kind": "core", "build": "prosystem", "tree": ".deps/prosystem-src", "remote": "https://github.com/mihawk-99/PS5_ProSystem"}, "modifications": "The fork's commits over libretro/prosystem-libretro."},
+    {"id": "dosbox-pure", "name": "DOSBox Pure (MS-DOS)", "kind": "code", "artifacts": ["cores/dosbox_pure_libretro.so"], "licence": "GPL-2.0-or-later", "copyright": ["Copyright (C) 2002-2021 The DOSBox Team", "Copyright (C) 2020-2026 Bernhard Schelling"], "texts": [{"from": ".deps/dosbox-pure-src/LICENSE", "to": "LICENSE"}], "source": {"kind": "core", "build": "dosbox-pure", "tree": ".deps/dosbox-pure-src", "remote": "https://github.com/mihawk-99/PS5_DOSBoxPure"}, "modifications": "The fork's commits over schelling/dosbox-pure on Codeberg (release 1.0-preview7)."},
+    {"id": "opera", "name": "Opera (3DO)", "kind": "code", "noncommercial": true, "artifacts": ["cores/opera_libretro.so"], "licence": "LicenseRef-FreeDO (modified LGPL; non-commercial)", "copyright": ["Copyright the FreeDO authors (Alexander Troosh, Maxim Grishin, Allen Wright, John Sammons, Felix Lazarev), the 4DO and Opera contributors"], "texts": [{"from": "tooling/notices/texts/opera-freedo.txt", "to": "LICENSE-FreeDO.txt", "verbatim": true}], "source": {"kind": "core", "build": "opera", "tree": ".deps/opera-src", "remote": "https://github.com/mihawk-99/PS5_Opera"}, "modifications": "The fork's commits over libretro/opera-libretro. FreeDO's terms are in its sources' headers (libopera/opera_arm.c): a modified LGPL that forbids commercial use without the owners' approval and requires full credits."},
+    {"id": "puae", "name": "PUAE (Commodore Amiga)", "kind": "code", "artifacts": ["cores/puae_libretro.so"], "licence": "GPL-2.0-or-later", "copyright": ["Copyright the UAE, WinUAE and PUAE authors and contributors"], "texts": [{"from": ".deps/puae-src/COPYING", "to": "COPYING"}], "source": {"kind": "core", "build": "puae", "tree": ".deps/puae-src", "remote": "https://github.com/mihawk-99/PS5_PUAE"}, "modifications": "The fork's commits over libretro/libretro-uae."},
+    {"id": "neocd", "name": "NeoCD (Neo Geo CD)", "kind": "code", "artifacts": ["cores/neocd_libretro.so"], "licence": "LGPL-3.0-or-later", "copyright": ["Copyright Laurent Cayrol (the neocd_libretro author) and contributors"], "texts": [{"from": ".deps/neocd-src/LICENSE.md", "to": "LICENSE.md"}], "source": {"kind": "core", "build": "neocd", "tree": ".deps/neocd-src", "remote": "https://github.com/mihawk-99/PS5_NeoCD"}, "modifications": "The fork's commits over libretro/neocd_libretro."},
+    {"id": "scummvm", "name": "ScummVM", "kind": "code", "artifacts": ["cores/scummvm_libretro.so"], "licence": "GPL-3.0-or-later; engines and libraries per its COPYING and LICENSES", "copyright": ["Copyright the ScummVM Team and contributors (AUTHORS)"], "texts": [{"from": ".deps/scummvm-src/COPYING", "to": "COPYING"}], "source": {"kind": "core", "build": "scummvm", "tree": ".deps/scummvm-src", "remote": "https://github.com/mihawk-99/PS5_ScummVM"}, "modifications": "The fork's commits over scummvm/scummvm (release v2026.3.0)."},
+    {
+      "id": "mame",
+      "name": "MAME 0.289 (arcade), libretro/mame",
+      "kind": "code",
+      "artifacts": ["cores/mame_libretro.so"],
+      "licence": "GPL-2.0-or-later (MAME as a whole; files BSD-3-Clause and others, see docs/legal)",
+      "copyright": ["Copyright the MAME team and contributors"],
+      "texts": [{"from": ".deps/mame-src/COPYING", "to": "COPYING"}, {"from": ".deps/mame-src/docs/legal", "to": "legal"}],
+      "source": {"kind": "core", "build": "mame", "tree": ".deps/mame-src", "remote": "https://github.com/mihawk-99/PS5_MAME"},
+      "modifications": "The fork's commits over libretro/mame."
+    },
+    {
+      "id": "rpcs3",
+      "name": "RPCS3 (PlayStation 3), with its bundled third-party code, LLVM, FFmpeg and GNU libiconv",
+      "kind": "code",
+      "artifacts": ["cores/rpcs3_libretro.so", "system/RPCS3/Icons/**", "system/RPCS3/patches/**", "system/RPCS3/fonts/**"],
+      "licence": "GPL-2.0-only (RPCS3); wolfSSL under GPL-2.0 by its RPCS3 exception; Apache-2.0 WITH LLVM-exception (LLVM); LGPL-2.1-or-later (FFmpeg, libiconv); OFL-1.1 (Inter); others per 3rdparty/",
+      "copyright": ["Copyright the RPCS3 team and contributors", "Copyright the LLVM project contributors", "Copyright the FFmpeg developers", "Copyright the Free Software Foundation (GNU libiconv)"],
+      "texts": [
+        {"from": ".deps/rpcs3-src/LICENSE", "to": "LICENSE"},
+        {"from": ".deps/rpcs3-src/3rdparty/wolfssl/wolfssl/LICENSING", "to": "wolfSSL-LICENSING"},
+        {"from": ["${LLVM}/llvm/LICENSE.TXT", "../PS5_LLVM/llvm/LICENSE.TXT"], "to": "LLVM-LICENSE.TXT"},
+        {"tar": ".deps/downloads/ffmpeg-8.1.1.tar.xz", "member": "ffmpeg-8.1.1/LICENSE.md", "to": "FFmpeg-LICENSE.md"},
+        {"tar": ".deps/downloads/ffmpeg-8.1.1.tar.xz", "member": "ffmpeg-8.1.1/COPYING.LGPLv2.1", "to": "FFmpeg-COPYING.LGPLv2.1"},
+        {"tar": ".deps/downloads/libiconv-1.18.tar.gz", "member": "libiconv-1.18/COPYING.LIB", "to": "libiconv-COPYING.LIB"}
+      ],
+      "source": {"kind": "core", "build": "rpcs3", "tree": ".deps/rpcs3-src", "extra": [{"git": ".deps/llvm-project", "pin": {"file": "tools/build-llvm.sh", "var": "revision"}, "paths": ["cmake", "llvm", "third-party"], "name": "llvm-project", "remote": "https://github.com/mihawk-99/PS5_LLVM"}, {"tarball": ".deps/downloads/ffmpeg-8.1.1.tar.xz"}, {"tarball": ".deps/downloads/libiconv-1.18.tar.gz"}, {"tarball": ".deps/downloads/vulkan-headers-1.4.354.tar.gz"}, {"tarball": ".deps/downloads/volk-1.4.350.1.tar.gz"}], "remote": "https://github.com/mihawk-99/PS5_RPCS3"},
+      "modifications": "The fork's commits over RPCS3/rpcs3; LLVM from mihawk-99/PS5_LLVM (tools/build-llvm.sh), FFmpeg and libiconv release tarballs (tools/build-ffmpeg.sh, tools/build-libiconv.sh). Not in a public release: see the audit's RPCS3 licence finding before shipping it."
+    },
+    {
+      "id": "webui-font",
+      "name": "Encode Sans Condensed (WebUI heading font)",
+      "kind": "asset",
+      "artifacts": [
+        "webui/assets/ui.woff2"
+      ],
+      "licence": "OFL-1.1",
+      "copyright": [
+        "Copyright 2012 The Encode Project Authors (impallari@gmail.com)"
+      ],
+      "texts": [
+        {
+          "from": "webui/assets/OFL.txt",
+          "to": "OFL.txt"
+        },
+        {
+          "from": "webui/assets/source.json",
+          "to": "source.json"
+        }
+      ],
+      "source": {
+        "kind": "fixed",
+        "revision": "97f60ed6d821c7c476b38c53dde854e14d9ce1c8cc295136a6a9faa2cd243ecb",
+        "url": "https://fonts.gstatic.com/s/encodesanscondensed/v13/j8_46_LD37rqfuwxyIuaZhE6cRXOLtm2gfT-PYqpBw.ttf"
+      },
+      "modifications": "Lossless WOFF2 container conversion; no glyph changes."
+    },
+    {
+      "id": "libmicrohttpd",
+      "name": "GNU libmicrohttpd 1.0.10 (WebUI HTTP transport)",
+      "kind": "code",
+      "always": true,
+      "artifacts": [
+        "eboot.bin"
+      ],
+      "licence": "LGPL-2.1-or-later",
+      "texts": [
+        {
+          "from": ".deps/webui/libmicrohttpd-1.0.10/COPYING",
+          "to": "COPYING",
+          "verbatim": true
+        }
+      ],
+      "source": {
+        "kind": "pin",
+        "file": "tools/build-webui-http.sh",
+        "var": "hash",
+        "url": "https://ftp.gnu.org/gnu/libmicrohttpd/libmicrohttpd-1.0.10.tar.gz"
+      },
+      "modifications": "Unmodified source; static HTTP-only build, following ps5-payload-dev/websrv. Build flags and source checksum in tools/build-webui-http.sh."
+    },
+    {
+      "id": "libsmb2",
+      "name": "libsmb2 (SMB shares: the file browser's SMB entry and the WebUI's SMB page)",
+      "kind": "code",
+      "always": true,
+      "artifacts": [
+        "eboot.bin",
+        "webui/ps5-retroarch-webui.elf"
+      ],
+      "licence": "LGPL-2.1-or-later",
+      "copyright": [
+        "Copyright (C) 2016 by Ronnie Sahlberg <ronniesahlberg@gmail.com> and the libsmb2 contributors"
+      ],
+      "texts": [
+        {
+          "from": ".deps/native/libsmb2-ps5/share/licenses/libsmb2/COPYING",
+          "to": "COPYING"
+        },
+        {
+          "from": ".deps/native/libsmb2-ps5/share/licenses/libsmb2/LICENCE-LGPL-2.1.txt",
+          "to": "LICENCE-LGPL-2.1.txt",
+          "verbatim": true
+        }
+      ],
+      "source": {
+        "kind": "pin",
+        "file": "tools/build-libsmb2.sh",
+        "var": "revision",
+        "url": "https://github.com/sahlberg/libsmb2/archive/{rev}.tar.gz",
+        "extra": [
+          {
+            "tarball": ".deps/downloads/libsmb2-68f1136e7f6e7d136fd08893dc0028faeb2a120b.tar.gz"
+          }
+        ]
+      },
+      "modifications": "Unmodified source; a static build without Kerberos, GSSAPI or libdcerpc, its resolver calls renamed to ps5_smb_getaddrinfo and ps5_smb_freeaddrinfo for the PS5 (tools/build-libsmb2.sh), at the master revision itsPLK/ps5-pkg-manager runs on the PS5."
+    },
+    {
+      "id": "slang-shaders",
+      "name": "slang-shaders offline video assets",
+      "kind": "assets",
+      "artifacts": [
+        "shaders/shaders_slang/**"
+      ],
+      "licence": "Mixed; individual shader source headers and collection license files are preserved",
+      "copyright": [
+        "Upstream authors; attribution retained beside assets and in shader source headers"
+      ],
+      "texts": [
+        {
+          "from": ".deps/video-assets/slang-shaders-0b3ff0b240f82f4cb5e5d0117f8f2080e2764cf7/bezel/koko-aio/LICENSE",
+          "to": "GPL-3.0.txt"
+        },
+        {
+          "from": ".deps/video-assets/slang-shaders-0b3ff0b240f82f4cb5e5d0117f8f2080e2764cf7/crt/shaders/crt-royale/LICENSE.TXT",
+          "to": "crt-royale-LICENSE.txt"
+        }
+      ],
+      "source": {
+        "kind": "fixed",
+        "revision": "0b3ff0b240f82f4cb5e5d0117f8f2080e2764cf7",
+        "remote": "https://github.com/libretro/slang-shaders"
+      },
+      "modifications": "Exact path corrections and exclusions recorded in video-assets.json and tooling/video-assets/collections.json. Full source trees and individual notices accompany the assets."
+    },
+    {
+      "id": "common-overlays",
+      "name": "common-overlays offline video assets",
+      "kind": "assets",
+      "artifacts": [
+        "overlays/common/**"
+      ],
+      "licence": "CC-BY-4.0",
+      "copyright": [
+        "Upstream authors; attribution retained beside assets and in shader source headers"
+      ],
+      "texts": [
+        {
+          "from": ".deps/video-assets/common-overlays-42c21b99889468a8e77fd7f002229ec16e2f9fa2/COPYING",
+          "to": "LICENSE.txt"
+        }
+      ],
+      "source": {
+        "kind": "fixed",
+        "revision": "42c21b99889468a8e77fd7f002229ec16e2f9fa2",
+        "remote": "https://github.com/libretro/common-overlays"
+      },
+      "modifications": "Exact path corrections and exclusions recorded in video-assets.json and tooling/video-assets/collections.json. Full source trees and individual notices accompany the assets."
+    },
+    {
+      "id": "overlay-borders",
+      "name": "overlay-borders offline video assets",
+      "kind": "assets",
+      "artifacts": [
+        "overlays/borders/**"
+      ],
+      "licence": "MIT",
+      "copyright": [
+        "Upstream authors; attribution retained beside assets and in shader source headers"
+      ],
+      "texts": [
+        {
+          "from": ".deps/video-assets/overlay-borders-9aceca2dd514c589a57d40086557b804851aafcf/LICENSE",
+          "to": "LICENSE.txt"
+        }
+      ],
+      "source": {
+        "kind": "fixed",
+        "revision": "9aceca2dd514c589a57d40086557b804851aafcf",
+        "remote": "https://github.com/libretro/overlay-borders"
+      },
+      "modifications": "Exact path corrections and exclusions recorded in video-assets.json and tooling/video-assets/collections.json. Full source trees and individual notices accompany the assets."
+    },
+    {
+      "id": "es-de",
+      "name": "ES-DE (EmulationStation Desktop Edition) 3.5.0, the EmulationStation frontend, and its own theme Linear",
+      "kind": "code",
+      "artifacts": ["es-de/es-de.bin", "es-de/LICENSE", "es-de/resources/**", "es-de/themes/linear-es-de/**"],
+      "licence": "MIT (ES-DE; what it bundles under the licences in licenses/)",
+      "copyright": ["Copyright (c) 2024-2026 Northwestern Software AB", "Copyright (c) 2020-2024 Leon Styhre", "Copyright (c) 2014 Alec Lofquist"],
+      "texts": [{"from": "build/es-de/src/LICENSE", "to": "LICENSE"}, {"from": "build/es-de/src/licenses", "to": "licenses"}],
+      "source": {"kind": "pin", "file": "tools/build-esde.sh", "var": "esde_commit", "url": "https://gitlab.com/es-de/emulationstation-de/-/tree/{rev}",
+                 "extra": [{"name": "emulationstation-de", "git": ".deps/es-de", "pin": {"file": "tools/build-esde.sh", "var": "esde_commit"}, "remote": "https://gitlab.com/es-de/emulationstation-de/-"}]},
+      "modifications": "frontends/es-de/patches/0001-ps5-port.patch and frontends/es-de/ps5/ (PS5_RetroArch): built for the PS5, its systems and game lists from RetroArch's playlists, every game started in RetroArch (game mode)."
+    },
+    {
+      "id": "alekfull-nx-es-de",
+      "name": "Alekfull NX for ES-DE (the default EmulationStation theme on the PS5)",
+      "kind": "asset",
+      "artifacts": ["es-de/themes/alekfull-nx-es-de/**", "picker/previews/es-de.rgba"],
+      "licence": "CC-BY-NC-SA-2.0",
+      "noncommercial": true,
+      "copyright": ["Artwork and layouts by fagnerpc (AlekFull NX); the ES-DE port by anthonycaccese and the authors its README credits"],
+      "texts": [{"from": ".deps/alekfull-nx-es-de/README.md", "to": "README.md"}],
+      "source": {"kind": "pin", "file": "tools/build-esde.sh", "var": "alekfull_commit", "url": "https://github.com/anthonycaccese/alekfull-nx-es-de/tree/{rev}"},
+      "modifications": "Shipped as it is, without the artwork sources (.psd, .afdesign); the picker's EmulationStation card is a picture of it on the console."
+    },
+    {
+      "id": "colorful-simplified-es-de",
+      "name": "Colorful (Simplified) for ES-DE (a theme EmulationStation offers)",
+      "kind": "asset",
+      "artifacts": ["es-de/themes/colorful-simplified-es-de/**"],
+      "licence": "CC-BY-NC-SA-2.0",
+      "noncommercial": true,
+      "copyright": ["ant (anthonycaccese) and viking, and the authors its README credits"],
+      "texts": [{"from": ".deps/esde-themes/colorful-simplified-es-de/README.md", "to": "README.md"}],
+      "source": {"kind": "pin", "file": "frontends/es-de/themes.list", "var": "theme_colorful_simplified", "url": "https://github.com/anthonycaccese/colorful-simplified-es-de/tree/{rev}"},
+      "modifications": "Shipped as it is, without the artwork sources (.psd, .afdesign, .xcf)."
+    },
+    {
+      "id": "colorful-revisited-es-de",
+      "name": "Colorful (Revisited) for ES-DE (a theme EmulationStation offers)",
+      "kind": "asset",
+      "artifacts": ["es-de/themes/colorful-revisited-es-de/**"],
+      "licence": "CC-BY-NC-SA-2.0",
+      "noncommercial": true,
+      "copyright": ["ant (anthonycaccese) and viking, and the authors its README credits"],
+      "texts": [{"from": ".deps/esde-themes/colorful-revisited-es-de/README.md", "to": "README.md"}],
+      "source": {"kind": "pin", "file": "frontends/es-de/themes.list", "var": "theme_colorful_revisited", "url": "https://github.com/anthonycaccese/colorful-revisited-es-de/tree/{rev}"},
+      "modifications": "Shipped as it is, without the artwork sources (.psd, .afdesign, .xcf)."
+    },
+    {
+      "id": "playstation-x-es-de",
+      "name": "PlayStation-X for ES-DE (a theme EmulationStation offers)",
+      "kind": "asset",
+      "artifacts": ["es-de/themes/playstation-x-es-de/**"],
+      "licence": "CC-BY-NC-SA-4.0",
+      "noncommercial": true,
+      "copyright": ["Rob Zombie (RobZombie9043) and pajarorrojo, and the authors its README credits"],
+      "texts": [{"from": ".deps/esde-themes/playstation-x-es-de/README.md", "to": "README.md"}],
+      "source": {"kind": "pin", "file": "frontends/es-de/themes.list", "var": "theme_playstation_x", "url": "https://github.com/RobZombie9043/playstation-x-es-de/tree/{rev}"},
+      "modifications": "Shipped as it is, without the artwork sources (.psd, .afdesign, .xcf)."
+    },
+    {
+      "id": "art-book-next-es-de",
+      "name": "Art Book Next for ES-DE (a theme EmulationStation offers)",
+      "kind": "asset",
+      "artifacts": ["es-de/themes/art-book-next-es-de/**"],
+      "licence": "CC-BY-NC-SA-2.0",
+      "noncommercial": true,
+      "copyright": ["ant (anthonycaccese), and the authors its README credits"],
+      "texts": [{"from": ".deps/esde-themes/art-book-next-es-de/README.md", "to": "README.md"}],
+      "source": {"kind": "pin", "file": "frontends/es-de/themes.list", "var": "theme_art_book_next", "url": "https://github.com/anthonycaccese/art-book-next-es-de/tree/{rev}"},
+      "modifications": "Shipped as it is, without the artwork sources (.psd, .afdesign, .xcf)."
+    },
+    {
+      "id": "retrofix-revisited-es-de",
+      "name": "Retrofix (Revisited) for ES-DE (a theme EmulationStation offers)",
+      "kind": "asset",
+      "artifacts": ["es-de/themes/retrofix-revisited-es-de/**"],
+      "licence": "CC-BY-NC-SA-2.0",
+      "noncommercial": true,
+      "copyright": ["ant (anthonycaccese) and 20GotoTen, and the authors its README credits"],
+      "texts": [{"from": ".deps/esde-themes/retrofix-revisited-es-de/README.md", "to": "README.md"}],
+      "source": {"kind": "pin", "file": "frontends/es-de/themes.list", "var": "theme_retrofix_revisited", "url": "https://github.com/anthonycaccese/retrofix-revisited-es-de/tree/{rev}"},
+      "modifications": "Shipped as it is, without the artwork sources (.psd, .afdesign, .xcf)."
+    },
+    {
+      "id": "artflix-revisited-es-de",
+      "name": "Artflix (Revisited) for ES-DE (a theme EmulationStation offers)",
+      "kind": "asset",
+      "artifacts": ["es-de/themes/artflix-revisited-es-de/**"],
+      "licence": "CC-BY-NC-SA-2.0",
+      "noncommercial": true,
+      "copyright": ["TheGrizzMD and Alekfull (fagnerpc), after ARTFLIX by Alekfull and ARTFLIX-Cobalto by Galisteo"],
+      "texts": [{"from": ".deps/esde-themes/artflix-revisited-es-de/README.md", "to": "README.md"}],
+      "source": {"kind": "pin", "file": "frontends/es-de/themes.list", "var": "theme_artflix_revisited", "url": "https://github.com/TheGrizzMD/artflix-revisited-es-de/tree/{rev}"},
+      "modifications": "Shipped as it is, without the artwork sources (.psd, .afdesign, .xcf). Its repository states no licence of its own; it derives from Alekfull's ARTFLIX, whose CC BY-NC-SA terms are applied here."
+    },
+    {
+      "id": "sdl2",
+      "name": "SDL 2.30.12 (ps5-payload-dev's PS5 fork), as ES-DE's window, input and sound",
+      "kind": "code",
+      "artifacts": ["es-de/es-de.bin"],
+      "licence": "Zlib",
+      "copyright": ["Copyright (C) 1997-2025 Sam Lantinga"],
+      "texts": [{"from": ".deps/ps5-sdl/LICENSE.txt", "to": "LICENSE.txt"}],
+      "source": {"kind": "fixed", "revision": "8c56053f13ca13a0c050de613706ff69eb615836", "url": "https://github.com/ps5-payload-dev/SDL/tree/{rev}",
+                 "extra": [{"name": "SDL", "git": ".deps/ps5-sdl", "revision": "8c56053f13ca13a0c050de613706ff69eb615836", "remote": "https://github.com/ps5-payload-dev/SDL"}]},
+      "modifications": "Built by PS5_OpenGL's integration/SDL2 (static-ps5.patch, ps5-joystick.patch, its OpenGL video bridge, the fork's PS5 audio driver)."
+    },
+    {
+      "id": "ps5-opengl",
+      "name": "PS5_OpenGL: OpenGL 4.6 for ES-DE (Mesa's Gallium, GLSL and NIR on the console's GPU), and its SDL2 integration",
+      "kind": "code",
+      "artifacts": ["es-de/es-de.bin"],
+      "licence": "GPL-3.0-or-later (PS5_OpenGL) AND MIT (Mesa) AND others stated in LICENSES/",
+      "copyright": ["Copyright (C) 2026 BlackBearReloaded", "Copyright (C) 2026 Mihawk", "Copyright the Mesa contributors (per-file notices in the source)"],
+      "texts": [{"from": "../PS5_OpenGL/LICENSE", "to": "GPL-3.0.txt"}, {"from": "../PS5_OpenGL/LICENSES", "to": "LICENSES"}, {"from": "../PS5_OpenGL/THIRD_PARTY_NOTICES.md", "to": "THIRD_PARTY_NOTICES.md"}],
+      "source": {"kind": "git", "path": "../PS5_OpenGL", "remote": "https://github.com/mihawk-99/ps5-opengl"},
+      "modifications": "mihawk-99's fork of blackbearreloaded/ps5-opengl; its dependencies.json pins the Mesa and OpenGNM sources it builds."
+    },
+    {
+      "id": "ffmpeg",
+      "name": "FFmpeg 8.1.1 (ES-DE's video previews: decoders and filters, no GPL parts)",
+      "kind": "code",
+      "artifacts": ["es-de/es-de.bin"],
+      "licence": "LGPL-2.1-or-later",
+      "copyright": ["Copyright the FFmpeg developers"],
+      "texts": [{"from": "build/ffmpeg-esde-ps5/src/COPYING.LGPLv2.1", "to": "COPYING.LGPLv2.1"}, {"from": "build/ffmpeg-esde-ps5/src/LICENSE.md", "to": "LICENSE.md"}],
+      "source": {"kind": "pin", "file": "tools/build-ffmpeg-esde.sh", "var": "version", "url": "https://ffmpeg.org/releases/ffmpeg-{rev}.tar.xz",
+                 "extra": [{"tarball": ".deps/downloads/ffmpeg-8.1.1.tar.xz"}]},
+      "modifications": "Configured by tools/build-ffmpeg-esde.sh and linked statically into es-de.bin; ES-DE's and this port's source (both in the source archives) relink it."
+    },
+    {
+      "id": "curl",
+      "name": "curl 8.22.0 (ES-DE's scraper and downloads)",
+      "kind": "code",
+      "artifacts": ["es-de/es-de.bin"],
+      "licence": "curl",
+      "copyright": ["Copyright (c) 1996 - 2026, Daniel Stenberg and many contributors"],
+      "texts": [{"from": "build/curl-ps5/curl/COPYING", "to": "COPYING"}],
+      "source": {"kind": "pin", "file": "tools/build-curl.sh", "var": "curl_version", "url": "https://curl.se/download/curl-{rev}.tar.bz2",
+                 "extra": [{"tarball": ".deps/downloads/curl-8.22.0.tar.bz2"}]},
+      "modifications": "Configured by tools/build-curl.sh, with mbedTLS for TLS."
+    },
+    {
+      "id": "mbedtls",
+      "name": "Mbed TLS 3.6.7 (curl's TLS)",
+      "kind": "code",
+      "artifacts": ["es-de/es-de.bin"],
+      "licence": "Apache-2.0 OR GPL-2.0-or-later",
+      "copyright": ["Copyright The Mbed TLS Contributors"],
+      "texts": [{"from": "build/curl-ps5/mbedtls/LICENSE", "to": "LICENSE"}],
+      "source": {"kind": "pin", "file": "tools/build-curl.sh", "var": "mbedtls_version", "url": "https://github.com/Mbed-TLS/mbedtls/releases/download/mbedtls-{rev}/mbedtls-{rev}.tar.bz2",
+                 "extra": [{"tarball": ".deps/downloads/mbedtls-3.6.7.tar.bz2"}]},
+      "modifications": "Built as it is by tools/build-curl.sh."
+    },
+    {
+      "id": "freetype",
+      "name": "FreeType 2.13.3 (ES-DE's fonts)",
+      "kind": "code",
+      "artifacts": ["es-de/es-de.bin"],
+      "licence": "FTL OR GPL-2.0-or-later",
+      "copyright": ["Portions of this software are copyright (C) The FreeType Project (www.freetype.org)"],
+      "texts": [{"from": "build/freetype-ps5/src/LICENSE.TXT", "to": "LICENSE.TXT"}, {"from": "build/freetype-ps5/src/docs/FTL.TXT", "to": "FTL.TXT"}],
+      "source": {"kind": "pin", "file": "tools/build-freetype.sh", "var": "version", "url": "https://download.savannah.gnu.org/releases/freetype/freetype-{rev}.tar.xz",
+                 "extra": [{"tarball": ".deps/downloads/freetype-2.13.3.tar.xz"}]},
+      "modifications": "Built as it is by tools/build-freetype.sh, under the FreeType License."
+    },
+    {
+      "id": "harfbuzz",
+      "name": "HarfBuzz 14.5.1 (ES-DE's text shaping)",
+      "kind": "code",
+      "artifacts": ["es-de/es-de.bin"],
+      "licence": "MIT-Modern-Variant",
+      "copyright": ["Copyright the HarfBuzz authors (see COPYING)"],
+      "texts": [{"from": "build/harfbuzz-ps5/src/COPYING", "to": "COPYING"}],
+      "source": {"kind": "pin", "file": "tools/build-harfbuzz.sh", "var": "version", "url": "https://github.com/harfbuzz/harfbuzz/releases/download/{rev}/harfbuzz-{rev}.tar.xz",
+                 "extra": [{"tarball": ".deps/downloads/harfbuzz-14.5.1.tar.xz"}]},
+      "modifications": "Built as it is by tools/build-harfbuzz.sh."
+    },
+    {
+      "id": "icu",
+      "name": "ICU 78.3 (ES-DE's Unicode text handling)",
+      "kind": "code",
+      "artifacts": ["es-de/es-de.bin"],
+      "licence": "Unicode-3.0",
+      "copyright": ["Copyright © 2016-2025 Unicode, Inc.", "Copyright (c) 1995-2016 International Business Machines Corporation and others"],
+      "texts": [{"from": "build/icu-ps5/src/LICENSE", "to": "LICENSE"}],
+      "source": {"kind": "pin", "file": "tools/build-icu.sh", "var": "version", "url": "https://github.com/unicode-org/icu/releases/tag/release-{rev}",
+                 "extra": [{"tarball": ".deps/downloads/icu4c-78.3-sources.tgz"}, {"tarball": ".deps/downloads/icu4c-78.3-data.zip"}]},
+      "modifications": "Built by tools/build-icu.sh with its data linked in."
+    },
+    {
+      "id": "pugixml",
+      "name": "pugixml 1.16 (ES-DE's XML; the port's game lists)",
+      "kind": "code",
+      "artifacts": ["es-de/es-de.bin"],
+      "licence": "MIT",
+      "copyright": ["Copyright (c) 2006-2026 Arseny Kapoulkine"],
+      "texts": [{"from": "build/pugixml-ps5/src/LICENSE.md", "to": "LICENSE.md"}],
+      "source": {"kind": "pin", "file": "tools/build-pugixml.sh", "var": "version", "url": "https://github.com/zeux/pugixml/releases/tag/v{rev}",
+                 "extra": [{"tarball": ".deps/downloads/pugixml-1.16.tar.gz"}]},
+      "modifications": "Built as it is by tools/build-pugixml.sh."
+    },
+    {
+      "id": "libwebp",
+      "name": "libwebp 1.6.0 (the WebP pictures ES-DE's themes use)",
+      "kind": "code",
+      "artifacts": ["es-de/es-de.bin"],
+      "licence": "BSD-3-Clause",
+      "copyright": ["Copyright (c) 2010, Google Inc."],
+      "texts": [{"from": "build/libwebp-ps5/src/COPYING", "to": "COPYING"}, {"from": "build/libwebp-ps5/src/PATENTS", "to": "PATENTS"}],
+      "source": {"kind": "pin", "file": "tools/build-libwebp.sh", "var": "version", "url": "https://storage.googleapis.com/downloads.webmproject.org/releases/webp/libwebp-{rev}.tar.gz",
+                 "extra": [{"tarball": ".deps/downloads/libwebp-1.6.0.tar.gz"}]},
+      "modifications": "Its decoder only, built by tools/build-libwebp.sh."
+    },
+    {
+      "id": "stb",
+      "name": "stb_image and stb_image_write (ES-DE's pictures, in place of FreeImage)",
+      "kind": "code",
+      "artifacts": ["es-de/es-de.bin"],
+      "licence": "MIT OR Unlicense",
+      "copyright": ["Copyright (c) 2017 Sean Barrett"],
+      "texts": [{"from": ".deps/stb-2c980bb59875b0d32144a71867fbdebb2f77cd20/LICENSE", "to": "LICENSE"}],
+      "source": {"kind": "pin", "file": "tools/build-esde.sh", "var": "stb_commit", "url": "https://github.com/nothings/stb/tree/{rev}"},
+      "modifications": "Used as it is by frontends/es-de/ps5/freeimage_stb.cpp."
+    },
+    {
+      "id": "frontend-picker",
+      "name": "The frontend picker: a program of PS5_VulkanTemplate's UI module (BlackBearReloaded's kit via PS5_VKHomebrewUI), with RADV",
+      "kind": "code",
+      "artifacts": ["picker/**"],
+      "licence": "GPL-3.0-or-later AND MIT AND others (picker-licenses/ lists each part, as the template staged them)",
+      "copyright": ["Copyright (C) 2026 Mihawk", "Copyright (C) 2026 BlackBearReloaded (the UI kit)", "Copyright (C) 2016-2026 Sascha Willems (the example base)"],
+      "texts": [{"from": "build/picker/title/dist/PPSA99168/licenses", "to": "picker-licenses"}, {"from": "build/picker/title/dist/PPSA99168/LEGAL.txt", "to": "LEGAL.txt"}, {"from": "assets/picker/NOTICE.md", "to": "previews-NOTICE.md"}],
+      "source": {"kind": "pin", "file": "tools/build-picker.sh", "var": "template_commit", "url": "https://github.com/mihawk-99/PS5_VulkanTemplate/tree/{rev}",
+                 "extra": [{"name": "PS5_VulkanTemplate", "git": "../PS5_VulkanTemplate", "pin": {"file": "tools/build-picker.sh", "var": "template_commit"}, "remote": "https://github.com/mihawk-99/PS5_VulkanTemplate"},
+                           {"name": "PS5_VKHomebrewUI", "git": "../PS5_VKHomebrewUI", "pin": {"file": "../PS5_VulkanTemplate/ps5/ui/setup-kit.sh", "var": "revision"}, "remote": "https://github.com/mihawk-99/PS5_VKHomebrewUI"},
+                           {"name": "PS5_PayloadSDK", "git": "../PS5_PayloadSDK", "pin": {"file": "../PS5_VulkanTemplate/ps5/tools/setup-sdk.sh", "var": "sdk_revision"}, "remote": "https://github.com/mihawk-99/PS5_PayloadSDK"}]},
+      "modifications": "frontends/picker/picker.cpp (PS5_RetroArch), built as the one program of a title the template generates (tools/build-picker.sh)."
+    },
+    {
+      "id": "qrcodegen",
+      "name": "Nayuki QR Code generator 1.8.0",
+      "kind": "code",
+      "always": true,
+      "artifacts": [
+        "eboot.bin",
+        "es-de/es-de.bin",
+        "picker/picker.bin"
+      ],
+      "licence": "MIT",
+      "copyright": [
+        "Copyright (c) Project Nayuki"
+      ],
+      "texts": [
+        {
+          "from": "third_party/qrcodegen/LICENSE",
+          "to": "MIT.txt"
+        }
+      ],
+      "source": {
+        "kind": "git",
+        "path": ".",
+        "remote": "https://github.com/mihawk-99/PS5_RetroArch"
+      },
+      "modifications": "Unmodified upstream C source vendored in third_party/qrcodegen; upstream URL, version and SHA-256 digests in source.json. Shared runtime WebUI QR wrapper in src/ps5_webui_qr.c."
+    },
+    {
+      "id": "proton-touchpad",
+      "name": "PS5 Proton touchpad tracking (adapted)",
+      "kind": "code",
+      "always": true,
+      "artifacts": [
+        "eboot.bin"
+      ],
+      "licence": "LGPL-2.1-or-later",
+      "copyright": [
+        "Copyright the PS5 Proton contributors"
+      ],
+      "texts": [
+        {
+          "from": "third_party/proton_touchpad/LICENSE",
+          "to": "LGPL-2.1.txt"
+        }
+      ],
+      "source": {
+        "kind": "git",
+        "path": ".",
+        "remote": "https://github.com/mihawk-99/PS5_RetroArch"
+      },
+      "modifications": "Relative contact tracking adapted in src/input_ps5.cpp; original revision and files in third_party/proton_touchpad/source.json."
+    },
+    {
+      "id": "lapy",
+      "name": "Lapy owned-root service (with ps5log client)",
+      "kind": "code",
+      "artifacts": [
+        "lapy-root-daemon.elf"
+      ],
+      "licence": "MIT AND LGPL-2.1-or-later",
+      "copyright": [
+        "Copyright (c) 2026 Arksama (Team PHU)"
+      ],
+      "texts": [
+        {
+          "from": "platform/lapy/LICENSE",
+          "to": "LICENSE-Lapy"
+        },
+        {
+          "from": "../prospero-win-main/LICENSE",
+          "to": "LICENSE-ps5log"
+        }
+      ],
+      "source": {
+        "kind": "fixed",
+        "revision": "5b8397b9f2b5f12a7bc2f9c8745a00d1c2dd01ad",
+        "remote": "https://github.com/mpereiraesaa/PS5-Lapy-JB-Daemon",
+        "extra": [
+          {"tarball": "build/lapy/ps5log-source.tar.gz"},
+          {
+            "name": "PS5-Lapy-JB-Daemon",
+            "git": "../PS5-Lapy-JB-Daemon",
+            "revision": "5b8397b9f2b5f12a7bc2f9c8745a00d1c2dd01ad",
+            "remote": "https://github.com/mpereiraesaa/PS5-Lapy-JB-Daemon"
+          }
+        ]
+      },
+      "modifications": "Title-specific resident service; qualified patches in platform/lapy and evidence; tools/build-lapy.py pins the ps5log header by SHA-256. No preflight or transaction guards disabled."
+    },
+    {
+      "id": "swanstation",
+      "name": "SwanStation (PlayStation)",
+      "kind": "code",
+      "artifacts": [
+        "cores/swanstation_libretro.so",
+        "cores/swanstation_libretro.info",
+        "info/swanstation_libretro.info",
+        "info/swanstation-LICENSE.txt"
+      ],
+      "licence": "GPL-3.0; bundled dependencies under their included licences",
+      "copyright": [
+        "Copyright the DuckStation, SwanStation and libretro contributors; PS5 portability adaptations from AngelXex (darkxex)"
+      ],
+      "texts": [
+        {
+          "from": "build/cores/stage/info/swanstation-LICENSE.txt",
+          "to": "swanstation-LICENSE.txt",
+          "verbatim": true
+        }
+      ],
+      "source": {
+        "kind": "core",
+        "build": "swanstation",
+        "remote": "https://github.com/libretro/swanstation"
+      },
+      "modifications": "Optional pinned PS5 shared-core build in tooling/swanstation and tools/build-swanstation.sh; platform executable-memory allocation and LUT fastmem."
+    }
+  ]
+}

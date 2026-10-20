@@ -1,0 +1,20 @@
+{
+  "step": "readme-galaxy",
+  "command": "python3 tools/make-readme-frames.py; source/XML/byte-identity audit; CUA preview; bash tools/verify.sh format evidence",
+  "lines": [
+    "Approved wide galaxy banner added after the unchanged opening warning",
+    "Four subtle section accents added; headings remain real searchable text",
+    "Both screenshot frames embed original screenshot bytes unchanged",
+    "All 33 core and renderer rows unchanged; frontend showcase remains before highlights",
+    "All 74 images resolve; local browser shows no broken images or page overflow",
+    "Self-contained SVG assets contain no scripts, foreignObject, or external image dependencies"
+  ],
+  "readme_sha256": "0adf18297673aee14b82e75e1852cde73071ca2584fabd7c689267af6a3b5682",
+  "assets": {
+    "galaxy-banner.svg": "08b4dd70bd1758dd8f6f898355a159390e40a08da19ea44abad84e2994477cdc",
+    "galaxy-games.svg": "9b01fa193e094bfc5e220ac4722243266631f145ebeba3ef6e352efb7b5f19b6",
+    "galaxy-frontends.svg": "da425834d8b4b627d335b7d19eee8d65f53e4e57cdf427fc97c587568d76511d",
+    "starfield-section.svg": "ac3d43c037a3d4c7d30f4fb182e0e960187aa655bd8235ee9dbfeb52510cf780"
+  },
+  "scope": "README and native SVG artwork only. Local preview checked; no GitHub publication or console action."
+}

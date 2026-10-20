@@ -1,0 +1,13 @@
+{
+  "step": "release-note-beta1",
+  "must_contain": [
+    "README warning preserved word for word; required main-branch banner is first image",
+    "All prose paragraphs and list items occupy one source line",
+    "Markdown renders four tables; the warning image loads without horizontal overflow",
+    "Draft names 18 added cores and 33 total; owner-requested sections and image removed",
+    "No release tag, release package or publication created",
+    "Yellow compatibility warning links ShadowMountPlus 1.7beta4 or later after the permanent warning; preview has no horizontal overflow"
+  ],
+  "must_not_contain": [],
+  "human_check": "Review the edited draft before preparing the final release package."
+}

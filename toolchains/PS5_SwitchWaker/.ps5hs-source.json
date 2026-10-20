@@ -1,0 +1,14 @@
+{
+  "repository": "griches/PS5_SwitchWaker",
+  "branch": "main",
+  "commit": "3c0f213f2d4c17606ac8637eda2c5da6cbcc73b0",
+  "sourceCommit": "3c0f213f2d4c17606ac8637eda2c5da6cbcc73b0",
+  "sourceRef": "main",
+  "method": "vendored-snapshot",
+  "vendoredSnapshot": true,
+  "vendorRepository": "RastaFairy/Visual-PS5",
+  "vendoredAt": "2026-10-20T15:43:39Z",
+  "submodulesMaterialized": true,
+  "originalMethod": "vendored-snapshot",
+  "sourceRevisionRecorded": true
+}

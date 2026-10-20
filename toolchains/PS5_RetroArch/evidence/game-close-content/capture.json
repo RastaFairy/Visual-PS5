@@ -1,0 +1,25 @@
+{
+  "step": "game-close-content",
+  "recorded": "2026-10-05T02:16:10Z",
+  "console_run": "base PS5 13.40, run 221401",
+  "revision": "c861d36 + tests/pad/game-close-content.txt",
+  "command": "tools/run-title.sh --no-build --relaunch-test=1 --relaunch-image=es-de/es-de.bin --frontend-capture=4,20 --frontend-launch --pad-script=tests/pad/game-close-content.txt --watch 80",
+  "raw_capture": "klog/close-content/summary.txt",
+  "raw_lines": 13,
+  "raw_bytes": 1254,
+  "lines": [
+    "==> tools/run-title.sh --no-build --relaunch-test=1 --relaunch-image=es-de/es-de.bin --frontend-capture=4,20 --frontend-launch --pad-script=tests/pad/game-close-content.txt --watch 80   (base PS5 13.40, build 584d4d27, run 221401)",
+    "frontend: mode 'game', test run 1, picker test 0, picker 1, es-de 1, remembered ask, L1 0 -> game",
+    "game mode: /app0/content/Nintendo - Super Nintendo Entertainment System/Jungle Run 2 - Partner's Island Quest (USA) (En,Fr) (Rev 1).zip with /app0/cores/snes9x_libretro.so, for /app0/es-de/es-de.bin",
+    "input: pad script MENU at 6.01 s: depth 1, list 'main_menu' '', entry 0 of 7 'Unload Core', pending ''",
+    "input: pad script press 0 at 6.51 s: 0xc000",
+    "input: pad script MENU at 8.51 s: depth 2, list 'quick_menu' 'Quick Menu', entry 0 of 17 'Resume', pending ''",
+    "input: pad script press 1 at 9.01 s: 0x0020",
+    "input: pad script press 2 at 9.51 s: 0x0020",
+    "input: pad script MENU at 10.51 s: depth 2, list 'quick_menu' 'Quick Menu', entry 2 of 17 'Close Content', pending ''",
+    "input: pad script press 3 at 11.01 s: 0x0001",
+    "game mode: RetroArch quit (status 0) after 11 s; back to the frontend",
+    "frontend capture PASS: 3 pictures from 2 process(es) in klog/frontend-20261004-221401",
+    "relaunch test PASS: handed over to /app0/es-de/es-de.bin"
+  ]
+}

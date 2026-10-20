@@ -1,0 +1,14 @@
+{
+  "repository": "polarco/X360PS5",
+  "branch": "master",
+  "commit": "21a1a707e09bf78445efda46858837d2659d7d3c",
+  "sourceCommit": "21a1a707e09bf78445efda46858837d2659d7d3c",
+  "sourceRef": "master",
+  "method": "vendored-snapshot",
+  "vendoredSnapshot": true,
+  "vendorRepository": "RastaFairy/Visual-PS5",
+  "vendoredAt": "2026-10-20T15:43:39Z",
+  "submodulesMaterialized": true,
+  "originalMethod": "vendored-snapshot",
+  "sourceRevisionRecorded": true
+}

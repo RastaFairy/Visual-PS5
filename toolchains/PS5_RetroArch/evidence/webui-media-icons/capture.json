@@ -1,0 +1,49 @@
+{
+  "step": "webui-media-icons",
+  "revision": "working tree on c71bfa8",
+  "command": "PS5_FRONTENDS=\"es-de picker\" PS5_VULKAN_TEMPLATE=\"$PWD/build/picker-template\" bash tools/verify.sh format unit build integration evidence",
+  "raw_capture": "build/webui-icon-fix-gates.log",
+  "raw_lines": 3070,
+  "lines": [
+    "== format",
+    "   PASS (10s)",
+    "== unit",
+    "Ran 185 tests in 276.743s",
+    "   PASS (277s)",
+    "== build",
+    "   PASS (86s)",
+    "== integration",
+    "Ran 185 tests in 269.280s",
+    "   PASS (277s)",
+    "== evidence",
+    "109 capture(s) replayed, 0 failed",
+    "   PASS (0s)",
+    "verify: PASS (format unit build integration evidence)",
+    "Console serves corrected icons.js bytes",
+    "Production image policy remains self-only",
+    "Embedded media image URLs removed",
+    "All ten media selector icons render on the console WebUI",
+    "RetroArch and frontend configuration bytes unchanged"
+  ],
+  "console": {
+    "build": "8135742c3466e0788579db9db79d797bbef274f9698cea48b0c109a297bfe6a5",
+    "frontend": "picker",
+    "icon_sha256": "a569c86c77fbc0db1f4589845a371083ee6b9215b993fa10d220907522359d27",
+    "policy": "default-src 'self'; connect-src 'self' https://api.github.com; img-src 'self'; style-src 'self'; script-src 'self'; font-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+    "checks": [
+      "Console serves corrected icons.js bytes",
+      "Production image policy remains self-only",
+      "Embedded media image URLs removed"
+    ]
+  },
+  "config_sha256": {
+    "retroarch.cfg": "a0b19a85a5d1af2ad85a50a403dd30913df9e3ee4dc9ac42fd84078f29ca2f8e",
+    "frontend.cfg": "4b46b4c945f76786ddb024e4e4da5f3153a1a50484e2c23a88dc874ffa9633ab"
+  },
+  "screenshots": [
+    "klog/webui-media-icons/before.jpg",
+    "klog/webui-media-icons/after.jpg"
+  ],
+  "finding": "The two authored media symbols used data:image URLs blocked by img-src self. They now render as inline SVG from trusted constants. Image policy unchanged. The installed page reproduced exactly two failed images before the fix; after deployment all ten selectors rendered.",
+  "regression": "Existing Chromium Add Game regression decodes each image and checks visible SVG nodes under the production CSP; prior assertions only checked requested asset paths/status."
+}

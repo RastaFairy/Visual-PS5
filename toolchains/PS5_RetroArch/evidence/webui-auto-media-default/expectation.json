@@ -1,0 +1,16 @@
+{
+  "step": "webui-auto-media-default",
+  "must_contain": [
+    "verify: PASS (format unit build integration evidence)",
+    "Installed Add Game opens with automatic media enabled and source options visible",
+    "Submit action reads Add game & download media",
+    "Disabling downloads restores Add to library; a new draft defaults to enabled",
+    "Running WebUI assets match source and stage",
+    "RetroArch and frontend configuration bytes unchanged"
+  ],
+  "must_not_contain": [
+    "FAILED",
+    "Traceback"
+  ],
+  "human_check": "Installed Add Game Media screenshot shows Enabled, source choices and Add game & download media without toggling it on."
+}

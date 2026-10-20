@@ -1,0 +1,10 @@
+{
+  "step": "dolphin-texture-budget-before",
+  "note": "Issue 5 before the fix, on build a2c7800a: Dolphin's custom asset cache gets no memory at all on the PS5, as reported.",
+  "must_contain": [
+    "build identity: a2c7800a",
+    "CustomAssetCache.cpp:26 E[Video]: Not enough system memory for custom resources."
+  ],
+  "must_not_contain": [],
+  "human_check": ""
+}

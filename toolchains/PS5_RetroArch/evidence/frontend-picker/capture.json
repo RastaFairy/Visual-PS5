@@ -1,0 +1,27 @@
+{
+  "step": "frontend-picker",
+  "recorded": "2026-10-04T21:35:13Z",
+  "console_run": "base PS5 13.40, runs picker-172323 (picture), frontend-20261004-172701 (es-de chain), picker-173316 (retroarch chain)",
+  "revision": "f0750ab + picker, frontend dispatch",
+  "command": "PS5_FRONTENDS='es-de picker' tools/build-title.sh; tools/run-title.sh --no-build --picker-test=300:es-de --frontend-capture=15 --frontend-quit --watch 60; tools/run-title.sh --no-build --picker-test=300:retroarch --retroarch-frames=600 --watch 60",
+  "raw_capture": "klog/frontend-picker-summary.txt",
+  "raw_lines": 15,
+  "raw_bytes": 1526,
+  "lines": [
+    "==> PS5_FRONTENDS='es-de picker' tools/build-title.sh; tools/run-title.sh --no-build --picker-test=300:<choice> [...] --watch 60   (base PS5, 13.40)",
+    "picker/picker.bin: PS5_VulkanTemplate ca553412 UI module, Gloss theme, two cards (RetroArch XMB, EmulationStation Alekfull NX SNES previews)",
+    "picker picture (klog/picker-172323/picker.png): 1920x1080, 143330 colours, focus on EmulationStation",
+    "picker record: {\"frames\":300,\"choice\":\"es-de\",\"next\":\"/app0/es-de/es-de.bin\"}",
+    "es-de chain (klog/run-PPSA99169-172717.log, --picker-test=300:es-de --frontend-capture=15 --frontend-quit): 181 eboot.bin, 182 picker/picker.bin, 183 es-de/es-de.bin, 184 eboot.bin, 185 picker/picker.bin; fatal signals 0",
+    "es-de after the picker: capture 15 s, frame 829, 1920x1080, GL error 0; es-de-ps5.log: ES-DE returned 0",
+    "trace: frontend: mode '', test run 0, picker test 1, picker 1, es-de 1 -> picker",
+    "trace: frontend: mode '', test run 0, picker test 0, picker 1, es-de 1 -> picker",
+    "picker record: {\"frames\":300,\"choice\":\"retroarch\",\"next\":\"/app0/eboot.bin\"}",
+    "retroarch chain (klog/run-PPSA99169-173316.log, --picker-test=300:retroarch --retroarch-frames=600): 186 eboot.bin, 187 picker/picker.bin, 188 eboot.bin, 189 eboot.bin, 190 picker/picker.bin; fatal signals 0",
+    "trace: frontend: mode 'retroarch', test run 1, picker test 0, picker 1, es-de 1 -> retroarch",
+    "trace: rarch_main returned = 0",
+    "trace: frontend: RetroArch quit; back to the picker",
+    "trace: frontend: mode '', test run 0, picker test 0, picker 1, es-de 1 -> picker",
+    "picker test PASS (both runs)"
+  ]
+}

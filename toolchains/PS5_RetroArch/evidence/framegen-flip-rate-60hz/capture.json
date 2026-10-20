@@ -1,0 +1,20 @@
+{
+  "step": "framegen-flip-rate-60hz",
+  "recorded": "2026-10-17T22:20:32Z",
+  "console_run": "",
+  "revision": "5c4256b (patch 0131); the hotfix eboot.bin built from it, identity 1f81446a",
+  "command": "the owner's launch of the installed hotfix; FTP read of /data/homebrew/PPSA99169/trace.txt and retroarch.log",
+  "raw_capture": "klog/framegen-flip-rate-60hz/record.txt",
+  "raw_lines": 8,
+  "raw_bytes": 851,
+  "lines": [
+    "Console: the owner's base PS5 on an output without 120 Hz, the hotfix eboot.bin (build identity 1f81446ad708fb08f7dfbbb5a4239afd69b49e256b77b2b630ec5a95dd27dce3), RetroArch's menu, 2026-10-17.",
+    "build identity: 1f81446ad708fb08f7dfbbb5a4239afd69b49e256b77b2b630ec5a95dd27dce3",
+    "wsi/videoout: 119.88 Hz not offered on the console's present output (0); presenting at 59.94 Hz",
+    "[INFO] [PS5] Display runs at 59.940 Hz; video_refresh_rate follows it (was 119.880).",
+    "[INFO] [PS5] Flips timed 16.67 to 16.69 ms apart, median 16.68 ms.",
+    "[INFO] [PS5] The output shows 59.943 flips a second in its 59.940 Hz mode.",
+    "[INFO] [FrameGen] Target Framerate 60: display 59.940 Hz, game 119.880 fps -> 0.50 pictures per game frame, each shown 1x",
+    "[INFO] [FrameGen] pace: 61.3 presents/s, 0.0 generated/s, 0.0 new frames/s, core 61.3 calls/s, governor level 0 (0.00 ms a picture)"
+  ]
+}

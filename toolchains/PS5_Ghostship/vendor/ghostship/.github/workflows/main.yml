@@ -1,0 +1,507 @@
+name: GenerateBuilds
+
+on:
+  push:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  generate-port-o2r:
+    runs-on: ubuntu-22.04
+    steps:
+    - uses: actions/checkout@v7
+      with:
+        submodules: true
+        fetch-depth: 0 # full history so the libultraship submodule gitlink resolves
+    - name: Extract Project Version
+      id: extract_version
+      run: |
+        VERSION=$(grep -oP '^\s*project\s*\([^)]*VERSION\s+\K[0-9\.]+' CMakeLists.txt)
+        echo "Found version: $VERSION"
+        echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+    - name: Install dependencies
+      run: sudo apt-get install gcc g++ git cmake ninja-build lsb-release
+    - name: ccache
+      uses: hendrikmuhs/ccache-action@v1.2.13
+      with:
+        key: ${{ runner.os }}-o2r-ccache-${{ github.ref }}-${{ github.sha }}
+        restore-keys: |
+          ${{ runner.os }}-o2r-ccache-${{ github.ref }}
+          ${{ runner.os }}-o2r-ccache-
+    - name: Cache build folders
+      uses: actions/cache@v6
+      with:
+        key: ${{ runner.os }}-o2r-build-${{ github.ref }}-${{ github.sha }}
+        restore-keys: |
+          ${{ runner.os }}-o2r-build-${{ github.ref }}
+          ${{ runner.os }}-o2r-build-
+        path: |
+          Torch/cmake-build-release
+    - name: Generate ghostship.o2r
+      run: |
+        export PATH="/usr/lib/ccache:/usr/local/opt/ccache/libexec:$PATH"
+        make -C Torch type=release -j3
+        Torch/cmake-build-release/torch pack port ghostship.o2r o2r -u ${{ steps.extract_version.outputs.version }}
+    - uses: actions/upload-artifact@v4
+      with:
+        name: ghostship.o2r
+        path: ghostship.o2r
+        retention-days: 1
+
+  build-windows:
+    needs: generate-port-o2r
+    runs-on: windows-2022
+    env:
+      WINDOWS_CERT_PFX_BASE64: ${{ secrets.WINDOWS_CERT_PFX_BASE64 }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+          fetch-depth: 0 # full history so the libultraship submodule gitlink resolves
+      - name: Setup MSVC
+        uses: ilammy/msvc-dev-cmd@v1
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install Python dependencies
+        run: pip install -r libultraship/requirements.txt
+      - name: Cache Vulkan SDK
+        uses: actions/cache@v6
+        with:
+          key: windows-vulkan-sdk-v1
+          path: C:\VulkanSDK
+      - name: Install Vulkan SDK
+        shell: pwsh
+        run: |
+          # Skip the (large) download+install when the cache already restored the SDK.
+          if (-not (Test-Path "C:\VulkanSDK\Lib")) {
+            $url = "https://sdk.lunarg.com/sdk/download/latest/windows/vulkan_sdk.exe"
+            Invoke-WebRequest -Uri $url -OutFile "$env:RUNNER_TEMP\vulkan_sdk.exe"
+            $p = Start-Process -FilePath "$env:RUNNER_TEMP\vulkan_sdk.exe" -ArgumentList "--root","C:\VulkanSDK","--accept-licenses","--default-answer","--confirm-command","install" -Wait -PassThru
+            if ($p.ExitCode -ne 0) { throw "Vulkan SDK install failed with exit code $($p.ExitCode)" }
+          }
+          "VULKAN_SDK=C:\VulkanSDK" | Out-File -FilePath $env:GITHUB_ENV -Append
+      - name: Cache vcpkg binaries
+        uses: actions/cache@v6
+        with:
+          key: windows-vcpkg-${{ github.ref }}-${{ github.sha }}
+          restore-keys: |
+            windows-vcpkg-${{ github.ref }}
+            windows-vcpkg-
+          path: |
+            ~\AppData\Local\vcpkg\archives
+      - name: sccache
+        uses: hendrikmuhs/ccache-action@v1.2.14
+        with:
+          variant: sccache
+          key: windows-sccache-${{ github.ref }}-${{ github.sha }}
+          restore-keys: |
+            windows-sccache-${{ github.ref }}
+            windows-sccache-
+      - name: Build
+        run: |
+          # Use the runner's preinstalled vcpkg (blanking VCPKG_ROOT made automate-vcpkg
+          # try to clone into an empty path and fail).
+          $env:VCPKG_ROOT=$env:VCPKG_INSTALLATION_ROOT
+          # Ninja (single-config) so the compiler launcher works; sccache caches MSVC objects.
+          # msvc-dev-cmd (arch x64) puts cl.exe on PATH; the x64-windows-static triplet is
+          # set unconditionally in CMakeLists, so dropping -A x64 doesn't change it.
+          cmake -S . -B "build/x64" -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER_LAUNCHER=sccache -DCMAKE_CXX_COMPILER_LAUNCHER=sccache -DPython3_EXECUTABLE="$(python -c 'import sys; print(sys.executable)')"
+          cmake --build ./build/x64 --parallel 10
+      - name: Download ghostship.o2r
+        uses: actions/download-artifact@v4
+        with:
+          name: ghostship.o2r
+          path: ./build/x64
+      - name: Create Package
+        shell: pwsh
+        run: |
+          Write-Host "=== build/x64 contents ==="
+          Get-ChildItem build/x64 -Force | Format-Table Name, Length, Mode
+          mkdir debug
+          if (-Not (Test-Path "build/x64/.tcc")) { Write-Error "ERROR: .tcc not found in build/x64/"; exit 1 }
+          Move-Item build/x64/.tcc .tcc
+          Move-Item build/x64/Ghostship.exe .
+          Move-Item build/x64/ghostship.o2r .
+          # Runtime DLLs the CMake POST_BUILD staged next to the exe (tcc.dll, shaderc_shared.dll, ...).
+          Get-ChildItem build/x64 -Filter *.dll | Move-Item -Destination .
+          # Belt-and-suspenders: shaderc ships straight from the SDK even if it wasn't staged.
+          if ((Test-Path "$env:VULKAN_SDK/Bin/shaderc_shared.dll") -and -not (Test-Path "shaderc_shared.dll")) {
+            Copy-Item "$env:VULKAN_SDK/Bin/shaderc_shared.dll" . -Force
+          }
+          Move-Item build/x64/*.pdb debug/
+          Move-Item README.md readme.txt
+          Invoke-WebRequest -Uri "https://raw.githubusercontent.com/mdqinc/SDL_GameControllerDB/master/gamecontrollerdb.txt" -OutFile "gamecontrollerdb.txt"
+      - name: Sign binaries
+        if: ${{ env.WINDOWS_CERT_PFX_BASE64 != '' }}
+        env:
+          WINDOWS_CERT_PASSWORD: ${{ secrets.WINDOWS_CERT_PASSWORD }}
+        shell: pwsh
+        run: |
+          $pfx = "$env:RUNNER_TEMP\codesign.pfx"
+          [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:WINDOWS_CERT_PFX_BASE64))
+          $signtool = (Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin\*\x64\signtool.exe" | Sort-Object FullName -Descending | Select-Object -First 1).FullName
+          Get-ChildItem -Path Ghostship.exe, *.dll | ForEach-Object {
+            & $signtool sign /f $pfx /p $env:WINDOWS_CERT_PASSWORD /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 $_.FullName
+            if ($LASTEXITCODE -ne 0) { throw "signtool failed for $($_.FullName)" }
+          }
+          Remove-Item $pfx -Force
+      - name: Upload build
+        uses: actions/upload-artifact@v4
+        with:
+          name: Ghostship-windows
+          include-hidden-files: true
+          path: |
+            .tcc
+            Ghostship.exe
+            *.dll
+            ghostship.o2r
+            debug
+            readme.txt
+            config.yml
+            assets
+            gamecontrollerdb.txt
+
+  build-macos:
+    needs: generate-port-o2r
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+          fetch-depth: 0 # full history so the libultraship submodule gitlink resolves
+      - name: Setup MacPorts
+        uses: melusina-org/setup-macports@v1
+        with:
+          parameters: '.github/macports.yml'
+      - name: Configure ccache
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          create-symlink: true
+          save: ${{ github.ref_name == github.event.repository.default_branch }}
+          key: ${{ runner.os }}-14-ccache-${{ github.ref }}-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-14-ccache-${{ github.ref }}
+            ${{ runner.os }}-14-ccache
+      - name: Install Python dependencies
+        run: python3 -m pip install -r libultraship/requirements.txt --break-system-packages || python3 -m pip install -r libultraship/requirements.txt
+      - name: Install dependencies
+        run: |
+          brew uninstall --ignore-dependencies libpng
+          brew install ninja
+      - name: Build (Universal)
+        run: |
+          export PATH="/usr/lib/ccache:/opt/homebrew/opt/ccache/libexec:/usr/local/opt/ccache/libexec:$PATH"
+          # MacPorts installs the (universal) Vulkan SDK under /opt/local; point the build
+          # at it so find_package(Vulkan) + shaderc resolve and the Vulkan backend is built.
+          export VULKAN_SDK=/opt/local
+          cmake --no-warn-unused-cli -H. -Bbuild-cmake -GNinja -DCMAKE_BUILD_TYPE:STRING=Release -DCMAKE_OSX_ARCHITECTURES="x86_64;arm64" -DPython3_EXECUTABLE=$(which python3)
+          cmake --build build-cmake --config Release --parallel 10
+      - name: Download ghostship.o2r
+        uses: actions/download-artifact@v4
+        with:
+          name: ghostship.o2r
+          path: ./build-cmake
+      - name: Create Package
+        run: |
+          (cd build-cmake && cpack)
+          mv _packages/*.dmg Ghostship.dmg
+          ls -la build-cmake/.tcc || (echo "ERROR: .tcc not found in build-cmake/" && exit 1)
+          cp -r build-cmake/.tcc .tcc
+          mv README.md readme.txt
+      - name: Publish packaged artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: Ghostship-mac
+          include-hidden-files: true
+          path: |
+            .tcc
+            Ghostship.dmg
+            readme.txt
+
+  build-ios:
+    needs: generate-port-o2r
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+          fetch-depth: 0 # full history so the libultraship submodule gitlink resolves
+      - name: Install Python dependencies
+        run: python3 -m pip install -r libultraship/requirements.txt --break-system-packages || python3 -m pip install -r libultraship/requirements.txt
+      - name: Download ghostship.o2r
+        uses: actions/download-artifact@v4
+        with:
+          name: ghostship.o2r
+          path: .
+      - name: Cache build folder
+        uses: actions/cache@v6
+        with:
+          key: ios-build-${{ github.ref }}-${{ github.sha }}
+          restore-keys: |
+            ios-build-${{ github.ref }}
+            ios-build-
+          path: build-ios
+      - name: Build (unsigned, device arm64)
+        run: |
+          cmake -S . -B build-ios -G Xcode -DIOS=ON -DPLATFORM=OS64 -DCMAKE_BUILD_TYPE=Release -DIOS_SIGNING=OFF -DPython3_EXECUTABLE=$(which python3)
+          # --target Ghostship skips dependency side-targets (zlib examples, TorchExternal)
+          cmake --build build-ios --config Release --target Ghostship -- CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO
+      - name: Package unsigned IPA
+        run: |
+          APP="build-ios/Release-iphoneos/Ghostship.app"
+          ls -la "$APP" || (echo "ERROR: $APP not found" && exit 1)
+          ls -la "$APP/ghostship.o2r" || (echo "ERROR: ghostship.o2r missing from app bundle" && exit 1)
+          rm -rf Payload && mkdir Payload
+          cp -R "$APP" Payload/
+          zip -qry Ghostship-unsigned.ipa Payload
+          cat > SIDELOADING.txt <<'EOF'
+          This IPA is UNSIGNED. Install it with a sideloading tool that re-signs
+          with your own Apple ID, e.g. AltStore, SideStore, or Sideloadly.
+          After installing, open the Files app and drop your SM64 ROM (.z64) or a
+          prebuilt sm64.o2r into "On My iPhone > Ghostship" (the app extracts the
+          ROM on first launch).
+          EOF
+      - name: Upload build
+        uses: actions/upload-artifact@v4
+        with:
+          name: Ghostship-ios
+          path: |
+            Ghostship-unsigned.ipa
+            SIDELOADING.txt
+
+  build-android:
+    needs: generate-port-o2r
+    runs-on: ubuntu-latest
+    env:
+      # Job-level so the signing steps can test it; a step's own `env` is not
+      # visible to that step's `if`.
+      KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+          fetch-depth: 0 # full history so the libultraship submodule gitlink resolves
+      - name: Setup JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      # The wrapper pins the Gradle version the build was written against; AGP
+      # refuses to run on an older one.
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+      - name: Install Android SDK components
+        # LUS needs CMake >= 3.24; NDK and SDK versions match android/app/build.gradle.kts
+        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "cmake;3.30.3" "ndk;30.0.15729638" "platforms;android-36" "build-tools;36.0.0" > /dev/null
+      - name: Install Python dependencies
+        run: pip install -r libultraship/requirements.txt
+      # gamedata.zip is packed from the repo root, so the o2r must land there first
+      - name: Download ghostship.o2r
+        uses: actions/download-artifact@v4
+        with:
+          name: ghostship.o2r
+          path: .
+      # Signed with the release key when the secrets are set. Without them the
+      # Gradle build falls back to the debug key, so forks still get an
+      # installable APK.
+      - name: Write release keystore
+        if: env.KEYSTORE_BASE64 != ''
+        run: |
+          echo "$KEYSTORE_BASE64" | base64 -d > android/app/release.keystore
+          test -s android/app/release.keystore || (echo "ERROR: empty keystore" && exit 1)
+      - name: Build APK (arm64 + armeabi-v7a)
+        if: env.KEYSTORE_BASE64 != ''
+        run: android/gradlew -p android assembleRelease
+        env:
+          KEYSTORE_FILE: release.keystore
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+      - name: Build APK (arm64 + armeabi-v7a, debug-signed)
+        if: env.KEYSTORE_BASE64 == ''
+        run: android/gradlew -p android assembleRelease
+      - name: Collect APK
+        run: |
+          APK=android/app/build/outputs/apk/release/app-release.apk
+          ls -la "$APK" || (echo "ERROR: APK not found" && exit 1)
+          # Every asset GameAssets.kt opens by name. An APK missing one of them
+          # installs and launches fine, then fails on the device during staging,
+          # so check it here rather than after the release goes out.
+          for entry in assets/gamedata.zip assets/gamedata.version \
+                       assets/gamecontrollerdb.txt assets/mods/place_mods_here.txt; do
+            unzip -Z1 "$APK" | grep -qx "$entry" || (echo "ERROR: $entry missing from the APK" && exit 1)
+          done
+          cp "$APK" Ghostship.apk
+      - name: Clean up keystore
+        if: always()
+        run: rm -f android/app/release.keystore
+      - name: Upload build
+        uses: actions/upload-artifact@v4
+        with:
+          name: Ghostship-android
+          path: Ghostship.apk
+
+  build-linux:
+    needs: generate-port-o2r
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+          fetch-depth: 0 # full history so the libultraship submodule gitlink resolves
+      - name: Update machine
+        run: sudo apt update
+      - name: Install dependencies
+        run: sudo apt-get install gcc g++ git cmake ninja-build lsb-release libsdl2-dev libpng-dev libsdl2-net-dev libzip-dev zipcmp zipmerge ziptool nlohmann-json3-dev libtinyxml2-dev libspdlog-dev libboost-dev libopengl-dev libogg-dev libvorbis-dev libmbedtls-dev libvulkan-dev libshaderc-dev glslang-dev spirv-tools
+      - name: ccache
+        uses: hendrikmuhs/ccache-action@v1.2.14
+        with:
+          key: linux-ccache-${{ github.ref }}-${{ github.sha }}
+          restore-keys: |
+            linux-ccache-${{ github.ref }}
+            linux-ccache-
+      - name: Cache build folders
+        uses: actions/cache@v6
+        with:
+          key: linux-build-${{ github.ref }}-${{ github.sha }}
+          restore-keys: |
+            linux-build-${{ github.ref }}
+            linux-build-
+          path: |
+            SDL2-2.30.3
+            tinyxml2-10.0.0
+            libzip-1.10.1
+      - name: Install latest SDL
+        run: |
+          export PATH="/usr/lib/ccache:/usr/local/opt/ccache/libexec:$PATH"
+          if [ ! -d "SDL2-2.30.3" ]; then
+            wget https://www.libsdl.org/release/SDL2-2.30.3.tar.gz
+            tar -xzf SDL2-2.30.3.tar.gz
+          fi
+          cd SDL2-2.30.3
+          ./configure --enable-hidapi-libusb
+          make -j 10
+          sudo make install
+          sudo cp -av /usr/local/lib/libSDL* /lib/x86_64-linux-gnu/
+      - name: Install latest tinyxml2
+        run: |
+          export PATH="/usr/lib/ccache:/usr/local/opt/ccache/libexec:$PATH"
+          if [ ! -d "tinyxml2-10.0.0" ]; then
+            wget https://github.com/leethomason/tinyxml2/archive/refs/tags/10.0.0.tar.gz
+            tar -xzf 10.0.0.tar.gz
+          fi
+          cd tinyxml2-10.0.0
+          mkdir -p build
+          cd build
+          cmake ..
+          make
+          sudo make install
+      - name: Install libzip without crypto
+        run: |
+          export PATH="/usr/lib/ccache:/usr/local/opt/ccache/libexec:$PATH"
+          if [ ! -d "libzip-1.10.1" ]; then
+            wget https://github.com/nih-at/libzip/releases/download/v1.10.1/libzip-1.10.1.tar.gz
+            tar -xzf libzip-1.10.1.tar.gz
+          fi
+          cd libzip-1.10.1
+          mkdir -p build
+          cd build
+          cmake .. -DENABLE_COMMONCRYPTO=OFF -DENABLE_GNUTLS=OFF -DENABLE_MBEDTLS=OFF -DENABLE_OPENSSL=OFF
+          make
+          sudo make install
+          sudo cp -av /usr/local/lib/libzip* /lib/x86_64-linux-gnu/
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install Python dependencies
+        run: pip install -r libultraship/requirements.txt
+      - name: Download ghostship.o2r
+        uses: actions/download-artifact@v4
+        with:
+          name: ghostship.o2r
+          path: ./build-cmake
+      - name: Build
+        run: |
+          # Route the compiler through ccache so the linux-ccache cache is actually used.
+          cmake -H. -Bbuild-cmake -GNinja -DCMAKE_BUILD_TYPE=Release -D CMAKE_C_COMPILER_LAUNCHER=ccache -D CMAKE_CXX_COMPILER_LAUNCHER=ccache -DPython3_EXECUTABLE=$(which python3)
+          cmake --build build-cmake --config Release -j3
+          (cd build-cmake && cpack -G External)
+          wget -O gamecontrollerdb.txt https://raw.githubusercontent.com/mdqinc/SDL_GameControllerDB/master/gamecontrollerdb.txt
+          mv README.md readme.txt
+          mv build-cmake/*.appimage ghostship.appimage
+          ls -la build-cmake/.tcc || (echo "ERROR: .tcc not found in build-cmake/" && exit 1)
+          cp -r build-cmake/.tcc .tcc
+      - name: Upload build
+        uses: actions/upload-artifact@v4
+        with:
+          name: Ghostship-linux
+          include-hidden-files: true
+          path: |
+            .tcc
+            ghostship.appimage
+            config.yml
+            readme.txt
+            assets
+            gamecontrollerdb.txt
+
+  build-switch:
+    if: false # Disabled until i update lus with the new renderer and fix the build issues
+    needs: generate-port-o2r
+    runs-on: ubuntu-latest
+    container:
+      image: devkitpro/devkita64:20260219
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+          fetch-depth: 0 # full history so the libultraship submodule gitlink resolves
+      # ccache-action doesn't run cleanly inside the devkitpro container, so cache the
+      # ccache dir directly (workspace-relative so host and container share it).
+      - name: Cache ccache
+        uses: actions/cache@v6
+        with:
+          key: switch-ccache-${{ github.ref }}-${{ github.sha }}
+          restore-keys: |
+            switch-ccache-${{ github.ref }}
+            switch-ccache-
+          path: |
+            .ccache
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build ccache
+          sudo apt-get remove -y cmake
+          sudo dkp-pacman -R --noconfirm switch-tinyxml2 # devkitPro's tinyxml2 is too old and causes build issues
+          export CFLAGS="${CFLAGS} -include strings.h" # weird libzip error (pulled in by LUS) that only happens in CI and not for SoH
+          git -C libultraship remote add nx https://github.com/Net64DD/libultraship.git
+          git -C libultraship fetch nx
+          git -C libultraship checkout nx/main-nx-nightly
+          wget https://github.com/Kitware/CMake/releases/download/v3.28.3/cmake-3.28.3-linux-x86_64.sh -O /tmp/cmake.sh
+          sudo sh /tmp/cmake.sh --prefix=/usr/local/ --exclude-subdir
+          # Route the devkitA64 cross-compiler through ccache; CCACHE_DIR is workspace-relative
+          # so the cached dir restored on the host is visible inside the container.
+          export CCACHE_DIR="$GITHUB_WORKSPACE/.ccache"
+          cmake -H. -Bbuild-switch -GNinja -DCMAKE_TOOLCHAIN_FILE=/opt/devkitpro/cmake/Switch.cmake -DCMAKE_BUILD_TYPE:STRING=Release -D CMAKE_C_COMPILER_LAUNCHER=ccache -D CMAKE_CXX_COMPILER_LAUNCHER=ccache
+          cmake --build build-switch --config Release -j3
+          wget -O gamecontrollerdb.txt https://raw.githubusercontent.com/mdqinc/SDL_GameControllerDB/refs/heads/master/gamecontrollerdb.txt
+          mv README.md readme.txt
+          mv build-switch/*.nro Ghostship.nro
+      - name: Download ghostship.o2r
+        uses: actions/download-artifact@v4
+        with:
+          name: ghostship.o2r
+      - name: Upload build
+        uses: actions/upload-artifact@v4
+        with:
+          name: Ghostship-switch
+          path: |
+            Ghostship.nro
+            ghostship.o2r
+            config.yml
+            assets
+            gamecontrollerdb.txt

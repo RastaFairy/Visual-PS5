@@ -1,0 +1,29 @@
+{
+  "step": "release-note-beta1",
+  "revision": "working tree on 0b6be46",
+  "command": "Compare warning with README.md; render with markdown-it; inspect local browser preview; tools/verify.sh format evidence",
+  "lines": [
+    "README warning preserved word for word; required main-branch banner is first image",
+    "All prose paragraphs and list items occupy one source line",
+    "Markdown renders four tables; the warning image loads without horizontal overflow",
+    "Draft names 18 added cores and 33 total; owner-requested sections and image removed",
+    "No release tag, release package or publication created",
+    "Yellow compatibility warning links ShadowMountPlus 1.7beta4 or later after the permanent warning; preview has no horizontal overflow"
+  ],
+  "artifact": {
+    "file": "releases/v1.0.0-beta.1.md",
+    "sha256": "479b597b0e5afad32179e460ed6fc34324d7d7861cf421556b7c9ee7cbafaf1b",
+    "warning_matches_readme": true,
+    "warning_is_first_image": true,
+    "paragraphs_single_line": true,
+    "markdown_rendered": true,
+    "words": 1849
+  },
+  "preview": "build/release-preview/index.html",
+  "scope": "Release-note drafting only; no runtime changes or console actions",
+  "owner_edits": [
+    "Removed Beta notes \u2014 please read section",
+    "Removed WebUI overview image and its caption",
+    "Added yellow ShadowMountPlus 1.7beta4 or later compatibility warning"
+  ]
+}

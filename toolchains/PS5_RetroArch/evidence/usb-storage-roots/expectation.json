@@ -1,0 +1,13 @@
+{
+  "step": "usb-storage-roots",
+  "note": "With ShadowMountPlus 1.7beta4, which mounts /mnt and /data into every PPSA title's sandbox, the title opens /mnt and finds the USB drive at /mnt/usb0; before, /mnt and /mnt/usb0 failed with errno 2. The browser's roots are INTERNAL and each mounted drive; /data is never offered (owner).",
+  "must_contain": [
+    "frontend ps5: directory /mnt opened=1",
+    "frontend ps5: storage /mnt/usb0 (USB 0) available",
+    "frontend ps5: storage /mnt/ext0 (EXTENDED 0) absent"
+  ],
+  "must_not_contain": [
+    "(DATA)"
+  ],
+  "human_check": "Owner confirmed the USB drive is listed in the title and a game from it plays."
+}

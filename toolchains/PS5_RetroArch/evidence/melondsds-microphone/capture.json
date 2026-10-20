@@ -1,0 +1,24 @@
+{
+  "step": "melondsds-microphone",
+  "recorded": "2026-10-17T22:10:00Z",
+  "console_run": "",
+  "revision": "20dd7fe (this series), in build 838fd9a3",
+  "command": "tools/run-title.sh --no-build --no-deploy --game=melondsds:<a backup in content/nds> --retroarch-arg=--appendconfig=/app0/tests/no-save.cfg --pad-script=tests/pad/melondsds-microphone.txt --watch 35",
+  "raw_capture": "klog/melondsds-microphone/record.txt",
+  "raw_lines": 12,
+  "raw_bytes": 1333,
+  "lines": [
+    "Console: the owner's base PS5 on a 1440p display with 120 Hz and VRR, build identity 838fd9a3ca99e21ce4adba405a3f3867a0c4ce411ee89981e0a8111dcef02797 (this series at 20dd7fe with PS5_FRONTENDS=\"es-de picker\", PS5_WITH_SWANSTATION=1, PS5_WITH_MELONDSDS=1), 2026-10-17.",
+    "melonDS DS with a backup in content/nds, its microphone set to Always for the run (its default listens only while the microphone button is held):",
+    "  [INFO] [Core] Loading dynamic libretro core from: \"/app0/cores/melondsds_libretro.so\".",
+    "  microphone ps5: opened user=<the first user> requested=47605 rate=48000 latency=64 s16 mono grain=256",
+    "  microphone ps5: silence state=00000000",
+    "  input: pad script OPTION melonds_mic_input_active=always at 2.00 s: 1",
+    "  input: pad script MARK at 5.005 s: frames=282 worst_ms=299.4 over_40ms=1",
+    "  input: pad script MARK at 15.015 s: frames=882 worst_ms=18.8 over_40ms=1",
+    "  input: pad script STOP at 18.00 s",
+    "  microphone ps5: closed result=00000000 received=866816 delivered=0 dropped=862720",
+    "  delivered=0: melonDS DS asks for samples only when the game reads its microphone (Platform::Mic_ReadInput), and this one does not; the bounded queue dropped what nobody read. tests/test_microphone_ps5.py covers reads.",
+    "  config/melonDS DS/melonDS DS.opt, which the run saved with the microphone on Always, was deleted (the console had none)."
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "step": "chd-flac-hash",
+  "note": "0133 on the console: the frontend's CHD reader opens a disc whose header lists CD FLAC, so RetroAchievements generates its PlayStation hash offline (and stops only at the sign-in); before, every candidate console answered \"Could not open track\" and the hash failed.",
+  "must_contain": [
+    "before: [INFO] [RCHEEVOS] Load failed (-25): hash generation failed",
+    "after: [INFO] [RCHEEVOS] Generated hash <32 hex digits>",
+    "after: [INFO] [RCHEEVOS] Found SYSTEM.CNF at sector 23",
+    "31002 hunks read, 0 failed"
+  ],
+  "must_not_contain": [
+    "after: [INFO] [RCHEEVOS] Could not open track",
+    "after: [INFO] [RCHEEVOS] Load failed (-25): hash generation failed"
+  ],
+  "human_check": ""
+}

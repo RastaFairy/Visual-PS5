@@ -1,0 +1,26 @@
+{
+  "step": "ppsspp-resolution-crash-before",
+  "recorded": "2026-10-19T01:58:46Z",
+  "console_run": "212836",
+  "revision": "aa7f0b2",
+  "command": "printf 'ppsspp_internal_resolution = \"2880x1632\"\\n' to config/PPSSPP/PPSSPP.opt; tools/run-title.sh --no-build --no-deploy \"--game=ppsspp:/app0/content/psp/<psp game>.cso\" --pad-script=tests/pad/ppsspp-resolution-change.txt --watch 80",
+  "raw_capture": "klog/evidence-63-before-focus.txt",
+  "raw_lines": 14,
+  "raw_bytes": 1082,
+  "lines": [
+    "    armed pad script tests/pad/ppsspp-resolution-change.txt",
+    "==> [run] ok launched PPSA99169 result=0x00002018 via lncUtilApp/foreground as user <user> (the console reports the title running)",
+    "    build identity: a2c7800a344aa5ddb08c175f9fa8543edadf271d79895da3bf15fbf5995c2093",
+    "    core loader: ready symbols=20618 relocations=29027 mapped_bytes=24920064 base=400840000",
+    "    core loader: ready symbols=20618 relocations=29027 mapped_bytes=24920064 base=400840000",
+    "    video driver: video_vulkan init entered",
+    "    input: pad script loaded, 0 presses",
+    "    input: pad script OPTION ppsspp_internal_resolution=3840x2176 at 30.00 s: 1",
+    "    video driver: video_vulkan init entered",
+    "    input: pad script loaded, 0 presses",
+    "    input: pad script OPTION ppsspp_internal_resolution=3840x2176 at 30.16 s: 1",
+    "    crash: signal 11 fault=0x0000000000000000 rip=0x0000000000000000 rsp=0x00000007ea93fc58 [rsp]=0x000000040084aabb handler=0x00000000004a4c20 flexible_free=914358272",
+    "    pad script: 0 picture(s) saved to klog/pad-212836",
+    "RetroArch log is stale or logging failed: current build identity absent"
+  ]
+}

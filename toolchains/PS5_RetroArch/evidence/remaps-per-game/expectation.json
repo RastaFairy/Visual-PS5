@@ -1,0 +1,15 @@
+{
+  "step": "remaps-per-game",
+  "note": "Remaps were saved to the relative default/<core>/ and never loaded (input_remapping_directory \"default\" unresolved, no platform remap folder). Fixed: game and core remaps save to /app0/config/remaps/<core>/ and load on the next launch; game overrides and game core options save and load.",
+  "must_contain": [
+    "Error saving remap file.: \"default/Snes9x/Snes9x.rmp\"",
+    "Remap file saved successfully.: \"/app0/config/remaps/Snes9x/Jungle Run 2",
+    "Game-specific remap found at \"/app0/config/remaps/Snes9x/",
+    "Remap file saved successfully.: \"/app0/config/remaps/Snes9x/Snes9x.rmp\"",
+    "Core-specific remap found at \"/app0/config/remaps/Snes9x/Snes9x.rmp\"",
+    "Game-specific overrides found at",
+    "Game-specific core options found at"
+  ],
+  "must_not_contain": [],
+  "human_check": "none"
+}

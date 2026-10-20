@@ -1,0 +1,14 @@
+{
+  "step": "smb-password",
+  "note": "SMB with a password on the Base PS5: the WebUI's SMB page saves a user and password for a share that refuses guests, the console keeps the password and answers only that it is set, and RetroArch lists that share under SMB and loads a game from it.",
+  "must_contain": [
+    "smbclient -N //<pc>/locked: tree connect failed: NT_STATUS_ACCESS_DENIED",
+    "'share': 'locked', 'folder': 'smb-test', 'user': 'mihawk', 'workgroup': '', 'password': True}",
+    "[SMB] smb://<pc>/locked/smb-test: listed 2 entries",
+    "[Content] Loading content file: \"smb://<pc>/locked/smb-test/homebrew.nes\"."
+  ],
+  "must_not_contain": [
+    "refused this user name and password"
+  ],
+  "human_check": "The owner adds a Samba user and a share that refuses guests, saves it with the password in the WebUI's SMB page, and starts a game from SMB on the console."
+}

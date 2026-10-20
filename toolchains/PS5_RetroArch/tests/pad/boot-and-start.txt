@@ -1,0 +1,13 @@
+# A game's first half-minute: pictures of what it shows, START pressed twice to
+# get past its title, and MARK lines for the frames made over each stretch.
+# Started with --game=<core>:<content>.
+5.0 MARK
+8.0 SCREENSHOT
+10.0 START 0.3
+13.0 SCREENSHOT
+15.0 MARK
+16.0 START 0.3
+19.0 SCREENSHOT
+25.0 MARK
+27.0 SCREENSHOT
+28.0 STOP

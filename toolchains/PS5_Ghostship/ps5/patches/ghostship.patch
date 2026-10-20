@@ -1,0 +1,463 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 1f4c0380..c9d86527 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -210,12 +210,12 @@ add_compile_definitions(
+     AVOID_UB=1
+ )
+ 
+-if(NOT CMAKE_SYSTEM_NAME STREQUAL "iOS")
++if(NOT CMAKE_SYSTEM_NAME STREQUAL "iOS" AND NOT PS5)
+     add_compile_definitions(ENABLE_OPENGL=1)
+ endif()
+ 
+ # Find necessary libraries
+-if (UNIX AND NOT APPLE AND NOT ANDROID)
++if (UNIX AND NOT APPLE AND NOT ANDROID AND NOT PS5)
+ find_package(OpenGL REQUIRED)
+ endif()
+ 
+@@ -463,6 +463,29 @@ include_directories(
+ if(CMAKE_SYSTEM_NAME STREQUAL "iOS" OR ANDROID)
+     set(ENABLE_SCRIPTING OFF CACHE BOOL "" FORCE)
+     set(DISABLE_DLL_LOADER ON CACHE BOOL "" FORCE)
++elseif(PS5)
++    # PlayStation 5: everything is linked into the title, from source
++    # (zlib's headers and options come from ps5/cmake/ps5-game.cmake)
++    set(tinyxml2_BUILD_TESTING OFF)
++    FetchContent_Declare(tinyxml2 GIT_REPOSITORY https://github.com/leethomason/tinyxml2.git GIT_TAG 10.0.0 GIT_SHALLOW TRUE OVERRIDE_FIND_PACKAGE)
++    FetchContent_Declare(nlohmann_json GIT_REPOSITORY https://github.com/nlohmann/json.git GIT_TAG v3.12.0 GIT_SHALLOW TRUE OVERRIDE_FIND_PACKAGE)
++    FetchContent_Declare(spdlog GIT_REPOSITORY https://github.com/gabime/spdlog.git GIT_TAG v1.16.0 GIT_SHALLOW TRUE OVERRIDE_FIND_PACKAGE)
++    set(BUILD_TOOLS OFF)
++    set(BUILD_REGRESS OFF)
++    set(BUILD_EXAMPLES OFF)
++    set(BUILD_DOC OFF)
++    set(BUILD_OSSFUZZ OFF)
++    set(ENABLE_BZIP2 OFF)
++    set(ENABLE_LZMA OFF)
++    set(ENABLE_ZSTD OFF)
++    set(ENABLE_COMMONCRYPTO OFF)
++    set(ENABLE_GNUTLS OFF)
++    set(ENABLE_MBEDTLS OFF)
++    set(ENABLE_OPENSSL OFF)
++    set(ENABLE_WINDOWS_CRYPTO OFF)
++    FetchContent_Declare(libzip GIT_REPOSITORY https://github.com/nih-at/libzip.git GIT_TAG v1.11.4 GIT_SHALLOW TRUE OVERRIDE_FIND_PACKAGE)
++    FetchContent_MakeAvailable(tinyxml2 nlohmann_json spdlog libzip)
++    target_include_directories(${PROJECT_NAME} PRIVATE ${libzip_SOURCE_DIR}/lib ${libzip_BINARY_DIR})
+ elseif(EMSCRIPTEN)
+     set(ENABLE_SCRIPTING OFF CACHE BOOL "" FORCE)
+     set(DISABLE_DLL_LOADER ON CACHE BOOL "" FORCE)
+@@ -964,7 +987,7 @@ if (CMAKE_SYSTEM_NAME STREQUAL "Windows")
+   endif()
+ endif()
+ 
+-if(NOT CMAKE_SYSTEM_NAME STREQUAL "NintendoSwitch" AND NOT ANDROID)
++if(NOT CMAKE_SYSTEM_NAME STREQUAL "NintendoSwitch" AND NOT ANDROID AND NOT PS5)
+ include(ExternalProject)
+ ExternalProject_Add(TorchExternal
+ 	PREFIX TorchExternal
+diff --git a/src/port/Engine.cpp b/src/port/Engine.cpp
+index 10ae903d..9c36e36d 100644
+--- a/src/port/Engine.cpp
++++ b/src/port/Engine.cpp
+@@ -102,7 +102,12 @@
+ 
+ const float imguiScaleOptionToValue[4] = { 0.75f, 1.0f, 1.5f, 2.0f };
+ std::shared_ptr<Fast::Fast3dWindow> gsFast3dWindow;
++#ifdef __PROSPERO__
++// PlayStation 5: a television across the room, not a monitor at arm's length
++const uint32_t defaultImGuiScale = 2;
++#else
+ const uint32_t defaultImGuiScale = 1;
++#endif
+ int32_t previousImGuiScaleIndex = -1;
+ float previousImGuiScale = defaultImGuiScale;
+ bool portArchiveVersionMatch = false;
+@@ -556,9 +561,12 @@ void GameEngine::FinishInit() {
+     gsFast3dWindow->SetMaximumFrameLatency(1);
+     gsFast3dWindow->SetRendererUCode(ucode_f3d);
+ 
+-#ifdef __EMSCRIPTEN__
++#if defined(__EMSCRIPTEN__) || defined(__PROSPERO__)
+     CVarRegisterInteger(CVAR_SETTING("InterpolationFPS"), 60);
+ #endif
++#ifdef __PROSPERO__
++    CVarRegisterInteger(CVAR_SETTING("ImGuiScale"), defaultImGuiScale);
++#endif
+ 
+     auto loader = ShipCompat::GetResourceManager()->GetResourceLoader();
+     auto blobFactory = std::make_shared<Ship::ResourceFactoryBinaryBlobV0>();
+@@ -630,7 +638,7 @@ void GameEngine::FinishInit() {
+     Instance->AudioInit();
+     Instance->LoadDictionary();
+     Instance->LoadPlayerAnims();
+-#if defined(__SWITCH__) || defined(__WIIU__)
++#if defined(__SWITCH__) || defined(__WIIU__) || defined(__PROSPERO__)
+     CVarRegisterInteger(CVAR_IMGUI_CONTROLLER_NAV, 1); // always enable controller nav on switch/wii u
+ #endif
+     GhostshipGui::SetupGuiElements();
+@@ -962,6 +970,11 @@ void GameEngine::RunExtract(int argc, char* argv[]) {
+ #ifdef __EMSCRIPTEN__
+                         promptStep = PS_WEB_CHOICE;
+ #else
++#ifdef __PROSPERO__
++                        // PlayStation 5: straight to looking for a ROM beside the title
++                        promptStep = PS_LOCAL;
++                        continue;
++#endif
+                         GhostshipGui::RegisterPopup(
+                             "No O2R Files", "No O2R files found. Generate one now?", "Yes", "No",
+                             [&]() { promptStep = PS_LOCAL; },
+@@ -1029,6 +1042,25 @@ void GameEngine::RunExtract(int argc, char* argv[]) {
+                         continue;
+                     }
+                     case PS_FIRST: {
++#ifdef __PROSPERO__
++                        // PlayStation 5: no file dialog. The ROM is found in the title's folder
++                        // (PS_LOCAL) or not at all.
++                        if (args.empty()) {
++                            promptStep = PS_WAIT;
++                            GhostshipGui::RegisterPopup(
++                                "Game files needed",
++                                "This needs your own copy of Super Mario 64.\n\n"
++                                "Copy sm64.o2r, or the ROM itself (.z64, US or JP), to\n"
++                                "/data/homebrew/PPSA99310 on the console, and start the game again.",
++                                "OK", "", [&]() {
++                                    threadPool = nullptr;
++                                    gsFast3dWindow = nullptr;
++                                    context = nullptr;
++                                    exit(0);
++                                });
++                            continue;
++                        }
++#endif
+                         if (args.empty() && !extract.SelectGameFromUI()) {
+                             promptStep = PS_FILE_CHECK;
+                             continue;
+@@ -1395,12 +1427,24 @@ ImFont* GameEngine::CreateFontWithSize(float size, std::string fontPath) {
+ }
+ 
+ void GameEngine::ScaleImGui() {
++#ifdef __PROSPERO__
++    // PlayStation 5: the selection is the only pointer there is. A colour that shows on the
++    // menu's blue buttons from across the room.
++    ImGui::GetStyle().Colors[ImGuiCol_NavCursor] = ImVec4(1.0f, 0.85f, 0.1f, 1.0f);
++#endif
+     int32_t imGuiScaleIndex = CVarGetInteger("gSettings.ImGuiScale", defaultImGuiScale);
+     if (imGuiScaleIndex == previousImGuiScaleIndex) {
+         return;
+     }
+ 
+     float scale = imguiScaleOptionToValue[imGuiScaleIndex];
++#ifdef __PROSPERO__
++    // ... and the options are sizes on a 1080p picture: a 4K output has twice the pixels each way
++    SDL_DisplayMode output;
++    if (SDL_GetDesktopDisplayMode(0, &output) == 0 && output.h > 1080) {
++        scale *= output.h / 1080.0f;
++    }
++#endif
+     float newScale = scale / previousImGuiScale;
+     ImGui::GetStyle().ScaleAllSizes(newScale);
+     ImGui::GetIO().FontGlobalScale = scale;
+diff --git a/src/port/GameExtractor.cpp b/src/port/GameExtractor.cpp
+index 8c94f895..4e867ebb 100644
+--- a/src/port/GameExtractor.cpp
++++ b/src/port/GameExtractor.cpp
+@@ -30,7 +30,7 @@ std::string GameExtractor::sLastError;
+ 
+ #ifdef __EMSCRIPTEN__
+ #include "port/web/WebUtils.h"
+-#elif !defined(__IOS__) && !defined(__ANDROID__) && !defined(__SWITCH__)
++#elif !defined(__IOS__) && !defined(__ANDROID__) && !defined(__SWITCH__) && !defined(__PROSPERO__)
+ #include "portable-file-dialogs.h"
+ #endif
+ 
+@@ -103,7 +103,7 @@ bool GameExtractor::SelectGameFromUI() {
+     if (romPath.empty()) {
+         return false;
+     }
+-#elif !defined(__IOS__) && !defined(__ANDROID__) && !defined(__SWITCH__)
++#elif !defined(__IOS__) && !defined(__ANDROID__) && !defined(__SWITCH__) && !defined(__PROSPERO__)
+     // Desktop: fallback to file dialogue if no baserom found
+     // if (!foundGame) {
+     if (!pfd::settings::available()) {
+diff --git a/src/port/interpolation/FrameInterpolation.cpp b/src/port/interpolation/FrameInterpolation.cpp
+index e207c0f3..83b27b2a 100644
+--- a/src/port/interpolation/FrameInterpolation.cpp
++++ b/src/port/interpolation/FrameInterpolation.cpp
+@@ -111,6 +111,14 @@ typedef pair<const void*, uintptr_t> label;
+ union Data {
+     Data() {
+     }
++    // Plain data whatever the member types' own constructors say: a vector of these must be able to grow
++    Data(const Data& other) {
++        memcpy(static_cast<void*>(this), &other, sizeof(Data));
++    }
++    Data& operator=(const Data& other) {
++        memcpy(static_cast<void*>(this), &other, sizeof(Data));
++        return *this;
++    }
+ 
+     struct {
+         Mat4** matrix;
+diff --git a/src/port/ui/GhostshipMenuSettings.cpp b/src/port/ui/GhostshipMenuSettings.cpp
+index aad34d13..0e6a347b 100644
+--- a/src/port/ui/GhostshipMenuSettings.cpp
++++ b/src/port/ui/GhostshipMenuSettings.cpp
+@@ -98,7 +98,7 @@ void GhostshipMenu::AddMenuSettings() {
+             "Sets the opacity of the background of the port menu."));
+ 
+     AddWidget(path, "General Settings", WIDGET_SEPARATOR_TEXT);
+-#if not defined(__SWITCH__) and not defined(__WIIU__)
++#if not defined(__SWITCH__) and not defined(__WIIU__) and not defined(__PROSPERO__)
+     AddWidget(path, "Cursor Always Visible", WIDGET_CVAR_CHECKBOX)
+         .CVar(CVAR_SETTING("CursorVisibility"))
+         .RaceDisable(false)
+@@ -135,7 +135,7 @@ void GhostshipMenu::AddMenuSettings() {
+                      .ComboMap(switchPerformanceProfiles)
+                      .Tooltip("Sets the Nintendo Switch CPU performance profile."));
+ #endif
+-#if not defined(__SWITCH__) and not defined(__WIIU__)
++#if not defined(__SWITCH__) and not defined(__WIIU__) and not defined(__PROSPERO__)
+     AddWidget(path, "Open App Files Folder", WIDGET_BUTTON)
+         .RaceDisable(false)
+         .Callback([](WidgetInfo& info) {
+diff --git a/src/port/ui/GhostshipModals.cpp b/src/port/ui/GhostshipModals.cpp
+index c409c825..691fb3b3 100644
+--- a/src/port/ui/GhostshipModals.cpp
++++ b/src/port/ui/GhostshipModals.cpp
+@@ -1,3 +1,7 @@
++#ifdef __PROSPERO__
++#include <SDL2/SDL.h>
++#include <imgui_impl_sdl2.h>
++#endif
+ #include "GhostshipModals.h"
+ #include <imgui.h>
+ #include <vector>
+@@ -43,7 +47,35 @@ void GhostshipModalWindow::DrawElement() {
+                                        ImGuiWindowFlags_NoSavedSettings)) {
+             ImGui::Text("%s", curModal.message_.c_str());
+             UIWidgets::PushStyleButton(THEME_COLOR);
++#ifdef __PROSPERO__
++            // PlayStation 5: a prompt is answered with the pad, whether or not the menu's
++            // controller navigation is on: Cross for the first answer, Circle for the second
++            const std::string button1 = curModal.button1_ + " (Cross)";
++            const std::string button2 = curModal.button2_ + " (Circle)";
++            // (read from SDL itself: the first-run prompts come before the game has
++            // started its controllers, so ImGui has none yet)
++            static SDL_GameController* pad = nullptr;
++            static bool held1 = true, held2 = true; // a button still down from before is not an answer
++            if (pad == nullptr && SDL_InitSubSystem(SDL_INIT_GAMECONTROLLER) == 0) {
++                for (int i = 0; i < SDL_NumJoysticks() && pad == nullptr; i++) {
++                    if (SDL_IsGameController(i)) {
++                        pad = SDL_GameControllerOpen(i);
++                    }
++                }
++                // ... and ImGui looked for one before there was any: again, for the menu
++                ImGui_ImplSDL2_SetGamepadMode(ImGui_ImplSDL2_GamepadMode_AutoFirst);
++            }
++            SDL_GameControllerUpdate();
++            const bool down1 = pad != nullptr && SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_A);
++            const bool down2 = pad != nullptr && SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_B);
++            const bool pad1 = down1 && !held1;
++            const bool pad2 = curModal.button2_ != "" && down2 && !held2;
++            held1 = down1;
++            held2 = down2;
++            if (ImGui::Button(button1.c_str()) || pad1) {
++#else
+             if (ImGui::Button(curModal.button1_.c_str())) {
++#endif
+                 if (curModal.button1callback_ != nullptr) {
+                     curModal.button1callback_();
+                 }
+@@ -54,7 +86,11 @@ void GhostshipModalWindow::DrawElement() {
+             if (curModal.button2_ != "") {
+                 ImGui::SameLine();
+                 UIWidgets::PushStyleButton(THEME_COLOR);
++#ifdef __PROSPERO__
++                if (ImGui::Button(button2.c_str()) || (pad2 && !pad1)) {
++#else
+                 if (ImGui::Button(curModal.button2_.c_str())) {
++#endif
+                     if (curModal.button2callback_ != nullptr) {
+                         curModal.button2callback_();
+                     }
+diff --git a/src/port/ui/Menu.cpp b/src/port/ui/Menu.cpp
+index 7dcb56d6..198c375d 100644
+--- a/src/port/ui/Menu.cpp
++++ b/src/port/ui/Menu.cpp
+@@ -1,3 +1,4 @@
++#include <algorithm>
+ #include "Menu.h"
+ #include <ship/window/gui/IconsFontAwesome4.h>
+ #include "port/ShipCompat.h"
+@@ -562,6 +563,14 @@ void Menu::Draw() {
+ 
+ static bool freshOpen = true;
+ void Menu::DrawElement() {
++#ifdef __PROSPERO__
++    // PlayStation 5: navigation is switched on where the menu is toggled, from whether the
++    // menu was visible before the toggle took effect, so it came on as the menu closed.
++    // While the menu is drawn, it is on.
++    if (CVarGetInteger(CVAR_IMGUI_CONTROLLER_NAV, 0)) {
++        ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;
++    }
++#endif
+     for (auto& [reason, info] : disabledMap) {
+         info.active = info.evaluation(info);
+     }
+@@ -647,6 +656,28 @@ void Menu::DrawElement() {
+     ImGui::PushFont(GameEngine::Instance->fontStandardLargest);
+     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(10.0f, 8.0f));
+     std::string headerIndex = CVarGetString(headerCvar, "Settings");
++#ifdef __PROSPERO__
++    // PlayStation 5: the menu is worked with the pad alone, and its three panes are three
++    // navigation scopes. The pad's shoulder buttons choose the tab (L1/R1) and the section
++    // (L2/R2), and the d-pad stays in the settings themselves.
++    static int ps5LastFrame = -2;
++    bool ps5Refocus = ImGui::GetFrameCount() != ps5LastFrame + 1; // the menu has just opened
++    ps5LastFrame = ImGui::GetFrameCount();
++    const bool ps5Idle = GhostshipGui::mModalWindow->PopupsQueued() == 0 && !ImGui::IsPopupOpen("", ImGuiPopupFlags_AnyPopup);
++    bool ps5Quit = ps5Idle && ImGui::IsKeyPressed(ImGuiKey_GamepadStart, false);
++    if (ps5Idle) {
++        const int step = (ImGui::IsKeyPressed(ImGuiKey_GamepadR1, false) ? 1 : 0) -
++                         (ImGui::IsKeyPressed(ImGuiKey_GamepadL1, false) ? 1 : 0);
++        auto at = std::find(menuOrder.begin(), menuOrder.end(), headerIndex);
++        if (step != 0 && at != menuOrder.end()) {
++            const int count = (int)menuOrder.size();
++            headerIndex = menuOrder[((int)(at - menuOrder.begin()) + step + count) % count];
++            CVarSetString(headerCvar, headerIndex.c_str());
++            CVarSave();
++            ps5Refocus = true;
++        }
++    }
++#endif
+     ImVec2 pos = window->DC.CursorPos;
+     float centerX = pos.x + windowWidth / 2 - (style.ItemSpacing.x * (menuEntries.size() + 1));
+     std::vector<ImVec2> headerSizes;
+@@ -699,6 +730,10 @@ void Menu::DrawElement() {
+         headerSelSize.y += style.ScrollbarSize;
+     }
+     bool autoFocus = CVarGetInteger(CVAR_SETTING("Menu.SearchAutofocus"), 0);
++#ifdef __PROSPERO__
++    // (the tabs and the sections answer to the shoulder buttons: the d-pad passes them by)
++    ImGui::PushItemFlag(ImGuiItemFlags_NoNav, true);
++#endif
+     ImGui::BeginChild("Header Selection", headerSelSize,
+                       ImGuiChildFlags_AutoResizeX | ImGuiChildFlags_AutoResizeY | ImGuiChildFlags_AlwaysAutoResize,
+                       ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_HorizontalScrollbar);
+@@ -756,12 +791,19 @@ void Menu::DrawElement() {
+         ImGui::PopStyleColor();
+     }
+     ImGui::EndChild();
++#ifdef __PROSPERO__
++    ImGui::PopItemFlag();
++#endif
+     ImGui::SameLine(menuSize.x - (buttonSize.x * 3) - (style.ItemSpacing.x * 2));
+     UIWidgets::ButtonOptions options3 = {};
+     options3.color = UIWidgets::Colors::Red;
+     options3.size = UIWidgets::Sizes::Inline;
+     options3.tooltip = "Quit Ghostship";
++#ifdef __PROSPERO__
++    if (UIWidgets::Button(ICON_FA_POWER_OFF, options3) || ps5Quit) {
++#else
+     if (UIWidgets::Button(ICON_FA_POWER_OFF, options3)) {
++#endif
+         GhostshipGui::mModalWindow->RegisterPopup(
+             "Quit Ghostship", "Are you sure you want to quit Ghostship?", "Quit", "Cancel",
+             []() {
+@@ -834,11 +876,30 @@ void Menu::DrawElement() {
+     if (!sidebar->contains(sectionIndex)) {
+         sectionIndex = menuEntries.at(headerIndex).sidebarOrder.at(0);
+     }
++#ifdef __PROSPERO__
++    if (ps5Idle) {
++        const int step = (ImGui::IsKeyPressed(ImGuiKey_GamepadR2, false) ? 1 : 0) -
++                         (ImGui::IsKeyPressed(ImGuiKey_GamepadL2, false) ? 1 : 0);
++        auto& order = menuEntries.at(headerIndex).sidebarOrder;
++        auto at = std::find(order.begin(), order.end(), sectionIndex);
++        if (step != 0 && at != order.end()) {
++            const int count = (int)order.size();
++            sectionIndex = order[((int)(at - order.begin()) + step + count) % count];
++            CVarSetString(sidebarCvar, sectionIndex.c_str());
++            CVarSave();
++            ps5Refocus = true;
++        }
++    }
++#endif
+     float sectionCenterX = pos.x + (sidebarWidth / 2);
+     float topY = pos.y;
+     ImGui::SetNextWindowSizeConstraints({ sidebarWidth, 0 }, { sidebarWidth, columnHeight });
++#ifdef __PROSPERO__
++    ImGui::PushItemFlag(ImGuiItemFlags_NoNav, true);
++#endif
+     ImGui::BeginChild((menuEntries.at(headerIndex).label + " Section").c_str(), { sidebarWidth, columnHeight * 3 },
+-                      ImGuiChildFlags_AutoResizeY | ImGuiChildFlags_AlwaysAutoResize, ImGuiWindowFlags_NoTitleBar);
++                      ImGuiChildFlags_AutoResizeY | ImGuiChildFlags_AlwaysAutoResize,
++                      ImGuiWindowFlags_NoTitleBar);
+     for (auto& sidebarLabel : menuEntries.at(headerIndex).sidebarOrder) {
+         std::string nextIndex = "";
+         UIWidgets::PushStyleButton(menuThemeIndex);
+@@ -862,6 +923,9 @@ void Menu::DrawElement() {
+         }
+     }
+     ImGui::EndChild();
++#ifdef __PROSPERO__
++    ImGui::PopItemFlag();
++#endif
+     ImGui::PopFont();
+ 
+     pos = ImVec2{ sectionCenterX + (sidebarWidth / 2), topY } + style.ItemSpacing * 2;
+@@ -881,8 +945,16 @@ void Menu::DrawElement() {
+     if (!useColumns || (headerSearch && menuSearchText.length() > 0)) {
+         ImGui::SameLine();
+         ImGui::SetNextWindowSizeConstraints({ sectionWidth, 0 }, { sectionWidth, columnHeight });
++#ifdef __PROSPERO__
++        if (ps5Refocus) {
++            ImGui::SetNextWindowFocus();
++        }
++        ImGui::BeginChild(sectionMenuId.c_str(), { sectionWidth, windowHeight * 4 },
++                          ImGuiChildFlags_AutoResizeY | ImGuiChildFlags_NavFlattened, ImGuiWindowFlags_NoTitleBar);
++#else
+         ImGui::BeginChild(sectionMenuId.c_str(), { sectionWidth, windowHeight * 4 }, ImGuiChildFlags_AutoResizeY,
+                           ImGuiWindowFlags_NoTitleBar);
++#endif
+     }
+     if (headerSearch && menuSearchText.length() > 0) {
+         ImGui::AlignTextToFramePadding();
+@@ -918,8 +990,17 @@ void Menu::DrawElement() {
+             std::string sectionId = fmt::format("{} Column {}", sectionMenuId, i);
+             if (useColumns) {
+                 ImGui::SetNextWindowSizeConstraints({ columnWidth, 0 }, { columnWidth, columnHeight });
++#ifdef __PROSPERO__
++                if (ps5Refocus && i == 0) {
++                    ImGui::SetNextWindowFocus();
++                }
++                ImGui::BeginChild(sectionId.c_str(), { columnWidth, windowHeight * 4 },
++                                  ImGuiChildFlags_AutoResizeY | ImGuiChildFlags_NavFlattened,
++                                  ImGuiWindowFlags_NoTitleBar);
++#else
+                 ImGui::BeginChild(sectionId.c_str(), { columnWidth, windowHeight * 4 }, ImGuiChildFlags_AutoResizeY,
+                                   ImGuiWindowFlags_NoTitleBar);
++#endif
+             }
+             // for (auto& entryName : sidebar->at(sectionIndex).sidebarOrder) {
+             for (auto& entry : sidebar->at(sectionIndex).columnWidgets.at(i)) {
+@@ -946,6 +1027,17 @@ void Menu::DrawElement() {
+         poppedSize = ImGui::GetWindowSize();
+         poppedPos = ImGui::GetWindowPos();
+     }
++#ifdef __PROSPERO__
++    {
++        const char* controls = "L1 / R1  tab      L2 / R2  section      D-pad  move      Cross  change      "
++                               "Circle  back      Options  quit      Touchpad  close";
++        const ImGuiViewport* screen = ImGui::GetMainViewport();
++        const ImVec2 size = ImGui::CalcTextSize(controls);
++        ImGui::GetForegroundDrawList()->AddText(
++            { screen->Pos.x + (screen->Size.x - size.x) / 2, screen->Pos.y + screen->Size.y - size.y * 1.6f },
++            IM_COL32(255, 255, 255, 200), controls);
++    }
++#endif
+     if (freshOpen) {
+         freshOpen = false;
+     }

@@ -1,0 +1,11 @@
+{
+  "step": "framegen-slow-core",
+  "note": "Frame generation with 0137 (build c0ece029), the same run: the core again below full speed at times (45 to 57 new frames a second), and every window shows real frames; each new frame is a halfway picture, then the real frame, which stays up until the next.",
+  "must_contain": [
+    "build identity: c0ece029"
+  ],
+  "must_not_contain": [
+    "real n 0 mean"
+  ],
+  "human_check": ""
+}

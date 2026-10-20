@@ -1,0 +1,297 @@
+# This port's changes to RetroArch's own sources.
+#
+# Unlike a unified diff, these are applied by tools/apply-port-patches.py, which
+# matches each change on a stable anchor line instead of a line number. The reason
+# is in that file: a diff carries one revision's line numbers and applies in the
+# wrong place, or not at all, when upstream moves.
+#
+# vendor/retroarch is never edited. The patches go to the configured copy under
+# build/ra-conf/, so "upstream plus a named, re-runnable change" stays true.
+#
+# 0001  register the PS5 video driver   gfx/video_driver.{h,c}
+0001-register-the-ps5-video-driver
+#
+# 0002  declare HAVE_XKBCOMMON, the one optional library upstream checks for
+#       without declaring, so that --disable-xkbcommon is accepted
+#       qb/config.params.sh
+0002-declare-have-xkbcommon
+#
+# 0003  rename upstream's `main` so the SDK's _start has one definition to reach
+#       and rarch_main keeps the frontend's main loop (see the note in
+#       tools/apply-port-patches.py: defining HAVE_MAIN instead compiles the loop
+#       out, which is a title that initialises everything and exits)
+#       retroarch.c
+0003-rename-upstream-main
+#
+# 0004  guard input_joypad_analog_axis against a null joypad driver, which is this
+#       console's normal state: without it the menu's analog read faults on the
+#       second pass through the runloop (see tools/apply-port-patches.py)
+#       input/input_driver.c
+0004-guard-the-joypad-analog-read
+
+# 0054  observe command completion, queue submission, presentation and menu draw inputs
+0054-observe-vulkan-api-results
+
+# 0055  convert the RGUI producer RGBA4444 channels to full-range RGBA8888
+0055-correct-rgui-rgba8888-upload
+
+# 0056  quiet steady-frame diagnostics and time Vulkan video preparation/submission/presentation
+0056-quiet-vulkan-frame-timing
+
+# 0057  retain startup/error logs without periodic successful-frame markers
+0057-startup-only-frame-diagnostics
+
+# 0058  reassert the title frontend logger after config parsing/rebuilt arguments
+0058-preserve-frontend-development-log
+
+# 0059  the first menu upload proves the handover; later updates must not write probes
+0059-log-menu-handover-once
+
+# 0060  pad the XMB ribbon uniform upload to the driver's 16-byte record size
+0060-pad-xmb-ribbon-uniform
+
+# 0061  expand XMB strips safely and submit the expanded vertex count
+0061-correct-display-triangle-strip-expansion
+
+# 0062  populate unused sampler layout slots for untextured menu effects
+0062-bind-menu-effect-placeholder-texture
+
+# 0063  seed the title asset path without Unix platform initialization and log XMB startup
+0063-set-title-menu-asset-directory
+
+# 0065  address the logical image inside driver-required row padding, including R8 fonts
+0065-correct-padded-texture-coordinates
+
+# 0066  isolate XMB sampling from unverified mip-chain layout
+0066-single-level-menu-textures
+
+# 0067  register the native PS5 PCM backend and select it by default
+0067-native-ps5-audio
+
+# Native platform paths, startup argument preservation and browser roots.
+0068-native-ps5-frontend
+
+# Supply the native executable path and enumerate through kernel getdents.
+0069-native-executable-path
+0070-native-directory-enumeration
+
+# 0071  expose PS5 pad through the binding/menu joypad interface and auto profile
+0071-register-native-ps5-joypad
+
+# Refuse failed core selection before frontend teardown; stop a failed runloop.
+0072-native-core-failure-recovery
+
+# Route libretro dynamic loading through the native ELF core loader.
+0073-native-elf-core-loader
+
+# Opt-in native loader diagnostic verifies rejected loads preserve the live menu.
+0074-native-core-recovery-diagnostic
+
+# 0075 and 0077 are withdrawn. Both existed because this driver's B8G8R8A8_UNORM
+#      entry was not a sampled one: the frontend's software core frames and its
+#      menu images ask for that format, 0014's substitution turned them into
+#      R8G8B8A8 images, and their bytes were then read in the wrong order - the
+#      red and blue reversal. The entry is sampled now, so the frontend keeps
+#      libretro's own byte order again. Their markers are in the WITHDRAWN tuple
+#      of tools/apply-port-patches.py, which exchanges each insertion for the
+#      upstream text it replaced.
+
+0076-archive-read-error-diagnostics
+
+0078-crop-padded-core-source
+
+# Opt-in, bounded first-failure XMB context; no allocator or menu policy change.
+0079-observe-xmb-allocation-context
+
+# Compact XMB nodes, mapped menu objects and checked list construction.
+0080-safe-xmb-list-allocations
+
+# Preserve requested pixel order in asynchronous thumbnail loading.
+0081-async-thumbnail-colour-order
+
+# Native joypad defaults and live auto-binding recovery after reset.
+0082-reset-native-input-defaults
+
+# 0083  an image is the format it was asked for: 0014's substitution to
+#       R8G8B8A8_UNORM is withdrawn, its usage mask kept, and 0027's and 0015's
+#       comments re-stated for the reason each still has
+0083-image-is-the-requested-format
+
+# 0084  pick the display mode by size, then highest refresh: 120 Hz where the
+#       driver offers it, 60 Hz where it does not; keep the refresh chosen
+#       gfx/common/vulkan_common.c
+0084-display-mode-highest-refresh
+#
+# 0085  report the chosen mode's refresh, make video_refresh_rate follow it, and
+#       make a saved swap interval of 1 automatic above 100 Hz so a 60 FPS core
+#       keeps its speed
+#       gfx/drivers_context/khr_display_ctx.c
+0085-report-the-display-refresh
+#
+# 0086  allocate the scaler's intermediate frames only for scaling, and fail a
+#       screenshot whose conversion cannot be set up instead of calling an unset
+#       converter (FBNeo's 4K screenshot crashed on a null call)
+#       libretro-common/gfx/scaler/scaler.c
+#       libretro-common/include/gfx/video_frame.h
+#       tasks/task_screenshot.c
+0086-scaler-frames-only-for-scaling
+#
+# 0087  line-buffer the log file, so a fault keeps the lines before it
+#       verbosity.c (0088 replaces the buffering)
+0087-line-buffered-log
+
+# 0088  a 256 KiB log buffer, written out by the title's flusher (src/main.cpp):
+#       line buffering wrote to the console's storage once a line on the
+#       logging thread, which stalled frames while a save state loaded
+#       verbosity.c
+0088-log-buffer-for-the-flusher
+
+# 0089  enable VK_KHR_get_physical_device_properties2 on the instance when it is
+#       offered: a core on a Vulkan 1.0 instance reaches the *2 queries only
+#       through it (Dolphin's allocator)
+#       gfx/common/vulkan_common.c
+0089-instance-properties2
+
+# 0090  the synchronous Vulkan readback copies no more than the viewport its
+#       caller allocated for: the cached frame it re-renders can recompute the
+#       viewport, and a save-state thumbnail of Dolphin's frame overran by ~1 MB
+#       gfx/drivers/vulkan.c
+0090-readback-within-caller-viewport
+
+# 0091  an emulated swap interval (each frame presented swap_interval times)
+#       asks for (video_max_swapchain_images - 1) * interval + 1 images, so
+#       the setting's frames of lookahead hold at 120 Hz as at 60 Hz
+#       gfx/common/vulkan_common.c
+0091-swap-interval-images
+
+# 0092  release 0021's replaced textures: the 1x1 default and 4x4 blank textures
+#       were overwritten by the wide ones and leaked on every re-initialisation
+#       gfx/drivers/vulkan.c
+0092-release-replaced-textures
+
+# 0093  release the HDR uniform buffer whenever vulkan_init created it, not only
+#       when the context reports HDR support: it leaked on every video init
+#       gfx/drivers/vulkan.c
+0093-release-hdr-uniform-buffer
+
+# 0094  write save states without stdio on this console: the libc's fwrite() ran
+#       at 3-13 MiB/s where write() of 1 MiB and more runs at 150-230 MiB/s, so
+#       a state (uncompressed in 4 MiB chunks, compressed in 1 MiB ones) goes
+#       to the raw descriptor through the frequent-access hint
+#       libretro-common/vfs/vfs_implementation.c, tasks/task_save.c,
+#       libretro-common/streams/rzip_stream.c
+0094-write-states-without-stdio
+
+# 0095  0019's instance-extension list on the heap: 256 records on the stack
+#       made a 133 KB frame with upstream's layer list, which a tester's title
+#       overran while re-creating the video driver after content closed
+#       gfx/common/vulkan_common.c
+0095-debug-utils-list-on-heap
+
+# 0096  RetroArch's own threads get a 2 MiB stack on this console, as Apple's
+#       do upstream and the cores' threads do here; they ran on the console's
+#       small default
+#       libretro-common/rthreads/rthreads.c
+0096-frontend-thread-stacks
+
+# 0097  the browser's top is the frontend's roots, INTERNAL (the title's folder)
+#       and the drives the sandbox exposes (src/frontend_ps5.cpp: USB and
+#       extended drives, or EXTERNAL): Load Content lists them alone, a
+#       root shows its name, and a root's parent is the roots, not the
+#       filesystem's /
+#       menu/menu_displaylist.c, menu/cbs/menu_cbs_get_value.c,
+#       menu/cbs/menu_cbs_ok.c
+0097-content-roots
+
+# 0098  a state load neither asks a core whose states are basic (RPCS3) for
+#       its state's size nor saves the running game for Undo Load State: such a
+#       core stops its game to make a state, which the load then replaces
+#       command.c, tasks/task_save.c
+0098-undo-load-backup
+
+# 0099  the FPS status line and Display Statistics' Frame Rate count the frames
+#       the core made, not the repeats it hands back (RetroArch's own count read
+#       the display's rate whatever the game's)
+#       gfx/video_driver.c
+0099-new-frame-rate
+
+# 0100  a screenshot's PNG is encoded at zlib's fastest level (a 4K frame at
+#       level 9 took about 20 s on the console)
+#       libretro-common/formats/png/rpng_encode.c
+0100-png-fast-level
+
+# 0101  each new frame is told to the pad script, whose MARK lines count the
+#       frames and the longest gap between them over exact script times
+#       gfx/video_driver.c
+0101-pad-script-frame-marks
+
+# 0102  balanced internal resolutions for 4K presentation, without forced MSAA;
+#       apply before saved values, so user overrides and Reset to Default work
+#       across legacy, v1, v2 and translated core options
+#       core_option_manager.c
+0102-balanced-core-defaults
+
+# 0103  shared CPU/GPU memory reports before and after state loads
+#       runloop.c
+0103-state-load-memory-reports
+
+# 0104  owner-selected PPSSPP 6x with 8x MSAA; retain saved overrides
+#       core_option_manager.c
+0104-ppsspp-msaa-default
+
+# 0105  snapshot registered core option categories, descriptions and choices
+#       for the WebUI; no HTTP access to live emulator state
+#       runloop.c
+0105-webui-core-metadata
+
+# 0106  route the default Saturn BIOS directory to system/Saturn
+#       runloop.c, core_info.c; explicit user paths remain unchanged
+0106-saturn-system-directory
+
+# 0107  compile upstream static CPU filters and resolve packaged video asset defaults
+#       Makefile.common, configuration.c
+0107-offline-video-effects
+
+0108  Full-composition Vulkan screenshots for gated console tests; preserve the game viewport and ordinary capture behavior.
+0109  Honor requested refresh at explicit fullscreen dimensions; automatic resolution keeps the highest refresh.
+0110  Expand overlay strips to both triangles for the existing list pipeline; retain UVs and alpha.
+
+0111  Normalize padded software frames before Slang sampling so history, feedback, LUTs and multipass Original use consistent coordinates.
+
+0112  Core frames are BGRA8888 textures: an RGB565 core's rows are widened on upload, and such a core is not lent the frontend's framebuffer.
+
+0113  input_remapping_directory "default" is the platform's remap folder (src/frontend_ps5.cpp, /app0/config/remaps), as "default" is for the other folders: remaps were saved to a relative "default/" path and never loaded.
+
+0114  The shared media library: RetroArch's thumbnail lookup asks /app0/library (src/ps5_library.c, ps5_library_thumbnail) first, the files every frontend reads; thumbnails_directory "default" is /app0/thumbnails, where it was empty and stopped every lookup.
+
+0115  Runtime-IP WebUI QR: XMB tab immediately left of Settings, RGUI first main-menu entry, modal drawing and input; shared encoder in src/ps5_webui_qr.c.
+
+0116  Bind the WebUI action in the common entry initializer; 0115 placed it in the custom-keyboard branch, unreachable from XMB/RGUI WebUI entries.
+
+0117  Netplay debug logging records local and remote state CRCs at upstream check frames, so a completed handshake can be distinguished from synchronized emulation. No protocol or synchronization behavior changes.
+
+0118  XMB tab icons by system: a playlist with no icon of its own name ("PS2", "Nintendo 3DS") gets the icon of the system src/ps5_library.c recognises in its name, named by database (tools/xmb-system-icons.py); otherwise the default icon, as upstream.
+
+0119  Frame generation: the shader subframes show the frames a trained network (PS5_FrameGen) makes between a content frame and the last, behind the video_framegen setting; sources are compiled by tools/build-retroarch.sh.
+
+0120  Frame generation menus: options in XMB's leftmost tab and RGUI's first main-menu entry (src/ps5_framegen_menu.c), forced cadence, method and working size, status on screen; shared file /app0/config/framegen.cfg.
+
+0121  Frame generation Output Rate Auto: the video output picks the presents per game frame from the display's rate over the game's (video_framegen_auto), and frame generation is on by default.
+
+0129  HTTPS refuses a server whose certificate does not chain to the bundled roots (cacert.h): MBEDTLS_SSL_VERIFY_REQUIRED instead of upstream's optional check whose result was ignored, so nobody on the network path can stand in for RetroAchievements.
+
+0130  A RetroAchievements sign-in that returns a token also removes the password from /app0/config/webui.cfg (with the empty token the WebUI put beside it) and from retroarch.cfg, which keeps its token (src/ps5_cheevos.c).
+
+0131  Frame generation plans on the rate the output really shows flips at: the display context times flips once on its first swapchain where the mode says 59.94 Hz (VRR shows 120 a second there, an output without 120 Hz shows 60), the plan assumes 119.88 only where they came that fast, and a target above the display's rate is the display's rate.
+
+0132  Frame generation off presents each game frame once: the presents per game frame it planned are kept in retroarch.cfg, and the 2 left there once it was turned off (in its menus or ES-DE's) held every frame for two refreshes, half speed on a 60 Hz output. Turning it on or off in the menus reinitializes the video output, so the change applies at once (src/ps5_framegen_menu.c).
+
+0133  Enable bundled FLAC for the frontend's CHD reader. libchdr rejects a CHD declaring CD FLAC when that codec is absent, preventing RetroAchievements hashing even when the emulation core can read the same disc.
+
+0134  Native user-routed AudioIn microphone backend (src/microphone_ps5.cpp), the default driver. It captures only while a core has its microphone on (melonDS DS while its microphone button is held, its default), sends silence under the DualSense mute, and keeps PCM only in a bounded in-memory queue; cores use the standard libretro microphone interface.
+
+0135  A microphone read that produces no frames returns silence rather than looping forever on a paused core, a temporarily empty nonblocking device, or a capture failure.
+
+0136  SMB: smb:// paths in RetroArch's VFS are the shared folder the WebUI's SMB page saved (src/ps5_smb.h, src/ps5_smb_vfs.c, libsmb2 from tools/build-libsmb2.sh), read-only and only on the saved server. The file browser lists it under SMB, after INTERNAL and EXTERNAL (src/frontend_ps5.cpp); a core that reads through the VFS streams a file from it, and one that opens paths itself gets a local copy in /app0/smb-cache, removed when the content closes (tasks/task_content.c). After RetroArch's own SMB client (libretro/RetroArch@c68eea5598), which 1.22.2 does not have.
+
+0137  Frame generation: the clock-measured gap between new frames (0121) counts calls a core skipped only when the core itself runs faster than real time. A core slower than real time hands over a frame each call, so its groups are planned as the calls that come: the real frame is shown again, after its generated one, instead of two early blends (the doubled image, 2026-10-18).

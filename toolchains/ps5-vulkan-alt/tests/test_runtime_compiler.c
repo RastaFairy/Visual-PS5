@@ -1,0 +1,690 @@
+#define _POSIX_C_SOURCE 200809L
+#include <pthread.h>
+#include "spirv_descriptor_types.h"
+#include "ps5vk_compiler.h"
+#include <assert.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+
+static uint32_t *read_file(const char *path, size_t *out_size)
+{
+    FILE *f = fopen(path, "rb");
+    if (!f) return NULL;
+    fseek(f, 0, SEEK_END);
+    long sz = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    if (sz <= 0 || (sz % 4) != 0) { fclose(f); return NULL; }
+    uint32_t *buf = malloc(sz);
+    if (!buf) { fclose(f); return NULL; }
+    if (fread(buf, 1, sz, f) != (size_t)sz) {
+        free(buf); fclose(f); return NULL;
+    }
+    fclose(f);
+    *out_size = (size_t)sz;
+    return buf;
+}
+
+/* An application compile thread with a stack far below what PSBC needs
+ * (the host measurement in src/compile_stack.h is 160-192 KiB): the driver
+ * must move the compile onto its own sized stack, or this thread overflows. */
+struct small_stack_compile {
+    const uint32_t *spirv; size_t words; VkPipelineLayout layout;
+    struct ps5vk_compiled_program program; uint32_t *code; VkResult result;
+};
+static void *small_stack_compile(void *opaque)
+{
+    struct small_stack_compile *c = opaque;
+    c->result = ps5vk_runtime_compile_compute(c->spirv, c->words, "main", c->layout,
+                                              NULL, &c->program, &c->code);
+    return NULL;
+}
+static void check_small_stack_compile(const uint32_t *spirv, size_t words,
+                                      VkPipelineLayout layout)
+{
+    struct small_stack_compile c = {spirv, words, layout, {0}, NULL, VK_ERROR_UNKNOWN};
+    pthread_attr_t attr;
+    pthread_t thread;
+    assert(!pthread_attr_init(&attr));
+    assert(!pthread_attr_setstacksize(&attr, (size_t)64u << 10));
+    assert(!pthread_create(&thread, &attr, small_stack_compile, &c));
+    assert(!pthread_join(thread, NULL));
+    pthread_attr_destroy(&attr);
+    assert(c.result == VK_SUCCESS && c.code && c.program.code_words);
+    free(c.code);
+}
+
+/* Count one scalar-buffer load width in the first ACO listing (after register
+ * allocation) that PSBC_DEBUG_DISASM prints to stderr. */
+static unsigned count_width(const char *listing, const char *needle)
+{
+    unsigned n = 0;
+    for (const char *p = strstr(listing, needle); p; p = strstr(p + 1, needle))
+        if (p[strlen(needle)] == ' ') ++n;
+    return n;
+}
+
+/* VK_EXT_robustness2: the driver compiles every program with
+ * robust_buffer_access2, so v[i - 1] and v[i] from an SSBO and a UBO are four
+ * separate loads rather than one merged dwordx2/dwordx8 pair (the pinned
+ * compiler's contract shows the merged form without the option). */
+static void robust_access_wrap(void)
+{
+    size_t bytes = 0;
+    uint32_t *spv = read_file("build/test-shaders/robust_access_wrap.spv", &bytes);
+    assert(spv);
+    struct VkPipelineLayout_T layout = {.set_count = 1};
+    const VkDescriptorType types[3] = {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+        VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER};
+    for (uint32_t b = 0; b < PS5VK_MAX_BINDINGS; ++b)
+        layout.sets[0].binding[b].first = b < 3 ? b : 3;
+    for (uint32_t b = 0; b < 3; ++b) {
+        layout.sets[0].binding[b].count = 1;
+        layout.sets[0].binding[b].stages = VK_SHADER_STAGE_COMPUTE_BIT;
+        layout.sets[0].type[b] = types[b];
+    }
+    layout.sets[0].count = 3;
+    FILE *capture = tmpfile(); assert(capture);
+    fflush(stderr);
+    int saved = dup(STDERR_FILENO); assert(saved >= 0);
+    assert(dup2(fileno(capture), STDERR_FILENO) >= 0);
+    assert(!setenv("PSBC_DEBUG_DISASM", "1", 1));
+    struct ps5vk_compiled_program prog = {0}; uint32_t *code = NULL;
+    VkResult res = ps5vk_runtime_compile_compute(spv, bytes / 4, "main", &layout, NULL,
+                                                 &prog, &code);
+    assert(!unsetenv("PSBC_DEBUG_DISASM"));
+    fflush(stderr);
+    assert(dup2(saved, STDERR_FILENO) >= 0); close(saved);
+    assert(res == VK_SUCCESS && code && prog.descriptor_count == 3);
+    long size = ftell(capture); assert(size > 0); rewind(capture);
+    char *text = calloc((size_t)size + 1, 1); assert(text);
+    assert(fread(text, 1, (size_t)size, capture) == (size_t)size); fclose(capture);
+    char *listing = strstr(text, "After RA:"); assert(listing);
+    char *stage = strstr(listing, "ACO shader stage:"); assert(stage);
+    char *next = strstr(stage + 1, "ACO shader stage:");
+    if (next) *next = '\0';
+    assert(count_width(listing, "s_buffer_load_dwordx2") == 0);
+    assert(count_width(listing, "s_buffer_load_dwordx8") == 0);
+    assert(count_width(listing, "s_buffer_load_dword") == 3);
+    assert(count_width(listing, "s_buffer_load_dwordx4") == 2);
+    free(text); free(code); free(spv);
+}
+
+/* A 1024-descriptor compute set: SAMPLED_IMAGE[1023] read with constant
+ * indices plus the storage buffer the results go to. Every element is a
+ * program descriptor, and the table follows the canonical layout. */
+/* A 1024-descriptor compute set: 1023 records of `type` (sampled images, 8
+ * table dwords each, or uniform texel buffers, 4 each) plus the output buffer.
+ * These are the capacity witness's own modules. */
+static void full_set_compile_type(const char *path, VkDescriptorType type, uint32_t dwords)
+{
+    size_t bytes = 0;
+    uint32_t *spv = read_file(path, &bytes);
+    assert(spv);
+    static struct VkPipelineLayout_T layout;
+    memset(&layout, 0, sizeof(layout)); layout.set_count = 1;
+    layout.sets[0].binding[0] = (struct ps5vk_binding){PS5VK_MAX_DESCRIPTORS - 1, 0, VK_SHADER_STAGE_COMPUTE_BIT};
+    layout.sets[0].type[0] = type;
+    layout.sets[0].binding[1] = (struct ps5vk_binding){1, PS5VK_MAX_DESCRIPTORS - 1, VK_SHADER_STAGE_COMPUTE_BIT};
+    layout.sets[0].type[1] = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    for (uint32_t b = 2; b < PS5VK_MAX_BINDINGS; ++b) layout.sets[0].binding[b].first = PS5VK_MAX_DESCRIPTORS;
+    layout.sets[0].count = PS5VK_MAX_DESCRIPTORS;
+    static struct ps5vk_compiled_program program; uint32_t *code = NULL;
+    assert(ps5vk_runtime_compile_compute(spv, bytes / 4, "main", &layout, NULL, &program, &code) == VK_SUCCESS);
+    assert(program.descriptor_count == PS5VK_MAX_DESCRIPTORS && program.descriptor_set_mask == 1);
+    assert(program.descriptors[PS5VK_MAX_DESCRIPTORS - 2].table_dword == (PS5VK_MAX_DESCRIPTORS - 2) * dwords);
+    assert(program.descriptors[PS5VK_MAX_DESCRIPTORS - 1].binding == 1 &&
+           program.descriptors[PS5VK_MAX_DESCRIPTORS - 1].table_dword == (PS5VK_MAX_DESCRIPTORS - 1) * dwords);
+    /* One more descriptor than a stage may declare is refused. */
+    layout.sets[0].binding[1].count = 2; layout.sets[0].count = PS5VK_MAX_DESCRIPTORS + 1;
+    uint32_t *refused = NULL;
+    assert(ps5vk_runtime_compile_compute(spv, bytes / 4, "main", &layout, NULL, &program, &refused) ==
+           VK_ERROR_FEATURE_NOT_PRESENT && !refused);
+    free(code); free(spv);
+}
+static void full_set_compile(void)
+{
+    full_set_compile_type("build/test-shaders/descriptor-capacity/descriptor_capacity_comp_spirv.spv",
+                          VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 8u);
+    full_set_compile_type("build/test-shaders/descriptor-capacity/descriptor_capacity_texel_spirv.spv",
+                          VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER, 4u);
+}
+int main(void)
+{
+    full_set_compile();
+    /* 1. Load minimal.comp SPIR-V */
+    size_t spv1_bytes = 0;
+    uint32_t *spv1 = read_file("build/test-shaders/minimal.spv", &spv1_bytes);
+    assert(spv1 != NULL);
+    size_t spv1_words = spv1_bytes / 4;
+
+    /* Setup layout: binding 0 (read), binding 1 (write) */
+    struct VkPipelineLayout_T layout = {0};
+    layout.set_count = 1;
+    layout.sets[0].count = 2;
+    layout.sets[0].binding[0].count = 1;
+    layout.sets[0].binding[0].stages = VK_SHADER_STAGE_COMPUTE_BIT;
+    layout.sets[0].type[0]=VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    layout.sets[0].binding[1].count = 1;
+    layout.sets[0].binding[1].first = 1;
+    layout.sets[0].binding[1].stages = VK_SHADER_STAGE_COMPUTE_BIT;
+    layout.sets[0].type[1]=VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+
+    /* 2. Runtime compile shader 1 (minimal) */
+    struct ps5vk_compiled_program prog1 = {0};
+    uint32_t *code1 = NULL;
+    VkResult res = ps5vk_runtime_compile_compute(spv1, spv1_words, "main", &layout, NULL, &prog1, &code1);
+    assert(res == VK_SUCCESS);
+    assert(code1 != NULL);
+    check_small_stack_compile(spv1, spv1_words, &layout);
+    assert(prog1.gfx == 1013);
+    assert(prog1.wave_size == 32);
+    assert(prog1.user_sgprs == 3);
+    assert(prog1.wgp_mode == 1);
+    assert(prog1.local_size[0] == 64 && prog1.local_size[1] == 1 && prog1.local_size[2] == 1);
+    assert(prog1.code_words > 0 && prog1.code_words <= 1024 * 1024);
+    assert(prog1.descriptor_count == 2);
+    assert(prog1.descriptors[0].binding == 0 && prog1.descriptors[0].table_dword == 0);
+    assert(prog1.descriptors[1].binding == 1 && prog1.descriptors[1].table_dword == 4);
+
+    size_t resource_bytes=0;
+    uint32_t *resource_spv=read_file("build/test-shaders/resource_abi.spv",&resource_bytes);
+    assert(resource_spv);
+    struct VkPipelineLayout_T resource_layout={.set_count=3};
+    resource_layout.sets[0]=layout.sets[0];
+    resource_layout.sets[1].binding[0]=(struct ps5vk_binding){1,0,VK_SHADER_STAGE_COMPUTE_BIT};
+    resource_layout.sets[1].type[0]=VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    resource_layout.sets[2].binding[0]=(struct ps5vk_binding){1,0,VK_SHADER_STAGE_COMPUTE_BIT};
+    resource_layout.sets[2].type[0]=VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER;
+    resource_layout.push_constant_size=4;
+    resource_layout.push_constant_stages[0]=VK_SHADER_STAGE_COMPUTE_BIT;
+    struct ps5vk_compiled_program resources={0};uint32_t *resource_code=NULL;
+    assert(ps5vk_runtime_compile_compute(resource_spv,resource_bytes/4,"main",&resource_layout,NULL,
+        &resources,&resource_code)==VK_SUCCESS);
+    assert(resources.descriptor_set_mask==7 && resources.descriptor_count==4 &&
+        resources.descriptor_set_sgpr[0]==2 && resources.descriptor_set_sgpr[1]==3 &&
+        resources.descriptor_set_sgpr[2]==4 && resources.push_constant_sgpr==5 &&
+        resources.push_constant_size==4 && resources.user_sgprs>=6);
+    assert(resources.descriptors[2].type==VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER &&
+        resources.descriptors[3].type==VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER);
+    free(resource_code);free(resource_spv);
+
+    /* DXVK's DXBC resource forms: separate SAMPLER + SAMPLED_IMAGE combined in
+     * the shader, a uniform texel buffer and a storage texel buffer. Each
+     * record sits at its canonical offset: S# 16 bytes at 0, T# 32 bytes at
+     * 16, the two texel V#s 16 bytes each at 48 and 64. */
+    size_t separate_bytes=0;
+    uint32_t *separate_spv=read_file("build/test-shaders/separate_sampler.spv",&separate_bytes);
+    assert(separate_spv);
+    struct VkPipelineLayout_T separate_layout={.set_count=1};
+    const VkDescriptorType separate_types[4]={VK_DESCRIPTOR_TYPE_SAMPLER,
+        VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER,
+        VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER};
+    for(uint32_t b=0;b<4;++b) {
+        separate_layout.sets[0].binding[b]=(struct ps5vk_binding){1,b,VK_SHADER_STAGE_COMPUTE_BIT};
+        separate_layout.sets[0].type[b]=separate_types[b];
+    }
+    separate_layout.sets[0].count=4;
+    struct ps5vk_compiled_program separate={0};uint32_t *separate_code=NULL;
+    assert(ps5vk_runtime_compile_compute(separate_spv,separate_bytes/4,"main",&separate_layout,
+        NULL,&separate,&separate_code)==VK_SUCCESS);
+    assert(separate.descriptor_set_mask==1 && separate.descriptor_count==4);
+    const uint32_t separate_dwords[4]={0,4,12,16};
+    for(uint32_t b=0;b<4;++b)
+        assert(separate.descriptors[b].set==0 && separate.descriptors[b].binding==b &&
+            separate.descriptors[b].element==0 && separate.descriptors[b].type==separate_types[b] &&
+            separate.descriptors[b].table_dword==separate_dwords[b]);
+    free(separate_code);
+    /* A layout that names the sampler slot as a combined image sampler is a
+     * different record; the compiler refuses the mismatched declaration. */
+    separate_layout.sets[0].type[0]=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    separate_code=NULL;
+    assert(ps5vk_runtime_compile_compute(separate_spv,separate_bytes/4,"main",&separate_layout,
+        NULL,&separate,&separate_code)==VK_ERROR_FEATURE_NOT_PRESENT && !separate_code);
+    /* Every opaque type is classified: each binding swapped for its sibling
+     * role of the same record family is refused before compilation. */
+    const VkDescriptorType swapped[4]={VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+        VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER,
+        VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER};
+    for(uint32_t b=0;b<4;++b) {
+        for(uint32_t k=0;k<4;++k)separate_layout.sets[0].type[k]=separate_types[k];
+        assert(ps5vk_spirv_descriptor_types_match(separate_spv,separate_bytes/4,1,
+            separate_layout.sets));
+        separate_layout.sets[0].type[b]=swapped[b];
+        assert(!ps5vk_spirv_descriptor_types_match(separate_spv,separate_bytes/4,1,
+            separate_layout.sets));
+    }
+    /* Bindings the layout does not name are not this check's business. */
+    for(uint32_t k=0;k<4;++k)separate_layout.sets[0].type[k]=separate_types[k];
+    separate_layout.sets[0].binding[3].count=0;
+    assert(ps5vk_spirv_descriptor_types_match(separate_spv,separate_bytes/4,1,
+        separate_layout.sets));
+    /* Malformed modules are refused. */
+    assert(!ps5vk_spirv_descriptor_types_match(separate_spv,4,1,separate_layout.sets));
+    free(separate_spv);
+
+    /* 3. Runtime compile shader 2 (previously unregistered shader) */
+    size_t spv2_bytes = 0;
+    uint32_t *spv2 = read_file("build/test-shaders/xor.spv", &spv2_bytes);
+    assert(spv2 != NULL);
+    struct ps5vk_compiled_program prog2 = {0};
+    uint32_t *code2 = NULL;
+    res = ps5vk_runtime_compile_compute(spv2, spv2_bytes / 4, "main", &layout, NULL, &prog2, &code2);
+    assert(res == VK_SUCCESS && code2 != NULL);
+    size_t common_words = prog1.code_words < prog2.code_words ? prog1.code_words : prog2.code_words;
+    assert(prog1.code_words != prog2.code_words || memcmp(code1, code2, common_words * 4) != 0);
+
+    /* Shared memory and inline grid arguments survive compilation unchanged. */
+    size_t shared_bytes = 0;
+    uint32_t *shared = read_file("build/test-shaders/shared_grid.spv", &shared_bytes);
+    assert(shared);
+    struct ps5vk_compiled_program shared_prog = {0};
+    uint32_t *shared_code = NULL;
+    assert(ps5vk_runtime_compile_compute(shared, shared_bytes / 4, "main", &layout, NULL,
+        &shared_prog, &shared_code) == VK_SUCCESS);
+    assert(shared_prog.user_sgprs == 6 && shared_prog.grid_size_sgpr == 3);
+    assert(shared_prog.lds_size > 0 && shared_prog.lds_size <= 128);
+    assert(shared_prog.local_size[0] == 2);
+    free(shared_code); free(shared);
+
+    /* The public synchronization witness deliberately mixes two ordinary
+     * SSBO dispatches with a four-wave LDS/atomic dispatch.  Freeze the
+     * compiler-facing resource contract here so a reflection drift cannot
+     * surface only as an invalid command buffer on hardware. */
+    const char *sync_paths[] = {
+        "build/test-shaders/sync_producer.spv",
+        "build/test-shaders/sync_consumer.spv",
+        "build/test-shaders/shared_atomic_multiwave.spv",
+    };
+    const uint32_t sync_descriptor_counts[] = {1, 2, 1};
+    const uint32_t sync_local_sizes[] = {64, 64, 128};
+    struct VkPipelineLayout_T single_storage_layout = layout;
+    single_storage_layout.sets[0].count = 1;
+    single_storage_layout.sets[0].binding[1].count = 0;
+    single_storage_layout.sets[0].type[1] = 0;
+    for (unsigned sync_index = 0; sync_index < 3; ++sync_index) {
+        size_t sync_bytes = 0;
+        uint32_t *sync_spirv = read_file(sync_paths[sync_index], &sync_bytes);
+        assert(sync_spirv);
+        struct ps5vk_compiled_program sync_program = {0};
+        uint32_t *sync_code = NULL;
+        VkPipelineLayout sync_layout = sync_index == 1 ? &layout : &single_storage_layout;
+        assert(ps5vk_runtime_compile_compute(sync_spirv, sync_bytes / 4, "main",
+            sync_layout, NULL, &sync_program, &sync_code) == VK_SUCCESS);
+        if (sync_program.descriptor_set_mask != 1 ||
+            sync_program.descriptor_count != sync_descriptor_counts[sync_index] ||
+            sync_program.local_size[0] != sync_local_sizes[sync_index] ||
+            sync_program.local_size[1] != 1 || sync_program.local_size[2] != 1)
+            fprintf(stderr, "sync contract drift path=%s mask=%u descriptors=%u local=%u,%u,%u\n",
+                sync_paths[sync_index], sync_program.descriptor_set_mask,
+                sync_program.descriptor_count, sync_program.local_size[0],
+                sync_program.local_size[1], sync_program.local_size[2]);
+        assert(sync_program.descriptor_set_mask == 1 &&
+            sync_program.descriptor_count == sync_descriptor_counts[sync_index] &&
+            sync_program.local_size[0] == sync_local_sizes[sync_index] &&
+            sync_program.local_size[1] == 1 && sync_program.local_size[2] == 1);
+        if (sync_index == 2)
+            assert(sync_program.lds_size > 0 && sync_program.wave_size == 32);
+        free(sync_code);
+        free(sync_spirv);
+    }
+
+    /* Push constants use a stable indirect user-data pointer and Vulkan
+     * specialization values are consumed before NIR optimization. */
+    size_t parameterized_bytes=0;
+    uint32_t *parameterized=read_file("build/test-shaders/push_specialization.spv",
+                                     &parameterized_bytes);
+    assert(parameterized);
+    struct VkPipelineLayout_T parameterized_layout=layout;
+    parameterized_layout.push_constant_size=4;
+    parameterized_layout.push_constant_stages[0]=VK_SHADER_STAGE_COMPUTE_BIT;
+    uint32_t values_a[]={5,11},values_b[]={9,13};
+    VkSpecializationMapEntry map[]={{0,0,4},{1,4,4}};
+    VkSpecializationInfo spec_a={2,map,sizeof(values_a),values_a};
+    VkSpecializationInfo spec_b={2,map,sizeof(values_b),values_b};
+    struct ps5vk_compiled_program parameterized_a={0},parameterized_b={0};
+    uint32_t *parameterized_code_a=NULL,*parameterized_code_b=NULL;
+    assert(ps5vk_runtime_compile_compute(parameterized,parameterized_bytes/4,"main",
+        &parameterized_layout,&spec_a,&parameterized_a,&parameterized_code_a)==VK_SUCCESS);
+    assert(parameterized_a.push_constant_size==4 &&
+        parameterized_a.push_constant_sgpr==3 && parameterized_a.user_sgprs>=4);
+    assert(ps5vk_runtime_compile_compute(parameterized,parameterized_bytes/4,"main",
+        &parameterized_layout,&spec_b,&parameterized_b,&parameterized_code_b)==VK_SUCCESS);
+    size_t common_parameterized=parameterized_a.code_words<parameterized_b.code_words?
+        parameterized_a.code_words:parameterized_b.code_words;
+    assert(parameterized_a.code_words!=parameterized_b.code_words ||
+        memcmp(parameterized_code_a,parameterized_code_b,common_parameterized*4));
+    free(parameterized_code_a);free(parameterized_code_b);free(parameterized);
+
+    /* Narrow storage fails closed without the matching device feature and
+     * succeeds only when that exact storage-only bit is forwarded to PSBC. */
+    const char *narrow_names[] = {"storage8", "storage16"};
+    const uint32_t narrow_features[] = {PS5VK_FEATURE_STORAGE_BUFFER_8BIT,
+                                        PS5VK_FEATURE_STORAGE_BUFFER_16BIT};
+    for (size_t narrow_index = 0; narrow_index < 2; ++narrow_index) {
+        char narrow_path[96];
+        snprintf(narrow_path, sizeof(narrow_path), "build/test-shaders/%s.spv",
+                 narrow_names[narrow_index]);
+        size_t narrow_bytes = 0;
+        uint32_t *narrow_spv = read_file(narrow_path, &narrow_bytes);
+        assert(narrow_spv);
+        struct ps5vk_compiled_program narrow_program = {0};
+        uint32_t *narrow_code = NULL;
+        assert(ps5vk_runtime_compile_compute(narrow_spv, narrow_bytes / 4, "main",
+            &layout, NULL, &narrow_program, &narrow_code) == VK_ERROR_FEATURE_NOT_PRESENT);
+        assert(!narrow_code);
+        assert(ps5vk_runtime_compile_compute_features(narrow_spv, narrow_bytes / 4,
+            "main", &layout, NULL, narrow_features[narrow_index],
+            &narrow_program, &narrow_code) == VK_SUCCESS);
+        assert(narrow_code && narrow_program.code_words > 0);
+        assert(narrow_program.gfx == 1013 && narrow_program.wave_size == 32);
+        assert(narrow_program.descriptor_count == 2);
+        free(narrow_code);
+        free(narrow_spv);
+    }
+    /* Core Int16 arithmetic is separate from 16-bit storage. The fixture
+     * declares Int16 alone and uses only 32-bit storage buffers. */
+    size_t int16_bytes = 0;
+    uint32_t *int16_spv = read_file("build/test-shaders/shader_int16.spv", &int16_bytes);
+    assert(int16_spv);
+    struct ps5vk_compiled_program int16_program = {0};
+    uint32_t *int16_code = NULL;
+    assert(ps5vk_runtime_compile_compute_features(int16_spv, int16_bytes / 4,
+        "main", &layout, NULL, 0, &int16_program, &int16_code) ==
+        VK_ERROR_FEATURE_NOT_PRESENT);
+    assert(!int16_code);
+    assert(ps5vk_runtime_compile_compute_features(int16_spv, int16_bytes / 4,
+        "main", &layout, NULL, PS5VK_FEATURE_SHADER_INT16,
+        &int16_program, &int16_code) == VK_SUCCESS);
+    assert(int16_code && int16_program.code_words &&
+           int16_program.descriptor_count == 2);
+    free(int16_code);
+    free(int16_spv);
+    /* The pinned compiler fixtures declare the actual SPIR-V capabilities.
+     * The adapter must keep each option off until its logical-device bit is
+     * enabled; DeviceScope also needs the base Vulkan memory model. */
+    const struct {
+        const char *shader;
+        uint32_t feature;
+        VkBool32 uses_push;
+    } t08_cases[] = {
+        {"t08_address", PS5VK_FEATURE_BUFFER_DEVICE_ADDRESS, VK_TRUE},
+        {"t08_memory_model_queue", PS5VK_FEATURE_VULKAN_MEMORY_MODEL, VK_FALSE},
+        {"t08_memory_model", PS5VK_FEATURE_VULKAN_MEMORY_MODEL |
+            PS5VK_FEATURE_VULKAN_MEMORY_MODEL_DEVICE_SCOPE, VK_FALSE},
+    };
+    for (size_t i = 0; i < sizeof(t08_cases) / sizeof(t08_cases[0]); ++i) {
+        char path[128];
+        snprintf(path, sizeof(path), "build/test-shaders/%s.spv",
+                 t08_cases[i].shader);
+        size_t bytes = 0;
+        uint32_t *spirv = read_file(path, &bytes);
+        assert(spirv);
+        struct VkPipelineLayout_T t08_layout = {0};
+        if (t08_cases[i].uses_push) {
+            t08_layout.push_constant_size = 8;
+            t08_layout.push_constant_stages[0] = VK_SHADER_STAGE_COMPUTE_BIT;
+        } else {
+            t08_layout.set_count = 1;
+            t08_layout.sets[0].count = 1;
+            t08_layout.sets[0].binding[0].count = 1;
+            t08_layout.sets[0].binding[0].stages = VK_SHADER_STAGE_COMPUTE_BIT;
+            t08_layout.sets[0].type[0] = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        }
+        struct ps5vk_compiled_program t08_program = {0};
+        uint32_t *t08_code = NULL;
+        assert(ps5vk_runtime_compile_compute_features(spirv, bytes / 4, "main",
+            &t08_layout, NULL, 0, &t08_program, &t08_code) == VK_ERROR_FEATURE_NOT_PRESENT);
+        assert(!t08_code);
+        if (i == 2) {
+            assert(ps5vk_runtime_compile_compute_features(spirv, bytes / 4, "main",
+                &t08_layout, NULL, PS5VK_FEATURE_VULKAN_MEMORY_MODEL_DEVICE_SCOPE,
+                &t08_program, &t08_code) == VK_ERROR_FEATURE_NOT_PRESENT);
+            assert(!t08_code);
+            assert(ps5vk_runtime_compile_compute_features(spirv, bytes / 4, "main",
+                &t08_layout, NULL, PS5VK_FEATURE_VULKAN_MEMORY_MODEL,
+                &t08_program, &t08_code) == VK_ERROR_FEATURE_NOT_PRESENT);
+            assert(!t08_code);
+        }
+        assert(ps5vk_runtime_compile_compute_features(spirv, bytes / 4, "main",
+            &t08_layout, NULL, t08_cases[i].feature,
+            &t08_program, &t08_code) == VK_SUCCESS);
+        assert(t08_code && t08_program.code_words && t08_program.gfx == 1013);
+        free(t08_code);
+        free(spirv);
+    }
+    /* The owned typed subgroup shader keeps Int8 behind the internal probe.
+     * This proves compiler lowering only; Vulkan 1.2 eligibility and GPU
+     * execution require separate evidence before public feature reporting. */
+    size_t int8_bytes = 0;
+    uint32_t *int8_spv = read_file(
+        "build/test-shaders/t08_subgroup_int8_iadd_runtime.spv", &int8_bytes);
+    assert(int8_spv);
+    VkBool32 has_int8 = VK_FALSE, has_arithmetic = VK_FALSE, has_iadd = VK_FALSE;
+    for (size_t at = 5; at < int8_bytes / 4;) {
+        size_t length = int8_spv[at] >> 16;
+        uint32_t opcode = int8_spv[at] & 0xffffu;
+        assert(length && length <= int8_bytes / 4 - at);
+        if (opcode == 17u && length == 2) {
+            has_int8 |= int8_spv[at + 1] == 39u;
+            has_arithmetic |= int8_spv[at + 1] == 63u;
+        }
+        has_iadd |= opcode == 349u; /* OpGroupNonUniformIAdd */
+        at += length;
+    }
+    assert(has_int8 && has_arithmetic && has_iadd);
+    struct VkPipelineLayout_T int8_layout = {0};
+    int8_layout.set_count = 1;
+    int8_layout.sets[0].count = 1;
+    int8_layout.sets[0].binding[0].count = 1;
+    int8_layout.sets[0].binding[0].stages = VK_SHADER_STAGE_COMPUTE_BIT;
+    int8_layout.sets[0].type[0] = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    struct ps5vk_compiled_program int8_program = {0};
+    uint32_t *int8_code = NULL;
+    assert(ps5vk_runtime_compile_compute_features(int8_spv, int8_bytes / 4,
+        "main", &int8_layout, NULL, 0, &int8_program, &int8_code) ==
+        VK_ERROR_FEATURE_NOT_PRESENT);
+    assert(!int8_code);
+    assert(ps5vk_runtime_compile_compute_features(int8_spv, int8_bytes / 4,
+        "main", &int8_layout, NULL, PS5VK_FEATURE_SHADER_INT8_COMPUTE,
+        &int8_program, &int8_code) == VK_SUCCESS);
+    assert(int8_code && int8_program.code_words && int8_program.gfx == 1013 &&
+           int8_program.wave_size == 32);
+    free(int8_code);
+    free(int8_spv);
+
+    /* The original ssbo_local_barrier_multiple_groups shader uses GLSL450
+     * OpMemoryModel and Device-scope barriers. Advertising the separate KHR
+     * base feature on the logical device must not reinterpret that legacy
+     * module as VulkanKHR and demand DeviceScope for it. */
+    size_t legacy_bytes = 0;
+    uint32_t *legacy = read_file("build/test-shaders/cts_ssbo_local_barrier.spv",
+                                 &legacy_bytes);
+    assert(legacy);
+    VkBool32 glsl450 = VK_FALSE;
+    for (size_t at = 5; at < legacy_bytes / 4;) {
+        const uint32_t words = legacy[at] >> 16;
+        assert(words && at + words <= legacy_bytes / 4);
+        if ((legacy[at] & 0xffffu) == 14u) {
+            assert(words == 3 && legacy[at + 2] == 1u);
+            glsl450 = VK_TRUE;
+        }
+        at += words;
+    }
+    assert(glsl450);
+    struct ps5vk_compiled_program legacy_program = {0};
+    uint32_t *legacy_code = NULL;
+    assert(ps5vk_runtime_compile_compute_features(legacy, legacy_bytes / 4,
+        "main", &single_storage_layout, NULL, PS5VK_FEATURE_VULKAN_MEMORY_MODEL,
+        &legacy_program, &legacy_code) == VK_SUCCESS);
+    assert(legacy_code && legacy_program.local_size[0] == 3 &&
+           legacy_program.local_size[1] == 4 && legacy_program.local_size[2] == 1);
+    free(legacy_code);
+    free(legacy);
+    /* Compile the actual SDK witness module through PSBC/ACO. The synthetic
+     * pipeline gate test proves admission only; this catches a compiler
+     * failure before a diagnostic GPU run. Public subgroup reporting stays off. */
+    size_t iadd_bytes = 0;
+    uint32_t *iadd_spirv = read_file(
+        "build/test-shaders/t08_subgroup_iadd_runtime.spv", &iadd_bytes);
+    assert(iadd_spirv);
+    struct ps5vk_compiled_program iadd_program = {0};
+    uint32_t *iadd_code = NULL;
+    assert(ps5vk_runtime_compile_compute_features(iadd_spirv, iadd_bytes / 4,
+        "main", &single_storage_layout, NULL, 0, &iadd_program,
+        &iadd_code) == VK_SUCCESS);
+    assert(iadd_code && iadd_program.code_words && iadd_program.gfx == 1013 &&
+           iadd_program.wave_size == 32 && iadd_program.local_size[0] == 64 &&
+           iadd_program.descriptor_count == 1 &&
+           iadd_program.descriptors[0].binding == 0);
+    free(iadd_code);
+    free(iadd_spirv);
+    /* 4. Test error handling */
+    struct ps5vk_compiled_program bad_prog;
+    uint32_t *bad_code = NULL;
+    /* Every mask bit is now assigned; reject an invalid feature dependency. */
+    assert(ps5vk_runtime_compile_compute_features(spv1, spv1_words, "main", &layout,
+        NULL, PS5VK_FEATURE_VULKAN_MEMORY_MODEL_DEVICE_SCOPE, &bad_prog,
+        &bad_code) == VK_ERROR_FEATURE_NOT_PRESENT);
+    /* Every graphics-only device feature the console platform reports and the
+     * pinned CTS enables on the device it creates must be transparent to the
+     * compute adapter: the full device mask compiles a compute shader exactly
+     * like the bare mask does. A promotion candidate that forgot one of these
+     * bits failed every compute pipeline on hardware. */
+    {
+        struct ps5vk_compiled_program graphics_device_program;
+        uint32_t *graphics_device_code = NULL;
+        const uint32_t graphics_device_mask = PS5VK_FEATURE_ROBUST_BUFFER_ACCESS |
+            PS5VK_FEATURE_STORAGE_BUFFER_8BIT | PS5VK_FEATURE_STORAGE_BUFFER_16BIT |
+            PS5VK_FEATURE_SHADER_DRAW_PARAMETERS | PS5VK_FEATURE_MULTIVIEW |
+            PS5VK_FEATURE_DRAW_INDIRECT_FIRST_INSTANCE | PS5VK_FEATURE_MULTI_DRAW_INDIRECT |
+            PS5VK_FEATURE_FULL_DRAW_INDEX_UINT32 |
+            PS5VK_FEATURE_OCCLUSION_QUERY_PRECISE;
+        assert(ps5vk_runtime_compile_compute_features(spv1, spv1_words, "main", &layout,
+            NULL, graphics_device_mask, &graphics_device_program,
+            &graphics_device_code) == VK_SUCCESS);
+        assert(graphics_device_code && graphics_device_program.code_words > 0);
+        free(graphics_device_code);
+        /* The default-off core shaderInt16 bit must pass the adapter mask.
+         * Module and pipeline validation decide whether Int16 is enabled. */
+        graphics_device_code = NULL;
+        assert(ps5vk_runtime_compile_compute_features(spv1, spv1_words, "main", &layout,
+            NULL, graphics_device_mask | PS5VK_FEATURE_SHADER_INT16,
+            &graphics_device_program, &graphics_device_code) == VK_SUCCESS);
+        assert(graphics_device_code && graphics_device_program.code_words > 0);
+        free(graphics_device_code);
+        /* Standard UBO layout changes SPIR-V layout validation, not PSBC's
+         * compute compilation options. A device that enables it must still
+         * compile unrelated compute shaders on the same logical device. */
+        graphics_device_code = NULL;
+        assert(ps5vk_runtime_compile_compute_features(spv1, spv1_words, "main", &layout,
+            NULL, graphics_device_mask | PS5VK_FEATURE_UNIFORM_BUFFER_STANDARD_LAYOUT,
+            &graphics_device_program, &graphics_device_code) == VK_SUCCESS);
+        assert(graphics_device_code && graphics_device_program.code_words > 0);
+        free(graphics_device_code);
+        /* The four DXVK262-T05 rasterization/viewport bits are the same kind
+         * of graphics-only device state. The FULL combined mask a T05 device
+         * would carry is tested at once, not one bit at a time: the T04
+         * promotion showed that fixing one new bit and repeating the failure
+         * for the next is exactly the regression to avoid. */
+        const uint32_t t05_device_mask = graphics_device_mask |
+            PS5VK_FEATURE_DEPTH_BIAS_CLAMP | PS5VK_FEATURE_DEPTH_CLAMP |
+            PS5VK_FEATURE_FILL_MODE_NON_SOLID | PS5VK_FEATURE_MULTI_VIEWPORT;
+        graphics_device_code = NULL;
+        assert(ps5vk_runtime_compile_compute_features(spv1, spv1_words, "main", &layout,
+            NULL, t05_device_mask, &graphics_device_program,
+            &graphics_device_code) == VK_SUCCESS);
+        assert(graphics_device_code && graphics_device_program.code_words > 0);
+        free(graphics_device_code);
+        /* T06 adds four more graphics-only bits. They must not poison a
+         * compute pipeline on a device which enabled every reported core
+         * feature, while an unknown bit after the declared range is refused. */
+        const uint32_t t06_device_mask = t05_device_mask |
+            PS5VK_FEATURE_INDEPENDENT_BLEND | PS5VK_FEATURE_DUAL_SRC_BLEND |
+            PS5VK_FEATURE_FRAGMENT_STORES_AND_ATOMICS |
+            PS5VK_FEATURE_SAMPLE_RATE_SHADING;
+        graphics_device_code = NULL;
+        assert(ps5vk_runtime_compile_compute_features(spv1, spv1_words, "main", &layout,
+            NULL, t06_device_mask, &graphics_device_program,
+            &graphics_device_code) == VK_SUCCESS);
+        assert(graphics_device_code && graphics_device_program.code_words > 0);
+        free(graphics_device_code);
+        /* T07 image/gather/query bits at 24-27 are legal on the same logical
+         * device and must not be confused with unknown bits. */
+        const uint32_t t07_device_mask = t06_device_mask |
+            PS5VK_FEATURE_IMAGE_CUBE_ARRAY |
+            PS5VK_FEATURE_SHADER_IMAGE_GATHER_EXTENDED |
+            PS5VK_FEATURE_OCCLUSION_QUERY_PRECISE |
+            PS5VK_FEATURE_TEXTURE_COMPRESSION_BC;
+        graphics_device_code = NULL;
+        assert(ps5vk_runtime_compile_compute_features(spv1, spv1_words, "main", &layout,
+            NULL, t07_device_mask, &graphics_device_program,
+            &graphics_device_code) == VK_SUCCESS);
+        assert(graphics_device_code && graphics_device_program.code_words > 0);
+        free(graphics_device_code);
+        /* A device-scope request without the base memory model fails closed. */
+        graphics_device_code = NULL;
+        assert(ps5vk_runtime_compile_compute_features(spv1, spv1_words, "main", &layout,
+            NULL, t06_device_mask | PS5VK_FEATURE_VULKAN_MEMORY_MODEL_DEVICE_SCOPE,
+            &graphics_device_program,
+            &graphics_device_code) == VK_ERROR_FEATURE_NOT_PRESENT);
+    }
+
+    /* Corrupted SPIR-V header */
+    uint32_t bad_spv[16] = {0x12345678, 0, 0, 0};
+    assert(ps5vk_runtime_compile_compute(bad_spv, 16, "main", &layout, NULL, &bad_prog, &bad_code) != VK_SUCCESS);
+
+    /* Nonexistent entrypoint */
+    assert(ps5vk_runtime_compile_compute(spv1, spv1_words, "nonexistent_entry", &layout, NULL, &bad_prog, &bad_code) != VK_SUCCESS);
+
+    /* Empty layout */
+    struct VkPipelineLayout_T empty_layout = {0};
+    assert(ps5vk_runtime_compile_compute(spv1, spv1_words, "main", &empty_layout, NULL, &bad_prog, &bad_code) != VK_SUCCESS);
+
+    struct VkPipelineLayout_T array_layout = layout;
+    array_layout.sets[0].binding[0].count = 2;
+    res = ps5vk_runtime_compile_compute(spv1, spv1_words, "main", &array_layout, NULL, &bad_prog, &bad_code);
+    assert(res==VK_SUCCESS && bad_prog.descriptor_count==3);free(bad_code);bad_code=NULL;
+
+    struct VkPipelineLayout_T multiset_layout = layout;
+    multiset_layout.set_count = 2;
+    res = ps5vk_runtime_compile_compute(spv1, spv1_words, "main", &multiset_layout, NULL, &bad_prog, &bad_code);
+    assert(res==VK_SUCCESS && bad_prog.descriptor_set_mask==1);free(bad_code);bad_code=NULL;
+
+    /* A declared set the shader never dereferences is a declaration, not a
+     * requirement: no second table pointer, no extra user SGPR, and no extra
+     * program descriptor. The previous contract reserved all of them. */
+    struct VkPipelineLayout_T sparse_layout = multiset_layout;
+    sparse_layout.sets[1].count = 1;
+    sparse_layout.sets[1].binding[0].count = 1;
+    sparse_layout.sets[1].binding[0].stages = VK_SHADER_STAGE_COMPUTE_BIT;
+    sparse_layout.sets[1].type[0] = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    res = ps5vk_runtime_compile_compute(spv1, spv1_words, "main", &sparse_layout, NULL, &bad_prog, &bad_code);
+    assert(res==VK_SUCCESS && bad_prog.descriptor_set_mask==1 &&
+        bad_prog.descriptor_count==2 && bad_prog.user_sgprs==3);
+    free(bad_code);bad_code=NULL;
+    /* A used set the layout does not declare still fails closed. */
+    assert(ps5vk_runtime_compile_compute(spv1, spv1_words, "main", &empty_layout,
+        NULL, &bad_prog, &bad_code) != VK_SUCCESS);
+
+    /* 5. Verify CPU reference computation semantics for both programs */
+    for (uint32_t i = 0; i < 1024; i++) {
+        uint32_t in_val = (i * UINT32_C(2654435761)) ^ 0x79bd2468;
+        /* Program 0 (minimal.comp): val * 3 + 7 */
+        uint32_t ref0 = in_val * 3u + 7u;
+        assert(ref0 == (in_val * 3u + 7u));
+        /* Program 1 (xor.comp): (val ^ 0xa5c39e71) + i * 17 */
+        uint32_t ref1 = (in_val ^ UINT32_C(0xa5c39e71)) + i * 17u;
+        assert(ref1 != ref0);
+    }
+
+    free(code1);
+    free(code2);
+    free(spv1);
+    free(spv2);
+
+    robust_access_wrap();
+    puts("Runtime compute compiler: pass (PSBC/ACO GFX1013 ABI, CS registers, error guards, CPU reference)");
+    return 0;
+}

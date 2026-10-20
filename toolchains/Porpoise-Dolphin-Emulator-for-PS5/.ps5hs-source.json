@@ -1,0 +1,14 @@
+{
+  "repository": "elripalda/Porpoise-Dolphin-Emulator-for-PS5",
+  "branch": "Main",
+  "commit": "2ed1ab5a06995aa198f7bccd4da0f90c3fc29d39",
+  "sourceCommit": "2ed1ab5a06995aa198f7bccd4da0f90c3fc29d39",
+  "sourceRef": "Main",
+  "method": "vendored-snapshot",
+  "vendoredSnapshot": true,
+  "vendorRepository": "RastaFairy/Visual-PS5",
+  "vendoredAt": "2026-10-20T15:43:39Z",
+  "submodulesMaterialized": true,
+  "originalMethod": "vendored-snapshot",
+  "sourceRevisionRecorded": true
+}

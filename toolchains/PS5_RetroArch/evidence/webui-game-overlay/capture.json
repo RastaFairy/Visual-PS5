@@ -1,0 +1,90 @@
+{
+  "step": "webui-game-overlay",
+  "recorded": "2026-10-08T13:19:56.771571+00:00",
+  "revision": "working tree on 6b7bc18",
+  "command": "PS5_FRONTENDS='es-de picker' PS5_VULKAN_TEMPLATE=\"$PWD/build/picker-template\" bash tools/verify.sh format unit build integration evidence; python3 tools/deploy-title.py; python3 build/check-game-overlay-console.py",
+  "console_run": "Base PS5, Picker; synthetic nonce-named ROM, native save and numbered savestate only. No game launched.",
+  "raw_capture": "klog/game-overlay/console-check.log",
+  "raw_lines": 6,
+  "lines": [
+    "== format",
+    "   PASS (6s)",
+    "== unit",
+    "Ran 183 tests in 282.856s",
+    "   PASS (283s)",
+    "== build",
+    "   PASS (103s)",
+    "== integration",
+    "Ran 183 tests in 257.758s",
+    "   PASS (264s)",
+    "== evidence",
+    "107 capture(s) replayed, 0 failed",
+    "   PASS (1s)",
+    "verify: PASS (format unit build integration evidence)",
+    "Running console daemon matches staged build: 6717f52110aa29296d8bd0b397de7aecfb497eb2306dc793585ed26a289ae167",
+    "Live HTTP WebUI assets match staged bytes",
+    "ROM replace/export bytes match; overwrite requires confirmation",
+    "save import/export/replacement bytes match",
+    "state import/export/replacement bytes match",
+    "Metadata round trip preserves editable values",
+    "Unrelated file target rejected",
+    "All disposable probe files removed; existing game and save files untouched",
+    "RetroArch and frontend configuration bytes unchanged",
+    "licenses/components.json      1,121,458 bytes  62497c94bb3d318e  ok",
+    "manifest.sha256               1,785,503 bytes  4256695570c9414b  ok",
+    "webui/ps5-retroarch-webui.elf  3,326,136 bytes  77c6537e09ba41e8  ok",
+    "webui/version.json                  134 bytes  577c1eaa33e47923  ok",
+    "eboot.bin                    39,400,764 bytes stored; all 4 of this build's markers present  ok",
+    "==> [deploy] 13619 unchanged files skipped (already verified on this console; --all uploads everything)",
+    "==> [deploy] published what changed; everything else was verified by an earlier deployment"
+  ],
+  "staged_artifacts": {
+    "webui/index.html": {
+      "bytes": 26199,
+      "sha256": "7969ba87ce99fb34651e737ef520e7cb65cca1dc2d27bdc871ac05353b165144"
+    },
+    "webui/app.css": {
+      "bytes": 64646,
+      "sha256": "a4b0bd2fede45fed2880b12be43be943bf4367dac075664c56a212a79c525f52"
+    },
+    "webui/app.js": {
+      "bytes": 124720,
+      "sha256": "80f3ca3104ed13e7dee839594469158d6ee9291759c19eb5b12e583291031288"
+    },
+    "webui/version.json": {
+      "bytes": 134,
+      "sha256": "577c1eaa33e47923f72fb781482cba6aa01b073955f707d9b8ef939e54f4ce2b"
+    },
+    "webui/ps5-retroarch-webui.elf": {
+      "bytes": 3326136,
+      "sha256": "77c6537e09ba41e80c1b8f207ef182f7bf9da9d21b738dcc77e24b7c8c6d731b"
+    },
+    "eboot.bin": {
+      "bytes": 38814732,
+      "sha256": "f93eac8edd6966d051a7be944dbfa0f024ac77a5e42035cef98d929d523e2a39"
+    },
+    "manifest.sha256": {
+      "bytes": 1785503,
+      "sha256": "4256695570c9414b935bd9e93a906e0035e1d6073d80bea3fc56300ac910c216"
+    }
+  },
+  "browser_captures": [
+    "klog/game-overlay/media-inspector-console.jpg",
+    "klog/game-overlay/files-console.jpg"
+  ],
+  "config_sha256": {
+    "retroarch.cfg": "a0b19a85a5d1af2ad85a50a403dd30913df9e3ee4dc9ac42fd84078f29ca2f8e",
+    "frontend.cfg": "4b46b4c945f76786ddb024e4e4da5f3153a1a50484e2c23a88dc874ffa9633ab"
+  },
+  "resolved_failures": [
+    "Sandbox localhost socket restriction: host tests rerun with approved networking.",
+    "Missing Game::core fallback initializer: fixed before the full green run.",
+    "Test assumed library order: changed to match exact game path.",
+    "Initial console check rejected the literal :/savefiles shorthand before writing a save. Added application-directory expansion and exercised it in the HTTP transfer regression test; final console round trips passed."
+  ],
+  "limits": [
+    "Native file transfers do not convert formats, package multi-file discs or map private core save databases.",
+    "Console tests verify bytes and paths, not in-game save compatibility. Close content before replacing a game/save/state.",
+    "Future Add Game reuses the design but is not implemented in this step."
+  ]
+}

@@ -1,0 +1,12 @@
+# Game mode: the game a frontend started is closed as a person closes it - the
+# Quick Menu (L3+R3, input_menu_toggle_gamepad_combo 2 on this console), then
+# Close Content - and RetroArch quits back to the frontend (quit_on_close_content
+# = CLI, src/main.cpp). The menu's OK is B here (menu_swap_ok_cancel_buttons).
+# Each MENU line prints the list on top and the selected entry to the trace.
+6.0 MENU              # the game runs: no menu yet
+6.5 L3+R3 0.3         # the Quick Menu
+8.5 MENU              # Quick Menu, Resume Content selected
+9.0 DOWN
+9.5 DOWN
+10.5 MENU             # Close Content selected
+11.0 B                # close it

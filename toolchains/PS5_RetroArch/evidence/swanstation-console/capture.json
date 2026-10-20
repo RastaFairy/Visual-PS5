@@ -1,0 +1,26 @@
+{
+  "step": "swanstation-console",
+  "recorded": "2026-10-17T22:10:00Z",
+  "console_run": "",
+  "revision": "20dd7fe (this series), in build 838fd9a3",
+  "command": "tools/run-title.sh --no-build --no-deploy --game=swanstation:/app0/content/psx/chd-flac-test.chd --retroarch-arg=--appendconfig=/app0/tests/no-save.cfg --pad-script=tests/pad/game-marks.txt --watch 35",
+  "raw_capture": "klog/swanstation-console/record.txt",
+  "raw_lines": 14,
+  "raw_bytes": 1218,
+  "lines": [
+    "Console: the owner's base PS5 on a 1440p display with 120 Hz and VRR, build identity 838fd9a3ca99e21ce4adba405a3f3867a0c4ce411ee89981e0a8111dcef02797 (this series at 20dd7fe with PS5_FRONTENDS=\"es-de picker\", PS5_WITH_SWANSTATION=1, PS5_WITH_MELONDSDS=1), 2026-10-17.",
+    "SwanStation with the same CHD and the owner's own PlayStation BIOS dump in system/:",
+    "  [INFO] [Core] Loading dynamic libretro core from: \"/app0/cores/swanstation_libretro.so\".",
+    "  [INFO] [Environ] GET_PREFERRED_HW_RENDER: RETRO_HW_CONTEXT_VULKAN.",
+    "  [libretro INFO] [HostInterface] Renderer = Vulkan",
+    "  [INFO] [Environ] SET_HW_RENDER, context type: vulkan.",
+    "  [INFO] [Video] Using HW render, vulkan driver forced.",
+    "  [INFO] [Vulkan] Got HW context negotiation interface 2.",
+    "  [INFO] [Vulkan] Found GPU at index 0: \"PlayStation 5 GPU (RADV NAVI21)\".",
+    "  input: pad script MARK at 5.011 s: frames=165 worst_ms=225.3 over_40ms=1",
+    "  input: pad script MARK at 15.004 s: frames=739 worst_ms=225.3 over_40ms=3",
+    "  input: pad script STOP at 18.01 s",
+    "  [INFO] [FrameGen] counter: shows 119.9 (the core made 59.9 new frames a second, generation on)",
+    "  The picture at 16 s (2880x2160, kept on this machine) shows the PlayStation BIOS logo drawn by the core's Vulkan renderer."
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "name": "Default Neon",
+  "colors": {
+    "accent": "#6FE3FFFF",
+    "accent_alt": "#5FADFFFF",
+    "accent_soft": "#5AC1EC48",
+    "ps_cross": "#5FADFFFF",
+    "ps_circle": "#FF6A86FF",
+    "ps_square": "#FF80DBFF",
+    "ps_triangle": "#78FFA4FF"
+  }
+}

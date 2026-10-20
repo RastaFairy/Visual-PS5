@@ -1,0 +1,24 @@
+{
+  "name": "Ember Noir",
+  "colors": {
+    "bg_top": "#181416FF",
+    "bg_bottom": "#060506FF",
+    "bg_grid": "#36282AFF",
+    "panel": "#161214FF",
+    "panel_soft": "#20181AFF",
+    "panel_strong": "#2A1C1EFF",
+    "border": "#6E5448FF",
+    "border_active": "#FF8246FF",
+    "text": "#FAECE0FF",
+    "text_soft": "#D2B49EFF",
+    "text_muted": "#9C8072FF",
+    "accent": "#FF8C58FF",
+    "accent_alt": "#68B0FFFF",
+    "accent_soft": "#FF863A42",
+    "ps_cross": "#68B0FFFF",
+    "ps_circle": "#FF6886FF",
+    "ps_square": "#FFB64EFF",
+    "ps_triangle": "#82E69AFF",
+    "status_bg": "#0A0809DC"
+  }
+}

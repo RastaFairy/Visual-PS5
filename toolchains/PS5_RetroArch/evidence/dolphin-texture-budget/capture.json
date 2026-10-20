@@ -1,0 +1,28 @@
+{
+  "step": "dolphin-texture-budget",
+  "recorded": "2026-10-19T01:58:46Z",
+  "console_run": "215319",
+  "revision": "3c23512",
+  "command": "dolphin_load_custom_textures = \"enabled\" in config/dolphin-emu/dolphin-emu.opt, the owner's pack in savefiles/dolphin-emu/User/Load/Textures/; tools/run-title.sh --no-build --no-deploy \"--game=dolphin:/app0/content/gc/<gc game>.gcz\" --pad-script=tests/pad/dolphin-texture-pack.txt --watch 95",
+  "raw_capture": "klog/evidence-5-after-focus.txt",
+  "raw_lines": 16,
+  "raw_bytes": 1145,
+  "lines": [
+    "    armed pad script tests/pad/dolphin-texture-pack.txt",
+    "==> [run] ok launched PPSA99169 result=0x0000a018 via lncUtilApp/foreground as user <user> (the console reports the title running)",
+    "    build identity: 191ff52ccdb6eb3b157895e1ca3804f477e180f206dfaf1b9c2452493cd072d4",
+    "    core loader: ready symbols=29319 relocations=64467 mapped_bytes=36732928 base=400840000",
+    "    core loader: ready symbols=29319 relocations=64467 mapped_bytes=36732928 base=400840000",
+    "    video driver: video_vulkan init entered",
+    "    input: pad script loaded, 0 presses",
+    "    input: pad script SCREENSHOT at 40.02 s: /app0/pad-shot-1.png 1",
+    "    input: pad script SCREENSHOT at 60.01 s: /app0/pad-shot-2.png 1",
+    "    input: pad script STOP at 70.01 s",
+    "    pad script: 2 picture(s) saved to klog/pad-215319",
+    "==> [run] VERDICT: it exited on its own before 95s",
+    "[INFO] [PS5] build identity: 191ff52ccdb6eb3b157895e1ca3804f477e180f206dfaf1b9c2452493cd072d4",
+    "[libretro INFO] 54:16:480 Core/ConfigManager.cpp:279 N[CORE]: Active title: <gc game> (<game id>)",
+    "[INFO] [Core] Geometry: 2560x2112, Aspect: 1.333, FPS: 59.94, Sample rate: 32029.00 Hz.",
+    "[INFO] [Video] Set video size to: fullscreen."
+  ]
+}

@@ -1,0 +1,92 @@
+{
+  "capture": "Unedited browser screenshots of the installed console WebUI. Add Game uses an unsaved LaunchBox metadata draft; no backup uploaded, no library edits saved, no download started. Full-page captures preserve scrollable page contents.",
+  "build": "8135742c",
+  "source_commit": "1e7edf5",
+  "files": [
+    {
+      "file": "webui-add-game-details.jpg",
+      "resolution": [
+        1265,
+        712
+      ],
+      "sha256": "011e27a0713f3e50dc1590df32fbccde04f9a3347b67f7fad9d744a1d5b6eb66"
+    },
+    {
+      "file": "webui-add-game-manual-media.jpg",
+      "resolution": [
+        1265,
+        712
+      ],
+      "sha256": "0dfa0a64e524c0086cde7a876950224441ef933fa7c67a5f666160127def29a7"
+    },
+    {
+      "file": "webui-add-game-media.jpg",
+      "resolution": [
+        1265,
+        712
+      ],
+      "sha256": "2873f3e14454a50e352e7a37783b9a3178a54f64ae8afe91ca2f3e82fa2bfefc"
+    },
+    {
+      "file": "webui-download-media.jpg",
+      "resolution": [
+        807,
+        3218
+      ],
+      "sha256": "ab9d2a5f1e432090acd4a28e4f5a5c81eb526da6ad8f9b485616b4ae3cf67a45",
+      "recap": "Nintendo - Game Boy Advance collapsed; game name and matched title hidden."
+    },
+    {
+      "file": "webui-download-sources.jpg",
+      "resolution": [
+        1265,
+        712
+      ],
+      "sha256": "dc064904f1810e24989a4da693e0a00bc360897728b5b5cd0b798a7df6d517c8"
+    },
+    {
+      "file": "webui-game-details.jpg",
+      "resolution": [
+        801,
+        594
+      ],
+      "sha256": "f9ecf12ae56c3b9a0496775f42cf5317bd514aac85a873f75731c9b644a0d7a2",
+      "game": "Puzzle Test Game"
+    },
+    {
+      "file": "webui-game-files.jpg",
+      "resolution": [
+        801,
+        594
+      ],
+      "sha256": "78662bfb3473ff1ee2a735f3bfe0a55317816c9f16023d92a95a1d247c008d5b",
+      "game": "Puzzle Test Game"
+    },
+    {
+      "file": "webui-game-media.jpg",
+      "resolution": [
+        801,
+        594
+      ],
+      "sha256": "7b312c4f136167b1ed419cd06f1020da370bdc56335b137c443ea2ef5e1541af",
+      "game": "Puzzle Test Game"
+    },
+    {
+      "file": "webui-game-savestates.jpg",
+      "resolution": [
+        801,
+        594
+      ],
+      "sha256": "307439798aeb8ab8901a9665a5a6eac3c0f40569510601247815b90caf59e2bc",
+      "game": "Puzzle Test Game"
+    },
+    {
+      "file": "webui-games-neogeo-b.jpg",
+      "resolution": [
+        1264,
+        1951
+      ],
+      "sha256": "63c582f50e5e38a0c3876059c63e011a6f8bd9d286bd6ca8e279b495329c2602"
+    }
+  ]
+}

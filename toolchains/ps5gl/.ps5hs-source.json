@@ -1,0 +1,14 @@
+{
+  "repository": "Rufidj/ps5gl",
+  "branch": "master",
+  "commit": "5f22dcfe01209330f52207217a44becfbb491a6a",
+  "sourceCommit": "5f22dcfe01209330f52207217a44becfbb491a6a",
+  "sourceRef": "master",
+  "method": "vendored-snapshot",
+  "vendoredSnapshot": true,
+  "vendorRepository": "RastaFairy/Visual-PS5",
+  "vendoredAt": "2026-10-20T15:43:39Z",
+  "submodulesMaterialized": true,
+  "originalMethod": "vendored-snapshot",
+  "sourceRevisionRecorded": true
+}

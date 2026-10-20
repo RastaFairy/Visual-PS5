@@ -1,0 +1,12 @@
+{
+  "step": "pr-series-frontends",
+  "note": "The picker and ES-DE built from this series start on the console; ES-DE's library counts 35 cores (SwanStation and melonDS DS staged) with no failures.",
+  "must_contain": [
+    "-> picker",
+    "relaunch test PASS: handed over to /app0/es-de/es-de.bin",
+    "frontend capture PASS",
+    "35 cores, 0 favourites, 3 played, 0 failures"
+  ],
+  "must_not_contain": [],
+  "human_check": ""
+}

@@ -1,0 +1,172 @@
+{
+  "about": "Pinned inputs of the ProsperoEden build. `make deps` (tools/deps.py) fetches every missing item and leaves existing checkouts and files untouched. Paths are relative to this repository; ../ means next to it, the layout the build expects.",
+  "items": [
+    {
+      "name": "eden",
+      "about": "Eden emulator source at the pinned commit (GitHub mirror archive)",
+      "kind": "archive",
+      "url": "https://github.com/eden-emulator/mirror/archive/67bada77f8a43a90da2e94e89b8e7da73c256989.tar.gz",
+      "sha256": "d42b6fb492c65eb5e98ab72a786dff01fd64384d073a739b9c9ff475414366ee",
+      "save": ".deps/eden-67bada77.tar.gz",
+      "extract": ".deps",
+      "creates": ".deps/mirror-67bada77f8a43a90da2e94e89b8e7da73c256989/CMakeLists.txt"
+    },
+    {
+      "name": "ffmpeg",
+      "about": "FFmpeg source as pinned by Eden's cpmfile.json, built for the PS5 decoders",
+      "kind": "archive",
+      "url": "https://github.com/FFmpeg/FFmpeg/archive/c7b5f1537d9c52efa50fd10d106ca015ddde1818.tar.gz",
+      "sha512": "ed177621176b3961bdcaa339187d3a7688c1c8b060b79c4bb0257cbc67ad7021ae5d5adca5303b45625abbbe3d9aafdd87ce777b8690ac295290d744c875489a",
+      "extract": ".deps/ffmpeg-c7b5f1537d",
+      "strip": 1,
+      "creates": ".deps/ffmpeg-c7b5f1537d/configure"
+    },
+    {
+      "name": "fmt",
+      "about": "fmt 12.1.0 headers for the build-time startup checks",
+      "kind": "archive",
+      "url": "https://github.com/fmtlib/fmt/archive/refs/tags/12.1.0.tar.gz",
+      "sha256": "ea7de4299689e12b6dddd392f9896f08fb0777ac7168897a244a6d6085043fea",
+      "save": ".deps/fmt-12.1.0.tar.gz",
+      "extract": ".deps",
+      "creates": ".deps/fmt-12.1.0/include/fmt/format.h"
+    },
+    {
+      "name": "compiler-rt",
+      "about": "LLVM 18.1.8 emulated-TLS runtime (emutls.c and its headers) for the PS5 build",
+      "kind": "files",
+      "dest": ".deps/compiler-rt-18.1.8",
+      "creates": ".deps/compiler-rt-18.1.8/emutls.c",
+      "files": [
+        {"name": "emutls.c", "url": "https://raw.githubusercontent.com/llvm/llvm-project/llvmorg-18.1.8/compiler-rt/lib/builtins/emutls.c", "sha256": "a4437f3e329a0835adbc7df38e36df12f358d05c073b11813c409f849c2345d2"},
+        {"name": "int_endianness.h", "url": "https://raw.githubusercontent.com/llvm/llvm-project/llvmorg-18.1.8/compiler-rt/lib/builtins/int_endianness.h", "sha256": "ec5175561075845b7b16a92ad5ecdfd42a284de2736dd07e4ca7011b75c37709"},
+        {"name": "int_lib.h", "url": "https://raw.githubusercontent.com/llvm/llvm-project/llvmorg-18.1.8/compiler-rt/lib/builtins/int_lib.h", "sha256": "b31130f10484636895daa13b91b63d47ea82b45547f29e4dd136b48a67854d30"},
+        {"name": "int_types.h", "url": "https://raw.githubusercontent.com/llvm/llvm-project/llvmorg-18.1.8/compiler-rt/lib/builtins/int_types.h", "sha256": "26517abcfb05e989f4ac18b38779bc118637e0a5b3e44536c3733cc47b33026e"},
+        {"name": "int_util.h", "url": "https://raw.githubusercontent.com/llvm/llvm-project/llvmorg-18.1.8/compiler-rt/lib/builtins/int_util.h", "sha256": "63d06198ab720a75c20bfd84be895c2746581b129168bae6201e7384bbb0473b"},
+        {"name": "cxa_thread_atexit.reference.cpp", "url": "https://raw.githubusercontent.com/llvm/llvm-project/llvmorg-18.1.8/libcxxabi/src/cxa_thread_atexit.cpp", "sha256": "a36d48fd9f3d5b8ba4d94387d66c83cd2f2e96ad64677dde714f0daba7272ad6"}
+      ]
+    },
+    {
+      "name": "pacbrew",
+      "about": "OpenSSL and zlib for the PS5 from pacbrew v0.40.2",
+      "kind": "archive",
+      "url": "https://github.com/ps5-payload-dev/pacbrew-repo/releases/download/v0.40.2/ps5-payload-dev.tar.gz",
+      "sha256": "a85f65de418a8e6a898c6c3e3c870d50fff7618a200e4dd59ea9692af6ecec4d",
+      "extract": ".deps/pacbrew-0.40.2",
+      "creates": ".deps/pacbrew-0.40.2/opt/ps5-payload-sdk/target/user/homebrew/lib/libcrypto.a"
+    },
+    {
+      "name": "opengl-sdk",
+      "about": "PS5 OpenGL 4.6 SDK 1.0.2 (launcher UI and the OpenGL renderer)",
+      "kind": "archive",
+      "url": "https://github.com/blackbearreloaded/ps5-opengl/releases/download/v1.0.2/ps5-opengl-sdk-1.0.2.tar.gz",
+      "sha256": "30d8e51dd062739b629346102be5932728ba714bc50b1bdcdf08306c8843d9a4",
+      "extract": ".deps",
+      "creates": ".deps/ps5-opengl-sdk-1.0.2/sdk/lib/libps5_opengl_core33.a"
+    },
+    {
+      "name": "harfbuzz",
+      "about": "HarfBuzz 12.3.2 source (MIT): shapes the launcher's Arabic, Thai and other non-Latin text. Only src/ and the licence are kept",
+      "kind": "archive",
+      "url": "https://github.com/harfbuzz/harfbuzz/releases/download/12.3.2/harfbuzz-12.3.2.tar.xz",
+      "sha256": "6f6db164359a2da5a84ef826615b448b33e6306067ad829d85d5b0bf936f1bb8",
+      "extract": ".deps/harfbuzz-12.3.2",
+      "strip": 1,
+      "only": ["src", "COPYING"],
+      "creates": ".deps/harfbuzz-12.3.2/src/harfbuzz.cc"
+    },
+    {
+      "name": "ui-kit",
+      "about": "ps5-homebrew-ui at the pinned commit (GPL-3.0-or-later): the launcher's themes start from its theme recipes. Only its theme table and the headers that table needs are fetched",
+      "kind": "files",
+      "dest": ".deps/ps5-homebrew-ui-aed286b8",
+      "creates": ".deps/ps5-homebrew-ui-aed286b8/src/ui/theme.cpp",
+      "files": [
+        {"name": "src/ui/theme.cpp", "url": "https://raw.githubusercontent.com/blackbearreloaded/ps5-homebrew-ui/aed286b81cdf70a814d3059f54633ba34844e46e/src/ui/theme.cpp", "sha256": "15ca512c61df48864ee787fa93b91d4f67d5103819e4a596eb4fa9bc38db42b6"},
+        {"name": "src/ui/theme.hpp", "url": "https://raw.githubusercontent.com/blackbearreloaded/ps5-homebrew-ui/aed286b81cdf70a814d3059f54633ba34844e46e/src/ui/theme.hpp", "sha256": "9726e50acbf33a89494c1763f0fa4ba6464b152800bed6b8b8053aa41cc4a709"},
+        {"name": "src/gfx/draw_list.hpp", "url": "https://raw.githubusercontent.com/blackbearreloaded/ps5-homebrew-ui/aed286b81cdf70a814d3059f54633ba34844e46e/src/gfx/draw_list.hpp", "sha256": "8c19ec93966fe03f61f7ffdb701a39a1fb011436742949453a4801173478ee9f"},
+        {"name": "src/gfx/font.hpp", "url": "https://raw.githubusercontent.com/blackbearreloaded/ps5-homebrew-ui/aed286b81cdf70a814d3059f54633ba34844e46e/src/gfx/font.hpp", "sha256": "c6fd392e18d6dc6c7dbaf104078f10f57af963fd116fb201c4c55de54d3c4ade"},
+        {"name": "src/gfx/font_format.hpp", "url": "https://raw.githubusercontent.com/blackbearreloaded/ps5-homebrew-ui/aed286b81cdf70a814d3059f54633ba34844e46e/src/gfx/font_format.hpp", "sha256": "d8beee75b7c823bbe16a93258e65a67cb565d178c2b4dd9f241bea731d277484"},
+        {"name": "src/gfx/backdrop_spec.hpp", "url": "https://raw.githubusercontent.com/blackbearreloaded/ps5-homebrew-ui/aed286b81cdf70a814d3059f54633ba34844e46e/src/gfx/backdrop_spec.hpp", "sha256": "0e03db2915bc0a7b65b280d0b9c817264289a69a6f86493e3c3bba4cbcf73852"},
+        {"name": "src/audio/cues.hpp", "url": "https://raw.githubusercontent.com/blackbearreloaded/ps5-homebrew-ui/aed286b81cdf70a814d3059f54633ba34844e46e/src/audio/cues.hpp", "sha256": "ca3c3961ae2086abe429d76e8d7c30dea3b669c5a0a4553f3eaaad6932a0db2c"},
+        {"name": "src/audio/mixer.hpp", "url": "https://raw.githubusercontent.com/blackbearreloaded/ps5-homebrew-ui/aed286b81cdf70a814d3059f54633ba34844e46e/src/audio/mixer.hpp", "sha256": "7d438dcaa70fea00fb9121e74b644162f836adb353e47a0b104270c64405752c"},
+        {"name": "src/audio/stream_ring.hpp", "url": "https://raw.githubusercontent.com/blackbearreloaded/ps5-homebrew-ui/aed286b81cdf70a814d3059f54633ba34844e46e/src/audio/stream_ring.hpp", "sha256": "ffb6427b2a32662609cb1156971d748277573a2da0e2ed99bc6488c5da87be3b"},
+        {"name": "LICENSE", "url": "https://raw.githubusercontent.com/blackbearreloaded/ps5-homebrew-ui/aed286b81cdf70a814d3059f54633ba34844e46e/LICENSE", "sha256": "3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986"}
+      ]
+    },
+    {
+      "name": "boilerplate",
+      "about": "PS5 Native App Boilerplate: Payload SDK v0.42, runtime libc.prx and the native packaging tool",
+      "kind": "git",
+      "url": "https://github.com/blackbearreloaded/ps5-native-app-boilerplate.git",
+      "commit": "dd44bbdc75437332ed22e3ba95126733419ef25a",
+      "path": "../ps5-native-app-boilerplate",
+      "setup": ["bash", "tools/setup-native-dependencies.sh"],
+      "setup_creates": ".deps/native/ps5-payload-sdk/bin/prospero-clang"
+    },
+    {
+      "name": "lapy-owned-helper",
+      "about": "Lapy one-shot elfldr owned-root helper with guarded target lifetime and balanced vnode ownership",
+      "kind": "git",
+      "url": "https://github.com/blackbearreloaded/PS5-Lapy-JB-Daemon.git",
+      "commit": "57fcc19b7f57e46c823d6f2a6c6233ebf3288079",
+      "path": ".deps/PS5-Lapy-JB-Daemon-57fcc19"
+    },
+    {
+      "name": "lapy-payload-sdk",
+      "about": "Official PS5 Payload SDK v0.42 used by the pinned Lapy helper",
+      "kind": "archive",
+      "url": "https://github.com/ps5-payload-dev/sdk/releases/download/v0.42/ps5-payload-sdk.zip",
+      "sha256": "8cfbc7cd5811e719eb4f0c47eea668d3dc7b40bc8ab11c4a5031d40c23ec02da",
+      "extract": ".deps/lapy-ps5-payload-sdk-v0.42",
+      "strip": 1,
+      "creates": ".deps/lapy-ps5-payload-sdk-v0.42/bin/prospero-clang"
+    },
+    {
+      "name": "lapy-ps5log",
+      "about": "Pinned ps5log/1 single-header client used by the upstream Lapy helper build",
+      "kind": "files",
+      "dest": ".deps/lapy-ps5log-1ae1f918",
+      "creates": ".deps/lapy-ps5log-1ae1f918/ps5log.h",
+      "files": [
+        {
+          "name": "ps5log.h",
+          "url": "https://raw.githubusercontent.com/mpereiraesaa/ps5-agc-gears/1ae1f9182abd2770c131b97419034fb85173c2dc/native/ps5log/ps5log.h",
+          "sha256": "394af67d0f8b60b3335deb53396e52855ea2daa50ca914a456ea7663f48900c6"
+        }
+      ]
+    },
+    {
+      "name": "ps5-vulkan-tools",
+      "about": "Mihawk's PS5_Vulkan: the RADV build and link recipes",
+      "kind": "git",
+      "url": "https://github.com/mihawk-99/PS5_Vulkan.git",
+      "commit": "5b5e4fc2d80fdb67a4f61ba9e6a8a424026bb8a5",
+      "path": "../mihawk-vulkan-review"
+    },
+    {
+      "name": "ps5-mesa",
+      "about": "Mihawk's PS5 Mesa (RADV) source",
+      "kind": "git",
+      "url": "https://github.com/mihawk-99/PS5_Mesa.git",
+      "commit": "7b59ef27c1b09b9671bc4153c41940c3155c3af2",
+      "path": "../mihawk-mesa-review"
+    },
+    {
+      "name": "ps5-payload-sdk-fork",
+      "about": "Mihawk's PS5 Payload SDK fork used to build RADV",
+      "kind": "git",
+      "url": "https://github.com/mihawk-99/PS5_PayloadSDK.git",
+      "commit": "b83202be73e930050e00de0f1b4d9ec46c0391bf",
+      "path": "../mihawk-sdk-review"
+    },
+    {
+      "name": "mihawkgen",
+      "about": "Mihawk's PS5_MihawkGen: neural frame generation (framegen module, GPL-3.0-or-later)",
+      "kind": "git",
+      "url": "https://github.com/mihawk-99/PS5_MihawkGen.git",
+      "commit": "c57232a9f16bcb6df5fe07c9bb631518f2b1cc0e",
+      "path": "../mihawk-framegen-review"
+    }
+  ]
+}

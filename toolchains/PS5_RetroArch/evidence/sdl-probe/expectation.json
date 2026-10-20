@@ -1,0 +1,15 @@
+{
+  "step": "sdl-probe",
+  "note": "A frontend executable beside eboot.bin runs SDL2 with PS5_OpenGL's hardware OpenGL 4.6 core at 1920x1080 and 60 frames a second, reads the controller, and hands the title back to eboot.bin: what EmulationStation needs from the platform.",
+  "must_contain": [
+    "kernel log: EXEC /app0/es-de/sdl-probe.bin",
+    "sdl probe: GL vendor 'PS5 homebrew', renderer 'PS5 AGC', version '4.6 (Core Profile) Mesa 26.2.0'",
+    "sdl probe: frames [121, 120, 120], centre pixel matched [121, 120, 120], failure ''",
+    "sdl probe: argv=[\"--ps5-relaunch=1\"]",
+    "relaunch test PASS: 1 restarts, every one with its arguments",
+    "fatal signals 0",
+    "Owner: \"I see red green blue then retroarch\""
+  ],
+  "must_not_contain": [],
+  "human_check": "The owner watched red, green and blue, then RetroArch."
+}

@@ -1,0 +1,21 @@
+{
+  "step": "picker-null-imports",
+  "recorded": "2026-10-04T23:48:45Z",
+  "console_run": "base PS5 13.40, run 194705",
+  "revision": "1b4ba51 + PS5_VulkanTemplate 08649131 pin",
+  "command": "PS5_FRONTENDS='es-de picker' tools/build-title.sh; tools/run-title.sh --no-build --picker-test=300:retroarch --retroarch-frames=600 --watch 60",
+  "raw_capture": "klog/picker-imports/summary.txt",
+  "raw_lines": 9,
+  "raw_bytes": 898,
+  "lines": [
+    "==> PS5_FRONTENDS='es-de picker' tools/build-title.sh; tools/run-title.sh --no-build --picker-test=300:retroarch --retroarch-frames=600 --watch 60   (base PS5, 13.40)",
+    "picker before (PS5_VulkanTemplate ca553412, PS5_Vulkan ab37acd): imports no loaded module exports: mkstemp readlink",
+    "picker after (PS5_VulkanTemplate 08649131, PS5_Vulkan f3cbf87): link-title.sh guard passed; imports none of strcasestr mkstemp readlink link symlink",
+    "eboot.bin after: imports none of strcasestr mkstemp readlink link symlink pathconf",
+    "picker: 300 frames, chose retroarch, next '/app0/eboot.bin'",
+    "picker test PASS: 300 frames, a picture of the last (klog/picker-194705/picker.png, sha256 2c557ba72c209d85...), then retroarch",
+    "frontend: RetroArch quit; back to the picker",
+    "kernel: EXEC /app0/picker/picker.bin, EXEC /app0/eboot.bin, EXEC /app0/eboot.bin, EXEC /app0/picker/picker.bin",
+    "fatal lines in the run's kernel log: 0"
+  ]
+}

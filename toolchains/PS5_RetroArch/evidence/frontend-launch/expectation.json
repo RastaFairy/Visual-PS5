@@ -1,0 +1,13 @@
+{
+  "step": "frontend-launch",
+  "note": "The title starts the frontend remembered in config/frontend.cfg (the picker's Remember switch, the WebUI's Start with), the picker when none is or L1 is held; a frontend quitting closes the title when one is remembered; each session keeps its trace and a game's RetroArch log apart; an installed update closes the title instead of handing over.",
+  "must_contain": [
+    "frontend: mode '', test run 0, picker test 0, picker 1, es-de 1, remembered es-de, L1 0 -> es-de",
+    "frontend: mode 'quit', test run 0, picker test 0, picker 1, es-de 1, remembered es-de, L1 0 -> close",
+    "console config/frontend.cfg: frontend_start = \"es-de\"",
+    "remembered ask, L1 0 -> picker",
+    "trace.txt: 97 lines, this session only"
+  ],
+  "must_not_contain": [],
+  "human_check": "klog/picker-215921/picker.png shows the picker with 'Remember: on' on Square and the line about holding L1. Holding L1 on a real pad at launch is not exercised by a script: the read itself is (pad open, a sample decided at once)."
+}

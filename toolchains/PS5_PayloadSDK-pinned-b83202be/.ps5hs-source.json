@@ -1,0 +1,14 @@
+{
+  "repository": "mihawk-99/PS5_PayloadSDK",
+  "branch": "main",
+  "commit": "b83202be73e930050e00de0f1b4d9ec46c0391bf",
+  "sourceCommit": "b83202be73e930050e00de0f1b4d9ec46c0391bf",
+  "sourceRef": "b83202be73e930050e00de0f1b4d9ec46c0391bf",
+  "method": "vendored-snapshot",
+  "vendoredSnapshot": true,
+  "vendorRepository": "RastaFairy/Visual-PS5",
+  "vendoredAt": "2026-10-20T15:43:39Z",
+  "submodulesMaterialized": true,
+  "originalMethod": "vendored-snapshot",
+  "sourceRevisionRecorded": true
+}

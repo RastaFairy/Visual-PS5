@@ -1,0 +1,19 @@
+{
+  "step": "webui-library-edits",
+  "recorded": "2026-10-19T01:59:27Z",
+  "console_run": "215629",
+  "revision": "3c23512",
+  "command": "python3 evidence/webui-library-edits/check.py (RetroArch running on the console, build 191ff52c)",
+  "raw_capture": "klog/webui-checks.txt",
+  "raw_lines": 7,
+  "raw_bytes": 325,
+  "lines": [
+    "58 password field: {'cheevos_password': 'not set', 'cheevos_token': 'not set'}",
+    "58 username present: False",
+    "add game: 201",
+    "55 rename: (200, 'Claude Test Renamed')",
+    "57 delete: (200, '{\"deleted\":1}', 'file gone', '0 playlist entries left', 'details gone')",
+    "57 library: gone from the library",
+    "cleanup: playlist and test files removed"
+  ]
+}

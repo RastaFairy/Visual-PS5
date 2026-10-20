@@ -1,0 +1,16 @@
+{
+  "step": "esde-folder-names",
+  "note": "Content folders take ES-DE's system names; folders earlier builds named as RetroArch does are renamed or merged with their playlists and per-folder settings; a fresh install starts in the picker; ES-DE's first start writes its library (it wrote nothing before: its own folder did not exist yet) and finds archived games of systems whose cores also take discs.",
+  "must_contain": [
+    "startup: system folders renamed as ES-DE names them = 3",
+    "picker 1, es-de 1, remembered ask, L1 0 -> picker",
+    "\"path\": \"/app0/content/gb/placeholder-a.gb\"",
+    "config/mGBA/gb.opt",
+    "29 failures",
+    "34 systems, 317 games (0 with ES-DE's details kept), 33 cores, 0 favourites, 0 played, 0 failures",
+    "start: systems written 34",
+    "every path /app0/content/<name>"
+  ],
+  "must_not_contain": [],
+  "human_check": ""
+}

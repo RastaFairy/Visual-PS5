@@ -1,0 +1,15 @@
+# RetroArch's History tab: the newest game's menu, then Add to Favorites, as a
+# person adds a favourite (the frontends then show it: src/ps5_library.h). The
+# menu's OK is B on this console, and XMB's tabs are Main Menu, Settings, History,
+# Favourites, Images, Import Content. The game menu is Run, Rename, Remove, Add to
+# Favorites, Set Core Association, ...
+4.0 RIGHT
+4.5 RIGHT
+6.0 MENU              # History, its newest game selected
+6.5 B                 # that game's menu
+8.0 DOWN
+8.5 DOWN
+9.0 DOWN
+9.5 MENU              # Add to Favorites selected
+10.0 B                # added
+11.5 STOP

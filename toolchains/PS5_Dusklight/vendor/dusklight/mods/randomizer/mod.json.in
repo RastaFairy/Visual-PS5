@@ -1,0 +1,7 @@
+{
+  "id": "dev.twilitrealm.randomizer",
+  "name": "Dusklight Randomizer",
+  "version": "@RANDOMIZER_VERSION@",
+  "author": "Twilit Realm",
+  "description": "Shuffles items and equipment all over the game, giving you countless new ways to enjoy Dusklight."
+}

@@ -1,0 +1,11 @@
+{
+  "step": "picker-multi-controller",
+  "note": "PS5_VulkanTemplate's foundation now opens a controller per signed-in user, as RetroArch does since 4788d35. The picker built from it opened player 0 for the launching user and player 1 for the second signed-in user on the console, and still passed its test.",
+  "must_contain": [
+    "[Frontend Picker] pad: player 1 opened for user B, rumble mode 0",
+    "picker test PASS: 300 frames",
+    "fatal lines in the run's kernel log: 0"
+  ],
+  "must_not_contain": [],
+  "human_check": ""
+}

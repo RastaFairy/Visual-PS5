@@ -1,0 +1,13 @@
+{
+  "step": "webui-release-collapsed-recap",
+  "must_contain": [
+    "Game Boy Advance recap is collapsed in the replacement screenshot",
+    "Game name and matched title are not visible",
+    "Updated screenshot loads in the release preview",
+    "Release prose and permanent warning unchanged"
+  ],
+  "must_not_contain": [
+    "FAILED"
+  ],
+  "human_check": "Full-page capture visually inspected: only collapsed Game Boy Advance summary is shown; game name and match hidden."
+}

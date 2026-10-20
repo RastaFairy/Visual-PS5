@@ -1,0 +1,4 @@
+# Issue 63: raise the internal resolution as the Quick Menu does (from 2880x1632, set in PPSSPP.opt, to 3840x2176)
+30 OPTION ppsspp_internal_resolution 3840x2176
+45 SCREENSHOT
+55 STOP

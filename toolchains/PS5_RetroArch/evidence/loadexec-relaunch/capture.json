@@ -1,0 +1,26 @@
+{
+  "step": "loadexec-relaunch",
+  "recorded": "2026-10-04T17:34:29Z",
+  "console_run": "base PS5 13.40, run relaunch-20261004-133221",
+  "revision": "39289d4 + relaunch probe (build 453864d6)",
+  "command": "tools/run-title.sh --no-build --relaunch-test=5 --watch 60",
+  "raw_capture": "klog/loadexec-relaunch-summary.txt",
+  "raw_lines": 14,
+  "raw_bytes": 1346,
+  "lines": [
+    "==> tools/run-title.sh --no-build --relaunch-test=5 --watch 60   (base PS5, firmware 13.40)",
+    "build identity: 453864d6302444f2dfe01373bd2539d9b64185fa5c5de1fb05803f7fa7215de0",
+    "run relaunch-20261004-133221: 6 processes, 5 restarts through sceSystemServiceLoadExec(\"/app0/eboot.bin\", {\"--ps5-relaunch=N\", NULL})",
+    "generation 0: argc=1 argv=[\"\"] pid=117 flexible_free=419430400 action=restart",
+    "generation 1: argc=1 argv=[\"--ps5-relaunch=1\"] pid=118 flexible_free=419430400 action=restart",
+    "generation 2: argc=1 argv=[\"--ps5-relaunch=2\"] pid=119 flexible_free=419430400 action=restart",
+    "generation 3: argc=1 argv=[\"--ps5-relaunch=3\"] pid=120 flexible_free=419430400 action=restart",
+    "generation 4: argc=1 argv=[\"--ps5-relaunch=4\"] pid=121 flexible_free=419430400 action=restart",
+    "generation 5: argc=1 argv=[\"--ps5-relaunch=5\"] pid=122 flexible_free=419430400 action=continue",
+    "restart to restart: 0.56 to 0.61 s",
+    "kernel log: EXEC /app0/eboot.bin x6, \"Kill for LoadExec(...) => 0\" x5, fatal signals 0",
+    "relaunch test PASS: 5 restarts, every one with its arguments",
+    "RetroArch after the chain: build identity present; [XMB] Assets missing: no; fonts ready: yes",
+    "first run (build f935ae4e, parser read from argv[1]): generation 1 argc=1 argv=[\"--ps5-relaunch=1\"] -> the console passes LoadExec arguments as the whole argv, no program name; home-screen launch argc=1 argv=[\"\"]"
+  ]
+}

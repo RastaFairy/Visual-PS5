@@ -1,0 +1,18 @@
+{
+  "step": "webui-daemon",
+  "note": "The WebUI is a daemon started through the console's loader: it served through picker -> RetroArch -> picker and picker -> ES-DE with one token, uploads across the switches arrived whole, it stopped 20 s after the title closed, and downloads (sendfile stopped at 33 KB) now arrive whole.",
+  "must_contain": [
+    "daemon (1086912 bytes) sent to the loader on 9021",
+    "frontend=retroarch token=741019b8",
+    "frontend=picker token=741019b8",
+    "frontend=es-de token=f91a25ee",
+    "upload-done seconds=66.7 status=HTTP/1.1 201 Created",
+    "800 blocks of 256 KiB identical to the first, 0 mismatched",
+    "the title is closed",
+    "download after the fix: http 200, 1917648896 bytes"
+  ],
+  "must_not_contain": [
+    "frontend=DOWN"
+  ],
+  "human_check": "none: hashes and block comparisons by the agent"
+}

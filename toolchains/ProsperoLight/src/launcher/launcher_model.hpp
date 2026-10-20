@@ -1,0 +1,379 @@
+/*
+ * ps5-native-app-boilerplate - ProsperoLight component.
+ * Copyright (C) 2026 BlackBearReloaded
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
+#pragma once
+
+#include "moonlight_backend.hpp"
+#include "moonlight_config.hpp"
+#include "moonlight_discovery.hpp"
+#include "moonlight_health.hpp"
+
+#include <pthread.h>
+
+#include <cstddef>
+#include <cstdint>
+#include <deque>
+#include <map>
+#include <memory>
+#include <string>
+#include <vector>
+
+namespace launcher
+{
+
+// What the launcher last learned about one saved PC.
+struct HostStatus
+{
+    bool known = false; // false until the PC has answered or failed once
+    bool online = false;
+    bool paired = false;
+    unsigned app_count = 0;
+    int current_app_id = 0;
+    char running[64] = {}; // name of the app Sunshine is running, when it is in the list
+};
+
+enum class NoticeKind
+{
+    info,
+    success,
+    warning,
+    error,
+};
+
+// One message for the player: the outcome of something they asked for.
+struct Notice
+{
+    NoticeKind kind = NoticeKind::info;
+    std::string title;
+    std::string body;
+    float seconds = 0.0f; // how long it stays; 0: the usual time for its kind
+};
+
+// One app's box art, decoded: RGBA, top row first.
+struct ArtworkImage
+{
+    int app_id = 0;
+    int width = 0;
+    int height = 0;
+    std::vector<unsigned char> rgba;
+};
+
+// Turns the picture the host sent (PNG, JPEG or WebP) into pixels. It runs on the worker thread.
+using ArtworkDecoder = bool (*)(const unsigned char *picture, std::size_t size,
+                                ArtworkImage *image);
+
+// The job the player is waiting for, if any.
+enum class Busy
+{
+    none,
+    searching,
+    refreshing,
+    unpairing,
+    stopping,
+};
+
+// Everything the launcher knows and does, with no drawing in it: saved PCs
+// and settings, Sunshine's state, pairing, and the requests that reach the
+// network. Requests run one at a time on a worker thread, so the screen keeps
+// moving while a PC is slow to answer; Poll() applies what they return.
+// A newer release the prosperostore.net catalog lists
+// (third_party/update-check/self_update.h).
+struct UpdateOffer
+{
+    bool installable = false; // the app can download and install it by itself
+    char version[40] = {};    // the release's name, for display
+    std::uint64_t size = 0;   // the ZIP's size in bytes; 0 when the catalog doesn't say
+    // What the developer wrote on the release, as the catalog gives it: plain
+    // text, lines split by '\n', list items starting "- ". Empty when there is
+    // none; truncated when the catalog cut it (the rest is on the app's page).
+    std::string notes;
+    bool notes_truncated = false;
+};
+
+enum class UpdatePhase : std::uint8_t
+{
+    idle,
+    starting,    // starting the helper
+    downloading, // done/total are bytes of the archive
+    unpacking,   // done/total are bytes unpacked
+    ready,       // staged and checked: apply or cancel
+    applying,    // the helper has the go-ahead: the app closes
+    cancelled,
+    failed, // error says why; nothing was changed
+};
+
+struct UpdateProgress
+{
+    UpdatePhase phase = UpdatePhase::idle;
+    std::uint64_t done = 0;
+    std::uint64_t total = 0; // 0 while it isn't known
+    char time_left[32] = {}; // "about 20 s left"; empty until it can be said
+    char error[160] = {};
+};
+
+// What installs the offered release. begin starts the download and the staging
+// on a thread of its own; poll is cheap, for every frame; cancel leaves the
+// app untouched; apply gives the go-ahead once staged (true: close the app
+// now); finish comes after a cancel or a failure, before beginning again.
+struct UpdateActions
+{
+    bool (*begin)() = nullptr;
+    void (*poll)(UpdateProgress *progress) = nullptr;
+    void (*cancel)() = nullptr;
+    bool (*apply)() = nullptr;
+    void (*finish)() = nullptr;
+};
+
+class Model
+{
+    bool session_only_ = false;
+
+  public:
+    Model() = default;
+    Model(const Model &) = delete;
+    Model &operator=(const Model &) = delete;
+    ~Model();
+
+    void Initialize(std::uint64_t now_ms);
+    void set_session_only(bool value)
+    {
+        session_only_ = value;
+    }
+    bool session_only() const
+    {
+        return session_only_;
+    }
+    void Poll(std::uint64_t now_ms);
+    // Finishes the request in flight and saves pending settings.
+    void Shutdown();
+
+    // ---- what is known ----
+    const moonlight_config_t &config() const
+    {
+        return config_;
+    }
+    const moonlight_config_host_t *selected_host() const;
+    // Sunshine's state on the selected PC; valid() is false until it answered.
+    const moonlight_backend_snapshot_t &backend() const
+    {
+        return backend_;
+    }
+    bool backend_valid() const
+    {
+        return backend_valid_;
+    }
+    HostStatus host_status(unsigned index) const;
+    bool reconnecting() const
+    {
+        return health_.Reconnecting();
+    }
+    Busy busy() const;
+    // Changes whenever the PC list, a PC's state or the app list changed.
+    unsigned revision() const
+    {
+        return revision_;
+    }
+    unsigned selected_app() const
+    {
+        return selected_app_;
+    }
+    void SelectApp(unsigned index);
+
+    // ---- pairing ----
+    bool pairing() const
+    {
+        return pairing_requested_ || pairing_active_;
+    }
+    // Empty until Sunshine is ready for it.
+    const char *pairing_pin() const
+    {
+        return pairing_pin_;
+    }
+    float pairing_seconds_left() const;
+
+    // ---- requests ----
+    void SelectHost(unsigned index);
+    // A notice from outside the model: why a forwarded launch did not start.
+    void ShowNotice(NoticeKind kind, std::string title, std::string body = {}, float seconds = 0.0f)
+    {
+        Notify(kind, std::move(title), std::move(body), seconds);
+    }
+    void Refresh(bool discover);
+    void StartPairing();
+    void Unpair();
+    void RemoveHost();
+    // On failure *error says what to type instead.
+    bool AddHost(const char *text, std::string *error);
+    bool SetPort(const char *text, std::string *error);
+    void StopApp();
+    // True when the stream may start; otherwise a notice says why not.
+    bool RequestStream();
+    // Settings: change the returned config, then call SettingsChanged().
+    moonlight_config_t &settings()
+    {
+        return config_;
+    }
+    void SettingsChanged();
+
+    // ---- box art ----
+    void set_artwork_decoder(ArtworkDecoder decoder)
+    {
+        artwork_decoder_ = decoder;
+    }
+    // Runs first on every worker thread. On the console it moves the thread
+    // off the screen's CPU: threads there are never time-sliced, and a TLS
+    // request froze the screen for a second.
+    // Asks the catalog whether a newer version exists; true with its name in
+    // version. It blocks for as long as the network takes, so it runs on the
+    // worker, once, when nothing else is waiting.
+    using UpdateCheck = bool (*)(UpdateOffer *offer);
+    void set_update_check(UpdateCheck check)
+    {
+        update_check_ = check;
+    }
+    using WorkerStart = void (*)();
+    void set_worker_start(WorkerStart start)
+    {
+        worker_start_ = start;
+    }
+    // Asks for one app's box art from the selected PC (once per app).
+    void RequestArtwork(int app_id);
+    // The view let go of this poster: it may be asked for again.
+    void ForgetArtwork(int app_id);
+    // The next picture that arrived, if any.
+    bool TakeArtwork(ArtworkImage *image);
+
+    std::vector<Notice> TakeNotices();
+    // A newer release the app can install by itself, once, when the catalog's
+    // answer has come. One it cannot install is a notice instead.
+    bool TakeUpdateOffer(UpdateOffer *offer);
+
+  private:
+    enum class JobKind
+    {
+        none,
+        discover,
+        refresh, // the selected PC, asked for by the player
+        health,  // the selected PC, on a timer
+        sweep,   // another saved PC, for the list
+        unpair,
+        stop,
+        artwork,
+        update, // is there a newer version: once, when idle
+    };
+    using Picture = std::shared_ptr<const std::vector<unsigned char>>;
+    struct Job
+    {
+        JobKind kind = JobKind::none;
+        char host[MOONLIGHT_CONFIG_ADDRESS_SIZE] = {};
+        std::uint16_t port = 0;
+        std::uint16_t https_port = 0;
+        int app_id = 0;
+        bool announce = false;     // tell the player when the PC does not answer
+        bool catalog_only = false; // box art for the forwarder catalog: saved, not shown
+        Picture picture;           // box art already fetched: decoded, not asked for again
+    };
+    struct JobResult
+    {
+        int result = 0;
+        moonlight_backend_snapshot_t snapshot{};
+        moonlight_discovered_host_t found[MOONLIGHT_DISCOVERY_MAX_HOSTS]{};
+        std::uint32_t found_count = 0;
+        ArtworkImage image;
+        Picture picture;
+    };
+    struct StatusEntry
+    {
+        char host[MOONLIGHT_CONFIG_ADDRESS_SIZE] = {};
+        std::uint16_t port = 0;
+        HostStatus status;
+    };
+    static void *Worker(void *self);
+    void Run(const Job &job, JobResult *result);
+    bool StartNext();
+    void Apply(const Job &job, JobResult &result);
+    void ApplyDiscovery(const JobResult &result);
+    bool ApplySelected(const Job &job, const JobResult &result);
+    void PollPairing();
+    void QueueSelectedRefresh(bool announce = false);
+    void QueueSweep();
+    void DropSelectedRequests();
+    void ResetSelected();
+    bool IsSelected(const char *host, std::uint16_t port) const;
+    // Both return whether anything the screens show has changed.
+    bool Remember(const char *host, std::uint16_t port, const moonlight_backend_snapshot_t &state,
+                  bool online);
+    bool Upsert(const char *host, std::uint16_t port, const moonlight_backend_snapshot_t &state);
+    void Notify(NoticeKind kind, std::string title, std::string body = {}, float seconds = 0.0f);
+    // Writes the PC's app list where forwarder tools read it.
+    void PublishCatalog(const char *host, std::uint16_t port,
+                        const moonlight_backend_snapshot_t &state);
+    void Save();
+
+    moonlight_config_t config_{};
+    moonlight_backend_snapshot_t backend_{};
+    bool backend_valid_ = false;
+    MoonlightHealthState health_{};
+    std::uint64_t health_due_ms_ = 0;
+    std::uint64_t now_ms_ = 0;
+    unsigned selected_app_ = 0;
+    unsigned revision_ = 1;
+    std::vector<StatusEntry> statuses_;
+    std::vector<Notice> notices_;
+
+    // The worker and what waits for it.
+    bool worker_active_ = false;
+    volatile int worker_done_ = 0;
+    pthread_t worker_{};
+    Job job_{};
+    JobResult result_{};
+    std::deque<Job> requests_; // asked for by the player: before everything else
+    std::deque<Job> sweeps_;
+    std::deque<int> artwork_wanted_;
+    std::vector<int> artwork_asked_;
+    std::deque<ArtworkImage> artwork_ready_;
+    // The selected PC's box art as it sent it, oldest first, so a poster the view let go of is
+    // decoded again rather than fetched. Bounded in bytes: the whole app shares a 128 MiB heap.
+    std::map<int, Picture> pictures_;
+    std::deque<int> picture_order_;
+    std::size_t picture_bytes_ = 0;
+    void KeepPicture(int app_id, Picture picture);
+    // Box art the forwarder catalog lacks, fetched when nothing else waits.
+    std::deque<int> catalog_wanted_;
+    std::vector<int> catalog_asked_;
+    ArtworkDecoder artwork_decoder_ = nullptr;
+    WorkerStart worker_start_ = nullptr;
+    UpdateCheck update_check_ = nullptr;
+    bool update_checked_ = false;
+    // The update check runs on a thread of its own: when the catalog cannot be
+    // reached its network wait lasts a minute, and nothing (a stream starting,
+    // the launcher closing) waits for it. The thread keeps its own reference.
+    struct UpdateTask
+    {
+        UpdateCheck check = nullptr;
+        WorkerStart start = nullptr;
+        bool available = false;
+        UpdateOffer offer;
+        int done = 0; // set, with release, once available and offer are written
+    };
+    static void *UpdateWorker(void *held);
+    void StartUpdateCheck();
+    void ApplyUpdate(bool available, const UpdateOffer &offer);
+    std::shared_ptr<UpdateTask> update_task_;
+    UpdateOffer update_offer_;
+    bool update_offered_ = false;
+
+    bool pairing_requested_ = false;
+    bool pairing_active_ = false;
+    moonlight_backend_pair_state_t pairing_state_ = MOONLIGHT_BACKEND_PAIR_IDLE;
+    std::uint64_t pairing_started_ms_ = 0;
+    char pairing_pin_[5] = {};
+
+    bool save_pending_ = false;
+    std::uint64_t save_due_ms_ = 0;
+};
+
+} // namespace launcher

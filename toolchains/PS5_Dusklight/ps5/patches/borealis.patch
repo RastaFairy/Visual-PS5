@@ -1,0 +1,32 @@
+diff --git a/src/crash.cpp b/src/crash.cpp
+index 8420ef0..9bf6db1 100644
+--- a/src/crash.cpp
++++ b/src/crash.cpp
+@@ -39,6 +39,10 @@
+ #else
+ #include <elf.h>
+ #include <link.h>
++#ifndef ElfW
++// FreeBSD and the PlayStation 5: link.h has no ElfW
++#define ElfW(type) Elf64_##type
++#endif
+ #ifndef NT_GNU_BUILD_ID
+ #define NT_GNU_BUILD_ID 3
+ #endif
+diff --git a/src/log.cpp b/src/log.cpp
+index c2a0343..f03f389 100644
+--- a/src/log.cpp
++++ b/src/log.cpp
+@@ -345,7 +345,12 @@ constexpr std::string_view level_color(LogLevel level) {
+ }
+ 
+ void write_console(const State& state, const Message& message, bool flushLine) {
++#if defined(__PROSPERO__)
++    // PlayStation 5: klog takes the title's standard error and nothing of its standard output.
++    FILE* out = stderr;
++#else
+     FILE* out = message.level >= LogLevel::Error ? stderr : stdout;
++#endif
+     const std::string_view levelStr = to_string(message.level);
+     if (state.consoleIsTty) {
+         const std::string_view color = level_color(message.level);

@@ -1,0 +1,14 @@
+{
+  "step": "issues-25-27",
+  "note": "Issue 25: ES-DE's library now also scans the content folders (src/ps5_library.c ps5_library_load_content): 36 systems and 1025 games, and a game no playlist lists (Atari 2600 Hacks/E.T.) starts in RetroArch through game mode and returns. Issue 27: ES-DE's FFmpeg lacked asetnsamples, the last filter of VideoFFmpegComponent's audio graph; the graph failed and videos stayed black. With it the test clip plays in real time (its burned-in clock advanced with the captures) with sound. The owner's ES-DE settings were restored and the test media removed.",
+  "must_contain": [
+    "after (content scan, archives for cartridge systems): start: library from RetroArch's playlists: 36 systems, 1025 games",
+    "game mode: /app0/content/ATARI 2600/Hacks/E.T. the Extra-Terrestrial (Fixed).zip with /app0/cores/stella_libretro.so",
+    "game mode: RetroArch quit (status 0)",
+    "before: Error:  VideoFFmpegComponent::setupAudioFilters(): Couldn't add graph filter: Filter not found",
+    "after: es_log filter errors: 0",
+    "after: frame 505 at 10 s: 1920x1080, GL error 0, sound ps5 (1 playing)"
+  ],
+  "must_not_contain": [],
+  "human_check": "Agent inspected klog/frontend-20261006-232901 (black video frame) and -233318 (the test clip playing: burned-in times 5.3, 9.3, 15.3 s at captures 10, 14, 20 s), and -233654 (Atari 2600 list with its subfolders, back on E.T. after the game)."
+}

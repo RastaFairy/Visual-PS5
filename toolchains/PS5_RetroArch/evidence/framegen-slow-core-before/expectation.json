@@ -1,0 +1,10 @@
+{
+  "step": "framegen-slow-core-before",
+  "note": "Frame generation before 0137 (build 191ff52c, the attract demo of a GameCube game, the core below full speed at times): 3 of 35 windows show only generated pictures, never the real frame (the doubled image the owner saw).",
+  "must_contain": [
+    "build identity: 191ff52c",
+    "spacing (ms): real n 0 mean 0.00 max 0.00 off 0 | generated n 148"
+  ],
+  "must_not_contain": [],
+  "human_check": ""
+}

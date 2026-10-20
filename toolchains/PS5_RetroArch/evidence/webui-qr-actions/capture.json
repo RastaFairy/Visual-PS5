@@ -1,0 +1,97 @@
+{
+  "step": "webui-qr-actions",
+  "recorded": "2026-10-07T22:32:02.262734+00:00",
+  "revision": "working tree on bf859b0",
+  "command": "PS5_FRONTENDS='es-de picker' PS5_VULKAN_TEMPLATE=\"$PWD/build/picker-template\" tools/verify.sh",
+  "raw_capture": "klog/webui-qr-actions/gates-recheck.log",
+  "raw_lines": 1360,
+  "raw_bytes": 89236,
+  "lines": [
+    "test_current_ip_changes_offline_and_modal_lifecycle (tests.test_webui_qr.WebUIQR.test_current_ip_changes_offline_and_modal_lifecycle) ... ok",
+    "test_encoder_decodes_and_preserves_quiet_zone (tests.test_webui_qr.WebUIQR.test_encoder_decodes_and_preserves_quiet_zone) ... ok",
+    "test_menu_hooks_apply_and_are_idempotent (tests.test_webui_qr.WebUIQR.test_menu_hooks_apply_and_are_idempotent) ... ok",
+    "test_picker_buttons_consume_input (tests.test_webui_qr.WebUIQR.test_picker_buttons_consume_input) ... ok",
+    "test_retroarch_entry_opens_modal_and_cancel_closes (tests.test_webui_qr.WebUIQR.test_retroarch_entry_opens_modal_and_cancel_closes) ... ok",
+    "test_rgui_rendered_frame_decodes (tests.test_webui_qr.WebUIQR.test_rgui_rendered_frame_decodes) ... ok",
+    "test_upstream_encoder_is_unmodified (tests.test_webui_qr.WebUIQR.test_upstream_encoder_is_unmodified) ... ok",
+    "test_xmb_rendered_frame_decodes (tests.test_webui_qr.WebUIQR.test_xmb_rendered_frame_decodes) ... ok",
+    "",
+    "----------------------------------------------------------------------",
+    "Ran 8 tests in 1.049s",
+    "",
+    "OK",
+    "== format",
+    "   PASS (9s)",
+    "== unit",
+    "Ran 177 tests in 266.658s",
+    "   PASS (267s)",
+    "== build",
+    "   PASS (106s)",
+    "== format",
+    "   PASS (9s)",
+    "== integration",
+    "Ran 177 tests in 244.004s",
+    "   PASS (251s)",
+    "== evidence",
+    "101 capture(s) replayed, 0 failed",
+    "   PASS (1s)",
+    "verify: PASS (format integration evidence)",
+    "Regression reproduced on bf859b0: WebUI entry action was not bound.",
+    "Working picker and ES-DE binaries remain byte-identical: PASS",
+    "Deployment: 6 changed files verified; 13617 unchanged files retained.",
+    "Deployed eboot.bin stored-byte SHA-256 matches corrected staged build: PASS"
+  ],
+  "owner_report": {
+    "picker": "Works great",
+    "xmb": "WebUI tab doesn't work",
+    "rgui": "WebUI doesn't work",
+    "es-de": "Works great"
+  },
+  "root_cause": "0115 inserted the WebUI action binding at the first lookup-setting binding, inside the custom keyboard branch. Common menu entries could not reach it. 0116 retires that insertion and binds WebUI in menu_cbs_init_bind_ok.",
+  "regression_before": {
+    "raw_capture": "klog/webui-qr-actions/before.log",
+    "result": "Expected failure: selecting WebUI failed the action initializer assertion."
+  },
+  "regression_after": "Compile production action initializer, WebUI callback and modal dispatcher against the real QR library. Select opens QR with expected URL, navigation is consumed, Cancel closes, normal actions resume, other entries retain fallback.",
+  "staged_artifacts": {
+    "eboot.bin": {
+      "bytes": 38771116,
+      "sha256": "dbb60b013648c51ac7058f7dbb7107997a08920a1ace6adc6e446e2b7773d4ff"
+    },
+    "picker/picker.bin": {
+      "bytes": 29608493,
+      "sha256": "411e2b6f604878bd00b8d2b67e797b2ae91f1682ad046719464d04c57fa9fe04"
+    },
+    "es-de/es-de.bin": {
+      "bytes": 48154397,
+      "sha256": "ac4dde1b3f41f06b633d24efbdbe5f6978e26ea91a15b1779a6f79c40478c9a5"
+    },
+    "manifest.sha256": {
+      "bytes": 1785399,
+      "sha256": "4fd06c8a3a3a9a926b84f4519c37275bd264be3af9adf20f337599447b2441a3"
+    }
+  },
+  "console_run": "Corrected build 0bdc8dd8 deployed to base PS5; exact eboot.bin stored-byte SHA-256 matches. XMB/RGUI live recheck pending.",
+  "verification_commands": [
+    "PS5_FRONTENDS='es-de picker' PS5_VULKAN_TEMPLATE=\"$PWD/build/picker-template\" tools/verify.sh",
+    "tools/verify.sh format integration evidence"
+  ],
+  "initial_integration_failure": {
+    "raw_capture": "klog/webui-qr-actions/gates.log",
+    "test": "test_games_page_in_a_browser",
+    "error": "Timeout waiting for four cover images. The fixture served text as PNG, racing the page image-error fallback.",
+    "resolution": "Browser-only source fixture now supplies a valid PNG; assertion waits for decoded images. Isolated strict test and full integration pass.",
+    "strict_test_log": "klog/webui-qr-actions/browser-fixed.log"
+  },
+  "deployment": {
+    "command": "python3 tools/deploy-title.py",
+    "raw_capture": "klog/webui-qr-actions/deploy.log",
+    "changed_files_verified": 6,
+    "unchanged_files_retained": 13617,
+    "eboot_readback": {
+      "bytes": 38771116,
+      "sha256": "dbb60b013648c51ac7058f7dbb7107997a08920a1ace6adc6e446e2b7773d4ff",
+      "matches_staged": true
+    }
+  }
+}

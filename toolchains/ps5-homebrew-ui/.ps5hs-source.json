@@ -1,7 +1,12 @@
 {
-  "method": "git clone --recurse-submodules",
+  "method": "vendored-snapshot",
   "branch": "main",
   "repository": "blackbearreloaded/ps5-homebrew-ui",
   "commit": "",
-  "installedAt": "2026-10-17T18:54:56.8034244+02:00"
+  "installedAt": "2026-10-17T18:54:56.8034244+02:00",
+  "vendorRepository": "RastaFairy/Visual-PS5",
+  "vendoredSnapshot": true,
+  "vendoredAt": "2026-10-20T15:43:39Z",
+  "originalMethod": "git clone --recurse-submodules",
+  "sourceRevisionRecorded": false
 }

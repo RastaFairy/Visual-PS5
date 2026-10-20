@@ -1,0 +1,27 @@
+{
+  "step": "multi-controller",
+  "recorded": "2026-10-05T01:23:34Z",
+  "console_run": "base PS5 13.40, run 211620 and the owner's own session",
+  "revision": "c56a9aa + four controller ports",
+  "command": "tools/run-title.sh --no-build --no-deploy --pad-monitor --watch 120; the owner's launch from the home screen",
+  "raw_capture": "klog/multipad/summary.txt",
+  "raw_lines": 15,
+  "raw_bytes": 1248,
+  "lines": [
+    "==> base PS5 13.40, two DualSense controllers, two signed-in users (user ids masked: A launched first, B the second)",
+    "monitored run 211620 (tools/run-title.sh --no-build --no-deploy --pad-monitor --watch 120, build 95a82988):",
+    "  input: pad opened, port=0 user=A haptic_thread=1 format=s16",
+    "  input: signed-in users A B -1 -1",
+    "  input: pad opened, port=1 user=B haptic_thread=1 format=s16",
+    "  input: port 0: user A's controller connected",
+    "  input: port 1: user B's controller connected",
+    "  monitor: no button changes (no buttons were pressed in that run)",
+    "owner's session (launched from the home screen with B's controller, picker -> RetroArch, build 95a82988):",
+    "  input: pad opened, port=0 user=B; signed-in users B A -1 -1; pad opened, port=1 user=A",
+    "  input: port 0: user B's controller connected; port 1: user A's controller connected",
+    "  RetroArch re-initialised its input driver: both ports opened and connected again",
+    "  owner: a racing game played with two controllers works",
+    "host test: PS5 joypad: raw binding capture, axes, user mappings, rumble, poll retention, lifecycle, four players by signed-in user and the script's STOP and OPTION PASS",
+    "committed source (build cafaf27f): the monitor's trace format only differs from 95a82988; not run on the console"
+  ]
+}

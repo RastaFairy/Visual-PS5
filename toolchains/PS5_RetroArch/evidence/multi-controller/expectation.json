@@ -1,0 +1,12 @@
+{
+  "step": "multi-controller",
+  "note": "Up to four controllers, one per signed-in user, as ProsperoEden connects them: port 0 the user who started the title, later users the first free port, a port let go at sign-out. Two controllers on the base PS5 opened as ports 0 and 1 with their own haptic streams, and the owner played a racing game with both.",
+  "must_contain": [
+    "input: signed-in users A B -1 -1",
+    "input: pad opened, port=1 user=B haptic_thread=1 format=s16",
+    "input: port 1: user B's controller connected",
+    "four players by signed-in user"
+  ],
+  "must_not_contain": [],
+  "human_check": "The owner played a racing game with two controllers on the base PS5 (build 95a82988) and reported that both work."
+}

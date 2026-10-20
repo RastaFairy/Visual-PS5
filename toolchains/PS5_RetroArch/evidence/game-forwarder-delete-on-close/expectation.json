@@ -1,0 +1,12 @@
+{
+  "step": "game-forwarder-delete-on-close",
+  "note": "A tile deleted in the Game Forwarder page while RetroArch runs leaves the home screen seconds after RetroArch closes: the WebUI's daemon tries it as soon as no program of the title is linked and every 3 s while ShadowMountPlus refuses (the exiting app), instead of only at its stop 20 s later.",
+  "must_contain": [
+    "RetroArch closed: /user/appmeta/PPSA99170 gone after 3.0 s",
+    "13:18:48 forwarder PPSA99170: not removed yet: a game is active or awaiting exit",
+    "13:18:51 forwarder PPSA99170: removed",
+    "[API] uninstall requested: title=PPSA99170"
+  ],
+  "must_not_contain": [],
+  "human_check": "The owner deletes a tile in the page while RetroArch runs, closes RetroArch (home screen or the picker's Quit): the tile leaves the home screen within a few seconds."
+}

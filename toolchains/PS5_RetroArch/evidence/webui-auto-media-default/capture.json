@@ -1,0 +1,38 @@
+{
+  "step": "webui-auto-media-default",
+  "revision": "working tree on 7301a9e",
+  "command": "PS5_FRONTENDS=\"es-de picker\" PS5_VULKAN_TEMPLATE=\"$PWD/build/picker-template\" bash tools/verify.sh format unit build integration evidence",
+  "raw_capture": "build/webui-auto-media-gates.log",
+  "raw_lines": 2790,
+  "lines": [
+    "== format",
+    "   PASS (11s)",
+    "== unit",
+    "Ran 185 tests in 274.629s",
+    "   PASS (274s)",
+    "== build",
+    "   PASS (101s)",
+    "== integration",
+    "Ran 185 tests in 272.541s",
+    "   PASS (280s)",
+    "== evidence",
+    "113 capture(s) replayed, 0 failed",
+    "   PASS (0s)",
+    "verify: PASS (format unit build integration evidence)",
+    "Installed Add Game opens with automatic media enabled and source options visible",
+    "Submit action reads Add game & download media",
+    "Disabling downloads restores Add to library; a new draft defaults to enabled",
+    "Running WebUI assets match source and stage",
+    "RetroArch and frontend configuration bytes unchanged"
+  ],
+  "console": {
+    "build": "fd8f648f5b51be2cc762f4533e9cd3703d71ef22842ece649b1bbd78c4d83099",
+    "frontend": "picker",
+    "assets": {
+      "index.html": "d873ebc4ce26be029467536ac66abdb85dffb992b5efd2e86937ba99a11da4ac",
+      "add-game.js": "b96220df31d246433b0ff80291b6e44a0c7264b0fce98676f1f5b5d4bd22eeda"
+    }
+  },
+  "screenshot": "klog/webui-auto-media/default-media.jpg",
+  "scope": "Automatic downloads default on for each new Add Game draft; libretro remains the initial selected source. No game added or scraper job started in console validation."
+}

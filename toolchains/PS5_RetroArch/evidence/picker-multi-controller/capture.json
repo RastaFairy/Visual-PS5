@@ -1,0 +1,20 @@
+{
+  "step": "picker-multi-controller",
+  "recorded": "2026-10-05T01:36:41Z",
+  "console_run": "base PS5 13.40, run 213503",
+  "revision": "4788d35 + PS5_VulkanTemplate a6c32497 pin",
+  "command": "PS5_FRONTENDS='es-de picker' tools/build-title.sh; tools/run-title.sh --no-build --picker-test=300:retroarch --retroarch-frames=600 --watch 60",
+  "raw_capture": "klog/picker-multipad/summary.txt",
+  "raw_lines": 8,
+  "raw_bytes": 801,
+  "lines": [
+    "==> PS5_FRONTENDS='es-de picker' tools/build-title.sh; tools/run-title.sh --no-build --picker-test=300:retroarch --retroarch-frames=600 --watch 60   (base PS5, 13.40, run 213503)",
+    "picker built from PS5_VulkanTemplate a6c32497 (players by signed-in user); two users signed in, the second controller switched off (user ids masked)",
+    "[Frontend Picker] pad: player 0 opened for user A, rumble mode 0",
+    "[Frontend Picker] pad: player 1 opened for user B, rumble mode 0",
+    "the same two lines again when the title came back to the picker after RetroArch",
+    "picker test PASS: 300 frames, a picture of the last (klog/picker-213503/picker.png), then retroarch",
+    "RetroArch in the same run: pad opened, port=0 user A; pad opened, port=1 user B; port 0 connected (port 1's controller off)",
+    "fatal lines in the run's kernel log: 0"
+  ]
+}

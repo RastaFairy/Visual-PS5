@@ -1,0 +1,17 @@
+{
+  "step": "azahar-stylus-parity",
+  "note": "Matching DeSmuME pen in Azahar; crash investigation is separate.",
+  "must_contain": [
+    "format: PASS",
+    "182 unit and 182 integration tests: PASS",
+    "Azahar software raster matches DeSmuME at 1x, 5x and 18x: PASS",
+    "Vulkan shader compile/link, pen predicate parity and clipped nib coordinates: PASS",
+    "Old Azahar raster fails the DeSmuME pixel comparison as expected",
+    "Native Azahar build, ABI and cursor-patch provenance: PASS",
+    "Stored eboot.bin and both cores match staged SHA-256: PASS",
+    "Core-switch crash remains unresolved; no lifecycle changes made",
+    "Fresh PS5 Azahar launch: cursor captured, 399 frames by 7 seconds, clean exit"
+  ],
+  "must_not_contain": [],
+  "human_check": "Check the stylus with physical touchpad movement, press and drag on the TV."
+}

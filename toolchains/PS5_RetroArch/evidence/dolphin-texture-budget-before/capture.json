@@ -1,0 +1,29 @@
+{
+  "step": "dolphin-texture-budget-before",
+  "recorded": "2026-10-19T01:58:46Z",
+  "console_run": "213014",
+  "revision": "aa7f0b2",
+  "command": "dolphin_load_custom_textures = \"enabled\" in config/dolphin-emu/dolphin-emu.opt, the owner's pack in savefiles/dolphin-emu/User/Load/Textures/; tools/run-title.sh --no-build --no-deploy \"--game=dolphin:/app0/content/gc/<gc game>.gcz\" --pad-script=tests/pad/dolphin-texture-pack.txt --watch 95",
+  "raw_capture": "klog/evidence-5-before-focus.txt",
+  "raw_lines": 17,
+  "raw_bytes": 1293,
+  "lines": [
+    "    armed pad script tests/pad/dolphin-texture-pack.txt",
+    "==> [run] ok launched PPSA99169 result=0x00004018 via lncUtilApp/foreground as user <user> (the console reports the title running)",
+    "    build identity: a2c7800a344aa5ddb08c175f9fa8543edadf271d79895da3bf15fbf5995c2093",
+    "    core loader: ready symbols=29319 relocations=64467 mapped_bytes=36749312 base=400840000",
+    "    core loader: ready symbols=29319 relocations=64467 mapped_bytes=36749312 base=400840000",
+    "    video driver: video_vulkan init entered",
+    "    input: pad script loaded, 0 presses",
+    "    input: pad script SCREENSHOT at 40.02 s: /app0/pad-shot-1.png 1",
+    "    input: pad script SCREENSHOT at 60.01 s: /app0/pad-shot-2.png 1",
+    "    input: pad script STOP at 70.01 s",
+    "    pad script: 2 picture(s) saved to klog/pad-213014",
+    "RetroArch log is stale or logging failed: current build identity absent",
+    "[INFO] [PS5] build identity: a2c7800a344aa5ddb08c175f9fa8543edadf271d79895da3bf15fbf5995c2093",
+    "[libretro INFO] 31:12:988 Core/ConfigManager.cpp:279 N[CORE]: Active title: <gc game> (<game id>)",
+    "[INFO] [Core] Geometry: 2560x2112, Aspect: 1.333, FPS: 59.94, Sample rate: 32029.00 Hz.",
+    "[INFO] [Video] Set video size to: fullscreen.",
+    "[libretro ERROR] 31:14:071 VideoCommon/Assets/CustomAssetCache.cpp:26 E[Video]: Not enough system memory for custom resources."
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "repository": "Rufidj/Nativehbl",
+  "branch": "main",
+  "commit": "e9488102399de9546d13dd496694c74142abe49f",
+  "sourceCommit": "e9488102399de9546d13dd496694c74142abe49f",
+  "sourceRef": "main",
+  "method": "vendored-snapshot",
+  "vendoredSnapshot": true,
+  "vendorRepository": "RastaFairy/Visual-PS5",
+  "vendoredAt": "2026-10-20T15:43:39Z",
+  "submodulesMaterialized": true,
+  "originalMethod": "vendored-snapshot",
+  "sourceRevisionRecorded": true
+}

@@ -1,0 +1,24 @@
+{
+  "step": "webui-games-sorting",
+  "note": "Existing metadata exposed by the real library API. Chromium checks global natural title sorting, direction, partial ISO release dates, numeric ratings including zero, missing/invalid values last, system/genre/developer/publisher sorting, letter and combined filters, selection retention, preference reload, 307-game pagination, keyboard activation and 390px layout. Behavior host-verified; console deployment verified by FTP and HTTP readback.",
+  "must_contain": [
+    "test_library_sort_details (tests.test_scraper.Scraper.test_library_sort_details) ... ok",
+    "test_games_page_in_a_browser (tests.test_scraper.Scraper.test_games_page_in_a_browser) ... ok",
+    "Ran 2 tests",
+    "OK",
+    "staged WebUI assets match source: PASS",
+    "Ran 169 tests",
+    "verify: PASS (format)",
+    "verify: PASS (unit build integration evidence)",
+    "deployment: 9 changed files verified; 11689 unchanged files retained from prior verification",
+    "eboot.bin stored-byte SHA-256 matches staged artifact: PASS",
+    "live HTTP index.html, app.js, app.css and version.json match staged artifacts: PASS",
+    "running daemon is older than deployed files: title restart required"
+  ],
+  "must_not_contain": [
+    "FAILED",
+    "ERROR",
+    "skipped"
+  ],
+  "human_check": "Deployed. Close PS5 RetroArch, wait about 20 seconds for the old daemon to exit, then reopen and refresh the WebUI. Metadata sorting with the restarted daemon and console library remains unverified."
+}

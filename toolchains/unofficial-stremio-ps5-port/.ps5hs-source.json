@@ -1,0 +1,14 @@
+{
+  "repository": "Sp9nky/unofficial-stremio-ps5-port",
+  "branch": "main",
+  "commit": "b8444a661b0b304d1298463151065297840c15e9",
+  "sourceCommit": "b8444a661b0b304d1298463151065297840c15e9",
+  "sourceRef": "main",
+  "method": "vendored-snapshot",
+  "vendoredSnapshot": true,
+  "vendorRepository": "RastaFairy/Visual-PS5",
+  "vendoredAt": "2026-10-20T15:43:39Z",
+  "submodulesMaterialized": true,
+  "originalMethod": "vendored-snapshot",
+  "sourceRevisionRecorded": true
+}

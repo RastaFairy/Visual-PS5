@@ -1,0 +1,20 @@
+{
+  "step": "scraper-libretro",
+  "recorded": "2026-10-07T14:31:29Z",
+  "console_run": "base PS5 13.40, WebUI daemon, picker (home launch), libretro thumbnails live",
+  "revision": "working tree on 90aaa75 (this commit)",
+  "command": "build/tmp/scraper/live.py <host> start ps5|pc[!] SYSTEMS / watch; webui/ps5-media-helper.py <url> <job>; FTP readback of library/",
+  "raw_capture": "klog/scraper-libretro/raw.txt",
+  "raw_lines": 8,
+  "raw_bytes": 1357,
+  "lines": [
+    "library through the daemon after the fixes: entries 1024 unique 1024 duplicated 0 (before: 1039 entries, 14 paths twice); PS1: ['PlayStation Test Game (USA).cue'] (the listed .bin dropped)",
+    "crash 1: daemon SIGSEGV, fault 8 bytes below rsp in a 64 KiB frame (a worker's stack); fixed: heap buffers, 1 MiB worker stacks; the crashed job resumed by itself on the next daemon",
+    "sony ssl from the daemon: sceHttpSendRequest failed (0x8095f00c) for every request",
+    "all systems, ps5 mode (http, before curl):  148.2s done {'ambiguous': 61, 'done': 520, 'partial': 28, 'skipped': 181, 'unmatched': 234} downloaded {'files': 1593, 'bytes': 179634410} transferred {'files': 0, 'bytes': 0} tasks {'queued': 0, 'leased': 0}",
+    "https through curl, ps5 mode, overwrite snes nes gba: 3.0s done {'done': 3} downloaded {'files': 9, 'bytes': 1391904}",
+    "cached: snes nes pokemini atarilynx amiga again: skipped 43, downloaded files 0",
+    "pc mode virtualboy overwrite: helper 1 killed after downloaded 30 sent 30; helper 2: Downloaded 60 sent to the PS5 60; job done {'done': 30} downloaded 90 transferred 90; library/virtualboy 90 png, 0 partial",
+    "title closed mid-job (atari2600 atari5200, 588 games): daemon unlinked picker 14:30:24, job ran on, saved state: done, 349 done 26 partial 36 ambiguous 177 unmatched; daemon then: no program of the title linked for 20 s: the title is closed, stopped"
+  ]
+}

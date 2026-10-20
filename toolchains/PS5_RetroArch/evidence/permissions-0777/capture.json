@@ -1,0 +1,16 @@
+{
+  "step": "permissions-0777",
+  "recorded": "2026-10-07T04:00:46Z",
+  "console_run": "base PS5 13.40, home-screen launches (picker), FTP audit of /data/homebrew/PPSA99169",
+  "revision": "working tree on cc5ded2 (this commit)",
+  "command": "tools/run-title.sh --no-build --home-launch --watch 30; FTP LIST walk of the title folder counting modes other than rwxrwxrwx",
+  "raw_capture": "klog/permissions-0777/audit-20261007.txt",
+  "raw_lines": 4,
+  "raw_bytes": 257,
+  "lines": [
+    "before (console, 2026-10-07): 17993 entries, 175 not 0777: -rw-rw-rw- 175",
+    "permissions: /app0 checked=17992 repaired=174 refused=0 in 589.8 ms",
+    "permissions: handover waited 596.2 ms for the repair",
+    "after picker-held launch and close: 17992 entries, 0 not 0777"
+  ]
+}

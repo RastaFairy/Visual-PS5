@@ -1,0 +1,33 @@
+{
+  "step": "framegen-off-presents-once",
+  "recorded": "2026-10-17T22:10:00Z",
+  "console_run": "",
+  "revision": "20dd7fe (this series), in build 838fd9a3",
+  "command": "tools/run-title.sh --no-build --no-deploy --game=fceumm:<a backup in content/nes> --retroarch-arg=--appendconfig=/app0/tests/fg-off-stale.cfg --pad-script=tests/pad/game-marks.txt --watch 30; the same with --appendconfig=/app0/tests/menu-combo.cfg --pad-script=tests/pad/framegen-off-in-game.txt --watch 40",
+  "raw_capture": "klog/framegen-off-presents-once/record.txt",
+  "raw_lines": 21,
+  "raw_bytes": 2382,
+  "lines": [
+    "Console: the owner's base PS5 on a 1440p display with 120 Hz and VRR, build identity 838fd9a3ca99e21ce4adba405a3f3867a0c4ce411ee89981e0a8111dcef02797 (this series at 20dd7fe with PS5_FRONTENDS=\"es-de picker\", PS5_WITH_SWANSTATION=1, PS5_WITH_MELONDSDS=1), 2026-10-17.",
+    "Frame generation off, with the 2 frame generation leaves in retroarch.cfg (appended for the run: video_framegen = \"false\", video_shader_subframes = \"2\", config_save_on_exit = \"false\"), FCEUmm and a backup in content/nes:",
+    "  [INFO] [Config] Appending config: \"/app0/tests/fg-off-stale.cfg\".",
+    "  [INFO] [FrameGen] Off: each game frame is presented once (2 presents were kept).",
+    "  [INFO] [FrameGen] counter: shows 61.3 (the core made 61.3 new frames a second, generation off)",
+    "  [INFO] [FrameGen] counter: shows 60.2 (the core made 60.2 new frames a second, generation off)",
+    "  input: pad script MARK at 5.005 s: frames=305 worst_ms=21.4 over_40ms=0",
+    "  input: pad script MARK at 15.005 s: frames=907 worst_ms=21.4 over_40ms=0",
+    "Frame generation on (its default), then turned off from its XMB tab while the game runs (input_menu_toggle_gamepad_combo 2 and config_save_on_exit false appended for the run):",
+    "  [INFO] [FrameGen] Target Framerate 120: display 119.880 Hz, game 60.100 fps -> 1.99 pictures per game frame, each shown 1x",
+    "  input: pad script MARK at 5.012 s: frames=288 worst_ms=223.7 over_40ms=1",
+    "  input: pad script MENU at 8.01 s: depth 2, list 'quick_menu' 'Quick Menu', entry 0 of 17 'Resume', pending ''",
+    "  input: pad script MENU at 9.51 s: depth 1, list 'main_menu' '', entry 0 of 7 'Quick Menu', pending ''",
+    "  input: pad script MENU at 11.00 s: depth 1, list 'main_menu' '', entry 0 of 7 'Frame Generation', pending ''",
+    "  input: pad script MENU at 13.51 s: depth 1, list 'main_menu' '', entry 0 of 7 'Frame Generation', pending ''",
+    "  input: pad script MARK at 17.012 s: frames=1190 worst_ms=2516.8 over_40ms=2",
+    "  input: pad script MARK at 27.007 s: frames=1792 worst_ms=23.0 over_40ms=2",
+    "  [INFO] [FrameGen] Off: each game frame is presented once (2 presents were kept).",
+    "  [INFO] [FrameGen] counter: shows 60.1 (the core made 60.1 new frames a second, generation off)",
+    "  [INFO] [FrameGen] counter: shows 60.2 (the core made 60.2 new frames a second, generation off)",
+    "  config/framegen.cfg as the menu wrote it: video_framegen = \"false\" (deleted after the run: the console had none, frame generation stays at its default)"
+  ]
+}

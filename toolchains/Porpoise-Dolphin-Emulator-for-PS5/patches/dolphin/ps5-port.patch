@@ -1,0 +1,4541 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 01b03ecee5..343efa4d02 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -497,7 +497,8 @@ if(LIBRETRO)
+   set(ENABLE_PULSEAUDIO OFF CACHE BOOL "" FORCE)
+   set(ENABLE_SDL OFF CACHE BOOL "" FORCE)
+   set(USE_DISCORD_PRESENCE OFF CACHE BOOL "" FORCE)
+-  set(USE_RETRO_ACHIEVEMENTS OFF CACHE BOOL "" FORCE)
++  # Porpoise: RetroAchievements stay available to the libretro build (the
++  # host does the HTTPS and the popups: Core/AchievementHooks.h).
+   set(USE_UPNP OFF CACHE BOOL "" FORCE)
+   add_definitions(-D__LIBRETRO__)
+   check_and_add_flag(FPIC -fpic)
+@@ -652,7 +653,7 @@ if(ENABLE_EVDEV)
+   endif()
+ endif()
+ 
+-if(UNIX)
++if(UNIX AND NOT DOLPHIN_PS5)
+   message(STATUS "Using named pipes as controller inputs")
+   add_definitions(-DUSE_PIPES=1)
+   message(STATUS "Watching game memory for changes")
+@@ -780,7 +781,9 @@ if(ENABLE_CUBEB)
+   add_definitions(-DHAVE_CUBEB)
+ endif()
+ 
+-if(NOT ANDROID AND NOT IOS AND NOT WEBOS)
++# PS5: no USB passthrough and no real Wii Remotes; a core reaches the pad only
++# through the frontend (libusb, hidapi and cpp-ipc are not built).
++if(NOT ANDROID AND NOT IOS AND NOT WEBOS AND NOT DOLPHIN_PS5)
+   dolphin_find_optional_system_library(LibUSB Externals/libusb)
+   add_definitions(-D__LIBUSB__)
+ endif()
+@@ -801,7 +804,7 @@ dolphin_find_optional_system_library(MBEDTLS Externals/mbedtls 2.28)
+ 
+ dolphin_find_optional_system_library(CURL Externals/curl)
+ 
+-if(NOT ANDROID AND NOT IOS)
++if(NOT ANDROID AND NOT IOS AND NOT DOLPHIN_PS5)
+   dolphin_find_optional_system_library(HIDAPI Externals/hidapi)
+ endif()
+ 
+@@ -848,7 +851,7 @@ if (NOT IOS)
+ endif()
+ 
+ # Any other platform or BSD is currently unsupported by cpp-ipc
+-if(WIN32 OR LINUX OR CMAKE_SYSTEM_NAME STREQUAL "FreeBSD" OR CMAKE_SYSTEM_NAME STREQUAL "QNX")
++if((WIN32 OR LINUX OR CMAKE_SYSTEM_NAME STREQUAL "FreeBSD" OR CMAKE_SYSTEM_NAME STREQUAL "QNX") AND NOT DOLPHIN_PS5)
+   add_subdirectory(Externals/cpp-ipc)
+   add_definitions(-DHAVE_CPPIPC)
+ endif()
+diff --git a/Externals/curl/CMakeLists.txt b/Externals/curl/CMakeLists.txt
+index b0a7ea0d39..1a8e87bbef 100644
+--- a/Externals/curl/CMakeLists.txt
++++ b/Externals/curl/CMakeLists.txt
+@@ -48,6 +48,17 @@ if(ANDROID)
+   set(CURL_CA_PATH "/system/etc/security/cacerts" CACHE STRING "")
+ endif()
+ 
++# Porpoise (PS5): curl's resolver thread doesn't start in a console core
++# ("getaddrinfo() thread failed to start"); names are looked up on the calling
++# thread instead (Dolphin's own download workers: WiiConnect24, game updates).
++if(CMAKE_C_COMPILER MATCHES "prospero")
++  set(ENABLE_THREADED_RESOLVER OFF CACHE BOOL "" FORCE)
++  # No alarm()/sigsetjmp() timeout around a lookup either: no signals for a
++  # title (Porpoise's own lookups have their own time limits).
++  set(HAVE_ALARM 0 CACHE INTERNAL "" FORCE)
++  set(HAVE_SIGSETJMP 0 CACHE INTERNAL "" FORCE)
++endif()
++
+ add_subdirectory(curl)
+ 
+ if(UNIX AND NOT MBEDTLS_FOUND)
+diff --git a/Source/Core/AudioCommon/AudioCommon.cpp b/Source/Core/AudioCommon/AudioCommon.cpp
+index 86cd50b192..2a601ab81d 100644
+--- a/Source/Core/AudioCommon/AudioCommon.cpp
++++ b/Source/Core/AudioCommon/AudioCommon.cpp
+@@ -3,6 +3,8 @@
+ 
+ #include "AudioCommon/AudioCommon.h"
+ 
++#include <mutex>
++
+ #include <fmt/chrono.h>
+ #include <fmt/format.h>
+ 
+@@ -56,6 +58,10 @@ static std::unique_ptr<SoundStream> CreateSoundStreamForBackend(std::string_view
+   return {};
+ }
+ 
++// Porpoise: held while the sound stream is set or freed, and while the
++// frontend pulls a Wii Remote's speaker from its mixer (DolphinLibretro/Audio.cpp).
++std::mutex g_porpoise_sound_stream_lock;
++
+ void InitSoundStream(Core::System& system)
+ {
+   std::string backend = Config::Get(Config::MAIN_AUDIO_BACKEND);
+@@ -76,7 +82,10 @@ void InitSoundStream(Core::System& system)
+     sound_stream->Init();
+   }
+ 
+-  system.SetSoundStream(std::move(sound_stream));
++  {
++    std::lock_guard<std::mutex> lock(g_porpoise_sound_stream_lock);
++    system.SetSoundStream(std::move(sound_stream));
++  }
+ }
+ 
+ void PostInitSoundStream(Core::System& system)
+@@ -98,7 +107,10 @@ void ShutdownSoundStream(Core::System& system)
+     StopAudioDump(system);
+ 
+   SetSoundStreamRunning(system, false);
+-  system.SetSoundStream(nullptr);
++  {
++    std::lock_guard<std::mutex> lock(g_porpoise_sound_stream_lock);
++    system.SetSoundStream(nullptr);
++  }
+ 
+   INFO_LOG_FMT(AUDIO, "Done shutting down sound stream");
+ }
+diff --git a/Source/Core/AudioCommon/Mixer.cpp b/Source/Core/AudioCommon/Mixer.cpp
+index a57b6024b7..bb0e16e616 100644
+--- a/Source/Core/AudioCommon/Mixer.cpp
++++ b/Source/Core/AudioCommon/Mixer.cpp
+@@ -4,6 +4,7 @@
+ #include "AudioCommon/Mixer.h"
+ 
+ #include <algorithm>
++#include <atomic>
+ #include <cmath>
+ #include <cstring>
+ #include <span>
+@@ -60,6 +61,37 @@ void Mixer::DoState(PointerWrap& p)
+     mixer.DoState(p);
+ }
+ 
++// Porpoise (Mixer::PorpoiseSetPull): the front end's pull, buffer and gap filling.
++namespace
++{
++std::atomic<bool> s_porpoise_pull{false};
++std::atomic<int> s_porpoise_buffer_ms{80};
++std::atomic<bool> s_porpoise_fill_gaps{true};
++std::atomic<unsigned long long> s_porpoise_pushed{0};
++}  // namespace
++
++void Mixer::PorpoiseSetPull(bool pull, int buffer_ms, bool fill_gaps)
++{
++  s_porpoise_buffer_ms.store(std::clamp(buffer_ms, 16, 512), std::memory_order_relaxed);
++  s_porpoise_fill_gaps.store(fill_gaps, std::memory_order_relaxed);
++  s_porpoise_pull.store(pull, std::memory_order_release);
++}
++
++bool Mixer::PorpoiseIsPulling()
++{
++  return s_porpoise_pull.load(std::memory_order_acquire);
++}
++
++void Mixer::PorpoiseQueue(unsigned* queued, unsigned* target, unsigned long long* pushed) const
++{
++  if (queued)
++    *queued = static_cast<unsigned>(m_dma_mixer.QueuedGranules());
++  if (target)
++    *target = static_cast<unsigned>(m_dma_mixer.TargetGranules());
++  if (pushed)
++    *pushed = s_porpoise_pushed.load(std::memory_order_relaxed);
++}
++
+ // Executed from sound stream thread
+ void Mixer::MixerFifo::Mix(s16* samples, std::size_t num_samples)
+ {
+@@ -86,7 +118,10 @@ void Mixer::MixerFifo::Mix(s16* samples, std::size_t num_samples)
+   const StereoPair volume{m_LVolume.load() / 256.0f, m_RVolume.load() / 256.0f};
+ 
+   // Calculate the ideal length of the granule queue.
+-  const std::size_t buffer_size_ms = m_mixer->m_config_audio_buffer_ms;
++  const std::size_t buffer_size_ms =
++      s_porpoise_pull.load(std::memory_order_relaxed) ?
++          static_cast<std::size_t>(s_porpoise_buffer_ms.load(std::memory_order_relaxed)) :
++          static_cast<std::size_t>(m_mixer->m_config_audio_buffer_ms);
+   const std::size_t buffer_size_samples = std::llround(buffer_size_ms * in_sample_rate / 1000.0);
+ 
+   // Limit the possible queue sizes to any number between 4 and 64.
+@@ -215,6 +250,7 @@ std::size_t Mixer::MixSurround(float* samples, std::size_t num_samples)
+ 
+ void Mixer::PushSamples(const s16* samples, std::size_t num_samples)
+ {
++  s_porpoise_pushed.fetch_add(num_samples, std::memory_order_relaxed);
+   if (IsOutputSampleRateValid())
+   {
+     // Big-endian RL-orderered stereo samples.
+@@ -570,7 +606,10 @@ bool Mixer::MixerFifo::Dequeue(Granule* granule)
+   {
+     // Only fill gaps when running to prevent stutter on pause.
+     const bool is_running = Core::GetState(Core::System::GetInstance()) == Core::State::Running;
+-    if (m_mixer->m_config_fill_audio_gaps && is_running)
++    const bool fill_gaps = s_porpoise_pull.load(std::memory_order_relaxed) ?
++                               s_porpoise_fill_gaps.load(std::memory_order_relaxed) :
++                               m_mixer->m_config_fill_audio_gaps && is_running;
++    if (fill_gaps)
+     {
+       // Jump the playhead to half the queue size behind the head.
+       // This provides smoother audio playback than suddenly stopping.
+diff --git a/Source/Core/AudioCommon/Mixer.h b/Source/Core/AudioCommon/Mixer.h
+index aca334bcf8..e5ec5597ad 100644
+--- a/Source/Core/AudioCommon/Mixer.h
++++ b/Source/Core/AudioCommon/Mixer.h
+@@ -56,6 +56,15 @@ public:
+   void StartLogDSPAudio(const std::string& filename);
+   void StopLogDSPAudio();
+ 
++  // Porpoise: the front end pulls the sound itself, at the speakers' pace (Mix from its own
++  // audio thread), with its own buffer size and gap filling. The pause a frame step leaves
++  // between the frames it runs counts as playing: gaps are filled then too.
++  static void PorpoiseSetPull(bool pull, int buffer_ms, bool fill_gaps);
++  static bool PorpoiseIsPulling();
++  // The DMA sound waiting, in granules, against the queue length the buffer size asks for,
++  // and the DMA frames pushed so far (the emulated speed).
++  void PorpoiseQueue(unsigned* queued, unsigned* target, unsigned long long* pushed) const;
++
+   // 54000000 doesn't work here as it doesn't evenly divide with 32000, but 108000000 does
+   static constexpr u64 FIXED_SAMPLE_RATE_DIVIDEND = 54000000 * 2;
+ 
+@@ -132,6 +141,18 @@ private:
+     void SetVolume(u32 lvolume, u32 rvolume);
+     std::pair<s32, s32> GetVolume() const;
+ 
++    // Porpoise: granules waiting, and the queue length the buffer size asks for.
++    std::size_t QueuedGranules() const
++    {
++      return (m_queue_head.load(std::memory_order_acquire) -
++              m_queue_tail.load(std::memory_order_acquire)) &
++             GRANULE_QUEUE_MASK;
++    }
++    std::size_t TargetGranules() const
++    {
++      return m_granule_queue_size.load(std::memory_order_relaxed);
++    }
++
+   private:
+     Mixer* m_mixer;
+ 
+diff --git a/Source/Core/Common/BlockingLoop.h b/Source/Core/Common/BlockingLoop.h
+index 472a84b1f6..b4ad7a6dcd 100644
+--- a/Source/Core/Common/BlockingLoop.h
++++ b/Source/Core/Common/BlockingLoop.h
+@@ -4,6 +4,9 @@
+ #pragma once
+ 
+ #include <atomic>
++#ifdef __PROSPERO__
++#include <immintrin.h>
++#endif
+ #include <mutex>
+ #include <thread>
+ 
+@@ -171,6 +174,13 @@ public:
+         else
+         {
+           // Busy loop.
++#ifdef __PROSPERO__
++          // PS5: the GPU thread polls the FIFO this way for as long as the
++          // emulated CPU never idles, and on the console it can share a core
++          // with the CPU thread. A pause between polls hands that core's
++          // pipeline back to it, and stops hammering the FIFO registers' line.
++          _mm_pause();
++#endif
+           break;
+         }
+         [[fallthrough]];
+diff --git a/Source/Core/Common/ChunkFile.h b/Source/Core/Common/ChunkFile.h
+index a9737c1e0e..b1b57502bc 100644
+--- a/Source/Core/Common/ChunkFile.h
++++ b/Source/Core/Common/ChunkFile.h
+@@ -57,6 +57,12 @@ public:
+   }
+ 
+   void SetMeasureMode() { m_mode = Mode::Measure; }
++#ifdef __LIBRETRO__
++  // Porpoise: what's left of the buffer, to tell whether an optional block
++  // (the achievements' progress, AchievementManager::DoState) is there.
++  size_t BytesLeft() const { return m_ptr_end > *m_ptr_current ? size_t(m_ptr_end - *m_ptr_current) : 0; }
++  const u8* Peek() const { return *m_ptr_current; }
++#endif
+   void SetVerifyMode() { m_mode = Mode::Verify; }
+   bool IsReadMode() const { return m_mode == Mode::Read; }
+   bool IsWriteMode() const { return m_mode == Mode::Write; }
+diff --git a/Source/Core/Common/DirectIOFile.cpp b/Source/Core/Common/DirectIOFile.cpp
+index b09ffd176c..d9d9351bb4 100644
+--- a/Source/Core/Common/DirectIOFile.cpp
++++ b/Source/Core/Common/DirectIOFile.cpp
+@@ -3,6 +3,7 @@
+ 
+ #include "Common/DirectIOFile.h"
+ 
++#include <mutex>
+ #include <utility>
+ 
+ #if defined(_WIN32)
+@@ -84,7 +85,7 @@ bool DirectIOFile::Open(const std::string& path, AccessMode access_mode, OpenMod
+     return false;
+ 
+ #ifdef __LIBRETRO__
+-  if (Libretro::VFile::HasVFS())
++  if (Libretro::VFile::UseVFS(path))
+   {
+     // used in Duplicate() later
+     m_path = path;
+@@ -184,7 +185,7 @@ bool DirectIOFile::Close()
+   m_current_offset = 0;
+ 
+ #ifdef __LIBRETRO__
+-  if (Libretro::VFile::HasVFS())
++  if (m_vfs_handle)
+   {
+     int result = Libretro::VFile::Close(m_vfs_handle);
+     m_vfs_handle = nullptr;
+@@ -202,7 +203,7 @@ bool DirectIOFile::Close()
+ bool DirectIOFile::IsOpen() const
+ {
+ #ifdef __LIBRETRO__
+-  if (Libretro::VFile::HasVFS())
++  if (m_vfs_handle)
+     return m_vfs_handle != nullptr;
+ #endif
+ 
+@@ -243,11 +244,18 @@ static bool OverlappedTransfer(HANDLE handle, u64 offset, auto* data_ptr, u64 si
+ }
+ #endif
+ 
++#ifdef __LIBRETRO__
++static std::mutex s_vfs_offset_mutex;
++#endif
++
+ bool DirectIOFile::OffsetRead(u64 offset, u8* out_ptr, u64 size)
+ {
+ #ifdef __LIBRETRO__
+-  if (Libretro::VFile::HasVFS())
++  if (m_vfs_handle)
+   {
++    // Porpoise: a seek and a read on the one handle, which the disc readers'
++    // threads share; one at a time, as pread would be.
++    std::lock_guard<std::mutex> lock(s_vfs_offset_mutex);
+     if (Libretro::VFile::Seek(m_vfs_handle, offset, SEEK_SET) < 0)
+       return false;
+ 
+@@ -266,8 +274,9 @@ bool DirectIOFile::OffsetRead(u64 offset, u8* out_ptr, u64 size)
+ bool DirectIOFile::OffsetWrite(u64 offset, const u8* in_ptr, u64 size)
+ {
+ #ifdef __LIBRETRO__
+-  if (Libretro::VFile::HasVFS())
++  if (m_vfs_handle)
+   {
++    std::lock_guard<std::mutex> lock(s_vfs_offset_mutex);
+     if (Libretro::VFile::Seek(m_vfs_handle, offset, SEEK_SET) < 0)
+       return false;
+ 
+@@ -286,7 +295,7 @@ bool DirectIOFile::OffsetWrite(u64 offset, const u8* in_ptr, u64 size)
+ u64 DirectIOFile::GetSize() const
+ {
+ #ifdef __LIBRETRO__
+-  if (Libretro::VFile::HasVFS())
++  if (m_vfs_handle)
+     return Libretro::VFile::GetSize(m_vfs_handle);
+ #endif
+ 
+@@ -332,7 +341,7 @@ bool DirectIOFile::Seek(s64 offset, SeekOrigin origin)
+ bool DirectIOFile::Flush()
+ {
+ #ifdef __LIBRETRO__
+-  if (Libretro::VFile::HasVFS())
++  if (m_vfs_handle)
+     return Libretro::VFile::Flush(m_vfs_handle) == 0;
+ #endif
+ 
+@@ -346,7 +355,7 @@ bool DirectIOFile::Flush()
+ void DirectIOFile::Swap(DirectIOFile& other)
+ {
+ #ifdef __LIBRETRO__
+-  if (Libretro::VFile::HasVFS())
++  if (true)
+   {
+     std::swap(m_vfs_handle, other.m_vfs_handle);
+     std::swap(m_path, other.m_path);
+@@ -371,7 +380,7 @@ DirectIOFile DirectIOFile::Duplicate() const
+     return result;
+ 
+ #ifdef __LIBRETRO__
+-  if (Libretro::VFile::HasVFS())
++  if (m_vfs_handle)
+   {
+     // We need to reopen the file, since VFS handles cannot be duplicated.
+     result.m_vfs_handle = Libretro::VFile::Open(
+@@ -415,7 +424,7 @@ DirectIOFile DirectIOFile::Duplicate() const
+ bool Resize(DirectIOFile& file, u64 size)
+ {
+ #ifdef __LIBRETRO__
+-  if (Libretro::VFile::HasVFS())
++  if (file.m_vfs_handle)
+     return Libretro::VFile::Truncate(file.m_vfs_handle, size) == 0;
+ #endif
+ 
+@@ -434,7 +443,7 @@ bool Rename(DirectIOFile& file, const std::string& source_path [[maybe_unused]],
+             const std::string& destination_path)
+ {
+ #ifdef __LIBRETRO__
+-  if (Libretro::VFile::HasVFS())
++  if (file.m_vfs_handle)
+     return file.IsOpen() && Libretro::VFile::Rename(source_path, destination_path);
+ #endif
+ 
+@@ -460,7 +469,7 @@ bool Rename(DirectIOFile& file, const std::string& source_path [[maybe_unused]],
+ bool Delete(DirectIOFile& file, const std::string& filename)
+ {
+ #ifdef __LIBRETRO__
+-  if (Libretro::VFile::HasVFS())
++  if (file.m_vfs_handle)
+     return file.IsOpen() && Libretro::VFile::Delete(filename);
+ #endif
+ 
+diff --git a/Source/Core/Common/DirectIOFile.h b/Source/Core/Common/DirectIOFile.h
+index 6bff9b04ef..e0eee81a3e 100644
+--- a/Source/Core/Common/DirectIOFile.h
++++ b/Source/Core/Common/DirectIOFile.h
+@@ -112,7 +112,7 @@ public:
+   auto GetHandle() const
+   {
+ #ifdef __LIBRETRO__
+-  if (Libretro::VFile::HasVFS())
++  if (m_vfs_handle)
+     ERROR_LOG_FMT(COMMON, "VFS: Attempt to use std::FILE in DirectIO which should not happen in VFS mode");
+ #endif
+ 
+@@ -146,6 +146,9 @@ private:
+   unsigned m_hints{};
+ 
+   friend bool Resize(DirectIOFile& file, u64 size);
++  friend bool Rename(DirectIOFile& file, const std::string& source_path,
++                     const std::string& destination_path);
++  friend bool Delete(DirectIOFile& file, const std::string& filename);
+ #endif
+ };
+ 
+diff --git a/Source/Core/Common/FileUtil.cpp b/Source/Core/Common/FileUtil.cpp
+index 54fb88b441..e47d428fac 100644
+--- a/Source/Core/Common/FileUtil.cpp
++++ b/Source/Core/Common/FileUtil.cpp
+@@ -96,7 +96,7 @@ FileInfo::FileInfo(const std::string& path) : FileInfo(path.c_str())
+ FileInfo::FileInfo(const char* path)
+ {
+ #ifdef __LIBRETRO__
+-  if (Libretro::VFile::HasVFS())
++  if (Libretro::VFile::UseVFS(path))
+   {
+     Libretro::VFile::FileInfo(m_status, m_size, m_exists, path);
+     return;
+@@ -149,7 +149,7 @@ u64 FileInfo::GetSize() const
+ bool Exists(const std::string& path)
+ {
+ #ifdef __LIBRETRO__
+-  if(Libretro::VFile::HasVFS())
++  if(Libretro::VFile::UseVFS(path))
+     return Libretro::VFile::Exists(path);
+ #endif
+ 
+@@ -160,7 +160,7 @@ bool Exists(const std::string& path)
+ bool IsDirectory(const std::string& path)
+ {
+ #ifdef __LIBRETRO__
+-  if(Libretro::VFile::HasVFS())
++  if(Libretro::VFile::UseVFS(path))
+     return Libretro::VFile::IsDirectory(path);
+ #endif
+   return FileInfo(path).IsDirectory();
+@@ -170,7 +170,7 @@ bool IsDirectory(const std::string& path)
+ bool IsFile(const std::string& path)
+ {
+ #ifdef __LIBRETRO__
+-  if (Libretro::VFile::HasVFS())
++  if (Libretro::VFile::UseVFS(path))
+     return Libretro::VFile::IsFile(path);
+ #endif
+   return FileInfo(path).IsFile();
+@@ -183,7 +183,7 @@ bool Delete(const std::string& filename, IfAbsentBehavior behavior)
+   DEBUG_LOG_FMT(COMMON, "{}: file {}", __func__, filename);
+ 
+ #ifdef __LIBRETRO__
+-  if (Libretro::VFile::HasVFS())
++  if (Libretro::VFile::UseVFS(filename))
+     return Libretro::VFile::Delete(filename);
+ #endif
+ 
+@@ -232,7 +232,7 @@ bool CreateDir(const std::string& path)
+   DEBUG_LOG_FMT(COMMON, "{}: directory {}", __func__, path);
+ 
+ #ifdef __LIBRETRO__
+-  if (Libretro::VFile::HasVFS())
++  if (Libretro::VFile::UseVFS(path))
+     return Libretro::VFile::CreateDir(path);
+ #endif
+ 
+@@ -253,7 +253,7 @@ bool CreateDirs(std::string_view path)
+   DEBUG_LOG_FMT(COMMON, "{}: directory {}", __func__, path);
+ 
+ #ifdef __LIBRETRO__
+-  if (Libretro::VFile::HasVFS())
++  if (Libretro::VFile::UseVFS(path))
+     return Libretro::VFile::CreateDirs(path);
+ #endif
+ 
+@@ -274,7 +274,7 @@ bool CreateFullPath(std::string_view fullPath)
+   DEBUG_LOG_FMT(COMMON, "{}: path {}", __func__, fullPath);
+ 
+ #ifdef __LIBRETRO__
+-  if (Libretro::VFile::HasVFS())
++  if (Libretro::VFile::UseVFS(fullPath))
+     return Libretro::VFile::CreateFullPath(fullPath);
+ #endif
+ 
+@@ -296,7 +296,7 @@ bool DeleteDir(const std::string& filename, IfAbsentBehavior behavior)
+   DEBUG_LOG_FMT(COMMON, "{}: directory {}", __func__, filename);
+ 
+ #ifdef __LIBRETRO__
+-  if (Libretro::VFile::HasVFS())
++  if (Libretro::VFile::UseVFS(filename))
+     return Libretro::VFile::DeleteDir(filename);
+ #endif
+ 
+@@ -334,7 +334,7 @@ bool DeleteDir(const std::string& filename, IfAbsentBehavior behavior)
+ bool Rename(const std::string& srcFilename, const std::string& destFilename)
+ {
+ #ifdef __LIBRETRO__
+-  if (Libretro::VFile::HasVFS())
++  if (Libretro::VFile::UseVFS(srcFilename))
+     return Libretro::VFile::Rename(srcFilename, destFilename);
+ #endif
+   DEBUG_LOG_FMT(COMMON, "{}: {} --> {}", __func__, srcFilename, destFilename);
+@@ -392,7 +392,7 @@ bool CopyRegularFile(std::string_view source_path, std::string_view destination_
+   DEBUG_LOG_FMT(COMMON, "{}: {} --> {}", __func__, source_path, destination_path);
+ 
+ #ifdef __LIBRETRO__
+-  if (Libretro::VFile::HasVFS())
++  if (Libretro::VFile::UseVFS(source_path))
+     return Libretro::VFile::CopyRegularFile(source_path, destination_path);
+ #endif
+ 
+@@ -412,7 +412,7 @@ bool CopyRegularFile(std::string_view source_path, std::string_view destination_
+ u64 GetSize(const std::string& path)
+ {
+ #ifdef __LIBRETRO__
+-  if (Libretro::VFile::HasVFS())
++  if (Libretro::VFile::UseVFS(path))
+     return Libretro::VFile::GetSize(path);
+ #endif
+   return FileInfo(path).GetSize();
+@@ -422,7 +422,7 @@ u64 GetSize(const std::string& path)
+ u64 GetSize(FILE* f)
+ {
+ #ifdef __LIBRETRO__
+-  if (Libretro::VFile::HasVFS())
++  if (false)
+   {
+     ERROR_LOG_FMT(COMMON, "GetSize: call using FILE when VFS is in use. This should not happen");
+     return 0;
+@@ -452,7 +452,7 @@ bool CreateEmptyFile(const std::string& filename)
+   DEBUG_LOG_FMT(COMMON, "CreateEmptyFile: {}", filename);
+ 
+ #ifdef __LIBRETRO__
+-  if (Libretro::VFile::HasVFS())
++  if (Libretro::VFile::UseVFS(filename))
+     return Libretro::VFile::CreateEmptyFile(filename);
+ #endif
+   if (!File::IOFile(filename, "wb"))
+@@ -508,7 +508,7 @@ FSTEntry ScanDirectoryTree(const std::string& directory, bool recursive)
+   DEBUG_LOG_FMT(COMMON, "{}: directory {}", __func__, directory);
+ 
+ #ifdef __LIBRETRO__
+-  if (Libretro::VFile::HasVFS())
++  if (Libretro::VFile::UseVFS(directory))
+     return Libretro::VFile::ScanDirectoryTree(directory, recursive);
+ #endif
+ 
+@@ -604,7 +604,7 @@ bool DeleteDirRecursively(const std::string& directory)
+   DEBUG_LOG_FMT(COMMON, "{}: {}", __func__, directory);
+ 
+ #ifdef __LIBRETRO__
+-  if (Libretro::VFile::HasVFS())
++  if (Libretro::VFile::UseVFS(directory))
+     return Libretro::VFile::DeleteDir(directory, true);
+ #endif
+ 
+@@ -622,7 +622,7 @@ bool Copy(std::string_view source_path, std::string_view dest_path, bool overwri
+                 overwrite_existing ? "overwrite" : "preserve");
+ 
+ #ifdef __LIBRETRO__
+-  if (Libretro::VFile::HasVFS())
++  if (Libretro::VFile::UseVFS(source_path))
+     return Libretro::VFile::CopyRegularFile(source_path, dest_path, overwrite_existing);
+ #endif
+ 
+@@ -650,7 +650,7 @@ static bool MoveWithOverwrite(const std::filesystem::path& src, const std::files
+                               std::error_code& error)
+ {
+ #ifdef __LIBRETRO__
+-  if (Libretro::VFile::HasVFS())
++  if (Libretro::VFile::UseVFS(src))
+     return Libretro::VFile::MoveWithOverwrite(src.string(), dst.string());
+ #endif
+ 
+@@ -763,7 +763,7 @@ std::string CreateTempDir()
+ std::string GetTempFilenameForAtomicWrite(std::string path)
+ {
+ #ifdef __LIBRETRO__
+-  if (Libretro::VFile::HasVFS())
++  if (Libretro::VFile::UseVFS(path))
+     return path + ".xxx";
+ #endif
+   std::error_code error;
+@@ -1143,7 +1143,7 @@ std::string GetThemeDir(const std::string& theme_name)
+ bool WriteStringToFile(const std::string& filename, std::string_view str)
+ {
+ #ifdef __LIBRETRO__
+-  if (Libretro::VFile::HasVFS())
++  if (Libretro::VFile::UseVFS(filename))
+     return Libretro::VFile::WriteStringToFile(filename, str);
+ #endif
+   return File::IOFile(filename, "wb").WriteBytes(str.data(), str.size());
+@@ -1152,7 +1152,7 @@ bool WriteStringToFile(const std::string& filename, std::string_view str)
+ bool ReadFileToString(const std::string& filename, std::string& str)
+ {
+ #ifdef __LIBRETRO__
+-  if (Libretro::VFile::HasVFS())
++  if (Libretro::VFile::UseVFS(filename))
+     return Libretro::VFile::ReadFileToString(filename, str);
+ #endif
+   File::IOFile file(filename, "rb");
+diff --git a/Source/Core/Common/FilesystemWatcher.cpp b/Source/Core/Common/FilesystemWatcher.cpp
+index fbb5e216b1..514abe9426 100644
+--- a/Source/Core/Common/FilesystemWatcher.cpp
++++ b/Source/Core/Common/FilesystemWatcher.cpp
+@@ -17,7 +17,11 @@ FilesystemWatcher::~FilesystemWatcher() = default;
+ 
+ void FilesystemWatcher::Watch(const std::string& path)
+ {
+-#ifndef IPHONEOS
++  // Porpoise: the PS5 has no change notices, so the watcher would look through
++  // the whole folder (a texture pack: tens of thousands of files) sixty times a
++  // second on a thread of its own, taking a core from the game. Nothing is
++  // edited mid-game on the console: no watching there.
++#if !defined(IPHONEOS) && !defined(__PROSPERO__)
+   const auto [iter, inserted] = m_watched_paths.try_emplace(path, nullptr);
+   if (inserted)
+   {
+@@ -66,7 +70,7 @@ void FilesystemWatcher::Watch(const std::string& path)
+ 
+ void FilesystemWatcher::Unwatch(const std::string& path)
+ {
+-#ifndef IPHONEOS
++#if !defined(IPHONEOS) && !defined(__PROSPERO__)
+   m_watched_paths.erase(path);
+ #endif
+ }
+diff --git a/Source/Core/Common/IOFile.cpp b/Source/Core/Common/IOFile.cpp
+index 7ad6352153..1b32bb29db 100644
+--- a/Source/Core/Common/IOFile.cpp
++++ b/Source/Core/Common/IOFile.cpp
+@@ -42,7 +42,7 @@ IOFile::IOFile(std::FILE* file) : m_file(file), m_good(true)
+ #ifdef __LIBRETRO__
+   m_vfs_handle = nullptr;
+ 
+-  if (Libretro::VFile::HasVFS())
++  if (m_vfs_handle)
+     ERROR_LOG_FMT(COMMON, "VFS: Attempt to use IOFile::IOFile with a std::FILE which should not happen");
+ #endif
+ }
+@@ -78,7 +78,7 @@ IOFile& IOFile::operator=(IOFile&& other) noexcept
+ void IOFile::Swap(IOFile& other) noexcept
+ {
+ #ifdef __LIBRETRO__
+-  if (Libretro::VFile::HasVFS())
++  if (true)
+     std::swap(m_vfs_handle, other.m_vfs_handle);
+ #endif
+   std::swap(m_file, other.m_file);
+@@ -91,7 +91,7 @@ bool IOFile::Open(const std::string& filename, const char openmode[],
+   Close();
+ 
+ #ifdef __LIBRETRO__
+-  if (Libretro::VFile::HasVFS())
++  if (Libretro::VFile::UseVFS(filename))
+   {
+     m_vfs_handle = Libretro::VFile::Open(filename, openmode);
+     m_good = m_vfs_handle != nullptr;
+@@ -126,7 +126,7 @@ bool IOFile::Open(const std::string& filename, const char openmode[],
+ bool IOFile::Close()
+ {
+ #ifdef __LIBRETRO__
+-  if (Libretro::VFile::HasVFS())
++  if (m_vfs_handle)
+   {
+     if (!IsOpen() || 0 != Libretro::VFile::Close(m_vfs_handle))
+       m_good = false;
+@@ -153,7 +153,7 @@ void IOFile::SetHandle(std::FILE* file)
+ u64 IOFile::GetSize() const
+ {
+ #ifdef __LIBRETRO__
+-  if (Libretro::VFile::HasVFS())
++  if (m_vfs_handle)
+   {
+     if (IsOpen())
+       return Libretro::VFile::GetSize(m_vfs_handle);
+@@ -187,7 +187,7 @@ bool IOFile::Seek(s64 offset, SeekOrigin origin)
+   }
+ 
+ #ifdef __LIBRETRO__
+-  if (Libretro::VFile::HasVFS())
++  if (m_vfs_handle)
+   {
+     if (!IsOpen() || 0 != Libretro::VFile::Seek(m_vfs_handle, offset, fseek_origin))
+       m_good = false;
+@@ -205,7 +205,7 @@ bool IOFile::Seek(s64 offset, SeekOrigin origin)
+ u64 IOFile::Tell() const
+ {
+ #ifdef __LIBRETRO__
+-  if (Libretro::VFile::HasVFS())
++  if (m_vfs_handle)
+   {
+     if (IsOpen())
+       return Libretro::VFile::Tell(m_vfs_handle);
+@@ -222,7 +222,7 @@ u64 IOFile::Tell() const
+ bool IOFile::Flush()
+ {
+ #ifdef __LIBRETRO__
+-  if (Libretro::VFile::HasVFS())
++  if (m_vfs_handle)
+   {
+     if (!IsOpen() || 0 != Libretro::VFile::Flush(m_vfs_handle))
+       m_good = false;
+@@ -239,7 +239,7 @@ bool IOFile::Flush()
+ bool IOFile::Resize(u64 size)
+ {
+ #ifdef __LIBRETRO__
+-  if (Libretro::VFile::HasVFS())
++  if (m_vfs_handle)
+   {
+     if (!IsOpen() || 0 != Libretro::VFile::Resize(m_vfs_handle, size))
+       m_good = false;
+diff --git a/Source/Core/Common/IOFile.h b/Source/Core/Common/IOFile.h
+index a123e7be9c..547098d027 100644
+--- a/Source/Core/Common/IOFile.h
++++ b/Source/Core/Common/IOFile.h
+@@ -61,7 +61,7 @@ public:
+   bool ReadArray(T* elements, size_t count, size_t* num_read = nullptr)
+   {
+ #ifdef __LIBRETRO__
+-    if (Libretro::VFile::HasVFS())
++    if (m_vfs_handle)
+     {
+       if (!IsOpen())
+       {
+@@ -99,7 +99,7 @@ public:
+   bool WriteArray(const T* elements, size_t count)
+   {
+   #ifdef __LIBRETRO__
+-    if (Libretro::VFile::HasVFS())
++    if (m_vfs_handle)
+     {
+       if (!IsOpen())
+       {
+@@ -157,7 +157,7 @@ public:
+   bool IsOpen() const
+   {
+ #ifdef __LIBRETRO__
+-    if (Libretro::VFile::HasVFS())
++    if (m_vfs_handle)
+       return nullptr != m_vfs_handle;
+ #endif
+     return nullptr != m_file;
+@@ -168,7 +168,7 @@ public:
+   std::FILE* GetHandle()
+   {
+ #ifdef __LIBRETRO__
+-    if (Libretro::VFile::HasVFS())
++    if (m_vfs_handle)
+       ERROR_LOG_FMT(COMMON, "VFS: Attempt to use std::FILE which should not happen in VFS mode");
+ #endif
+     return m_file; 
+@@ -189,7 +189,7 @@ public:
+   {
+     m_good = true;
+ #ifdef __LIBRETRO__
+-    if (Libretro::VFile::HasVFS())
++    if (m_vfs_handle)
+       return;
+ #endif
+     if (IsOpen())
+diff --git a/Source/Core/Common/MemArena.h b/Source/Core/Common/MemArena.h
+index 1a3093cc4d..22a59f7a47 100644
+--- a/Source/Core/Common/MemArena.h
++++ b/Source/Core/Common/MemArena.h
+@@ -14,6 +14,10 @@
+ #include "Common/CommonTypes.h"
+ #include "Common/DynamicLibrary.h"
+ 
++#ifdef __PROSPERO__
++#include <ps5platform/shm.h>
++#endif
++
+ namespace Common
+ {
+ #ifdef _WIN32
+@@ -152,6 +156,11 @@ private:
+   int m_shm_fd = 0;
+   void* m_reserved_region = nullptr;
+   std::size_t m_reserved_region_size = 0;
++#ifdef __PROSPERO__
++  // PS5: guest memory is one direct-memory object of the platform layer
++  // (MemArenaUnix.cpp, ps5platform/shm.h).
++  ps5_shm m_shm{};
++#endif
+ #endif
+ };
+ 
+diff --git a/Source/Core/Common/MemArenaUnix.cpp b/Source/Core/Common/MemArenaUnix.cpp
+index 26a123c081..b8c89961af 100644
+--- a/Source/Core/Common/MemArenaUnix.cpp
++++ b/Source/Core/Common/MemArenaUnix.cpp
+@@ -21,6 +21,24 @@
+ #include "Common/Logging/Log.h"
+ #include "Common/MsgHandler.h"
+ 
++#ifdef __PROSPERO__
++// PS5: guest memory is direct memory, through the platform layer (my payload SDK
++// fork, ps5platform/shm.h), rather than a shared-memory object. Every view of a
++// shared-memory object was charged to the title's flexible memory (448 MiB for
++// the whole title), and Wind Waker's fake-VMEM mirrors - one 32 MiB region
++// mapped at up to 28 logical addresses - exhausted it: the mappings failed and a
++// fastmem access faulted through a missing view (2026-09-24). A direct-memory
++// object is charged to nothing but the 12 GiB direct pool, and can be mapped at
++// any number of addresses, which is what a mirror is.
++namespace
++{
++int ps5_protection(bool writeable)
++{
++  return PS5_SHM_READ | (writeable ? PS5_SHM_WRITE : 0);
++}
++}  // namespace
++#endif
++
+ namespace Common
+ {
+ MemArena::MemArena() = default;
+@@ -28,6 +46,13 @@ MemArena::~MemArena() = default;
+ 
+ void MemArena::GrabSHMSegment(size_t size, std::string_view base_name)
+ {
++#ifdef __PROSPERO__
++  const int result = ps5_shm_create(size, &m_shm);
++  if (result != 0)
++    PanicAlertFmt("PS5: allocating {:#x} bytes of direct memory for guest RAM failed: {:#010x}",
++                  size, static_cast<u32>(result));
++  return;
++#endif
+   const std::string file_name = fmt::format("/{}.{}", base_name, getpid());
+   m_shm_fd = shm_open(file_name.c_str(), O_RDWR | O_CREAT | O_EXCL, 0600);
+   if (m_shm_fd == -1)
+@@ -42,11 +67,28 @@ void MemArena::GrabSHMSegment(size_t size, std::string_view base_name)
+ 
+ void MemArena::ReleaseSHMSegment()
+ {
++#ifdef __PROSPERO__
++  ps5_shm_destroy(&m_shm);
++  return;
++#endif
+   close(m_shm_fd);
+ }
+ 
+ void* MemArena::CreateView(s64 offset, size_t size)
+ {
++#ifdef __PROSPERO__
++  // Anywhere outside the Vulkan driver's GPU window.
++  void* view = nullptr;
++  const int result = ps5_shm_map(&m_shm, static_cast<size_t>(offset), size, nullptr,
++                                 ps5_protection(true), 0, &view);
++  if (result != 0)
++  {
++    ERROR_LOG_FMT(MEMMAP, "PS5: mapping a view of {:#x} bytes at offset {:#x} failed: {:#010x}",
++                  size, offset, static_cast<u32>(result));
++    return nullptr;
++  }
++  return view;
++#endif
+   void* retval = mmap(nullptr, size, PROT_READ | PROT_WRITE, MAP_SHARED, m_shm_fd, offset);
+   if (retval == MAP_FAILED)
+   {
+@@ -61,11 +103,45 @@ void* MemArena::CreateView(s64 offset, size_t size)
+ 
+ void MemArena::ReleaseView(void* view, size_t size)
+ {
++#ifdef __PROSPERO__
++  ps5_shm_unmap(view, size, 0);
++  return;
++#endif
+   munmap(view, size);
+ }
+ 
+ u8* MemArena::ReserveMemoryRegion(size_t memory_size)
+ {
++#ifdef __PROSPERO__
++  // PS5: an anonymous PROT_NONE mapping of this size is charged to the title's
++  // small flexible-memory budget and fails. The platform layer reserves the
++  // range without backing it, outside the Vulkan driver's GPU window, and the
++  // views are mapped into it at fixed addresses as upstream does.
++  //
++  // RetroArch unloads a core when content closes. A reservation an earlier
++  // instance left behind (a core that did not reach ReleaseMemoryRegion) holds
++  // the hint; the range is this arena's alone, so it is released and asked for
++  // again rather than taken elsewhere.
++  void* const ps5_arena_hint = reinterpret_cast<void*>(0x10'0000'0000);
++  void* address = nullptr;
++  int result = ps5_vrange_reserve(memory_size, ps5_arena_hint, 0x10000, &address);
++  if (result == 0 && address != ps5_arena_hint)
++  {
++    ps5_vrange_release(address, memory_size);
++    ps5_vrange_release(ps5_arena_hint, memory_size);
++    result = ps5_vrange_reserve(memory_size, ps5_arena_hint, 0x10000, &address);
++  }
++  if (result != 0)
++  {
++    PanicAlertFmt("PS5: reserving {:#x} bytes of address space failed: {:#010x}", memory_size,
++                  static_cast<u32>(result));
++    return nullptr;
++  }
++  INFO_LOG_FMT(MEMMAP, "PS5: fastmem arena reserved at {} ({:#x} bytes)", address, memory_size);
++  m_reserved_region = address;
++  m_reserved_region_size = memory_size;
++  return static_cast<u8*>(address);
++#endif
+   const int flags = MAP_ANON | MAP_PRIVATE;
+   void* base = mmap(nullptr, memory_size, PROT_NONE, flags, -1, 0);
+   if (base == MAP_FAILED)
+@@ -82,13 +158,30 @@ void MemArena::ReleaseMemoryRegion()
+ {
+   if (m_reserved_region)
+   {
++#ifdef __PROSPERO__
++    ps5_vrange_release(m_reserved_region, m_reserved_region_size);
++#else
+     munmap(m_reserved_region, m_reserved_region_size);
++#endif
+     m_reserved_region = nullptr;
+   }
+ }
+ 
+ void* MemArena::MapInMemoryRegion(s64 offset, size_t size, void* base, bool writeable)
+ {
++#ifdef __PROSPERO__
++  // Fixed, over the reservation (ReserveMemoryRegion) or a view unmapped from it.
++  void* view = nullptr;
++  const int result = ps5_shm_map(&m_shm, static_cast<size_t>(offset), size, base,
++                                 ps5_protection(writeable), PS5_SHM_FIXED, &view);
++  if (result != 0)
++  {
++    ERROR_LOG_FMT(MEMMAP, "PS5: mapping {:#x} bytes of guest RAM at {} failed: {:#010x}", size,
++                  base, static_cast<u32>(result));
++    return nullptr;
++  }
++  return view;
++#endif
+   int prot = PROT_READ;
+   if (writeable)
+     prot |= PROT_WRITE;
+@@ -96,7 +189,8 @@ void* MemArena::MapInMemoryRegion(s64 offset, size_t size, void* base, bool writ
+   void* retval = mmap(base, size, prot, MAP_SHARED | MAP_FIXED, m_shm_fd, offset);
+   if (retval == MAP_FAILED)
+   {
+-    NOTICE_LOG_FMT(MEMMAP, "mmap failed");
++    ERROR_LOG_FMT(MEMMAP, "mmap of {:#x} bytes at {} (offset {:#x}) failed: {}", size, base,
++                  offset, strerror(errno));
+     return nullptr;
+   }
+   else
+@@ -119,9 +213,15 @@ bool MemArena::ChangeMappingProtection(void* view, size_t size, bool writeable)
+ 
+ void MemArena::UnmapFromMemoryRegion(void* view, size_t size)
+ {
++#ifdef __PROSPERO__
++  // The hole stays reserved, so nothing else is mapped into the arena.
++  if (ps5_shm_unmap(view, size, PS5_SHM_KEEP_RESERVED) != 0)
++    ERROR_LOG_FMT(MEMMAP, "PS5: unmapping the view at {} failed", view);
++  return;
++#endif
+   void* retval = mmap(view, size, PROT_NONE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED, -1, 0);
+   if (retval == MAP_FAILED)
+-    NOTICE_LOG_FMT(MEMMAP, "mmap failed");
++    ERROR_LOG_FMT(MEMMAP, "unmapping {:#x} bytes at {} failed: {}", size, view, strerror(errno));
+ }
+ 
+ size_t MemArena::GetPageSize() const
+diff --git a/Source/Core/Common/MemoryUtil.cpp b/Source/Core/Common/MemoryUtil.cpp
+index 5d5085aa09..48afb09fac 100644
+--- a/Source/Core/Common/MemoryUtil.cpp
++++ b/Source/Core/Common/MemoryUtil.cpp
+@@ -3,6 +3,8 @@
+ 
+ #include "Common/MemoryUtil.h"
+ 
++#include <cstdio>
++
+ #include <cstddef>
+ #include <cstdlib>
+ 
+@@ -10,6 +12,10 @@
+ #include "Common/Logging/Log.h"
+ #include "Common/MsgHandler.h"
+ 
++#ifdef __PROSPERO__
++#include <ps5platform/exec.h>
++#endif
++
+ #ifdef _WIN32
+ #include <windows.h>
+ #include "Common/StringUtil.h"
+@@ -103,7 +109,20 @@ void* AllocateExecutableMemory(size_t size)
+ 
+   int map_prot = PROT_READ | PROT_WRITE | PROT_EXEC;
+ 
++#ifdef __PROSPERO__
++  // PS5: code lives in direct memory through the platform layer (my payload SDK
++  // fork, ps5platform/exec.h): read, write and execute at once, within a 32-bit
++  // displacement of this core's own code, and out of the 12 GiB direct pool
++  // rather than the title's 448 MiB of flexible memory -- which is why the code
++  // caches are upstream's size again (Jit64Constants.h, FarCodeCache.h).
++  (void)map_prot;
++  (void)map_flags;
++  void* ptr = ps5_exec_allocate(size, reinterpret_cast<uintptr_t>(&AllocateExecutableMemory));
++  if (ptr == nullptr)
++    fprintf(stderr, "dolphin ps5: no executable memory for %zu bytes\n", size);
++#else
+   void* ptr = mmap(nullptr, size, map_prot, map_flags, -1, 0);
++#endif
+   if (ptr == MAP_FAILED)
+     ptr = nullptr;
+ #endif
+@@ -236,6 +255,13 @@ bool FreeMemoryPages(void* ptr, size_t size)
+ {
+   if (ptr)
+   {
++#ifdef __PROSPERO__
++    // Code blocks free their executable memory here (CodeBlock.h, off iOS):
++    // what the platform layer handed out goes back to it, direct memory and
++    // all, rather than being only unmapped.
++    if (ps5_exec_release(ptr) == 0)
++      return true;
++#endif
+ #ifdef _WIN32
+     if (!VirtualFree(ptr, 0, MEM_RELEASE))
+     {
+@@ -436,6 +462,11 @@ void FreeExecutableMemory(void* ptr, size_t size)
+       return;
+     }
+   }
++#endif
++#ifdef __PROSPERO__
++  (void)size;
++  ps5_exec_release(ptr);
++  return;
+ #endif
+   munmap(ptr, size);
+ }
+diff --git a/Source/Core/Common/Thread.cpp b/Source/Core/Common/Thread.cpp
+index 41afff087b..a5750cca86 100644
+--- a/Source/Core/Common/Thread.cpp
++++ b/Source/Core/Common/Thread.cpp
+@@ -177,6 +177,11 @@ void SetCurrentThreadName(const char* name)
+ {
+ #ifdef __APPLE__
+   pthread_setname_np(name);
++#elif defined(__PROSPERO__)
++  // PS5 defines __FreeBSD__, but its libkernel's pthread_set_name_np faults when
++  // a title calls it on a fresh thread (the PPSSPP port found this); the name is
++  // not needed.
++  (void)name;
+ #elif defined __FreeBSD__ || defined __OpenBSD__
+   pthread_set_name_np(pthread_self(), name);
+ #elif defined(__NetBSD__)
+diff --git a/Source/Core/Core/AchievementHooks.h b/Source/Core/Core/AchievementHooks.h
+new file mode 100644
+index 0000000000..bc4d5fe73d
+--- /dev/null
++++ b/Source/Core/Core/AchievementHooks.h
+@@ -0,0 +1,59 @@
++// Copyright 2026 Ruben (Project Porpoise)
++// SPDX-License-Identifier: GPL-2.0-or-later
++
++// Porpoise (libretro): RetroAchievements with the host doing the network and
++// the popups. The host fills these in (DolphinLibretro/Achievements.cpp,
++// porpoise_ra_setup) before the game loads; AchievementManager calls them.
++
++#pragma once
++
++#ifdef USE_RETRO_ACHIEVEMENTS
++
++#include <atomic>
++#include <cstddef>
++#include <mutex>
++#include <string>
++
++namespace AchievementHooks
++{
++// One answer's bytes, as they come.
++using Sink = void (*)(void* ctx, const char* data, size_t size);
++// A GET (post_data null) or a form POST. Returns the HTTP status, or -1 when
++// there was no answer at all.
++using RequestFn = int (*)(const char* url, const char* post_data, void* ctx, Sink sink);
++// Something for the player to see (Kind), with up to two numbers.
++using EventFn = void (*)(int kind, const char* title, const char* text, const char* image_url, int a,
++                         int b);
++
++enum Kind
++{
++  LoginOk = 1,         // title: the player's name; a: softcore points
++  LoginFailed = 2,     // a: rcheevos' result
++  GameLoaded = 3,      // title: the game; a: unlocked, b: total
++  Unlocked = 4,        // title, text: the achievement; a: its points
++  Completed = 5,       // title: the game
++  NoAchievements = 6,  // RetroAchievements doesn't know this game (or this version of it)
++  ServerError = 7,     // title: the API call; text: the server's message
++};
++
++extern RequestFn request;
++extern EventFn event;
++// The game's file as the boot opened it: the set is identified from a fresh
++// reader on it (a copy of the boot's own reader is the fallback).
++extern std::string boot_path;
++// rcheevos' last message, for a load that fails: the popup says why.
++extern std::string last_message;
++extern std::mutex message_lock;  // last_message's
++// Requests queued or under way, so the host can wait for an unlock still
++// being sent before it closes the game.
++extern std::atomic<int> pending;
++
++inline void Send(int kind, const char* title, const char* text = "", const char* image_url = "",
++                 int a = 0, int b = 0)
++{
++  if (event)
++    event(kind, title ? title : "", text ? text : "", image_url ? image_url : "", a, b);
++}
++}  // namespace AchievementHooks
++
++#endif  // USE_RETRO_ACHIEVEMENTS
+diff --git a/Source/Core/Core/AchievementManager.cpp b/Source/Core/Core/AchievementManager.cpp
+index ec0fee2059..05458c7b83 100644
+--- a/Source/Core/Core/AchievementManager.cpp
++++ b/Source/Core/Core/AchievementManager.cpp
+@@ -5,6 +5,7 @@
+ 
+ #include "Core/AchievementManager.h"
+ 
++#include <cstring>
+ #include <memory>
+ 
+ #include <fmt/format.h>
+@@ -22,6 +23,7 @@
+ #include "Common/Version.h"
+ #include "Common/WorkQueueThread.h"
+ #include "Core/AchievementApprovedHash.h"
++#include "Core/AchievementHooks.h"
+ #include "Core/ActionReplay.h"
+ #include "Core/Config/AchievementSettings.h"
+ #include "Core/Config/FreeLookSettings.h"
+@@ -55,6 +57,28 @@ static const Common::HttpRequest::Headers USER_AGENT_HEADER = {
+     {"User-Agent", Common::GetUserAgentStr()}};
+ #endif  // ANDROID
+ 
++namespace AchievementHooks
++{
++RequestFn request = nullptr;
++EventFn event = nullptr;
++std::atomic<int> pending{0};
++std::string boot_path;
++std::string last_message;
++std::mutex message_lock;
++}  // namespace AchievementHooks
++
++#ifdef __LIBRETRO__
++// Porpoise: a game's badge, an achievement's or the player's picture, as the
++// URL the popup shows.
++static std::string GameImageUrl(const rc_client_game_t* game)
++{
++  char url[512] = "";
++  if (!game || rc_client_game_get_image_url(game, url, sizeof url) != RC_OK)
++    url[0] = '\0';
++  return url;
++}
++#endif
++
+ AchievementManager& AchievementManager::GetInstance()
+ {
+   static AchievementManager s_instance;
+@@ -77,6 +101,14 @@ void AchievementManager::Init(void* hwnd)
+     rc_client_enable_logging(m_client, RC_CLIENT_LOG_LEVEL_VERBOSE,
+                              [](const char* message, const rc_client_t* client) {
+                                INFO_LOG_FMT(ACHIEVEMENTS, "{}", message);
++#ifdef __LIBRETRO__
++                               // The step before "Load failed (...)": the reason.
++                               if (message && std::strncmp(message, "Load failed", 11) != 0)
++                               {
++                                 std::lock_guard lock{AchievementHooks::message_lock};
++                                 AchievementHooks::last_message = message;
++                               }
++#endif
+                              });
+     m_config_changed_callback_id = Config::AddConfigChangedCallback([this] { SetHardcoreMode(); });
+     SetHardcoreMode();
+@@ -196,7 +228,26 @@ void AchievementManager::LoadGame(const DiscIO::Volume* volume)
+ #endif  // RC_CLIENT_SUPPORTS_RAINTEGRATION
+     if (!m_loading_volume)
+     {
+-      m_loading_volume = DiscIO::CreateVolume(volume->GetBlobReader().CopyReader());
++#ifdef __LIBRETRO__
++      // Porpoise: the game's file opened afresh, the way the boot opened it.
++      // The copy of the boot's reader below (a dup of its descriptor) never
++      // gave the hash a disc on PS5: every game said "hash generation failed".
++      if (!AchievementHooks::boot_path.empty())
++      {
++        std::unique_ptr<DiscIO::Volume> fresh = DiscIO::CreateVolume(AchievementHooks::boot_path);
++        if (fresh && fresh->GetGameID() == volume->GetGameID() &&
++            fresh->GetDiscNumber() == volume->GetDiscNumber())
++        {
++          m_loading_volume = std::move(fresh);
++        }
++      }
++      if (!m_loading_volume)
++#endif
++        m_loading_volume = DiscIO::CreateVolume(volume->GetBlobReader().CopyReader());
++#ifdef __LIBRETRO__
++      if (!m_loading_volume)
++        WARN_LOG_FMT(ACHIEVEMENTS, "Porpoise: the game's file could not be opened for its hash");
++#endif
+     }
+   }
+   std::lock_guard lg{m_filereader_lock};
+@@ -714,6 +765,74 @@ u32 AchievementManager::ActivateDevMenuItem(u32 menu_item_id)
+ 
+ void AchievementManager::DoState(PointerWrap& p)
+ {
++#ifdef __LIBRETRO__
++  // Porpoise: the progress is an optional block at the end, behind its own
++  // mark, so a state saved signed out (or by 2.0) loads signed in and the
++  // other way round. Signed out, nothing is written: the state is as before.
++  static constexpr u32 kMark = 0x68634152;  // "RAch"
++  if (p.IsReadMode())
++  {
++    u32 mark = 0;
++    if (p.BytesLeft() >= sizeof(u32) + sizeof(u64))
++      std::memcpy(&mark, p.Peek(), sizeof mark);
++    if (mark != kMark)
++    {
++      std::lock_guard lg{m_lock};
++      m_pending_progress.clear();
++      if (m_client && rc_client_get_game_info(m_client))
++        rc_client_deserialize_progress_sized(m_client, nullptr, 0);  // from the start
++      return;
++    }
++    p.Do(mark);
++    u64 size = 0;
++    p.Do(size);
++    if (size > p.BytesLeft())
++    {
++      p.SetMeasureMode();
++      return;
++    }
++    auto block = std::make_unique<u8[]>(size_t(size) + 1);
++    p.DoArray(block.get(), u32(size));
++    p.DoMarker("AchievementManager");
++    std::lock_guard lg{m_lock};
++    if (m_client && rc_client_get_game_info(m_client))
++    {
++      m_pending_progress.clear();
++      if (rc_client_deserialize_progress_sized(m_client, block.get(), size_t(size)) != RC_OK)
++        ERROR_LOG_FMT(ACHIEVEMENTS, "Failed deserializing achievement client");
++    }
++    else if (m_client)
++    {
++      // A state loaded early (quick resume, a slot from Details): the set
++      // isn't loaded yet, so its progress waits for it.
++      m_pending_progress.assign(block.get(), block.get() + size);
++    }
++    return;
++  }
++  if (!m_client || !Config::Get(Config::RA_ENABLED) || !rc_client_get_game_info(m_client))
++    return;
++  {
++    u32 mark = kMark;
++    u64 size = 0;
++    std::unique_ptr<u8[]> block;
++    {
++      std::lock_guard lg{m_lock};
++      size = rc_client_progress_size(m_client);
++      block = std::make_unique<u8[]>(size_t(size) + 1);
++      if (rc_client_serialize_progress_sized(m_client, block.get(), size_t(size)) != RC_OK)
++        return;
++    }
++    // A buffer sized before an achievement changed state may be a little
++    // short: the state goes without the block rather than overflowing.
++    if (p.IsWriteMode() && p.BytesLeft() < sizeof(u32) + sizeof(u64) + size_t(size) + sizeof(u32))
++      return;
++    p.Do(mark);
++    p.Do(size);
++    p.DoArray(block.get(), u32(size));
++    p.DoMarker("AchievementManager");
++  }
++  return;
++#endif
+   if (!m_client || !Config::Get(Config::RA_ENABLED))
+     return;
+   size_t size = 0;
+@@ -755,6 +874,7 @@ void AchievementManager::DoState(PointerWrap& p)
+ void AchievementManager::CloseGame()
+ {
+   m_queue.Cancel();
++  AchievementHooks::pending = 0;
+   m_image_queue.Cancel();
+   {
+     std::lock_guard lg{m_lock};
+@@ -766,6 +886,9 @@ void AchievementManager::CloseGame()
+     m_unlocked_badges.clear();
+     m_locked_badges.clear();
+     m_leaderboard_map.clear();
++#ifdef __LIBRETRO__
++    m_pending_progress.clear();
++#endif
+     m_rich_presence.fill('\0');
+     m_system.store(nullptr, std::memory_order_release);
+     if (Config::Get(Config::RA_DISCORD_PRESENCE_ENABLED))
+@@ -799,6 +922,11 @@ void AchievementManager::Shutdown()
+   {
+     CloseGame();
+     m_queue.Shutdown();
++#ifdef __LIBRETRO__
++    // Porpoise: the image queue's thread too, or it outlives the core, which
++    // then can't be unmapped after the game (the loader waits for its threads).
++    m_image_queue.Shutdown();
++#endif
+     Config::RemoveConfigChangedCallback(m_config_changed_callback_id);
+     std::lock_guard lg{m_lock};
+     // DON'T log out - keep those credentials for next run.
+@@ -933,6 +1061,9 @@ void AchievementManager::LoginCallback(int result, const char* error_message, rc
+   {
+     WARN_LOG_FMT(ACHIEVEMENTS, "Failed to login {} to RetroAchievements server.",
+                  Config::Get(Config::RA_USERNAME));
++#ifdef __LIBRETRO__
++    AchievementHooks::Send(AchievementHooks::LoginFailed, error_message, "", "", result);
++#endif
+     Config::SetBaseOrCurrent(Config::RA_API_TOKEN, "");
+     instance.update_event.Trigger({.failed_login_code = result});
+     instance.login_event.Trigger(result);
+@@ -962,6 +1093,15 @@ void AchievementManager::LoginCallback(int result, const char* error_message, rc
+ 
+   INFO_LOG_FMT(ACHIEVEMENTS, "Successfully logged in {} to RetroAchievements server.",
+                user->username);
++#ifdef __LIBRETRO__
++  {
++    char avatar[512] = "";
++    if (rc_client_user_get_image_url(user, avatar, sizeof avatar) != RC_OK)
++      avatar[0] = '\0';
++    AchievementHooks::Send(AchievementHooks::LoginOk, user->display_name, "", avatar,
++                           int(user->score_softcore));
++  }
++#endif
+   std::lock_guard lg{instance.GetLock()};
+   Config::SetBaseOrCurrent(Config::RA_API_TOKEN, user->token);
+   instance.FetchPlayerBadge();
+@@ -1014,6 +1154,9 @@ void AchievementManager::LoadGameCallback(int result, const char* error_message,
+   if (result == RC_API_FAILURE)
+   {
+     WARN_LOG_FMT(ACHIEVEMENTS, "Load data request rejected for old Dolphin version.");
++#ifdef __LIBRETRO__
++    AchievementHooks::Send(AchievementHooks::ServerError, "load game", error_message);
++#endif
+     OSD::AddMessage("RetroAchievements no longer supports this version of Dolphin.",
+                     OSD::Duration::VERY_LONG, OSD::Color::RED);
+     OSD::AddMessage("Please update Dolphin to a newer version.", OSD::Duration::VERY_LONG,
+@@ -1023,6 +1166,9 @@ void AchievementManager::LoadGameCallback(int result, const char* error_message,
+   if (result == RC_LOGIN_REQUIRED || result == RC_INVALID_CREDENTIALS || result == RC_EXPIRED_TOKEN)
+   {
+     WARN_LOG_FMT(ACHIEVEMENTS, "Invalid/expired RetroAchievements API token.");
++#ifdef __LIBRETRO__
++    AchievementHooks::Send(AchievementHooks::LoginFailed, error_message, "", "", result);
++#endif
+     OSD::AddMessage(
+         "You have been logged out from RetroAchievements due to invalid/expired credentials.",
+         OSD::Duration::VERY_LONG, OSD::Color::RED);
+@@ -1046,11 +1192,41 @@ void AchievementManager::LoadGameCallback(int result, const char* error_message,
+     {
+       INFO_LOG_FMT(ACHIEVEMENTS, "Loaded data for game ID {}.", game->id);
+       instance.m_display_welcome_message = true;
++#ifdef __LIBRETRO__
++      rc_client_user_game_summary_t summary{};
++      rc_client_get_user_game_summary(client, &summary);
++      if (summary.num_core_achievements == 0)
++        AchievementHooks::Send(AchievementHooks::NoAchievements, game->title);
++      else
++        AchievementHooks::Send(AchievementHooks::GameLoaded, game->title, "",
++                               GameImageUrl(game).c_str(), int(summary.num_unlocked_achievements),
++                               int(summary.num_core_achievements));
++#endif
+     }
+   }
+   else
+   {
+     WARN_LOG_FMT(ACHIEVEMENTS, "Failed to load data for current game.");
++#ifdef __LIBRETRO__
++    if (result == RC_NO_GAME_LOADED || result == RC_NOT_FOUND)
++    {
++      AchievementHooks::Send(AchievementHooks::NoAchievements, "");
++    }
++    else
++    {
++      // A failure on this side (the hash) carries rcheevos' own last word
++      // on it ("Could not open file", "Not a Gamecube disc"...).
++      std::string why = error_message ? error_message : rc_error_str(result);
++      {
++        std::lock_guard lock{AchievementHooks::message_lock};
++        if (result == RC_INVALID_STATE && !AchievementHooks::last_message.empty() &&
++            AchievementHooks::last_message != why)
++          why += " (" + AchievementHooks::last_message + ")";
++      }
++      ERROR_LOG_FMT(ACHIEVEMENTS, "Porpoise: the game's set did not load: {}", why);
++      AchievementHooks::Send(AchievementHooks::ServerError, "load game", why.c_str());
++    }
++#endif
+     OSD::AddMessage("Achievements are not supported for this title.", OSD::Duration::VERY_LONG,
+                     OSD::Color::RED);
+   }
+@@ -1065,6 +1241,15 @@ void AchievementManager::LoadGameCallback(int result, const char* error_message,
+   instance.m_last_rp_time = std::chrono::steady_clock::now() - std::chrono::minutes{2};
+ 
+   std::lock_guard lg{instance.GetLock()};
++#ifdef __LIBRETRO__
++  if (!instance.m_pending_progress.empty())
++  {
++    if (rc_client_deserialize_progress_sized(client, instance.m_pending_progress.data(),
++                                             instance.m_pending_progress.size()) != RC_OK)
++      ERROR_LOG_FMT(ACHIEVEMENTS, "Failed applying a save state's achievement progress");
++    instance.m_pending_progress.clear();
++  }
++#endif
+   auto* leaderboard_list =
+       rc_client_create_leaderboard_list(client, RC_CLIENT_LEADERBOARD_LIST_GROUPING_NONE);
+   for (u32 bucket = 0; bucket < leaderboard_list->num_buckets; bucket++)
+@@ -1141,6 +1326,18 @@ void AchievementManager::DisplayWelcomeMessage()
+ void AchievementManager::HandleAchievementTriggeredEvent(const rc_client_event_t* client_event)
+ {
+   auto& instance = AchievementManager::GetInstance();
++#ifdef __LIBRETRO__
++  {
++    char badge[512] = "";
++    if (rc_client_achievement_get_image_url(client_event->achievement,
++                                            RC_CLIENT_ACHIEVEMENT_STATE_UNLOCKED, badge,
++                                            sizeof badge) != RC_OK)
++      badge[0] = '\0';
++    AchievementHooks::Send(AchievementHooks::Unlocked, client_event->achievement->title,
++                           client_event->achievement->description, badge,
++                           int(client_event->achievement->points));
++  }
++#endif
+ 
+   OSD::AddMessage(fmt::format("Unlocked: {} ({})", client_event->achievement->title,
+                               client_event->achievement->points),
+@@ -1286,6 +1483,10 @@ void AchievementManager::HandleGameCompletedEvent(const rc_client_event_t* clien
+     return;
+   }
+   bool hardcore = rc_client_get_hardcore_enabled(client);
++#ifdef __LIBRETRO__
++  AchievementHooks::Send(AchievementHooks::Completed, game_info->title, "",
++                         GameImageUrl(game_info).c_str());
++#endif
+   OSD::AddMessage(fmt::format("Congratulations, {}! You have {} {}", user_info->display_name,
+                               hardcore ? "mastered" : "completed", game_info->title),
+                   OSD::Duration::VERY_LONG, hardcore ? OSD::Color::YELLOW : OSD::Color::CYAN,
+@@ -1295,13 +1496,21 @@ void AchievementManager::HandleGameCompletedEvent(const rc_client_event_t* clien
+ void AchievementManager::HandleResetEvent(const rc_client_event_t* client_event)
+ {
+   INFO_LOG_FMT(ACHIEVEMENTS, "Reset requested by Achievement Manager");
++#ifndef __LIBRETRO__
++  // Porpoise: only hardcore asks for this, and Porpoise is softcore only;
++  // stopping the core under the host would leave it waiting on a dead game.
+   Core::Stop(Core::System::GetInstance());
++#endif
+ }
+ 
+ void AchievementManager::HandleServerErrorEvent(const rc_client_event_t* client_event)
+ {
+   ERROR_LOG_FMT(ACHIEVEMENTS, "RetroAchievements server error: {} {}",
+                 client_event->server_error->api, client_event->server_error->error_message);
++#ifdef __LIBRETRO__
++  AchievementHooks::Send(AchievementHooks::ServerError, client_event->server_error->api,
++                         client_event->server_error->error_message);
++#endif
+ }
+ 
+ void AchievementManager::Request(const rc_api_request_t* request,
+@@ -1309,7 +1518,41 @@ void AchievementManager::Request(const rc_api_request_t* request,
+                                  rc_client_t* client)
+ {
+   std::string url = request->url;
+-  std::string post_data = request->post_data;
++  std::string post_data = request->post_data ? request->post_data : "";
++#ifdef __LIBRETRO__
++  if (AchievementHooks::request)
++  {
++    // Porpoise: the host's HTTPS (its own User-Agent, the console's network).
++    ++AchievementHooks::pending;
++    AchievementManager::GetInstance().m_queue.Push(
++        [url = std::move(url), post_data = std::move(post_data), callback, callback_data] {
++          std::string body;
++          const int status = AchievementHooks::request(
++              url.c_str(), post_data.empty() ? nullptr : post_data.c_str(), &body,
++              [](void* ctx, const char* data, size_t size) {
++                static_cast<std::string*>(ctx)->append(data, size);
++              });
++          rc_api_server_response_t server_response{};
++          if (status > 0)
++          {
++            server_response.body = body.data();
++            server_response.body_length = body.size();
++            server_response.http_status_code = status;
++          }
++          else
++          {
++            static constexpr char error_message[] = "Failed HTTP request.";
++            server_response.body = error_message;
++            server_response.body_length = sizeof(error_message);
++            server_response.http_status_code = RC_API_SERVER_RESPONSE_RETRYABLE_CLIENT_ERROR;
++          }
++          callback(&server_response, callback_data);
++          if (AchievementHooks::pending > 0)
++            --AchievementHooks::pending;
++        });
++    return;
++  }
++#endif
+   AchievementManager::GetInstance().m_queue.Push(
+       [url = std::move(url), post_data = std::move(post_data), callback, callback_data] {
+         Common::HttpRequest http_request;
+@@ -1365,6 +1608,14 @@ void AchievementManager::FetchBadge(AchievementManager::Badge* badge, u32 badge_
+                                     AchievementManager::BadgeNameFunction function,
+                                     UpdatedItems callback_data)
+ {
++#ifdef __LIBRETRO__
++  // Porpoise: the popups show the badges by their URLs; nothing to download.
++  if (AchievementHooks::request)
++  {
++    update_event.Trigger(callback_data);
++    return;
++  }
++#endif
+   if (!m_client || !HasAPIToken())
+   {
+     update_event.Trigger(callback_data);
+diff --git a/Source/Core/Core/AchievementManager.h b/Source/Core/Core/AchievementManager.h
+index 74f26b9ec7..91de356d89 100644
+--- a/Source/Core/Core/AchievementManager.h
++++ b/Source/Core/Core/AchievementManager.h
+@@ -268,6 +268,11 @@ private:
+   Badge m_player_badge;
+   Badge m_game_badge;
+   bool m_display_welcome_message = false;
++  #ifdef __LIBRETRO__
++  // Porpoise: a save state's progress, loaded before the game's set was; applied
++  // once the set loads (LoadGameCallback).
++  std::vector<u8> m_pending_progress;
++  #endif
+   std::unordered_map<AchievementId, Badge> m_unlocked_badges;
+   std::unordered_map<AchievementId, Badge> m_locked_badges;
+   RichPresence m_rich_presence;
+diff --git a/Source/Core/Core/Boot/Boot.cpp b/Source/Core/Core/Boot/Boot.cpp
+index 0cad29ee35..f9fb14bec5 100644
+--- a/Source/Core/Core/Boot/Boot.cpp
++++ b/Source/Core/Core/Boot/Boot.cpp
+@@ -36,6 +36,7 @@
+ #include "Core/ConfigManager.h"
+ #include "Core/FifoPlayer/FifoPlayer.h"
+ #include "Core/HLE/HLE.h"
++#include "Core/HLE/HLE_PorpoiseWidescreen.h"
+ #include "Core/HW/DVD/AMMediaboard.h"
+ #include "Core/HW/DVD/DVDInterface.h"
+ #include "Core/HW/EXI/EXI_DeviceIPL.h"
+@@ -73,7 +74,7 @@ std::vector<std::string> ReadM3UFile(const std::string& m3u_path,
+   std::string newline;
+ 
+ #ifdef __LIBRETRO__
+-  if (Libretro::VFile::HasVFS())
++  if (Libretro::VFile::UseVFS(m3u_path))
+   {
+     lines = Libretro::VFile::ReadLines(m3u_path);
+   }
+@@ -564,6 +565,8 @@ bool CBoot::BootUp(Core::System& system, const Core::CPUThreadGuard& guard,
+         return false;
+ 
+       SConfig::OnTitleDirectlyBooted(guard);
++      // Porpoise: the universal widescreen, when chosen for this game.
++      HLE_PorpoiseWidescreen::Apply(system, guard, *volume);
+       return true;
+     }
+ 
+diff --git a/Source/Core/Core/Boot/Boot_WiiWAD.cpp b/Source/Core/Core/Boot/Boot_WiiWAD.cpp
+index c4b5419a69..71778b9600 100644
+--- a/Source/Core/Core/Boot/Boot_WiiWAD.cpp
++++ b/Source/Core/Core/Boot/Boot_WiiWAD.cpp
+@@ -32,7 +32,12 @@ bool CBoot::BootNANDTitle(Core::System& system, const u64 title_id)
+ 
+ bool CBoot::Boot_WiiWAD(Core::System& system, const DiscIO::VolumeWAD& wad)
+ {
+-  if (!WiiUtils::InstallWAD(*system.GetIOS(), wad, WiiUtils::InstallType::Temporary))
++  // Porpoise: a system title (the Wii Menu) the player boots from their own WAD stays
++  // installed, so "boot to the Wii Menu" keeps finding it after other channels are played.
++  const bool system_title = (wad.GetTMD().GetTitleId() >> 32) == 0x00000001;
++  if (!WiiUtils::InstallWAD(*system.GetIOS(), wad,
++                            system_title ? WiiUtils::InstallType::Permanent :
++                                           WiiUtils::InstallType::Temporary))
+   {
+     PanicAlertFmtT("Cannot boot this WAD because it could not be installed to the NAND.");
+     return false;
+diff --git a/Source/Core/Core/CMakeLists.txt b/Source/Core/Core/CMakeLists.txt
+index baad9c0941..44681b89cf 100644
+--- a/Source/Core/Core/CMakeLists.txt
++++ b/Source/Core/Core/CMakeLists.txt
+@@ -131,6 +131,8 @@ add_library(core
+   HLE/HLE_Misc.cpp
+   HLE/HLE_Misc.h
+   HLE/HLE_OS.cpp
++  HLE/HLE_PorpoiseWidescreen.cpp
++  HLE/HLE_PorpoiseWidescreen.h
+   HLE/HLE_OS.h
+   HLE/HLE_VarArgs.cpp
+   HLE/HLE_VarArgs.h
+diff --git a/Source/Core/Core/Config/MainSettings.cpp b/Source/Core/Core/Config/MainSettings.cpp
+index f0cc8511b7..86571be24b 100644
+--- a/Source/Core/Core/Config/MainSettings.cpp
++++ b/Source/Core/Core/Config/MainSettings.cpp
+@@ -46,7 +46,14 @@ const Info<bool> MAIN_JIT_FOLLOW_BRANCH{{System::Main, "Core", "JITFollowBranch"
+ const Info<bool> MAIN_FASTMEM{{System::Main, "Core", "Fastmem"}, true};
+ const Info<bool> MAIN_PAGE_TABLE_FASTMEM{{System::Main, "Core", "PageTableFastmem"}, true};
+ const Info<bool> MAIN_FASTMEM_ARENA{{System::Main, "Core", "FastmemArena"}, true};
++// PS5: the large map is a 64 GiB lazily committed anonymous mapping, which the
++// console charges up front against a far smaller budget; the JIT's own fallback
++// lookup is used instead.
++#ifdef __PROSPERO__
++const Info<bool> MAIN_LARGE_ENTRY_POINTS_MAP{{System::Main, "Core", "LargeEntryPointsMap"}, false};
++#else
+ const Info<bool> MAIN_LARGE_ENTRY_POINTS_MAP{{System::Main, "Core", "LargeEntryPointsMap"}, true};
++#endif
+ const Info<bool> MAIN_ACCURATE_CPU_CACHE{{System::Main, "Core", "AccurateCPUCache"}, false};
+ const Info<bool> MAIN_DSP_HLE{{System::Main, "Core", "DSPHLE"}, true};
+ const Info<int> MAIN_MAX_FALLBACK{{System::Main, "Core", "MaxFallback"}, 100};
+@@ -229,6 +236,24 @@ const Info<bool> MAIN_DIVIDE_BY_ZERO_EXCEPTIONS{{System::Main, "Core", "DivByZer
+ const Info<bool> MAIN_FPRF{{System::Main, "Core", "FPRF"}, false};
+ const Info<bool> MAIN_ACCURATE_NANS{{System::Main, "Core", "AccurateNaNs"}, false};
+ const Info<bool> MAIN_ACCURATE_FMADDS{{System::Main, "Core", "AccurateFmadds"}, true};
++// Porpoise 3.0 (a game's own settings, off by default):
++//  FastPairedMath: a paired-single multiply takes its multiplier as it is, not
++//   rounded to the 25 bits Gekko keeps (it is a paired single already).
++//  FastSinglePrecision: single-precision results stay as computed, not rounded
++//   to single after every operation; float math in long chains runs about
++//   twice as fast (Mario Superstar Baseball's skinning). Some games need the
++//   rounding (Dolphin names a Zelda that gets stuck without it).
++const Info<bool> MAIN_FAST_PAIRED_MATH{{System::Main, "Core", "FastPairedMath"}, false};
++const Info<bool> MAIN_FAST_SINGLE_PRECISION{{System::Main, "Core", "FastSinglePrecision"}, false};
++//  FastPairedRounding: only paired-single results (ps_*) stay unrounded; the
++//   game's other single-precision math is rounded as on the console. Mario
++//   Superstar Baseball runs but stops progressing with FastSinglePrecision.
++const Info<bool> MAIN_FAST_PAIRED_ROUNDING{{System::Main, "Core", "FastPairedRounding"}, false};
++// Porpoise 3.0: a block whose guess at its quantizers (GQRs) turned out wrong
++// guesses again with the values then current, this many times, before it reads
++// them on every access for good.
++const Info<int> MAIN_PAIRED_QUANTIZE_RETRIES{{System::Main, "Core", "PairedQuantizeRetries"}, 0};
++const Info<std::string> MAIN_FAST_PAIRED_BLOCKS{{System::Main, "Core", "FastPairedBlocks"}, ""};
+ const Info<bool> MAIN_DISABLE_ICACHE{{System::Main, "Core", "DisableICache"}, false};
+ const Info<float> MAIN_EMULATION_SPEED{{System::Main, "Core", "EmulationSpeed"}, 1.0f};
+ #if defined(ANDROID)
+diff --git a/Source/Core/Core/Config/MainSettings.h b/Source/Core/Core/Config/MainSettings.h
+index 4bb1c36db9..a2bbde2054 100644
+--- a/Source/Core/Core/Config/MainSettings.h
++++ b/Source/Core/Core/Config/MainSettings.h
+@@ -134,6 +134,12 @@ extern const Info<bool> MAIN_DIVIDE_BY_ZERO_EXCEPTIONS;
+ extern const Info<bool> MAIN_FPRF;
+ extern const Info<bool> MAIN_ACCURATE_NANS;
+ extern const Info<bool> MAIN_ACCURATE_FMADDS;
++extern const Info<bool> MAIN_FAST_PAIRED_MATH;
++extern const Info<bool> MAIN_FAST_SINGLE_PRECISION;
++extern const Info<bool> MAIN_FAST_PAIRED_ROUNDING;
++extern const Info<int> MAIN_PAIRED_QUANTIZE_RETRIES;
++// Porpoise 3.0: blocks (start addresses, hex, comma-separated) that defer paired rounding; empty: all.
++extern const Info<std::string> MAIN_FAST_PAIRED_BLOCKS;
+ extern const Info<bool> MAIN_DISABLE_ICACHE;
+ extern const Info<float> MAIN_EMULATION_SPEED;
+ extern const Info<bool> MAIN_PRECISION_FRAME_TIMING;
+diff --git a/Source/Core/Core/Core.cpp b/Source/Core/Core/Core.cpp
+index cda66bffd1..f34121d4f1 100644
+--- a/Source/Core/Core/Core.cpp
++++ b/Source/Core/Core/Core.cpp
+@@ -3,8 +3,15 @@
+ 
+ #include "Core/Core.h"
+ 
++#ifdef __PROSPERO__
++#include <cstdlib>
++#include <pthread.h>
++#include <pthread_np.h>
++#endif
++
+ #include <algorithm>
+ #include <atomic>
++#include <chrono>
+ #include <functional>
+ #include <future>
+ #include <mutex>
+@@ -97,6 +104,8 @@ static bool s_wants_determinism;
+ 
+ #ifdef __LIBRETRO__
+ static std::vector<Common::ScopeGuard<Common::MoveOnlyFunction<void()>>> s_emu_thread_scope_guards;
++// A single-core FIFO playback's injected CPU core; removed first in Shutdown.
++static std::optional<Common::ScopeGuard<Common::MoveOnlyFunction<void()>>> s_fifo_player_guard;
+ std::unique_ptr<BootParameters> g_boot_params;
+ #endif
+ // Declarations and definitions
+@@ -107,10 +116,26 @@ std::thread s_emu_thread;
+ static Common::HookableEvent<Core::State> s_state_changed_event;
+ 
+ static bool s_is_throttler_temp_disabled = false;
++#ifdef __LIBRETRO__
++// Porpoise: the CPU thread's frame steps, timed (porpoise_perf_take).
++std::atomic<long long> g_porpoise_cpu_ns{0};
++std::atomic<long long> g_porpoise_cpu_max_ns{0};
++std::atomic<unsigned> g_porpoise_cpu_frames{0};
++#endif
+ #ifndef __LIBRETRO__
+ static
+ #endif
+ bool s_frame_step = false;
++#ifdef __LIBRETRO__
++// Porpoise: how long the CPU thread takes to run each frame step (porpoise_perf_take).
++std::atomic<long long> s_porpoise_step_start_ns{0};
++long long PorpoiseNowNs()
++{
++  return std::chrono::duration_cast<std::chrono::nanoseconds>(
++             std::chrono::steady_clock::now().time_since_epoch())
++      .count();
++}
++#endif
+ #ifndef __LIBRETRO__
+ static
+ #endif
+@@ -351,6 +376,24 @@ static void CpuThread(Core::System& system, const std::optional<std::string> sav
+   else
+     Common::SetCurrentThreadName("CPU-GPU thread");
+ 
++#ifdef __PROSPERO__
++  // PS5: the emulated CPU is what limits most games on the console, and its
++  // thread loses a share of its core whenever another busy thread runs on the
++  // same core's other half. Porpoise names the processors this thread keeps
++  // to (PORPOISE_CPU_THREAD_CPUS, a hex mask) and keeps its own threads off
++  // that core.
++  if (const char* cpus = std::getenv("PORPOISE_CPU_THREAD_CPUS"))
++  {
++    const unsigned long long mask = std::strtoull(cpus, nullptr, 16);
++    if (mask != 0)
++    {
++      const int result = pthread_setaffinity_np(pthread_self(), sizeof mask,
++                                                reinterpret_cast<const cpuset_t*>(&mask));
++      NOTICE_LOG_FMT(CORE, "PS5: the CPU thread keeps to processors {:#x} ({})", mask, result);
++    }
++  }
++#endif
++
+ #ifdef USE_ANALYTICS
+   // This needs to be delayed until after the video backend is ready.
+   DolphinAnalytics::Instance().ReportGameStart();
+@@ -456,6 +499,23 @@ static void FifoPlayerThread(Core::System& system, const std::optional<std::stri
+ 
+     CPUSetInitialExecutionState(system);
+ 
++#ifdef __LIBRETRO__
++    // Single core: like CpuThread, return to retro_run, whose RunSingleFrame runs the
++    // injected core up to the next field. The core stays injected until Shutdown,
++    // ahead of the guards that tear the hardware down. Running CPU::Run() here
++    // instead, as the dual-core path does, never returns in single-core libretro
++    // mode: playback of a FIFO log (.dff) hung before its first frame.
++    if (!system.IsDualCoreMode())
++    {
++      std::shared_ptr<CPUCoreBase> core(std::move(cpu_core));
++      s_fifo_player_guard.emplace(Common::MoveOnlyFunction<void()>([&system, core] {
++        system.GetPowerPC().InjectExternalCPUCore(nullptr);
++        system.GetFifoPlayer().Close();
++      }));
++      return;
++    }
++#endif
++
+     system.GetCPU().Run();
+ 
+     system.GetPowerPC().InjectExternalCPUCore(nullptr);
+@@ -994,6 +1054,17 @@ void Callback_NewField(Core::System& system)
+     if (s_stop_frame_step.load())
+ #endif
+     {
++#ifdef __LIBRETRO__
++      const long long start = s_porpoise_step_start_ns.load(std::memory_order_relaxed);
++      if (start != 0)
++      {
++        const long long ns = PorpoiseNowNs() - start;
++        g_porpoise_cpu_ns.fetch_add(ns, std::memory_order_relaxed);
++        if (ns > g_porpoise_cpu_max_ns.load(std::memory_order_relaxed))
++          g_porpoise_cpu_max_ns.store(ns, std::memory_order_relaxed);
++        g_porpoise_cpu_frames.fetch_add(1, std::memory_order_relaxed);
++      }
++#endif
+       s_frame_step = false;
+       system.GetCPU().Break();
+       NotifyStateChanged(Core::GetState(system));
+@@ -1036,6 +1107,7 @@ void Shutdown(Core::System& system)
+   if (s_emu_thread.joinable())
+     s_emu_thread.join();
+ #ifdef __LIBRETRO__
++  s_fifo_player_guard.reset();
+   for (auto& g : s_emu_thread_scope_guards)
+     g.Exit();
+   s_emu_thread_scope_guards.clear();
+@@ -1136,6 +1208,9 @@ void DoFrameStep(Core::System& system)
+     // if already paused, frame advance for 1 frame
+     s_stop_frame_step = false;
+     s_frame_step = true;
++#ifdef __LIBRETRO__
++    s_porpoise_step_start_ns.store(PorpoiseNowNs(), std::memory_order_relaxed);
++#endif
+     SetState(system, State::Running, false);
+   }
+   else if (!s_frame_step)
+diff --git a/Source/Core/Core/FifoPlayer/FifoPlayer.cpp b/Source/Core/Core/FifoPlayer/FifoPlayer.cpp
+index f0c62d4e3f..bbb4cb7791 100644
+--- a/Source/Core/Core/FifoPlayer/FifoPlayer.cpp
++++ b/Source/Core/Core/FifoPlayer/FifoPlayer.cpp
+@@ -4,11 +4,14 @@
+ #include "Core/FifoPlayer/FifoPlayer.h"
+ 
+ #include <algorithm>
++#include <cstdio>
++#include <cstdlib>
+ #include <cstring>
+ #include <type_traits>
+ 
+ #include "Common/Assert.h"
+ #include "Common/CommonTypes.h"
++#include "Common/Logging/Log.h"
+ #include "Common/MsgHandler.h"
+ #include "Core/Config/MainSettings.h"
+ #include "Core/Core.h"
+@@ -32,6 +35,10 @@
+ // TODO: Move texMem somewhere else so this isn't an issue.
+ #include "VideoCommon/TextureDecoder.h"
+ 
++#ifdef __PROSPERO__
++bool Ps5DolphinObjectRange(unsigned* first, unsigned* last);  // VideoCommon/PixelShaderGen.cpp
++#endif
++
+ namespace
+ {
+ class FifoPlaybackAnalyzer : public OpcodeDecoder::Callback
+@@ -188,6 +195,25 @@ bool FifoPlayer::Open(const std::string& filename)
+     FifoPlaybackAnalyzer::AnalyzeFrames(m_File.get(), m_FrameInfo);
+ 
+     m_FrameRangeEnd = m_File->GetFrameCount() - 1;
++
++    // PS5 bring-up aid: play only objects "first last" of each frame, to bisect a
++    // frame against desktop Dolphin playing the same log -- the console's debug
++    // mode "objects A B" (VideoCommon/PixelShaderGen.cpp), $FIFO_OBJECTS on the host.
++    unsigned first = 0, last = 0;
++#ifdef __PROSPERO__
++    const bool ranged = Ps5DolphinObjectRange(&first, &last);
++#else
++    const char* const range = std::getenv("FIFO_OBJECTS");
++    const bool ranged = range && std::sscanf(range, "%u %u", &first, &last) == 2;
++#endif
++    if (ranged)
++    {
++      m_ObjectRangeStart = first;
++      m_ObjectRangeEnd = last;
++      for (u32 frame = 0; frame < m_FrameInfo.size(); ++frame)
++        NOTICE_LOG_FMT(BOOT, "FIFO frame {}: {} objects; playing {}-{}", frame,
++                       GetFrameObjectCount(frame), m_ObjectRangeStart, m_ObjectRangeEnd);
++    }
+   }
+ 
+   if (m_FileLoadedCb)
+diff --git a/Source/Core/Core/HLE/HLE.cpp b/Source/Core/Core/HLE/HLE.cpp
+index 31b6c2d1ed..e9d09a5296 100644
+--- a/Source/Core/Core/HLE/HLE.cpp
++++ b/Source/Core/Core/HLE/HLE.cpp
+@@ -14,6 +14,7 @@
+ #include "Core/GeckoCode.h"
+ #include "Core/HLE/HLE_Misc.h"
+ #include "Core/HLE/HLE_OS.h"
++#include "Core/HLE/HLE_PorpoiseWidescreen.h"
+ #include "Core/HW/Memmap.h"
+ #include "Core/Host.h"
+ #include "Core/PowerPC/PPCSymbolDB.h"
+@@ -26,7 +27,7 @@ namespace HLE
+ static std::map<u32, u32> s_hooked_addresses;
+ 
+ // clang-format off
+-constexpr std::array<Hook, 23> os_patches{{
++constexpr std::array<Hook, 25> os_patches{{
+     // Placeholder, os_patches[0] is the "non-existent function" index
+     {"FAKE_TO_SKIP_0",               HLE_Misc::UnimplementedFunction,       HookType::Replace, HookFlag::Generic},
+ 
+@@ -58,7 +59,11 @@ constexpr std::array<Hook, 23> os_patches{{
+ 
+     {"GeckoCodehandler",             HLE_Misc::GeckoCodeHandlerICacheFlush, HookType::Start,   HookFlag::Fixed},
+     {"GeckoHandlerReturnTrampoline", HLE_Misc::GeckoReturnTrampoline,       HookType::Replace, HookFlag::Fixed},
+-    {"AppLoaderReport",              HLE_OS::HLE_GeneralDebugPrint,         HookType::Start,   HookFlag::Fixed} // apploader needs OSReport-like function
++    {"AppLoaderReport",              HLE_OS::HLE_GeneralDebugPrint,         HookType::Start,   HookFlag::Fixed}, // apploader needs OSReport-like function
++
++    // Porpoise's universal widescreen (beta): installed at the addresses found when the game boots
++    {"PorpoiseWidePerspective",      HLE_PorpoiseWidescreen::Perspective,   HookType::Start,   HookFlag::Fixed},
++    {"PorpoiseWideFrustum",          HLE_PorpoiseWidescreen::Frustum,       HookType::Start,   HookFlag::Fixed},
+ }};
+ // clang-format on
+ 
+@@ -104,6 +109,8 @@ void PatchFixedFunctions(Core::System& system)
+   // This has to always be installed even if cheats are not enabled because of the possibility of
+   // loading a savestate where PC is inside the code handler while cheats are disabled.
+   Patch(system, Gecko::HLE_TRAMPOLINE_ADDRESS, "GeckoHandlerReturnTrampoline");
++  // Porpoise: the universal widescreen's hooks, when the game has them.
++  HLE_PorpoiseWidescreen::Repatch(system);
+ }
+ 
+ void PatchFunctions(Core::System& system)
+@@ -151,6 +158,7 @@ void PatchFunctions(Core::System& system)
+ void Clear()
+ {
+   s_hooked_addresses.clear();
++  HLE_PorpoiseWidescreen::Reset();
+ }
+ 
+ void Reload(Core::System& system)
+diff --git a/Source/Core/Core/HLE/HLE_PorpoiseWidescreen.cpp b/Source/Core/Core/HLE/HLE_PorpoiseWidescreen.cpp
+new file mode 100644
+index 0000000000..1039ba713e
+--- /dev/null
++++ b/Source/Core/Core/HLE/HLE_PorpoiseWidescreen.cpp
+@@ -0,0 +1,256 @@
++// Porpoise's universal widescreen (beta).
++// Copyright (C) 2026 Ruben (Project Porpoise)
++// SPDX-License-Identifier: GPL-2.0-or-later
++
++#include "Core/HLE/HLE_PorpoiseWidescreen.h"
++
++#include <array>
++#include <atomic>
++#include <cmath>
++#include <optional>
++#include <utility>
++#include <vector>
++
++#include "Common/CommonTypes.h"
++#include "Common/Config/Config.h"
++#include "Common/Logging/Log.h"
++#include "Core/Config/GraphicsSettings.h"
++#include "Core/Core.h"
++#include "Core/HLE/HLE.h"
++#include "Core/PowerPC/MMU.h"
++#include "Core/PowerPC/PowerPC.h"
++#include "Core/PowerPC/SignatureDB/SignatureDB.h"
++#include "Core/System.h"
++#include "DiscIO/DiscUtils.h"
++#include "DiscIO/Enums.h"
++#include "DiscIO/Volume.h"
++#include "DiscIO/VolumeDisc.h"
++#include "VideoCommon/VideoConfig.h"
++
++namespace HLE_PorpoiseWidescreen
++{
++namespace
++{
++constexpr u32 BLR = 0x4E800020;
++// C_MTXFrustum's first instruction: fsubs f9, f4, f3 (r - l).
++constexpr u32 FRUSTUM_FIRST = 0xED241828;
++// 4:3 to 16:9.
++constexpr double WIDEN = 4.0 / 3.0;
++
++struct Signature
++{
++  u32 hash;
++  u32 size;  // bytes
++};
++
++// From Dolphin's Data/Sys/totaldb.dsy (two builds of the SDK each).
++constexpr std::array<Signature, 2> PERSPECTIVE{{{0x2f85f228, 236}, {0xd2bd4590, 208}}};
++constexpr std::array<Signature, 2> ORTHO{{{0xc76f95b2, 152}, {0xcdcb1aa9, 152}}};
++
++bool s_enabled = false;
++u32 s_perspective = 0;
++u32 s_frustum = 0;
++std::atomic<bool> s_logged_perspective{false};
++std::atomic<bool> s_logged_frustum{false};
++
++struct Section
++{
++  u32 start;
++  u32 end;  // exclusive
++};
++
++// The main program's text sections, from its DOL header on the disc.
++std::vector<Section> TextSections(const DiscIO::VolumeDisc& volume)
++{
++  std::vector<Section> sections;
++  const DiscIO::Partition partition = volume.GetGamePartition();
++  const std::optional<u64> dol = DiscIO::GetBootDOLOffset(volume, partition);
++  if (!dol)
++    return sections;
++  for (u32 i = 0; i < 7; ++i)
++  {
++    const std::optional<u32> address = volume.ReadSwapped<u32>(*dol + 0x48 + i * 4, partition);
++    const std::optional<u32> size = volume.ReadSwapped<u32>(*dol + 0x90 + i * 4, partition);
++    if (!address || !size || *size == 0 || *size > 0x01800000)
++      continue;
++    if (*address < 0x80000000 || *address >= 0x81800000)
++      continue;
++    sections.push_back({*address, *address + (*size & ~3u)});
++  }
++  return sections;
++}
++
++u32 Read(const Core::CPUThreadGuard& guard, u32 address)
++{
++  return PowerPC::MMU::HostRead_Instruction(guard, address);
++}
++
++// A function with one of the signatures: it starts just after a blr (or at the
++// section's start) and its last instruction is a blr.
++template <std::size_t N>
++u32 FindKnown(const Core::CPUThreadGuard& guard, const std::vector<Section>& sections,
++              const std::array<Signature, N>& known)
++{
++  for (const Section& section : sections)
++  {
++    for (u32 address = section.start; address + 8 <= section.end; address += 4)
++    {
++      if (address != section.start && Read(guard, address - 4) != BLR)
++        continue;
++      for (const Signature& signature : known)
++      {
++        const u32 last = address + signature.size - 4;
++        if (last >= section.end || Read(guard, last) != BLR)
++          continue;
++        if (HashSignatureDB::ComputeCodeChecksum(guard, address, last) == signature.hash)
++          return address;
++      }
++    }
++  }
++  return 0;
++}
++
++// C_MTXFrustum sits just before C_MTXPerspective in mtx44.o: the function that
++// ends at the blr before it, when it starts with C_MTXFrustum's first
++// instruction.
++u32 FindFrustumBefore(const Core::CPUThreadGuard& guard, u32 next, u32 start)
++{
++  if (next < start + 8 || Read(guard, next - 4) != BLR)
++    return 0;
++  const u32 limit = next - start > 0x200 ? next - 0x200 : start;
++  for (u32 address = next - 8; address >= limit; address -= 4)
++  {
++    if (Read(guard, address) == BLR)
++      return Read(guard, address + 4) == FRUSTUM_FIRST ? address + 4 : 0;
++    if (address == start)
++      return Read(guard, address) == FRUSTUM_FIRST ? address : 0;
++    if (address < 4)
++      break;
++  }
++  return 0;
++}
++
++// A 4:3-ish aspect, widened to 16:9; anything else (a square shadow map, a
++// game that is wide already) is left alone.
++std::optional<double> Widened(double aspect)
++{
++  const double magnitude = std::fabs(aspect);
++  if (!std::isfinite(magnitude) || magnitude < 1.2 || magnitude > 1.6)
++    return std::nullopt;
++  return aspect * WIDEN;
++}
++}  // namespace
++
++void SetEnabled(bool enabled)
++{
++  s_enabled = enabled;
++}
++
++namespace
++{
++// Where the game's own projection can't be widened: Dolphin's widescreen hack
++// instead, so the game still plays in 16:9 (its HUD stretched, things at the
++// edges perhaps popping in, as with the hack chosen outright).
++bool UseHack(const char* why)
++{
++  NOTICE_LOG_FMT(BOOT, "Universal widescreen: {}; Dolphin's widescreen hack instead", why);
++  Config::SetCurrent(Config::GFX_WIDESCREEN_HACK, true);
++  return false;
++}
++}  // namespace
++
++bool Apply(Core::System& system, const Core::CPUThreadGuard& guard,
++           const DiscIO::VolumeDisc& volume)
++{
++  Reset();
++  if (!s_enabled)
++    return false;
++  if (system.IsWii() || volume.GetVolumeType() != DiscIO::Platform::GameCubeDisc)
++    return UseHack("a Wii game (GameCube games' projections only)");
++
++  const std::vector<Section> sections = TextSections(volume);
++  if (sections.empty())
++    return UseHack("the program's sections weren't readable");
++
++  u32 perspective = FindKnown(guard, sections, PERSPECTIVE);
++  u32 frustum = 0;
++  if (perspective)
++  {
++    for (const Section& section : sections)
++      if (perspective >= section.start && perspective < section.end)
++        frustum = FindFrustumBefore(guard, perspective, section.start);
++  }
++  const u32 ortho = FindKnown(guard, sections, ORTHO);
++
++  if (!perspective && !frustum)
++  {
++    NOTICE_LOG_FMT(BOOT, "Universal widescreen: no known projection function (ortho {:08x})", ortho);
++    return UseHack("the game's own projection function wasn't found");
++  }
++
++  s_perspective = perspective;
++  s_frustum = frustum;
++  NOTICE_LOG_FMT(BOOT,
++                 "Universal widescreen: C_MTXPerspective {:08x}, C_MTXFrustum {:08x}, "
++                 "C_MTXOrtho {:08x}",
++                 perspective, frustum, ortho);
++  Repatch(system);
++
++  Config::SetCurrent(Config::GFX_ASPECT_RATIO, AspectMode::ForceWide);
++  Config::SetCurrent(Config::GFX_WIDESCREEN_HACK, false);
++  return true;
++}
++
++void Repatch(Core::System& system)
++{
++  if (s_perspective)
++    HLE::Patch(system, s_perspective, "PorpoiseWidePerspective");
++  if (s_frustum)
++    HLE::Patch(system, s_frustum, "PorpoiseWideFrustum");
++}
++
++void Reset()
++{
++  s_perspective = 0;
++  s_frustum = 0;
++  s_logged_perspective = false;
++  s_logged_frustum = false;
++}
++
++// C_MTXPerspective(Mtx44 m, f32 fovY, f32 aspect, f32 n, f32 f): aspect in f2.
++void Perspective(const Core::CPUThreadGuard& guard)
++{
++  auto& ppc_state = guard.GetSystem().GetPPCState();
++  const double aspect = ppc_state.ps[2].PS0AsDouble();
++  const std::optional<double> wide = Widened(aspect);
++  if (!wide)
++    return;
++  ppc_state.ps[2].Fill(double(float(*wide)));
++  if (!s_logged_perspective.exchange(true))
++    NOTICE_LOG_FMT(BOOT, "Universal widescreen: perspective {:.3f} widened to {:.3f}", aspect,
++                   *wide);
++}
++
++// C_MTXFrustum(Mtx44 m, f32 t, f32 b, f32 l, f32 r, f32 n, f32 f): l and r in
++// f3 and f4, widened about their middle.
++void Frustum(const Core::CPUThreadGuard& guard)
++{
++  auto& ppc_state = guard.GetSystem().GetPPCState();
++  const double t = ppc_state.ps[1].PS0AsDouble();
++  const double b = ppc_state.ps[2].PS0AsDouble();
++  const double l = ppc_state.ps[3].PS0AsDouble();
++  const double r = ppc_state.ps[4].PS0AsDouble();
++  if (t == b)
++    return;
++  if (!Widened((r - l) / (t - b)))
++    return;
++  const double middle = (l + r) / 2;
++  const double new_l = middle + (l - middle) * WIDEN;
++  const double new_r = middle + (r - middle) * WIDEN;
++  ppc_state.ps[3].Fill(double(float(new_l)));
++  ppc_state.ps[4].Fill(double(float(new_r)));
++  if (!s_logged_frustum.exchange(true))
++    NOTICE_LOG_FMT(BOOT, "Universal widescreen: frustum {:.3f}..{:.3f} widened to {:.3f}..{:.3f}",
++                   l, r, new_l, new_r);
++}
++}  // namespace HLE_PorpoiseWidescreen
+diff --git a/Source/Core/Core/HLE/HLE_PorpoiseWidescreen.h b/Source/Core/Core/HLE/HLE_PorpoiseWidescreen.h
+new file mode 100644
+index 0000000000..f4ed420486
+--- /dev/null
++++ b/Source/Core/Core/HLE/HLE_PorpoiseWidescreen.h
+@@ -0,0 +1,43 @@
++// Porpoise's universal widescreen (beta).
++// Copyright (C) 2026 Ruben (Project Porpoise)
++// SPDX-License-Identifier: GPL-2.0-or-later
++//
++// For a GameCube game without a widescreen code of its own: find the SDK's
++// projection functions (C_MTXPerspective and C_MTXFrustum, from mtx44.o) in
++// the game's main program, by the checksums in Dolphin's own signature
++// database, and hook them so a 4:3 projection is widened to 16:9. When they
++// can't be found, nothing is hooked and the game stays 4:3.
++
++#pragma once
++
++namespace Core
++{
++class CPUThreadGuard;
++class System;
++}  // namespace Core
++
++namespace DiscIO
++{
++class VolumeDisc;
++}
++
++namespace HLE_PorpoiseWidescreen
++{
++// Chosen for the game about to boot (the frontend's "Universal (Beta)").
++void SetEnabled(bool enabled);
++
++// After the game's program is in memory: finds the functions and hooks them.
++// true when the game is widened.
++bool Apply(Core::System& system, const Core::CPUThreadGuard& guard,
++           const DiscIO::VolumeDisc& volume);
++
++// Installs the hooks found by Apply again (HLE::PatchFixedFunctions).
++void Repatch(Core::System& system);
++
++// Forgets the game (HLE::Clear).
++void Reset();
++
++// The hooks, run at the start of each function.
++void Perspective(const Core::CPUThreadGuard& guard);
++void Frustum(const Core::CPUThreadGuard& guard);
++}  // namespace HLE_PorpoiseWidescreen
+diff --git a/Source/Core/Core/HW/GCMemcard/GCMemcardDirectory.cpp b/Source/Core/Core/HW/GCMemcard/GCMemcardDirectory.cpp
+index 1228b2a94f..76f34d0008 100644
+--- a/Source/Core/Core/HW/GCMemcard/GCMemcardDirectory.cpp
++++ b/Source/Core/Core/HW/GCMemcard/GCMemcardDirectory.cpp
+@@ -670,19 +670,26 @@ void GCMemcardDirectory::FlushToFile()
+           }
+           save.m_filename = default_save_name;
+         }
+-        File::IOFile gci(save.m_filename, "wb");
++        // Porpoise: written beside the save, then put in its place, so a game
++        // closed while the save is being written keeps the old save whole
++        // instead of half of the new one.
++        const std::string staged = save.m_filename + ".tmp";
++        File::IOFile gci(staged, "wb");
+         if (gci)
+         {
+           gci.WriteBytes(&save.m_gci_header, Memcard::DENTRY_SIZE);
+           for (const Memcard::GCMBlock& block : save.m_save_data)
+             gci.WriteBytes(block.m_block.data(), Memcard::BLOCK_SIZE);
+ 
+-          if (gci.IsGood())
++          const bool written = gci.IsGood() && gci.Close();
++          if (written && File::Rename(staged, save.m_filename))
+           {
+             Core::DisplayMessage("Wrote save contents to GCI Folder", 4000);
+           }
+           else
+           {
++            File::Delete(staged);
++            save.m_dirty = true; // tried again at the next flush
+             Core::DisplayMessage(
+                 fmt::format("Failed to write save contents to {}", save.m_filename), 10000);
+             ERROR_LOG_FMT(EXPANSIONINTERFACE, "Failed to save data to {}", save.m_filename);
+diff --git a/Source/Core/Core/IOS/FS/HostBackend/File.cpp b/Source/Core/Core/IOS/FS/HostBackend/File.cpp
+index bee1b14666..31868c76b6 100644
+--- a/Source/Core/Core/IOS/FS/HostBackend/File.cpp
++++ b/Source/Core/Core/IOS/FS/HostBackend/File.cpp
+@@ -137,7 +137,7 @@ Result<u32> HostFileSystem::ReadBytesFromFile(Fd fd, u8* ptr, u32 count)
+   handle->host_file->Seek(handle->file_offset, File::SeekOrigin::Begin);
+ 
+ #ifdef __LIBRETRO__
+-  if (Libretro::VFile::HasVFS())
++  if (handle->host_file->GetVFSHandle())
+   {
+     const u32 actually_read_vfs = Libretro::VFile::ReadBytes(handle->host_file->GetVFSHandle(), ptr, count);
+ 
+diff --git a/Source/Core/Core/IOS/Network/Socket.cpp b/Source/Core/Core/IOS/Network/Socket.cpp
+index feb2579afb..86d0965c76 100644
+--- a/Source/Core/Core/IOS/Network/Socket.cpp
++++ b/Source/Core/Core/IOS/Network/Socket.cpp
+@@ -4,6 +4,8 @@
+ // No Wii socket support while using NetPlay or TAS
+ #include "Core/IOS/Network/Socket.h"
+ 
++#include <vector>
++
+ #include <algorithm>
+ #include <numeric>
+ 
+@@ -153,6 +155,17 @@ void WiiSocket::SetFd(s32 s)
+   if (-1 == (flags = fcntl(fd, F_GETFL, 0)))
+     flags = 0;
+   fcntl(fd, F_SETFL, flags | O_NONBLOCK);
++#ifdef __PROSPERO__
++  // Porpoise: the console ignores O_NONBLOCK on a socket; its own SO_NBIO
++  // option makes it non-blocking, as everything here expects (a Wii game's
++  // receive with nothing waiting would otherwise hold the emulator until data
++  // came: Mario Kart Wii froze joining a race online).
++  {
++    int one = 1;
++    if (setsockopt(fd, SOL_SOCKET, 0x1200 /* SO_NBIO */, &one, sizeof one) != 0)
++      WARN_LOG_FMT(IOS_NET, "SO_NBIO failed on socket {}", fd);
++  }
++#endif
+ #endif
+ }
+ 
+@@ -292,6 +305,32 @@ void WiiSocket::Update(bool read, bool write, bool except)
+         sockaddr_in local_name = WiiSockMan::ToNativeAddrIn(addr);
+ 
+         int ret = bind(fd, (sockaddr*)&local_name, sizeof(local_name));
++#ifdef __PROSPERO__
++        // Porpoise: the console refuses a title a port in the high range
++        // (Mario Kart Wii's 56259 for its players' connections: EACCES, and the
++        // game dropped from the server, 67010). The same port 32768 lower, or
++        // any the console picks; the game's server and the other players see
++        // the port the router gives it either way.
++        if (ret != 0 && errno == EACCES && local_name.sin_port != 0)
++        {
++          const u16 wanted = Common::swap16(local_name.sin_port);
++          std::vector<u16> tries;
++          if (wanted >= 49152)
++            tries.push_back(static_cast<u16>(wanted - 32768));
++          tries.push_back(0);
++          for (const u16 port : tries)
++          {
++            local_name.sin_port = Common::swap16(port);
++            ret = bind(fd, (sockaddr*)&local_name, sizeof(local_name));
++            const int bind_errno = errno;
++            WARN_LOG_FMT(IOS_NET, "SO_BIND: port {} refused by the console; port {} instead: {}", wanted,
++                         port, ret == 0 ? "bound" : "refused too");
++            errno = bind_errno;  // for GetNetErrorCode below
++            if (ret == 0)
++              break;
++          }
++        }
++#endif
+         ReturnValue = m_socket_manager.GetNetErrorCode(ret, "SO_BIND", false);
+ 
+         INFO_LOG_FMT(IOS_NET, "IOCTL_SO_BIND ({:08X}, {}:{}) = {}", wii_fd,
+@@ -754,7 +793,7 @@ WiiSocket::ConnectingState WiiSocket::GetConnectingState() const
+   Common::ScopeGuard guard([&state] { Common::RestoreNetworkErrorState(state); });
+ 
+ #ifdef _WIN32
+-  constexpr int (*get_errno)() = &WSAGetLastError;
++  int (*const get_errno)() = &WSAGetLastError;  // imported: not a constant under MinGW
+ #else
+   constexpr int (*get_errno)() = []() { return errno; };
+ #endif
+diff --git a/Source/Core/Core/MemTools.cpp b/Source/Core/Core/MemTools.cpp
+index 871bb3f615..bad7c5d42a 100644
+--- a/Source/Core/Core/MemTools.cpp
++++ b/Source/Core/Core/MemTools.cpp
+@@ -260,14 +260,17 @@ bool IsExceptionHandlerSupported()
+ #elif defined(_POSIX_VERSION) && !defined(_M_GENERIC) && !(defined(TARGET_OS_TV) && TARGET_OS_TV)
+ 
+ static struct sigaction old_sa_segv;
+-#if defined(__APPLE__)
++// PS5: an access to a reserved but unmapped page may arrive as SIGBUS, as on
++// Apple platforms, so both are taken there.
++#if defined(__APPLE__) || defined(__PROSPERO__)
++#define DOLPHIN_FASTMEM_SIGBUS 1
+ static struct sigaction old_sa_bus;
+ #endif
+ 
+ static void sigsegv_handler(int sig, siginfo_t* info, void* raw_context)
+ {
+   if (sig != SIGSEGV
+-#if defined(__APPLE__)
++#if defined(DOLPHIN_FASTMEM_SIGBUS)
+       && sig != SIGBUS
+ #endif
+   )
+@@ -298,7 +301,7 @@ static void sigsegv_handler(int sig, siginfo_t* info, void* raw_context)
+ 
+   // If JIT didn't handle the signal, restore the original handler and invoke it.
+   const auto& old_sa =
+-#if defined(__APPLE__)
++#if defined(DOLPHIN_FASTMEM_SIGBUS)
+       (sig == SIGBUS) ? old_sa_bus :
+ #endif
+                         old_sa_segv;
+@@ -324,7 +327,7 @@ void InstallExceptionHandler()
+   sa.sa_flags = SA_SIGINFO;
+   sigemptyset(&sa.sa_mask);
+   sigaction(SIGSEGV, &sa, &old_sa_segv);
+-#ifdef __APPLE__
++#ifdef DOLPHIN_FASTMEM_SIGBUS
+   sigaction(SIGBUS, &sa, &old_sa_bus);
+ #endif
+ }
+@@ -339,7 +342,7 @@ void UninstallExceptionHandler()
+     free(old_stack.ss_sp);
+   }
+   sigaction(SIGSEGV, &old_sa_segv, nullptr);
+-#ifdef __APPLE__
++#ifdef DOLPHIN_FASTMEM_SIGBUS
+   sigaction(SIGBUS, &old_sa_bus, nullptr);
+ #endif
+ }
+diff --git a/Source/Core/Core/PowerPC/Jit64/Jit.cpp b/Source/Core/Core/PowerPC/Jit64/Jit.cpp
+index 1248b1ab01..763dde53da 100644
+--- a/Source/Core/Core/PowerPC/Jit64/Jit.cpp
++++ b/Source/Core/Core/PowerPC/Jit64/Jit.cpp
+@@ -2,6 +2,9 @@
+ // SPDX-License-Identifier: GPL-2.0-or-later
+ 
+ #include "Core/PowerPC/Jit64/Jit.h"
++#include "Core/Config/MainSettings.h"
++#include "Common/StringUtil.h"
++#include <algorithm>
+ 
+ #include <map>
+ #include <span>
+@@ -21,6 +24,7 @@
+ #include "Common/GekkoDisassembler.h"
+ #include "Common/HostDisassembler.h"
+ #include "Common/IOFile.h"
++#include "Common/CPUDetect.h"
+ #include "Common/Logging/Log.h"
+ #include "Common/Swap.h"
+ #include "Common/x64ABI.h"
+@@ -49,6 +53,10 @@
+ #include "Core/System.h"
+ 
+ using namespace Gen;
++
++bool PorpoiseTolerant(const PPCAnalyst::CodeOp& op);
++bool PorpoiseFullWrite(const PPCAnalyst::CodeOp& op);
++bool PorpoiseExitLike(const PPCAnalyst::CodeOp& op);
+ using namespace PowerPC;
+ 
+ // Dolphin's PowerPC->x86_64 JIT dynamic recompiler
+@@ -262,7 +270,7 @@ void Jit64::Init()
+   EnableBlockLink();
+ 
+   jo.optimizeGatherPipe = true;
+-  jo.accurateSinglePrecision = true;
++  jo.accurateSinglePrecision = !Config::Get(Config::MAIN_FAST_SINGLE_PRECISION);
+   js.fastmemLoadStore = nullptr;
+   js.compilerPC = 0;
+ 
+@@ -734,6 +742,19 @@ void Jit64::WriteExternalExceptionExit()
+ void Jit64::Run()
+ {
+   ProtectStack();
++#ifdef __PROSPERO__
++  // PS5: what the JIT runs with, once, for the log: the host CPU's features
++  // decide the code it emits, and without the stack guard every return goes
++  // through the dispatcher (no BLR optimization).
++  static bool reported = false;
++  if (!reported)
++  {
++    reported = true;
++    NOTICE_LOG_FMT(POWERPC, "PS5 JIT: {}; BLR optimization {}; fastmem {}; accurate fmadds {}",
++                   cpu_info.Summarize(), m_enable_blr_optimization ? "on" : "off",
++                   jo.fastmem ? "on" : "off", m_accurate_fmadds ? "on" : "off");
++  }
++#endif
+   m_system.GetJitInterface().UpdateMembase();
+ 
+   CompiledCode pExecAddr = (CompiledCode)asm_routines.enter_code;
+@@ -992,6 +1013,8 @@ bool Jit64::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
+     IntializeSpeculativeConstants();
+   }
+ 
++  PorpoisePlan(code_block.m_num_instructions);
++
+   // Translate instructions
+   for (u32 i = 0; i < code_block.m_num_instructions; i++)
+   {
+@@ -1035,6 +1058,7 @@ bool Jit64::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
+       // asynchronous.
+       if (gatherPipeIntCheck)
+       {
++        PorpoiseRound(m_porpoise_dirty);
+         TEST(32, PPCSTATE(Exceptions), Imm32(EXCEPTION_EXTERNAL_INT));
+         FixupBranch extException = J_CC(CC_NZ, Jump::Near);
+ 
+@@ -1064,6 +1088,11 @@ bool Jit64::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
+       }
+     }
+ 
++    if (m_porpoise_dirty &&
++        HLE::TryReplaceFunction(m_ppc_symbol_db, op.address, PowerPC::CoreMode::JIT))
++    {
++      PorpoiseRound(m_porpoise_dirty);
++    }
+     if (HandleFunctionHooking(op.address))
+       break;
+ 
+@@ -1079,6 +1108,24 @@ bool Jit64::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
+     }
+     else
+     {
++      if (m_porpoise_plan && m_porpoise_dirty)
++      {
++        BitSet32 need;
++        if (PorpoiseExitLike(op))
++          need |= PorpoiseExitNeed(op);
++        // An exit compiled together with this op (a compare and its branch).
++        if (i + 1 < code_block.m_num_instructions && !PorpoiseTolerant(op) &&
++            PorpoiseExitLike(m_code_buffer[i + 1]))
++        {
++          need |= PorpoiseExitNeed(m_code_buffer[i + 1]);
++        }
++        if (!PorpoiseTolerant(op))
++          need |= op.fregsIn;
++        if (!PorpoiseFullWrite(op))
++          need |= op.GetFregsOut();
++        PorpoiseRound(need & m_porpoise_dirty);
++      }
++
+       auto& cpu = m_system.GetCPU();
+       auto& power_pc = m_system.GetPowerPC();
+       if (IsDebuggingEnabled() && power_pc.GetBreakPoints().IsAddressBreakPoint(op.address) &&
+@@ -1240,6 +1287,15 @@ bool Jit64::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
+       gpr.Flush(~op.gprWillBeWritten & op.regsOut, RegCache::FlushMode::Undirty);
+       fpr.Flush(~op.fprWillBeWritten & op.GetFregsOut(), RegCache::FlushMode::Undirty);
+ 
++      if (m_porpoise_plan)
++      {
++        if (op.porpoiseDefer)
++          m_porpoise_dirty |= op.GetFregsOut();
++        else
++          m_porpoise_dirty &= ~op.GetFregsOut();
++        m_porpoise_dirty &= ~op.fprDiscardable;
++      }
++
+       if (opinfo->flags & FL_LOADSTORE)
+         ++js.numLoadStoreInst;
+ 
+@@ -1260,6 +1316,7 @@ bool Jit64::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
+ 
+   if (code_block.m_broken)
+   {
++    PorpoiseRound(m_porpoise_dirty);
+     gpr.Flush();
+     fpr.Flush();
+     WriteExit(nextPC);
+@@ -1386,6 +1443,177 @@ void Jit64::FlushRegistersBeforeSlowAccess()
+   }
+ }
+ 
++// Porpoise 3.0: deferred paired-single rounding.
++//
++// The GameCube rounds every paired-single result to single precision; Dolphin does it after each
++// op, and in long chains of paired math (skinning, matrix work) that rounding is most of the
++// time. A result read only by more paired math or by a paired store (which rounds as it stores)
++// can stay unrounded until something else reads it; it is rounded before any other reader,
++// before every exit from the block, and before anything that can leave the block and come back.
++static bool PorpoisePairedArith(UGeckoInstruction inst)
++{
++  if (inst.OPCD != 4)
++    return false;
++  switch (inst.SUBOP5)
++  {
++  case 10:  // ps_sum0
++  case 11:  // ps_sum1
++  case 12:  // ps_muls0
++  case 13:  // ps_muls1
++  case 14:  // ps_madds0
++  case 15:  // ps_madds1
++  case 18:  // ps_div
++  case 20:  // ps_sub
++  case 21:  // ps_add
++  case 25:  // ps_mul
++  case 28:  // ps_msub
++  case 29:  // ps_madd
++  case 30:  // ps_nmsub
++  case 31:  // ps_nmadd
++    return true;
++  default:
++    return false;
++  }
++}
++
++// Reads its inputs without needing them rounded first.
++bool PorpoiseTolerant(const PPCAnalyst::CodeOp& op)
++{
++  const UGeckoInstruction inst = op.inst;
++  if (inst.OPCD == 60 || inst.OPCD == 61)  // psq_st, psq_stu
++    return true;
++  if (inst.OPCD == 4 && (inst.SUBOP6 == 7 || inst.SUBOP6 == 39))  // psq_stx, psq_stux
++    return true;
++  return PorpoisePairedArith(inst);
++}
++
++// Overwrites both halves of its output register.
++bool PorpoiseFullWrite(const PPCAnalyst::CodeOp& op)
++{
++  const UGeckoInstruction inst = op.inst;
++  switch (inst.OPCD)
++  {
++  case 4:   // paired singles, psq_lx, psq_lux
++  case 56:  // psq_l
++  case 57:  // psq_lu
++  case 59:  // single-precision math (both halves)
++  case 48:  // lfs
++  case 49:  // lfsu
++    return true;
++  case 31:
++    return inst.SUBOP10 == 535 || inst.SUBOP10 == 567;  // lfsx, lfsux
++  default:
++    return false;
++  }
++}
++
++// Leaves the block (or may), or depends on FPSCR / machine state.
++bool PorpoiseExitLike(const PPCAnalyst::CodeOp& op)
++{
++  if (op.skip)
++    return false;
++  switch (op.opinfo->type)
++  {
++  case OpType::Branch:
++  case OpType::System:
++  case OpType::SystemFP:
++  case OpType::Unknown:
++  case OpType::Invalid:
++  case OpType::InstructionCache:
++    return true;
++  default:
++    break;
++  }
++  return (op.opinfo->flags & FL_ENDBLOCK) != 0 || op.canEndBlock;
++}
++
++static bool PorpoiseSelfLoop(const PPCAnalyst::CodeOp& op, u32 block_start)
++{
++  return !op.skip && op.inst.OPCD == 16 && !op.inst.LK && op.branchTo == block_start;
++}
++
++BitSet32 Jit64::PorpoiseExitNeed(const PPCAnalyst::CodeOp& op) const
++{
++  // Back to this block's start: what the start overwrites before reading can stay as it is.
++  if (PorpoiseSelfLoop(op, js.blockStart))
++    return m_porpoise_dirty & ~m_porpoise_tol_entry;
++  return m_porpoise_dirty;
++}
++
++void Jit64::PorpoisePlan(u32 count)
++{
++  m_porpoise_plan = m_fast_paired_rounding && jo.accurateSinglePrecision && !jo.memcheck &&
++                    !jo.fp_exceptions && !bJITRegisterCacheOff;
++  if (m_porpoise_plan)
++  {
++    // Only the listed blocks, when there is a list.
++    static std::string s_list_text;
++    static std::vector<u32> s_list;
++    const std::string text = Config::Get(Config::MAIN_FAST_PAIRED_BLOCKS);
++    if (text != s_list_text)
++    {
++      s_list_text = text;
++      s_list.clear();
++      for (const std::string& part : SplitString(text, ','))
++      {
++        u32 address = 0;
++        if (TryParse("0x" + std::string(StripWhitespace(part)), &address))
++          s_list.push_back(address);
++      }
++    }
++    if (!s_list.empty() && std::find(s_list.begin(), s_list.end(), js.blockStart) == s_list.end())
++      m_porpoise_plan = false;
++  }
++  m_porpoise_dirty = BitSet32();
++  m_porpoise_tol_entry = BitSet32();
++  for (u32 i = 0; i < count; i++)
++  {
++    PPCAnalyst::CodeOp& op = m_code_buffer[i];
++    op.porpoiseDefer = m_porpoise_plan && PorpoisePairedArith(op.inst) && op.inst.SUBOP5 != 18 &&
++                       !op.inst.Rc && !(m_fprf && op.wantsFPRF) && op.fregOut >= 0;
++  }
++  if (!m_porpoise_plan)
++    return;
++
++  // Which registers the block's start overwrites before any other reader or any exit.
++  BitSet32 tol;
++  bool self_loop = false;
++  for (u32 n = count; n-- > 0;)
++  {
++    const PPCAnalyst::CodeOp& op = m_code_buffer[n];
++    if (op.skip)
++      continue;
++    if (PorpoiseExitLike(op))
++    {
++      tol = BitSet32();
++      self_loop |= PorpoiseSelfLoop(op, js.blockStart);
++      continue;
++    }
++    if (PorpoiseFullWrite(op))
++      tol |= op.GetFregsOut();
++    else
++      tol &= ~op.GetFregsOut();
++    if (!PorpoiseTolerant(op))
++      tol &= ~op.fregsIn;
++  }
++  m_porpoise_tol_entry = tol;
++  // Coming back around a loop, those registers may still be unrounded.
++  if (self_loop)
++    m_porpoise_dirty = tol;
++}
++
++void Jit64::PorpoiseRound(BitSet32 regs)
++{
++  for (int r : regs)
++  {
++    RCX64Reg reg = fpr.Bind(r, RCMode::ReadWrite);
++    RegCache::Realize(reg);
++    CVTPD2PS(reg, R(reg));
++    CVTPS2PD(reg, R(reg));
++  }
++  m_porpoise_dirty &= ~regs;
++}
++
+ bool Jit64::HandleFunctionHooking(u32 address)
+ {
+   const auto result = HLE::TryReplaceFunction(m_ppc_symbol_db, address, PowerPC::CoreMode::JIT);
+diff --git a/Source/Core/Core/PowerPC/Jit64/Jit.h b/Source/Core/Core/PowerPC/Jit64/Jit.h
+index da1be2db04..74e36f4016 100644
+--- a/Source/Core/Core/PowerPC/Jit64/Jit.h
++++ b/Source/Core/Core/PowerPC/Jit64/Jit.h
+@@ -277,6 +277,14 @@ private:
+ 
+   bool HandleFunctionHooking(u32 address);
+ 
++  // Porpoise 3.0: deferred paired-single rounding (Riptide Boost).
++  void PorpoisePlan(u32 count);
++  void PorpoiseRound(BitSet32 regs);
++  BitSet32 PorpoiseExitNeed(const PPCAnalyst::CodeOp& op) const;
++  bool m_porpoise_plan = false;
++  BitSet32 m_porpoise_dirty;
++  BitSet32 m_porpoise_tol_entry;
++
+   void FreeRanges();
+   void ResetFreeMemoryRanges();
+ 
+diff --git a/Source/Core/Core/PowerPC/Jit64/Jit_FloatingPoint.cpp b/Source/Core/Core/PowerPC/Jit64/Jit_FloatingPoint.cpp
+index 86f9e49178..ff12386950 100644
+--- a/Source/Core/Core/PowerPC/Jit64/Jit_FloatingPoint.cpp
++++ b/Source/Core/Core/PowerPC/Jit64/Jit_FloatingPoint.cpp
+@@ -50,7 +50,8 @@ void Jit64::SetFPRFIfNeeded(const OpArg& input, bool single)
+ void Jit64::FinalizeSingleResult(X64Reg output, const OpArg& input, bool packed, bool duplicate)
+ {
+   // Most games don't need these. Zelda requires it though - some platforms get stuck without them.
+-  if (jo.accurateSinglePrecision)
++  // Porpoise 3.0: a deferred paired-single result is rounded where it is read (PorpoisePlan).
++  if (jo.accurateSinglePrecision && !(js.op && js.op->porpoiseDefer))
+   {
+     if (packed)
+     {
+@@ -69,13 +70,12 @@ void Jit64::FinalizeSingleResult(X64Reg output, const OpArg& input, bool packed,
+   }
+   else
+   {
+-    if (!input.IsSimpleReg(output))
+-    {
+-      if (duplicate)
+-        MOVDDUP(output, input);
+-      else
+-        MOVAPD(output, input);
+-    }
++    // Porpoise: a packed result keeps both halves (as the rounding path above does);
++    // only a scalar result is duplicated.
++    if (!packed && duplicate)
++      MOVDDUP(output, input);
++    else if (!input.IsSimpleReg(output))
++      MOVAPD(output, input);
+ 
+     SetFPRFIfNeeded(input, false);
+   }
+@@ -379,7 +379,7 @@ void Jit64::fmaddXX(UGeckoInstruction inst)
+   const bool madds0 = inst.SUBOP5 == 14;
+   const bool madds1 = inst.SUBOP5 == 15;
+   const bool single = inst.OPCD == 4 || inst.OPCD == 59;
+-  const bool round_input = single && !js.op->fprIsSingle[c];
++  const bool round_input = single && !js.op->fprIsSingle[c] && !js.op->porpoiseDefer;
+ 
+   const bool error_free_transformation = single && m_accurate_fmadds;
+   const bool packed =
+diff --git a/Source/Core/Core/PowerPC/Jit64/Jit_LoadStorePaired.cpp b/Source/Core/Core/PowerPC/Jit64/Jit_LoadStorePaired.cpp
+index 8dfee9239b..5242a1ffca 100644
+--- a/Source/Core/Core/PowerPC/Jit64/Jit_LoadStorePaired.cpp
++++ b/Source/Core/Core/PowerPC/Jit64/Jit_LoadStorePaired.cpp
+@@ -61,7 +61,13 @@ void Jit64::psq_stXX(UGeckoInstruction inst)
+ 
+     // Paired stores (other than w/type zero) don't yield any real change in
+     // performance right now, but if we can improve fastmem support this might change
+-    if (gqrValue == 0)
++    //
++    // Porpoise (Riptide Boost): every quantized store with a known GQR is written
++    // in place, with fastmem, instead of calling the shared routine, whose store
++    // checks the address in the BAT table first. The same code, so the same
++    // bytes in memory; four calls fewer per pass in Day of Reckoning 2's
++    // skinning loops.
++    if (gqrValue == 0 || m_fast_paired_rounding)
+     {
+       if (w)
+         GenQuantizedStore(true, static_cast<EQuantizeType>(type), (gqrValue & 0x3F00) >> 8);
+diff --git a/Source/Core/Core/PowerPC/Jit64/Jit_Paired.cpp b/Source/Core/Core/PowerPC/Jit64/Jit_Paired.cpp
+index 2e1b05cb42..b99786cdce 100644
+--- a/Source/Core/Core/PowerPC/Jit64/Jit_Paired.cpp
++++ b/Source/Core/Core/PowerPC/Jit64/Jit_Paired.cpp
+@@ -79,7 +79,7 @@ void Jit64::ps_muls(UGeckoInstruction inst)
+   int d = inst.FD;
+   int a = inst.FA;
+   int c = inst.FC;
+-  bool round_input = !js.op->fprIsSingle[c];
++  bool round_input = !js.op->fprIsSingle[c] && !js.op->porpoiseDefer;
+ 
+   RCOpArg Ra = fpr.Use(a, RCMode::Read);
+   RCOpArg Rc = fpr.Use(c, RCMode::Read);
+diff --git a/Source/Core/Core/PowerPC/JitCommon/JitBase.cpp b/Source/Core/Core/PowerPC/JitCommon/JitBase.cpp
+index b2ff246cce..90439557da 100644
+--- a/Source/Core/Core/PowerPC/JitCommon/JitBase.cpp
++++ b/Source/Core/Core/PowerPC/JitCommon/JitBase.cpp
+@@ -58,7 +58,7 @@
+ // After resetting the stack to the top, we call _resetstkoflw() to restore
+ // the guard page at the 256kb mark.
+ 
+-const std::array<std::pair<bool JitBase::*, const Config::Info<bool>*>, 25> JitBase::JIT_SETTINGS{{
++const std::array<std::pair<bool JitBase::*, const Config::Info<bool>*>, 27> JitBase::JIT_SETTINGS{{
+     {&JitBase::bJITOff, &Config::MAIN_DEBUG_JIT_OFF},
+     {&JitBase::bJITLoadStoreOff, &Config::MAIN_DEBUG_JIT_LOAD_STORE_OFF},
+     {&JitBase::bJITLoadStorelXzOff, &Config::MAIN_DEBUG_JIT_LOAD_STORE_LXZ_OFF},
+@@ -81,6 +81,8 @@ const std::array<std::pair<bool JitBase::*, const Config::Info<bool>*>, 25> JitB
+     {&JitBase::m_fprf, &Config::MAIN_FPRF},
+     {&JitBase::m_accurate_nans, &Config::MAIN_ACCURATE_NANS},
+     {&JitBase::m_accurate_fmadds, &Config::MAIN_ACCURATE_FMADDS},
++    {&JitBase::m_fast_paired_math, &Config::MAIN_FAST_PAIRED_MATH},
++    {&JitBase::m_fast_paired_rounding, &Config::MAIN_FAST_PAIRED_ROUNDING},
+     {&JitBase::m_fastmem_enabled, &Config::MAIN_FASTMEM},
+     {&JitBase::m_page_table_fastmem_enabled, &Config::MAIN_PAGE_TABLE_FASTMEM},
+     {&JitBase::m_accurate_cpu_cache_enabled, &Config::MAIN_ACCURATE_CPU_CACHE},
+diff --git a/Source/Core/Core/PowerPC/JitCommon/JitBase.h b/Source/Core/Core/PowerPC/JitCommon/JitBase.h
+index 612161b492..97bf8c0b5c 100644
+--- a/Source/Core/Core/PowerPC/JitCommon/JitBase.h
++++ b/Source/Core/Core/PowerPC/JitCommon/JitBase.h
+@@ -8,6 +8,7 @@
+ #include <iosfwd>
+ #include <map>
+ #include <string_view>
++#include <unordered_map>
+ #include <unordered_set>
+ #include <utility>
+ #include <vector>
+@@ -130,6 +131,9 @@ protected:
+ 
+     std::unordered_set<u32> fifoWriteAddresses;
+     std::unordered_set<u32> pairedQuantizeAddresses;
++    // Porpoise 3.0: how often a block's quantizer guess was wrong (see
++    // JitInterface::CompileExceptionCheck).
++    std::unordered_map<u32, u32> pairedQuantizeRetries;
+     std::unordered_set<u32> noSpeculativeConstantsAddresses;
+   };
+ 
+@@ -160,6 +164,8 @@ protected:
+   bool m_fprf = false;
+   bool m_accurate_nans = false;
+   bool m_accurate_fmadds = false;
++  bool m_fast_paired_math = false;
++  bool m_fast_paired_rounding = false;
+   bool m_fastmem_enabled = false;
+   bool m_page_table_fastmem_enabled = false;
+   bool m_accurate_cpu_cache_enabled = false;
+@@ -168,7 +174,7 @@ protected:
+   bool m_cleanup_after_stackfault = false;
+   u8* m_stack_guard = nullptr;
+ 
+-  static const std::array<std::pair<bool JitBase::*, const Config::Info<bool>*>, 25> JIT_SETTINGS;
++  static const std::array<std::pair<bool JitBase::*, const Config::Info<bool>*>, 27> JIT_SETTINGS;
+ 
+   bool DoesConfigNeedRefresh() const;
+   void RefreshConfig();
+diff --git a/Source/Core/Core/PowerPC/JitCommon/JitCache.cpp b/Source/Core/Core/PowerPC/JitCommon/JitCache.cpp
+index 626a46b4a7..b526a43692 100644
+--- a/Source/Core/Core/PowerPC/JitCommon/JitCache.cpp
++++ b/Source/Core/Core/PowerPC/JitCommon/JitCache.cpp
+@@ -81,6 +81,7 @@ void JitBaseBlockCache::Clear()
+ #endif
+   m_jit.js.fifoWriteAddresses.clear();
+   m_jit.js.pairedQuantizeAddresses.clear();
++  m_jit.js.pairedQuantizeRetries.clear();
+   m_jit.js.noSpeculativeConstantsAddresses.clear();
+   for (auto& e : block_map)
+   {
+diff --git a/Source/Core/Core/PowerPC/JitInterface.cpp b/Source/Core/Core/PowerPC/JitInterface.cpp
+index f229be35f2..5363634406 100644
+--- a/Source/Core/Core/PowerPC/JitInterface.cpp
++++ b/Source/Core/Core/PowerPC/JitInterface.cpp
+@@ -3,6 +3,8 @@
+ 
+ #include "Core/PowerPC/JitInterface.h"
+ 
++#include "Core/Config/MainSettings.h"
++
+ #include <string>
+ #include <unordered_set>
+ 
+@@ -341,6 +343,14 @@ void JitInterface::CompileExceptionCheck(ExceptionType type)
+       if (optype != OpType::Store && optype != OpType::StoreFP && optype != OpType::StorePS)
+         return;
+     }
++    if (type == ExceptionType::PairedQuantize &&
++        static_cast<int>(++m_jit->js.pairedQuantizeRetries[ppc_state.pc]) <=
++            Config::Get(Config::MAIN_PAIRED_QUANTIZE_RETRIES))
++    {
++      // Guess again, with the quantizers as they are now.
++      m_jit->GetBlockCache()->InvalidateICache(ppc_state.pc, 4, true);
++      return;
++    }
+     exception_addresses->insert(ppc_state.pc);
+ 
+     // Invalidate the JIT block so that it gets recompiled with the external exception check
+diff --git a/Source/Core/Core/PowerPC/PPCAnalyst.h b/Source/Core/Core/PowerPC/PPCAnalyst.h
+index f9081bae93..501a3266f7 100644
+--- a/Source/Core/Core/PowerPC/PPCAnalyst.h
++++ b/Source/Core/Core/PowerPC/PPCAnalyst.h
+@@ -76,6 +76,8 @@ struct CodeOp  // 16B
+   // denormals and SNaNs being preserved as long as no arithmetic operation is performed on them.)
+   BitSet32 fprIsStoreSafeBeforeInst;
+   BitSet32 fprIsStoreSafeAfterInst;
++  // Porpoise: a paired-single result left unrounded (rounded later, where it is read).
++  bool porpoiseDefer = false;
+ 
+   BitSet32 GetFregsOut() const
+   {
+diff --git a/Source/Core/DolphinLibretro/Achievements.cpp b/Source/Core/DolphinLibretro/Achievements.cpp
+new file mode 100644
+index 0000000000..db6cdbdacd
+--- /dev/null
++++ b/Source/Core/DolphinLibretro/Achievements.cpp
+@@ -0,0 +1,179 @@
++// Copyright 2026 Ruben (Project Porpoise)
++// SPDX-License-Identifier: GPL-2.0-or-later
++
++// Porpoise: RetroAchievements (softcore) under the host. The host hands over
++// the account and its network and popup functions before each game
++// (porpoise_ra_setup); the core signs in with the token as the game starts.
++
++#include "DolphinLibretro/Achievements.h"
++
++#include <cstdio>
++#include <cstring>
++#include <mutex>
++#include <string>
++
++#ifdef USE_RETRO_ACHIEVEMENTS
++#include "Common/Config/Config.h"
++#include "Common/Logging/Log.h"
++#include "Common/Logging/LogManager.h"
++#include "Core/AchievementHooks.h"
++#include "Core/AchievementManager.h"
++#include "Core/Config/AchievementSettings.h"
++#endif
++
++namespace
++{
++struct Setup
++{
++  bool given = false;
++  std::string username, token;
++};
++Setup s_setup;
++}  // namespace
++
++extern "C" {
++struct porpoise_ra_setup_t
++{
++  unsigned version;  // 1
++  const char* username;
++  const char* token;
++  int (*request)(const char* url, const char* post_data, void* ctx,
++                 void (*sink)(void* ctx, const char* data, size_t size));
++  void (*event)(int kind, const char* title, const char* text, const char* image_url, int a, int b);
++};
++
++// Before retro_load_game. A null or empty account: no achievements this game.
++__attribute__((visibility("default"))) int porpoise_ra_setup(const porpoise_ra_setup_t* setup)
++{
++#ifdef USE_RETRO_ACHIEVEMENTS
++  s_setup = {};
++  AchievementHooks::request = nullptr;
++  AchievementHooks::event = nullptr;
++  if (!setup || setup->version != 1 || !setup->username || !setup->token || !*setup->username ||
++      !*setup->token || !setup->request)
++    return 0;
++  s_setup.given = true;
++  s_setup.username = setup->username;
++  s_setup.token = setup->token;
++  AchievementHooks::request = setup->request;
++  AchievementHooks::event = setup->event;
++  return 1;
++#else
++  (void)setup;
++  return 0;
++#endif
++}
++
++// The running game's achievements, as text Porpoise reads (its in-game menu
++// and the list it keeps for Details): a line "G" for the game, then one "A"
++// per achievement, fields separated by tabs. Returns the size the whole text
++// needs (with its NUL; copied in when it fits), or -1 when no game's set is
++// loaded.
++//   G  id  title  badge_url  unlocked  total  points_unlocked  points_total
++//   A  id  points  unlocked(0/1)  unlock_time  type  rarity  measured_progress
++//      title  description  badge_url  badge_locked_url
++__attribute__((visibility("default"))) int porpoise_ra_list(char* buf, int size)
++{
++#ifdef USE_RETRO_ACHIEVEMENTS
++  auto& manager = AchievementManager::GetInstance();
++  std::lock_guard lg{manager.GetLock()};
++  rc_client_t* client = manager.GetClient();
++  const rc_client_game_t* game = client ? rc_client_get_game_info(client) : nullptr;
++  if (!game || game->id == 0)
++    return -1;
++  auto clean = [](const char* s) {
++    std::string out = s ? s : "";
++    for (char& c : out)
++      if (c == '\t' || c == '\n' || c == '\r')
++        c = ' ';
++    return out;
++  };
++  rc_client_user_game_summary_t summary{};
++  rc_client_get_user_game_summary(client, &summary);
++  char game_badge[512] = "";
++  if (rc_client_game_get_image_url(game, game_badge, sizeof game_badge) != RC_OK)
++    game_badge[0] = '\0';
++  std::string out = "G\t" + std::to_string(game->id) + "\t" + clean(game->title) + "\t" + game_badge + "\t" +
++                    std::to_string(summary.num_unlocked_achievements) + "\t" +
++                    std::to_string(summary.num_core_achievements) + "\t" +
++                    std::to_string(summary.points_unlocked) + "\t" + std::to_string(summary.points_core) +
++                    "\n";
++  if (rc_client_achievement_list_t* list = rc_client_create_achievement_list(
++          client, RC_CLIENT_ACHIEVEMENT_CATEGORY_CORE, RC_CLIENT_ACHIEVEMENT_LIST_GROUPING_LOCK_STATE))
++  {
++    for (uint32_t b = 0; b < list->num_buckets; ++b)
++      for (uint32_t i = 0; i < list->buckets[b].num_achievements; ++i)
++      {
++        const rc_client_achievement_t* a = list->buckets[b].achievements[i];
++        char rarity[16];
++        std::snprintf(rarity, sizeof rarity, "%.1f", double(a->rarity));
++        out += "A\t" + std::to_string(a->id) + "\t" + std::to_string(a->points) + "\t" +
++               (a->state == RC_CLIENT_ACHIEVEMENT_STATE_UNLOCKED ? "1" : "0") + "\t" +
++               std::to_string(static_cast<long long>(a->unlock_time)) + "\t" + std::to_string(a->type) +
++               "\t" + rarity + "\t" + clean(a->measured_progress) + "\t" + clean(a->title) + "\t" +
++               clean(a->description) + "\t" + clean(a->badge_url) + "\t" + clean(a->badge_locked_url) +
++               "\n";
++      }
++    rc_client_destroy_achievement_list(list);
++  }
++  const int need = static_cast<int>(out.size()) + 1;
++  if (buf && size >= need)
++    std::memcpy(buf, out.c_str(), static_cast<size_t>(need));
++  return need;
++#else
++  (void)buf;
++  (void)size;
++  return -1;
++#endif
++}
++
++// Requests still queued or being sent (an unlock on its way).
++__attribute__((visibility("default"))) int porpoise_ra_pending()
++{
++#ifdef USE_RETRO_ACHIEVEMENTS
++  return AchievementHooks::pending.load();
++#else
++  return 0;
++#endif
++}
++}
++
++namespace Libretro::Achievements
++{
++void Start(const std::string& game_path)
++{
++#ifdef USE_RETRO_ACHIEVEMENTS
++  AchievementManager::GetInstance().Shutdown();  // one left by a game that didn't boot
++  AchievementHooks::boot_path = game_path;
++  {
++    std::lock_guard lock{AchievementHooks::message_lock};
++    AchievementHooks::last_message.clear();
++  }
++  // rcheevos' own account of each step goes to core.log (it is off by default).
++  if (s_setup.given)
++    Common::Log::LogManager::GetInstance()->SetEnable(Common::Log::LogType::ACHIEVEMENTS, true);
++  // The current layer: nothing here is written back to RetroAchievements.ini.
++  Config::SetCurrent(Config::RA_ENABLED, s_setup.given);
++  Config::SetCurrent(Config::RA_HARDCORE_ENABLED, false);  // softcore only
++  Config::SetCurrent(Config::RA_UNOFFICIAL_ENABLED, false);
++  Config::SetCurrent(Config::RA_ENCORE_ENABLED, false);
++  Config::SetCurrent(Config::RA_SPECTATOR_ENABLED, false);
++  Config::SetCurrent(Config::RA_DISCORD_PRESENCE_ENABLED, false);
++  Config::SetCurrent(Config::RA_USERNAME, s_setup.given ? s_setup.username : std::string());
++  Config::SetCurrent(Config::RA_API_TOKEN, s_setup.given ? s_setup.token : std::string());
++  if (s_setup.given)
++    AchievementManager::GetInstance().Init(nullptr);
++#endif
++}
++
++void Stop()
++{
++#ifdef USE_RETRO_ACHIEVEMENTS
++  AchievementManager::GetInstance().Shutdown();
++  AchievementHooks::boot_path.clear();
++  AchievementHooks::request = nullptr;
++  AchievementHooks::event = nullptr;
++  s_setup = {};
++#endif
++}
++}  // namespace Libretro::Achievements
+diff --git a/Source/Core/DolphinLibretro/Achievements.h b/Source/Core/DolphinLibretro/Achievements.h
+new file mode 100644
+index 0000000000..ff7129fc3d
+--- /dev/null
++++ b/Source/Core/DolphinLibretro/Achievements.h
+@@ -0,0 +1,13 @@
++// Copyright 2026 Ruben (Project Porpoise)
++// SPDX-License-Identifier: GPL-2.0-or-later
++#pragma once
++
++#include <string>
++
++namespace Libretro::Achievements
++{
++// As the game boots (after the config is read; game_path: the file booted)
++// and after it has stopped.
++void Start(const std::string& game_path);
++void Stop();
++}  // namespace Libretro::Achievements
+diff --git a/Source/Core/DolphinLibretro/Audio.cpp b/Source/Core/DolphinLibretro/Audio.cpp
+index a96698067d..5f74d2dbe2 100644
+--- a/Source/Core/DolphinLibretro/Audio.cpp
++++ b/Source/Core/DolphinLibretro/Audio.cpp
+@@ -1,9 +1,12 @@
+ #include <libretro.h>
++#include <mutex>
+ #include "Audio.h"
+ #include "Common/Logging/Log.h"
+ #include "Common/Thread.h"
+ #include "Core/Config/MainSettings.h"
++#include "Core/System.h"
+ #include "AudioCommon/AudioCommon.h"
++#include "AudioCommon/Mixer.h"
+ #include "VideoCommon/Present.h"
+ #include "DolphinLibretro/Common/Globals.h"
+ 
+@@ -152,6 +155,10 @@ bool Stream::IsValid()
+ 
+ void Stream::Update(unsigned int num_samples)
+ {
++  // Porpoise pulls the sound itself (porpoise_audio_pull): nothing is pushed.
++  if (Mixer::PorpoiseIsPulling())
++    return;
++
+   if (g_use_call_back_audio != CallBackMode::PUSH_SAMPLES) {
+     return;
+   }
+@@ -219,6 +226,9 @@ void Stream::MixAndPush(unsigned int num_samples)
+ 
+ void Stream::PushAudioForFrame()
+ {
++  if (Mixer::PorpoiseIsPulling())
++    return;
++
+   if (g_use_call_back_audio != CallBackMode::SYNC_PER_FRAME || !m_mixer || !batch_cb)
+     return;
+ 
+@@ -451,6 +461,73 @@ void retroarch_audio_buffer_status_cb(bool active,
+   Libretro::Audio::g_buf_underrun.store(underrun_likely, std::memory_order_relaxed);
+ }
+ 
++// Porpoise: the Wii Remotes' speakers on their own, for the controllers'
++// speakers. With Core/WiimoteAudioRoutingEnabled (and WiimoteNAudioOutputEnabled)
++// the mixer leaves a Remote's sound out of the TV's and keeps it for these.
++namespace AudioCommon
++{
++extern std::mutex g_porpoise_sound_stream_lock;
++}
++using AudioCommon::g_porpoise_sound_stream_lock;
++
++extern "C" __attribute__((visibility("default"))) size_t porpoise_mix_wiimote_speaker(unsigned index, int16_t* stereo,
++                                                                                    size_t frames)
++{
++  // The stream can be freed by the emulation thread at any time: not while this holds the lock.
++  std::lock_guard<std::mutex> lock(g_porpoise_sound_stream_lock);
++  SoundStream* sound_stream = Core::System::GetInstance().GetSoundStream();
++  if (!sound_stream || !sound_stream->GetMixer() || !stereo)
++    return 0;
++  return sound_stream->GetMixer()->MixWiimoteSpeaker(index, stereo, frames);
++}
++
++// Porpoise: the game's sound pulled at the speakers' pace, as Dolphin's own audio backends
++// do, so Dolphin's mixer fills the gaps when a game runs slow (instead of the front end's
++// queue running dry and crackling). pull 0 goes back to the sound pushed each frame.
++extern "C" __attribute__((visibility("default"))) int porpoise_audio_pull_config(int pull, int buffer_ms,
++                                                                               int fill_gaps)
++{
++  Mixer::PorpoiseSetPull(pull != 0, buffer_ms, fill_gaps != 0);
++  return 1;
++}
++
++// Mixes `frames` stereo frames at out_rate (the mixer's output rate follows it, which the
++// front end nudges to keep the queue at its length). 0 when there is no game sound yet.
++extern "C" __attribute__((visibility("default"))) size_t porpoise_audio_pull(int16_t* stereo, size_t frames,
++                                                                           unsigned out_rate)
++{
++  std::lock_guard<std::mutex> lock(g_porpoise_sound_stream_lock);
++  SoundStream* sound_stream = Core::System::GetInstance().GetSoundStream();
++  if (!sound_stream || !sound_stream->GetMixer() || !stereo || !Mixer::PorpoiseIsPulling())
++    return 0;
++  Mixer* mixer = sound_stream->GetMixer();
++  if (out_rate >= 8000 && out_rate <= 192000 && mixer->GetSampleRate() != out_rate)
++    mixer->SetSampleRate(out_rate);
++  return mixer->Mix(stereo, frames);
++}
++
++// The game's sound waiting (granules), the length the buffer size asks for, and the frames
++// the game has made so far.
++extern "C" __attribute__((visibility("default"))) int porpoise_audio_queue(unsigned* queued, unsigned* target,
++                                                                         unsigned long long* pushed)
++{
++  std::lock_guard<std::mutex> lock(g_porpoise_sound_stream_lock);
++  SoundStream* sound_stream = Core::System::GetInstance().GetSoundStream();
++  if (!sound_stream || !sound_stream->GetMixer())
++    return 0;
++  sound_stream->GetMixer()->PorpoiseQueue(queued, target, pushed);
++  return 1;
++}
++
++extern "C" __attribute__((visibility("default"))) unsigned porpoise_wiimote_speaker_rate()
++{
++  std::lock_guard<std::mutex> lock(g_porpoise_sound_stream_lock);
++  SoundStream* sound_stream = Core::System::GetInstance().GetSoundStream();
++  if (!sound_stream || !sound_stream->GetMixer())
++    return 0;
++  return sound_stream->GetMixer()->GetSampleRate();
++}
++
+ // retroarch hooks
+ extern "C" {
+ 
+diff --git a/Source/Core/DolphinLibretro/Boot.cpp b/Source/Core/DolphinLibretro/Boot.cpp
+index c53281053f..dce587dd93 100644
+--- a/Source/Core/DolphinLibretro/Boot.cpp
++++ b/Source/Core/DolphinLibretro/Boot.cpp
+@@ -1,4 +1,5 @@
+ #include <cstdio>
++#include "Common/CPUDetect.h"
+ #include <libretro.h>
+ #include <string>
+ #include <functional>
+@@ -6,6 +7,7 @@
+ #include <fstream>
+ 
+ #include "Common/CommonPaths.h"
++#include "Core/HLE/HLE_PorpoiseWidescreen.h"
+ #include "Core/CommonTitles.h"
+ #include "Common/FileUtil.h"
+ #include "Common/StringUtil.h"
+@@ -14,6 +16,7 @@
+ #include "Core/BootManager.h"
+ #include "Core/Config/GraphicsSettings.h"
+ #include "Core/Config/MainSettings.h"
++#include "Core/Config/SessionSettings.h"
+ #include "Core/Config/SYSCONFSettings.h"
+ #include "Core/ConfigManager.h"
+ #include "Core/Core.h"
+@@ -25,6 +28,7 @@
+ #include "Core/HW/WiimoteReal/WiimoteReal.h"
+ #include "Core/PowerPC/PowerPC.h"
+ #include "Core/System.h"
++#include "DolphinLibretro/Achievements.h"
+ #include "DolphinLibretro/Audio.h"
+ #include "DolphinLibretro/Input.h"
+ #include "DolphinLibretro/Log.h"
+@@ -280,6 +284,8 @@ bool retro_load_game(const struct retro_game_info* game)
+   UICommon::Init();
+   Libretro::Log::Init();
+ 
++  // The GBA settings exist only when libmgba is built (USE_MGBA).
++#ifdef HAS_LIBMGBA
+   if (Libretro::GBPlayer_active)
+   {
+     Config::SetBase(Config::MAIN_GBA_ROM_PATHS[Config::GBPLAYER_GBA_INDEX], Libretro::GBPlayer_rom_path);
+@@ -294,7 +300,31 @@ bool retro_load_game(const struct retro_game_info* game)
+   {
+     Config::SetBase(Config::MAIN_GBA_ROM_PATHS[Config::GBPLAYER_GBA_INDEX], std::string{});
+   }
++#endif
+ 
++#ifdef __PROSPERO__
++  // The fog debug mode (VideoCommon/PixelShaderGen.cpp) changes shader code
++  // without changing a shader's key, so the disk cache would hand back the
++  // ordinary shaders: it is off for such a run.
++  {
++    extern int Ps5DolphinDebugMode();
++    if (Ps5DolphinDebugMode() != 0)
++      Config::SetBase(Config::GFX_SHADER_CACHE, false);
++    // "dump": every frame as an image in the user directory's Dump/Frames, to
++    // compare with desktop Dolphin playing the same FIFO log.
++    // "swloader": Dolphin's software vertex loader instead of the x86-64 JIT one.
++    if (Ps5DolphinDebugMode() == 4)
++      Config::SetBase(Config::GFX_VERTEX_LOADER_TYPE, VertexLoaderType::Software);
++    // "cmploader": both loaders, every mismatch logged (VertexLoaderTester).
++    if (Ps5DolphinDebugMode() == 5)
++      Config::SetBase(Config::GFX_VERTEX_LOADER_TYPE, VertexLoaderType::Compare);
++    if (Ps5DolphinDebugMode() == 3)
++    {
++      Config::SetBase(Config::MAIN_MOVIE_DUMP_FRAMES, true);
++      Config::SetBase(Config::GFX_DUMP_FRAMES_AS_IMAGES, true);
++    }
++  }
++#endif
+   Discord::SetDiscordPresenceEnabled(false);
+   Common::SetEnableAlert(false);
+   Common::SetAbortOnPanicAlert(false);
+@@ -303,6 +333,18 @@ bool retro_load_game(const struct retro_game_info* game)
+   {
+     // Log the message instead of showing a popup
+     WARN_LOG_FMT(COMMON, "Suppressed popup: {} - {}", caption, text);
++#ifdef __PROSPERO__
++    // The title's trace carries the first alerts too: on screen they last two
++    // seconds, and a run is judged from its trace. Bounded, since an alert a
++    // frame would otherwise be a line a frame.
++    static int ps5_alerts;
++    if (ps5_alerts < 32)
++    {
++      ++ps5_alerts;
++      std::fprintf(stderr, "dolphin alert: %s - %s\n", caption ? caption : "",
++                   text ? text : "");
++    }
++#endif
+     Libretro::Log::LogFrontEnd(style, caption, text, 2000);
+     return true; // Always "continue"
+   });
+@@ -357,6 +399,30 @@ bool retro_load_game(const struct retro_game_info* game)
+ #endif
+   Config::SetBase(Config::MAIN_ACCURATE_CPU_CACHE,
+     Libretro::GetOption<bool>(core::MAIN_ACCURATE_CPU_CACHE, /*def=*/false));
++#ifdef __PROSPERO__
++  {
++    const bool exact_fma = Libretro::GetOption<bool>(core::ACCURATE_FMADDS, /*def=*/false);
++    Config::SetBase(Config::MAIN_ACCURATE_FMADDS, exact_fma);
++    NOTICE_LOG_FMT(BOOT, "Exact multiply-add rounding (AccurateFmadds) = {}", exact_fma ? "Yes" : "No");
++  }
++  {
++    // Porpoise 3.0: fast float math, the game's own choice.
++    const bool fast = Libretro::GetOption<bool>(core::FAST_FLOAT_MATH, /*def=*/false);
++    // Paired-single results stay unrounded only while paired math and paired
++    // stores read them; anything else that reads them, and every exit from a
++    // block, gets them rounded first (Jit64::PorpoisePlan). Leaving every result
++    // unrounded ran Mario Superstar Baseball twice as fast but froze it.
++    Config::SetBase(Config::MAIN_FAST_PAIRED_ROUNDING, fast);
++    NOTICE_LOG_FMT(BOOT, "Riptide Boost (deferred paired rounding) = {}", fast ? "Yes" : "No");
++  }
++  {
++    // Porpoise 3.0: the universal widescreen (beta), hooked as the game boots.
++    const bool universal = Libretro::GetOption<bool>(core::UNIVERSAL_WIDESCREEN, /*def=*/false);
++    HLE_PorpoiseWidescreen::SetEnabled(universal);
++    NOTICE_LOG_FMT(BOOT, "Universal widescreen = {}", universal ? "Yes" : "No");
++  }
++
++#endif
+ 
+   Config::SetBase(Config::MAIN_DSP_HLE,
+                      Libretro::GetOption<bool>(audio::DSP_HLE, /*def=*/true));
+@@ -496,6 +562,12 @@ bool retro_load_game(const struct retro_game_info* game)
+ 
+   Config::SetBase(Config::GFX_WAIT_FOR_SHADERS_BEFORE_STARTING,
+     Libretro::GetOption<bool>(gfx_settings::WAIT_FOR_SHADERS, /*def=*/false));
++#ifdef __PROSPERO__
++  // Porpoise 3.0: two threads compile the shaders a game asks for (Dolphin's
++  // default is one), so its exact shaders replace the slower ubershaders
++  // sooner; the PS5 has cores to spare beside the CPU and GPU threads.
++  Config::SetBase(Config::GFX_SHADER_COMPILER_THREADS, 2);
++#endif
+ 
+   if (Common::is_uwp())
+     Config::SetBase(Config::GFX_SHADER_CACHE, false);
+@@ -646,6 +718,10 @@ bool retro_load_game(const struct retro_game_info* game)
+   NOTICE_LOG_FMT(BOOT, "CPU Core: {}", Libretro::Options::CPUCoreToString(Config::Get(Config::MAIN_CPU_CORE)));
+   NOTICE_LOG_FMT(BOOT, "Fastmem enabled = {}", (Config::Get(Config::MAIN_FASTMEM)) ? "Yes" : "No");
+   NOTICE_LOG_FMT(BOOT, "JIT debug enabled = {}", Config::IsDebuggingEnabled() ? "Yes" : "No");
++  // Porpoise: what the JIT may use of this CPU (FMA and AVX make the game's
++  // paired-single maths shorter).
++  NOTICE_LOG_FMT(BOOT, "CPU: {} | FMA used = {}", cpu_info.Summarize(),
++                 Config::Get(Config::SESSION_USE_FMA) ? "Yes" : "No");
+ 
+   Libretro::FrameTiming::Init();
+   Libretro::Audio::Init();
+@@ -737,6 +813,13 @@ bool retro_load_game(const struct retro_game_info* game)
+     ERROR_LOG_FMT(BOOT, "Could not boot {}", game->path);
+     return false;
+   }
++  /* Porpoise: RetroAchievements after BootCore, which closes any game the
++   * manager has (SetRunningGameMetadata -> CloseGame cancels its queue: the
++   * token sign-in queued before it was dropped, and the set never loaded).
++   * The game itself boots on the first retro_run (EmuThread), which is when
++   * its set is identified. */
++  if (!normalized_game_paths.empty())
++    Libretro::Achievements::Start(normalized_game_paths.front());
+ 
+   Libretro::Input::InitStage2();
+ 
+@@ -804,6 +887,7 @@ void retro_unload_game(void)
+ 
+     Core::Shutdown(system);
+   }
++  Libretro::Achievements::Stop();
+ 
+   if (!g_context_status.IsDestroyed() && g_video_backend)
+     g_video_backend->Shutdown();
+diff --git a/Source/Core/DolphinLibretro/CMakeLists.txt b/Source/Core/DolphinLibretro/CMakeLists.txt
+index 50497a7171..2e5629cfa6 100644
+--- a/Source/Core/DolphinLibretro/CMakeLists.txt
++++ b/Source/Core/DolphinLibretro/CMakeLists.txt
+@@ -1,5 +1,6 @@
+ 
+ add_library(dolphin_libretro SHARED
++  Achievements.cpp
+   Audio.cpp
+   Boot.cpp
+   Host.cpp
+diff --git a/Source/Core/DolphinLibretro/Common/Options.cpp b/Source/Core/DolphinLibretro/Common/Options.cpp
+index 52791da8de..9197de420f 100644
+--- a/Source/Core/DolphinLibretro/Common/Options.cpp
++++ b/Source/Core/DolphinLibretro/Common/Options.cpp
+@@ -1,6 +1,13 @@
+ 
+ #include <libretro.h>
++#include <cstdio>
+ #include <cstdlib>
++#include <cstring>
++#ifdef __PROSPERO__
++#include <fcntl.h>
++#include <sys/stat.h>
++#include <unistd.h>
++#endif
+ #include "DolphinLibretro/Common/Options.h"
+ 
+ namespace Libretro
+@@ -243,6 +250,51 @@ static struct retro_core_option_v2_definition option_defs[] = {
+     },
+     "disabled"
+   },
++#ifdef __PROSPERO__
++  {
++    Libretro::Options::core::ACCURATE_FMADDS,
++    "Core > Accurate single-precision multiply-add",
++    "Accurate single-precision multiply-add",
++    "Rounds fmadds and ps_madd exactly as the console does. Slower; only a few games need it.",
++    nullptr,
++    CATEGORY_CORE,
++    {
++      { "disabled", nullptr },
++      { "enabled",  nullptr },
++      { nullptr, nullptr }
++    },
++    "disabled"
++  },
++  {
++    Libretro::Options::core::UNIVERSAL_WIDESCREEN,
++    "Core > Universal widescreen",
++    "Universal widescreen",
++    "Widens the game's own 3D view to 16:9 where it uses the SDK's projection functions.",
++    nullptr,
++    CATEGORY_CORE,
++    {
++      { "disabled", nullptr },
++      { "enabled",  nullptr },
++      { nullptr, nullptr }
++    },
++    "disabled"
++  },
++  {
++    Libretro::Options::core::FAST_FLOAT_MATH,
++    "Core > Riptide Boost",
++    "Riptide Boost",
++    "Paired-single results are rounded where they are read, not after every operation. Up to twice as "
++    "fast in games heavy on paired-single math.",
++    nullptr,
++    CATEGORY_CORE,
++    {
++      { "disabled", nullptr },
++      { "enabled",  nullptr },
++      { nullptr, nullptr }
++    },
++    "disabled"
++  },
++#endif
+   {
+     Libretro::Options::core::CHEATS_ENABLED,
+     "Core > Internal Cheats",
+@@ -1876,9 +1928,61 @@ void Init()
+   CheckForUpdatedVariables();
+ }
+ 
++#ifdef __PROSPERO__
++// PS5 port: the defaults are the best picture that holds full speed on the
++// console (tooling/dolphin-profiles/p12-ps5-best.txt in the title's repository):
++// 6x internal resolution, asynchronous ubershaders -- exact ubershaders draw
++// while the specialised shaders compile in the background, so nothing is
++// skipped and nothing stalls -- 16x anisotropic filtering, and texture decoding
++// on the GPU. Every accuracy setting keeps Dolphin's default. Resident Evil 4,
++// Melee, Wind Waker and Mario Kart Wii held 100% in every window after boot.
++static void Ps5ApplyDefaultProfile()
++{
++  static const struct
++  {
++    const char* key;
++    const char* value;
++  } profile[] = {
++      {Libretro::Options::gfx_settings::EFB_SCALE, "6"},
++      {Libretro::Options::gfx_settings::SHADER_COMPILATION_MODE, "2"},
++      {Libretro::Options::gfx_enhancements::MAX_ANISOTROPY, "4"},
++      {Libretro::Options::gfx_settings::GPU_TEXTURE_DECODING, "enabled"},
++  };
++  for (retro_core_option_v2_definition* def = option_defs; def->key; ++def)
++    for (const auto& entry : profile)
++      if (!std::strcmp(def->key, entry.key))
++        def->default_value = entry.value;
++
++  // Once: an options file saved by an earlier core keeps its values over these
++  // defaults (RetroArch reads it when the options are set, just after this), so
++  // the first run of this profile sets it aside, recoverable, as the PPSSPP port
++  // does. The folder is made first, open to FTP, so the marker exists even on a
++  // console that has never saved Dolphin's options.
++  const char* const folder = "/app0/config/dolphin-emu";
++  const char* const saved = "/app0/config/dolphin-emu/dolphin-emu.opt";
++  const char* const marker = "/app0/config/dolphin-emu/ps5-default-profile-v1";
++  struct stat status;
++  if (stat(marker, &status) == 0)
++    return;
++  if (mkdir(folder, 0777) == 0)
++    chmod(folder, 0777);
++  if (stat(saved, &status) == 0)
++    std::rename(saved, "/app0/config/dolphin-emu/dolphin-emu.opt.before-ps5-profile");
++  const int fd = open(marker, O_WRONLY | O_CREAT | O_TRUNC, 0666);
++  if (fd >= 0)
++  {
++    fchmod(fd, 0666);
++    close(fd);
++  }
++}
++#endif
++
+ void SetVariables()
+ {
+   unsigned version = 0;
++#ifdef __PROSPERO__
++  Ps5ApplyDefaultProfile();
++#endif
+ 
+   struct retro_core_options_v2 options_us = {
+     const_cast<retro_core_option_v2_category*>(option_cats),
+diff --git a/Source/Core/DolphinLibretro/Common/Options.h b/Source/Core/DolphinLibretro/Common/Options.h
+index 0601c80065..e051ee8d9c 100644
+--- a/Source/Core/DolphinLibretro/Common/Options.h
++++ b/Source/Core/DolphinLibretro/Common/Options.h
+@@ -140,6 +140,20 @@ namespace core {
+   constexpr const char FASTMEM[] = "dolphin_fastmem";
+   constexpr const char FASTMEM_ARENA[] = "dolphin_fastmem_arena";
+   constexpr const char MAIN_ACCURATE_CPU_CACHE[] = "dolphin_main_accurate_cpu_cache";
++#ifdef __PROSPERO__
++  // PS5: whether single-precision multiply-adds are rounded exactly as the
++  // hardware does (Dolphin's AccurateFmadds, on upstream). Each ps_madd and
++  // fmadds then calls an error-correction routine; in Day of Reckoning 2 that
++  // was a third of the emulated CPU's time on the console. Off by default here.
++  constexpr const char ACCURATE_FMADDS[] = "dolphin_accurate_fmadds";
++  // Porpoise 3.0: single-precision float math kept as computed, not rounded to
++  // single after every operation (FastSinglePrecision, FastPairedMath): about
++  // twice as fast in long chains of float math. Per game; read at its start.
++  constexpr const char FAST_FLOAT_MATH[] = "dolphin_fast_float_math";
++  // Porpoise 3.0: the universal widescreen (beta), for a game with no
++  // widescreen code (Core/HLE/HLE_PorpoiseWidescreen).
++  constexpr const char UNIVERSAL_WIDESCREEN[] = "dolphin_universal_widescreen";
++#endif
+   constexpr const char CHEATS_ENABLED[] = "dolphin_cheats_enabled";
+   constexpr const char SKIP_GC_BIOS[] = "dolphin_skip_gc_bios";
+   constexpr const char DISC_BASED_GAMES_BOOT_TO_WII_MENU[] = "dolphin_disc_based_games_boot_to_wii_menu";
+diff --git a/Source/Core/DolphinLibretro/Common/VFile.cpp b/Source/Core/DolphinLibretro/Common/VFile.cpp
+index 26ef8b1278..c4f4ef190b 100644
+--- a/Source/Core/DolphinLibretro/Common/VFile.cpp
++++ b/Source/Core/DolphinLibretro/Common/VFile.cpp
+@@ -66,6 +66,11 @@ bool HasVFS()
+   return is_enabled && initialized && vfs_interface;
+ }
+ 
++bool UseVFS(std::string_view path)
++{
++  return HasVFS() && path.size() > 5 && path.substr(0, 5) == "/net/";
++}
++
+ // Dolphin expects to be able to use "/" (DIR_SEP) everywhere.
+ // RetroArch uses the OS separator.
+ // Convert between them when switching between systems.
+diff --git a/Source/Core/DolphinLibretro/Common/VFile.h b/Source/Core/DolphinLibretro/Common/VFile.h
+index b1248b660b..c1c4d19578 100644
+--- a/Source/Core/DolphinLibretro/Common/VFile.h
++++ b/Source/Core/DolphinLibretro/Common/VFile.h
+@@ -1,6 +1,8 @@
+ #pragma once
+ 
++#include <filesystem>
+ #include <string>
++#include <string_view>
+ #include <cstdint>
+ #include <cstdio>
+ #include <cstring>
+@@ -26,6 +28,12 @@ extern retro_vfs_interface* vfs_interface;
+ // Generic methods
+ void Init();
+ bool HasVFS();
++// Porpoise: the frontend's VFS is used only for its network library's paths
++// ("/net/<share>/..."); every other file is the core's own, as without a VFS.
++bool UseVFS(std::string_view path);
++inline bool UseVFS(const std::string& path) { return UseVFS(std::string_view(path)); }
++inline bool UseVFS(const char* path) { return path && UseVFS(std::string_view(path)); }
++inline bool UseVFS(const std::filesystem::path& path) { return UseVFS(path.generic_string()); }
+ std::string NormalizePath(const std::string& path);
+ std::string DenormalizePath(const std::string& path);
+ 
+diff --git a/Source/Core/DolphinLibretro/Input.cpp b/Source/Core/DolphinLibretro/Input.cpp
+index 5250054bf4..623852428d 100644
+--- a/Source/Core/DolphinLibretro/Input.cpp
++++ b/Source/Core/DolphinLibretro/Input.cpp
+@@ -1356,7 +1356,13 @@ void retro_set_controller_port_device_gc(unsigned port, unsigned device)
+   auto& si = Core::System::GetInstance().GetSerialInterface();
+ 
+   if (device == RETRO_DEVICE_GC_ON_WII) // Disconnect Wii device if we're using GC controller as device type to avoid conflict
++  {
++    // Porpoise: in the config too, or the Remote came back when the Wii's
++    // controllers were set up at boot, and both took the same presses.
++    if (port < 4)
++      Config::SetBaseOrCurrent(Config::GetInfoForWiimoteSource(port), WiimoteSource::None);
+     WiimoteCommon::OnSourceChanged(port, WiimoteSource::None);
++  }
+ 
+   Core::System& system = Core::System::GetInstance();
+ 
+diff --git a/Source/Core/DolphinLibretro/Log.cpp b/Source/Core/DolphinLibretro/Log.cpp
+index 1a1915cd1d..948cc1b8b4 100644
+--- a/Source/Core/DolphinLibretro/Log.cpp
++++ b/Source/Core/DolphinLibretro/Log.cpp
+@@ -2,6 +2,8 @@
+ #include "Common/Logging/Log.h"
+ #include "Common/Logging/LogManager.h"
+ #include "DolphinLibretro/Log.h"
++
++#include <cstdlib>
+ #include "DolphinLibretro/Common/Options.h"
+ #if defined(ANDROID)
+ #include <android/log.h>
+@@ -94,6 +96,14 @@ LogListener::LogListener(retro_log_printf_t log) : m_log(log)
+   Common::Log::LogManager::GetInstance()->SetEnable(
+     Common::Log::LogType::DSP_MAIL,
+     Libretro::Options::GetCached<bool>(Libretro::Options::main_interface::LOG_DSP_MAIL, false));
++
++  // Porpoise 3.0 alpha: a Wii game going online - its sockets and SSL, for
++  // finding why a game drops from a server. Every socket call (a line per
++  // packet in a race) only with Porpoise's Debug Logs on.
++  Common::Log::LogManager::GetInstance()->SetEnable(Common::Log::LogType::IOS_NET,
++                                                    std::getenv("PORPOISE_NET_LOG") != nullptr);
++  Common::Log::LogManager::GetInstance()->SetEnable(Common::Log::LogType::IOS_SSL, true);
++  Common::Log::LogManager::GetInstance()->SetEnable(Common::Log::LogType::IOS_WC24, true);
+ }
+ 
+ LogListener::~LogListener()
+@@ -112,18 +122,18 @@ void LogListener::Log(Common::Log::LogLevel level, const char* text)
+   switch (level)
+   {
+   case Common::Log::LogLevel::LDEBUG:
+-    m_log(RETRO_LOG_DEBUG, text);
++    m_log(RETRO_LOG_DEBUG, "%s", text);  // Porpoise: the text is not a format (a path with %)
+     break;
+   case Common::Log::LogLevel::LWARNING:
+-    m_log(RETRO_LOG_WARN, text);
++    m_log(RETRO_LOG_WARN, "%s", text);  // Porpoise: the text is not a format (a path with %)
+     break;
+   case Common::Log::LogLevel::LERROR:
+-    m_log(RETRO_LOG_ERROR, text);
++    m_log(RETRO_LOG_ERROR, "%s", text);  // Porpoise: the text is not a format (a path with %)
+     break;
+   case Common::Log::LogLevel::LNOTICE:
+   case Common::Log::LogLevel::LINFO:
+   default:
+-    m_log(RETRO_LOG_INFO, text);
++    m_log(RETRO_LOG_INFO, "%s", text);  // Porpoise: the text is not a format (a path with %)
+     break;
+   }
+ #if defined(ANDROID) && defined(_DEBUG)
+diff --git a/Source/Core/DolphinLibretro/Main.cpp b/Source/Core/DolphinLibretro/Main.cpp
+index cd8753b666..e4a8942bdd 100644
+--- a/Source/Core/DolphinLibretro/Main.cpp
++++ b/Source/Core/DolphinLibretro/Main.cpp
+@@ -1,4 +1,5 @@
+ 
++#include <atomic>
+ #include <cstdint>
+ #include <libretro.h>
+ #include <string>
+@@ -35,6 +36,12 @@
+ #include "Core/PatchEngine.h"
+ #include "Core/State.h"
+ #include "Core/System.h"
++#include "Core/FifoPlayer/FifoDataFile.h"
++#include "Core/FifoPlayer/FifoRecorder.h"
++#ifdef __PROSPERO__
++int Ps5DolphinDebugMode();  // VideoCommon/PixelShaderGen.cpp
++unsigned Ps5DolphinFifoFrame();  // VideoCommon/PixelShaderGen.cpp
++#endif
+ #include "DolphinLibretro/Audio.h"
+ #include "DolphinLibretro/Input.h"
+ #include "DolphinLibretro/Common/Options.h"
+@@ -82,10 +89,61 @@ extern void reload_cheats_from_ini();
+ extern unsigned msg_interface_version;
+ }  // namespace Libretro
+ 
++#ifdef __PROSPERO__
++// PS5 test aid: /app0/dolphin-options.txt, when present, holds key=value lines
++// that answer RETRO_ENVIRONMENT_GET_VARIABLE for those keys instead of the
++// frontend, so a test run sets core options without a person at the pad (the
++// console's FTP server cannot reach the frontend's options folder). The file is
++// never shipped, and the title deletes it on any launch that is not a test run.
++namespace
++{
++retro_environment_t s_ps5_frontend_environ;
++std::vector<std::pair<std::string, std::string>> s_ps5_option_overrides;
++
++bool Ps5EnvironCallback(unsigned cmd, void* data)
++{
++  if (cmd == RETRO_ENVIRONMENT_GET_VARIABLE && data)
++  {
++    auto* var = static_cast<retro_variable*>(data);
++    for (const auto& [key, value] : s_ps5_option_overrides)
++    {
++      if (var->key && key == var->key)
++      {
++        var->value = value.c_str();
++        return true;
++      }
++    }
++  }
++  return s_ps5_frontend_environ(cmd, data);
++}
++
++retro_environment_t Ps5WrapEnvironment(retro_environment_t cb)
++{
++  s_ps5_frontend_environ = cb;
++  s_ps5_option_overrides.clear();
++  std::ifstream file("/app0/dolphin-options.txt");
++  std::string line;
++  while (std::getline(file, line))
++  {
++    while (!line.empty() && (line.back() == '\r' || line.back() == ' '))
++      line.pop_back();
++    const size_t equals = line.find('=');
++    if (equals == std::string::npos || equals == 0)
++      continue;
++    s_ps5_option_overrides.emplace_back(line.substr(0, equals), line.substr(equals + 1));
++  }
++  return s_ps5_option_overrides.empty() ? cb : Ps5EnvironCallback;
++}
++}  // namespace
++#endif
++
+ extern "C" {
+ 
+ void retro_set_environment(retro_environment_t cb)
+ {
++#ifdef __PROSPERO__
++  cb = Ps5WrapEnvironment(cb);
++#endif
+   Libretro::environ_cb = cb;
+ #ifdef PERF_TEST
+   environ_cb(RETRO_ENVIRONMENT_GET_PERF_INTERFACE, &perf_cb);
+@@ -203,8 +261,74 @@ void retro_reset(void)
+   Core::System::GetInstance().GetProcessorInterface().ResetButton_Tap();
+ }
+ 
++#ifdef __PROSPERO__
++// The FIFO-log debug mode (VideoCommon/PixelShaderGen.cpp, "fifo" or "fifo N"):
++// 300 frames (or N) after launch, ten frames of GPU commands are recorded and saved as
++// /app0/savefiles/ps5-fifo.dff, which desktop Dolphin plays back as a reference
++// for the same frames. Test runs only.
++static void Ps5FifoRecording()
++{
++  static unsigned frame = 0;
++  if (Ps5DolphinDebugMode() != 2)
++    return;
++  ++frame;
++  // The same frames dumped as images on the console, to compare with desktop
++  // Dolphin's playback of the log (a couple of frames either side).
++  const unsigned start = Ps5DolphinFifoFrame();
++  if (frame + 2 >= start && frame < start + 12)
++    Core::SaveScreenShot(fmt::format("ps5-frame-{}", frame));
++  if (frame != start)
++    return;
++  auto& recorder = Core::System::GetInstance().GetFifoRecorder();
++  recorder.StartRecording(10, [&recorder] {
++    FifoDataFile* const file = recorder.GetRecordedFile();
++    const bool saved = file != nullptr && file->Save("/app0/savefiles/ps5-fifo.dff");
++    fprintf(stderr, "dolphin ps5: FIFO log of 10 frames %s\n", saved ? "saved" : "NOT saved");
++  });
++  fprintf(stderr, "dolphin ps5: FIFO recording started at frame %u\n", start);
++}
++#endif
++
++// Inside the extern "C" block: C++ names, as Core.cpp and Fifo.cpp define them.
++extern "C++"
++{
++namespace Core
++{
++extern std::atomic<long long> g_porpoise_cpu_ns;
++extern std::atomic<long long> g_porpoise_cpu_max_ns;
++extern std::atomic<unsigned> g_porpoise_cpu_frames;
++}  // namespace Core
++namespace Fifo
++{
++extern std::atomic<long long> g_porpoise_gpu_ns;
++}  // namespace Fifo
++}
++
++// Porpoise: where a frame's time goes, since the last call. cpu_ms: the CPU thread's run of
++// a frame step on average; cpu_max_ms: the longest; gpu_ms: the video loop's busy time per
++// frame. Returns the frames counted.
++extern "C" __attribute__((visibility("default"))) unsigned porpoise_perf_take(double* cpu_ms,
++                                                                            double* cpu_max_ms,
++                                                                            double* gpu_ms)
++{
++  const unsigned frames = Core::g_porpoise_cpu_frames.exchange(0, std::memory_order_relaxed);
++  const long long cpu = Core::g_porpoise_cpu_ns.exchange(0, std::memory_order_relaxed);
++  const long long cpu_max = Core::g_porpoise_cpu_max_ns.exchange(0, std::memory_order_relaxed);
++  const long long gpu = Fifo::g_porpoise_gpu_ns.exchange(0, std::memory_order_relaxed);
++  if (cpu_ms)
++    *cpu_ms = frames ? cpu / 1e6 / frames : 0.0;
++  if (cpu_max_ms)
++    *cpu_max_ms = cpu_max / 1e6;
++  if (gpu_ms)
++    *gpu_ms = frames ? gpu / 1e6 / frames : 0.0;
++  return frames;
++}
++
+ void retro_run(void)
+ {
++#ifdef __PROSPERO__
++  Ps5FifoRecording();
++#endif
+   Libretro::Input::InitSensors();
+   Libretro::Options::CheckForUpdatedVariables();
+   Libretro::FrameTiming::CheckForFastForwarding();
+@@ -482,6 +606,7 @@ void retro_run(void)
+   RETRO_PERFORMANCE_INIT(dolphin_main_func);
+   RETRO_PERFORMANCE_START(dolphin_main_func);
+ 
++  Libretro::Video::BeginRun();
+   if (system.IsDualCoreMode())
+   {
+     Core::DoFrameStep(system);
+@@ -491,6 +616,7 @@ void retro_run(void)
+   {
+     system.GetCPU().RunSingleFrame();
+   }
++  Libretro::Video::EndRun();
+ 
+   RETRO_PERFORMANCE_STOP(dolphin_main_func);
+ 
+@@ -714,3 +840,90 @@ void retro_cheat_set(unsigned index, bool enabled, const char *code)
+   }, true);
+ }
+ } // extern "C"
++
++// Porpoise's Performance report: the host addresses the sampler found busiest
++// on the emulated CPU's thread, told as the game's own code (PowerPC) - which
++// JIT block each falls in, its address and its instructions - so a slow game's
++// hot loop can be read. Called from the frontend's thread between frames; the
++// CPU thread is held while the block table is read.
++#include <algorithm>
++#include "Common/GekkoDisassembler.h"
++#include "Core/PowerPC/JitCommon/JitCache.h"
++#include "Core/PowerPC/JitInterface.h"
++#include "Core/PowerPC/MMU.h"
++#include "Core/PowerPC/PowerPC.h"
++
++extern "C" __attribute__((visibility("default"))) void
++porpoise_jit_describe(const unsigned long long* rips, const unsigned* counts, int n)
++{
++  if (!rips || !counts || n <= 0 || !Core::IsRunning(Core::System::GetInstance()))
++    return;
++  Core::System& system = Core::System::GetInstance();
++  Core::CPUThreadGuard guard(system);
++  struct Hot
++  {
++    u32 address = 0, size = 0;
++    unsigned samples = 0;
++    const u8* begin = nullptr;
++    const u8* end = nullptr;
++  };
++  std::vector<Hot> hot;
++  unsigned outside = 0;
++  for (int i = 0; i < n; ++i)
++  {
++    const u8* const rip = reinterpret_cast<const u8*>(static_cast<uintptr_t>(rips[i]));
++    bool found = false;
++    system.GetJitInterface().RunOnBlocks(guard, [&](const JitBlock& b) {
++      if (found)
++        return;
++      if ((rip >= b.near_begin && rip < b.near_end) || (rip >= b.far_begin && rip < b.far_end))
++      {
++        found = true;
++        for (Hot& h : hot)
++          if (h.address == b.effectiveAddress)
++          {
++            h.samples += counts[i];
++            return;
++          }
++        hot.push_back({b.effectiveAddress, b.originalSize, counts[i], b.near_begin, b.near_end});
++      }
++    });
++    if (!found)
++      outside += counts[i];
++  }
++  std::sort(hot.begin(), hot.end(), [](const Hot& a, const Hot& b) { return a.samples > b.samples; });
++  std::fprintf(stderr, "jit: %zu hot blocks; %u samples outside any block\n", hot.size(), outside);
++  for (std::size_t k = 0; k < hot.size() && k < 8; ++k)
++  {
++    const Hot& h = hot[k];
++    std::fprintf(stderr, "jit: block %08x, %u instructions, host %p..%p, samples %u\n", h.address,
++                 h.size, static_cast<const void*>(h.begin), static_cast<const void*>(h.end),
++                 h.samples);
++    for (u32 i = 0; i < h.size && i < 64; ++i)
++    {
++      const u32 at = h.address + i * 4;
++      const u32 op = PowerPC::MMU::HostRead_Instruction(guard, at);
++      std::fprintf(stderr, "jit:   %08x  %08x  %s\n", at, op,
++                   Common::GekkoDisassembler::Disassemble(op, at).c_str());
++    }
++    /* 3.0: the block's own machine code, for reading offline (the two
++     * hottest), 32 bytes a line. */
++    if (k < 2 && h.begin && h.end > h.begin && h.end - h.begin < 16384)
++      for (const u8* p = h.begin; p < h.end; p += 32)
++      {
++        std::fprintf(stderr, "jit: host %p ", static_cast<const void*>(p));
++        for (const u8* q = p; q < p + 32 && q < h.end; ++q)
++          std::fprintf(stderr, "%02x", *q);
++        std::fprintf(stderr, "\n");
++      }
++  }
++  /* The quantizers and the paired-single state the hot code runs with. */
++  {
++    const auto& ppc = system.GetPPCState();
++    std::fprintf(stderr, "jit: gqr");
++    for (int i = 0; i < 8; ++i)
++      std::fprintf(stderr, " %08x", ppc.spr[SPR_GQR0 + i]);
++    std::fprintf(stderr, " hid2 %08x msr %08x\n", ppc.spr[SPR_HID2], ppc.msr.Hex);
++  }
++  std::fflush(stderr);
++}
+diff --git a/Source/Core/DolphinLibretro/Video.cpp b/Source/Core/DolphinLibretro/Video.cpp
+index b4003b25b1..0275157ec2 100644
+--- a/Source/Core/DolphinLibretro/Video.cpp
++++ b/Source/Core/DolphinLibretro/Video.cpp
+@@ -71,6 +71,52 @@ static Common::DynamicLibrary d3d11_library;
+ static Common::DynamicLibrary d3d12_library;
+ #endif
+ 
++// libretro asks for one video_cb per retro_run, NULL for a frame that repeats
++// the last: the frontend presents it again, and presenting is what paces
++// retro_run to the display. Dolphin's presenters call video_cb only for a frame
++// they draw, and with bSkipPresentingDuplicateXFBs (the default) a field that
++// repeats its XFB draws none, so a 30 FPS game's every other run returned
++// without one: nothing waited for the display, and those runs were paced by the
++// audio writes alone. On the PS5 at 119.88 Hz with a swap interval of 2, Wind
++// Waker's present periods then crossed 40 ms 14-17 times in 130 seconds.
++//
++// The duplicate goes out where Dolphin would have presented the field
++// (Presenter::ViSwap), inside the GPU loop while the CPU thread emulates on. At
++// the end of the run instead, the frontend's present waited on the display
++// after the frame step had stopped the CPU thread, and the time it lost there
++// left the audio short (Wind Waker: 37-7268 silent frames a ten-second window).
++// EndRun covers a run in which no field was output at all.
++static retro_video_refresh_t s_frontend_video_cb;
++static bool s_frame_sent;
++static unsigned s_frame_width;
++static unsigned s_frame_height;
++
++static void SendFrame(const void* data, unsigned width, unsigned height, size_t pitch)
++{
++  s_frame_sent = true;
++  s_frame_width = width;
++  s_frame_height = height;
++  s_frontend_video_cb(data, width, height, pitch);
++}
++
++void SendDuplicate()
++{
++  // Before the first frame there is nothing to repeat.
++  if (s_frontend_video_cb && s_frame_width != 0)
++    SendFrame(nullptr, s_frame_width, s_frame_height, 0);
++}
++
++void BeginRun()
++{
++  s_frame_sent = false;
++}
++
++void EndRun()
++{
++  if (!s_frame_sent)
++    SendDuplicate();
++}
++
+ int GetAdjustedBaseHeight()
+ {
+   const bool crop_overscan = Libretro::Options::GetCached<bool>(
+@@ -556,6 +602,8 @@ void ContextDestroy(void)
+   DEBUG_LOG_FMT(VIDEO, "Video - ContextDestroy!");
+ 
+   g_context_status.MarkDestroyed();
++  // The frame a duplicate would repeat belonged to this context.
++  s_frame_width = 0;
+ 
+ #ifdef HAS_OPENGL
+   if (g_gfx &&
+@@ -724,5 +772,6 @@ bool CreateDevice(retro_vulkan_context* context, VkInstance instance, VkPhysical
+ 
+ void retro_set_video_refresh(retro_video_refresh_t cb)
+ {
+-  Libretro::Video::video_cb = cb;
++  Libretro::Video::s_frontend_video_cb = cb;
++  Libretro::Video::video_cb = cb ? &Libretro::Video::SendFrame : nullptr;
+ }
+diff --git a/Source/Core/DolphinLibretro/Video.h b/Source/Core/DolphinLibretro/Video.h
+index 8df1a7e320..2892601cf7 100644
+--- a/Source/Core/DolphinLibretro/Video.h
++++ b/Source/Core/DolphinLibretro/Video.h
+@@ -42,6 +42,10 @@ bool Video_InitializeBackend();
+ bool SetHWRender(retro_hw_context_type type, const int version_major = -1, const int version_minor = -1);
+ void ContextReset(void);
+ void ContextDestroy(void);
++// retro_run brackets its frame with these: a run that handed the frontend no
++// frame passes a duplicate (NULL), so the frontend presents -- and paces -- it.
++void BeginRun();
++void EndRun();
+ 
+ class SWGfx : public SW::SWGfx
+ {
+diff --git a/Source/Core/DolphinLibretro/Vulkan.cpp b/Source/Core/DolphinLibretro/Vulkan.cpp
+index bc463c7ceb..7f12cce1c4 100644
+--- a/Source/Core/DolphinLibretro/Vulkan.cpp
++++ b/Source/Core/DolphinLibretro/Vulkan.cpp
+@@ -91,6 +91,7 @@ struct VkSwapchainKHR_T
+   std::mutex mutex;
+   std::condition_variable condVar;
+   int current_index;
++  uint32_t width = 0, height = 0; /* the images' size: what is presented */
+ };
+ static VkSwapchainKHR_T chain;
+ 
+@@ -272,6 +273,8 @@ vkCreateSwapchainKHR(VkDevice device, const VkSwapchainCreateInfoKHR* pCreateInf
+     swapchain_mask >>= 1;
+   }
+   chain.images.resize(chain.count);
++  chain.width = pCreateInfo->imageExtent.width;
++  chain.height = pCreateInfo->imageExtent.height;
+ 
+   for (uint32_t i = 0; i < chain.count; i++)
+   {
+@@ -390,10 +393,13 @@ static VKAPI_ATTR VkResult VKAPI_CALL vkQueuePresentKHR(VkQueue queue,
+                     0, nullptr, vulkan->queue_index);
+ #endif
+   swapchain->condVar.notify_all();
+-  uint32_t out_w = 0;
+-  uint32_t out_h = 0;
++  // The presented image's own size (Porpoise): the frontend shows the whole
++  // image and copies it for save-state pictures, so it needs the image's size,
++  // which can differ from the EFB's after the internal resolution changes.
++  uint32_t out_w = swapchain->width;
++  uint32_t out_h = swapchain->height;
+ 
+-  if (g_framebuffer_manager)
++  if ((out_w == 0 || out_h == 0) && g_framebuffer_manager)
+   {
+     if (AbstractTexture* efb_tex = g_framebuffer_manager->GetEFBColorTexture())
+     {
+diff --git a/Source/Core/VideoBackends/D3D/D3DBoundingBox.cpp b/Source/Core/VideoBackends/D3D/D3DBoundingBox.cpp
+index 049d090a0d..8bb8b759d6 100644
+--- a/Source/Core/VideoBackends/D3D/D3DBoundingBox.cpp
++++ b/Source/Core/VideoBackends/D3D/D3DBoundingBox.cpp
+@@ -90,7 +90,7 @@ std::vector<BBoxType> D3DBoundingBox::Read(u32 index, u32 length)
+ 
+ void D3DBoundingBox::Write(u32 index, std::span<const BBoxType> values)
+ {
+-  D3D11_BOX box{index * sizeof(BBoxType),
++  D3D11_BOX box{static_cast<u32>(index * sizeof(BBoxType)),
+                 0,
+                 0,
+                 static_cast<u32>((index + values.size()) * sizeof(BBoxType)),
+diff --git a/Source/Core/VideoBackends/Vulkan/VKMain.cpp b/Source/Core/VideoBackends/Vulkan/VKMain.cpp
+index 6338e52e3d..10539c661e 100644
+--- a/Source/Core/VideoBackends/Vulkan/VKMain.cpp
++++ b/Source/Core/VideoBackends/Vulkan/VKMain.cpp
+@@ -66,7 +66,15 @@ void VideoBackend::InitBackendInfo(const WindowSystemInfo& wsi)
+   }
+   else
+   {
++#ifdef __LIBRETRO__
++    // A libretro core renders through the frontend's Vulkan device, which it is
++    // handed later (DolphinLibretro/Vulkan.cpp); this probe of a host library is
++    // not needed, and on a platform with no loadable library (the PS5) its
++    // failure is expected rather than an alert.
++    INFO_LOG_FMT(VIDEO, "No Vulkan library to probe; the frontend supplies the device.");
++#else
+     PanicAlertFmt("Failed to load Vulkan library.");
++#endif
+   }
+ }
+ 
+diff --git a/Source/Core/VideoCommon/Assets/CustomAssetCache.cpp b/Source/Core/VideoCommon/Assets/CustomAssetCache.cpp
+index 3b15d5733e..32297b09d7 100644
+--- a/Source/Core/VideoCommon/Assets/CustomAssetCache.cpp
++++ b/Source/Core/VideoCommon/Assets/CustomAssetCache.cpp
+@@ -3,6 +3,8 @@
+ 
+ #include "VideoCommon/Assets/CustomAssetCache.h"
+ 
++#include <algorithm>
++
+ #include "Common/Logging/Log.h"
+ #include "Common/MemoryUtil.h"
+ 
+@@ -21,6 +23,15 @@ void CustomAssetCache::Initialize()
+   const size_t keep_unused_mem = std::max(sys_mem / 2, std::min(sys_mem, must_keep_unused));
+ 
+   m_max_ram_available = sys_mem - keep_unused_mem;
++#ifdef __PROSPERO__
++  // Porpoise: the console reports all of its memory (16 GiB), half of which
++  // a big texture pack was then allowed to fill - far past what a title
++  // has, so a long session with an HD pack ended in the system closing the
++  // app. Its textures stay within 2 GiB; the least recently used go first.
++  constexpr size_t porpoise_cap = size_t(2) * 1024 * 1024 * 1024;
++  m_max_ram_available = std::min(m_max_ram_available, porpoise_cap);
++  NOTICE_LOG_FMT(VIDEO, "Custom textures may use up to {} MiB", m_max_ram_available >> 20);
++#endif
+ 
+   if (m_max_ram_available == 0)
+     ERROR_LOG_FMT(VIDEO, "Not enough system memory for custom resources.");
+diff --git a/Source/Core/VideoCommon/CommandProcessor.cpp b/Source/Core/VideoCommon/CommandProcessor.cpp
+index 1dbf466f1c..bae595786b 100644
+--- a/Source/Core/VideoCommon/CommandProcessor.cpp
++++ b/Source/Core/VideoCommon/CommandProcessor.cpp
+@@ -252,9 +252,18 @@ void CommandProcessorManager::RegisterMMIO(MMIO::Mapping* mmio, u32 base)
+     fifo_rw_distance_lo_r =
+         MMIO::DirectRead<u16>(MMIO::Utils::LowPart(&m_fifo.CPReadWriteDistance));
+   }
++#ifdef __LIBRETRO__
++  mmio->Register(base | FIFO_RW_DISTANCE_LO, fifo_rw_distance_lo_r,
++                 MMIO::ComplexWrite<u16>([WMASK_LO_ALIGN_32BIT](Core::System& system_, u32, u16 val) {
++                   auto& fifo_ = system_.GetCommandProcessor().GetFifo();
++                   fifo_.register_writes.fetch_add(1, std::memory_order_seq_cst);
++                   *MMIO::Utils::LowPart(&fifo_.CPReadWriteDistance) = val & WMASK_LO_ALIGN_32BIT;
++                 }));
++#else
+   mmio->Register(base | FIFO_RW_DISTANCE_LO, fifo_rw_distance_lo_r,
+                  MMIO::DirectWrite<u16>(MMIO::Utils::LowPart(&m_fifo.CPReadWriteDistance),
+                                         WMASK_LO_ALIGN_32BIT));
++#endif
+ 
+   MMIO::ReadHandlingMethod<u16>* fifo_rw_distance_hi_r;
+   if (is_on_thread)
+@@ -291,6 +300,9 @@ void CommandProcessorManager::RegisterMMIO(MMIO::Mapping* mmio, u32 base)
+                  MMIO::ComplexWrite<u16>([WMASK_HI_RESTRICT](Core::System& system_, u32, u16 val) {
+                    auto& fifo_ = system_.GetCommandProcessor().GetFifo();
+                    system_.GetFifo().SyncGPUForRegisterAccess();
++#ifdef __LIBRETRO__
++                   fifo_.register_writes.fetch_add(1, std::memory_order_seq_cst);
++#endif
+                    WriteHigh(fifo_.CPReadWriteDistance, val & WMASK_HI_RESTRICT);
+                    system_.GetFifo().RunGpu();
+                  }));
+@@ -299,7 +311,15 @@ void CommandProcessorManager::RegisterMMIO(MMIO::Mapping* mmio, u32 base)
+       base | FIFO_READ_POINTER_LO,
+       is_on_thread ? MMIO::DirectRead<u16>(MMIO::Utils::LowPart(&m_fifo.SafeCPReadPointer)) :
+                      MMIO::DirectRead<u16>(MMIO::Utils::LowPart(&m_fifo.CPReadPointer)),
++#ifdef __LIBRETRO__
++      MMIO::ComplexWrite<u16>([WMASK_LO_ALIGN_32BIT](Core::System& system_, u32, u16 val) {
++        auto& fifo_ = system_.GetCommandProcessor().GetFifo();
++        fifo_.register_writes.fetch_add(1, std::memory_order_seq_cst);
++        *MMIO::Utils::LowPart(&fifo_.CPReadPointer) = val & WMASK_LO_ALIGN_32BIT;
++      }));
++#else
+       MMIO::DirectWrite<u16>(MMIO::Utils::LowPart(&m_fifo.CPReadPointer), WMASK_LO_ALIGN_32BIT));
++#endif
+ 
+   MMIO::ReadHandlingMethod<u16>* fifo_read_hi_r;
+   MMIO::WriteHandlingMethod<u16>* fifo_read_hi_w;
+@@ -314,6 +334,9 @@ void CommandProcessorManager::RegisterMMIO(MMIO::Mapping* mmio, u32 base)
+         MMIO::ComplexWrite<u16>([WMASK_HI_RESTRICT](Core::System& system_, u32, u16 val) {
+           auto& fifo_ = system_.GetCommandProcessor().GetFifo();
+           system_.GetFifo().SyncGPUForRegisterAccess();
++#ifdef __LIBRETRO__
++          fifo_.register_writes.fetch_add(1, std::memory_order_seq_cst);
++#endif
+           WriteHigh(fifo_.CPReadPointer, val & WMASK_HI_RESTRICT);
+           fifo_.SafeCPReadPointer.store(fifo_.CPReadPointer.load(std::memory_order_relaxed),
+                                         std::memory_order_relaxed);
+@@ -330,6 +353,9 @@ void CommandProcessorManager::RegisterMMIO(MMIO::Mapping* mmio, u32 base)
+         MMIO::ComplexWrite<u16>([WMASK_HI_RESTRICT](Core::System& system_, u32, u16 val) {
+           auto& fifo_ = system_.GetCommandProcessor().GetFifo();
+           system_.GetFifo().SyncGPUForRegisterAccess();
++#ifdef __LIBRETRO__
++          fifo_.register_writes.fetch_add(1, std::memory_order_seq_cst);
++#endif
+           WriteHigh(fifo_.CPReadPointer, val & WMASK_HI_RESTRICT);
+         });
+   }
+diff --git a/Source/Core/VideoCommon/CommandProcessor.h b/Source/Core/VideoCommon/CommandProcessor.h
+index 976592c829..8684ae12e7 100644
+--- a/Source/Core/VideoCommon/CommandProcessor.h
++++ b/Source/Core/VideoCommon/CommandProcessor.h
+@@ -49,6 +49,15 @@ struct SCPFifoStruct
+   std::atomic<u32> bFF_LoWatermark = 0;
+   std::atomic<u32> bFF_HiWatermark = 0;
+ 
++#ifdef __LIBRETRO__
++  // The CPU's writes to the read pointer and the read/write distance, counted
++  // before each write lands. The dual-core GPU loop commits a chunk's read
++  // pointer and distance only if none came while the chunk was in flight: the
++  // CPU's values win, as they do on the hardware (Fifo.cpp, CommitChunk). Not
++  // saved; it only orders the two threads.
++  std::atomic<u32> register_writes = 0;
++#endif
++
+   void Init();
+   void DoState(PointerWrap& p);
+ };
+diff --git a/Source/Core/VideoCommon/Fifo.cpp b/Source/Core/VideoCommon/Fifo.cpp
+index d40bd0e8db..558a31fd02 100644
+--- a/Source/Core/VideoCommon/Fifo.cpp
++++ b/Source/Core/VideoCommon/Fifo.cpp
+@@ -4,6 +4,7 @@
+ #include "VideoCommon/Fifo.h"
+ 
+ #include <atomic>
++#include <chrono>
+ #include <cstring>
+ 
+ #include "Common/Assert.h"
+@@ -288,12 +289,70 @@ void FifoManager::ResetVideoBuffer()
+   m_fifo_aux_read_ptr = m_fifo_aux_data;
+ }
+ 
++#ifdef __LIBRETRO__
++// A chunk the dual-core GPU loop has run advances the read pointer past it and
++// shortens the read/write distance by it -- unless the CPU rewrote either
++// register while the chunk was in flight, in which case the CPU's values stand,
++// as a CPU write replaces the hardware's own. The game can reset its FIFO (read
++// enable off, the distance to 0, a new read pointer) the moment it runs again,
++// and here the GPU loop resumes with it at every field, with a chunk or more
++// still queued: the loop's unconditional subtraction then took a zeroed distance
++// to -32, which the loop reads as more to fetch, and it fetched the FIFO's stale
++// words as commands until one faulted (Rogue Leader's attract sequence, every
++// run at the same point). A gather-pipe burst only adds to the distance and is
++// retried; a register write is not.
++static void CommitChunk(CommandProcessor::SCPFifoStruct& fifo, u32 writes, u32 fetched, u32 next)
++{
++  if (fifo.register_writes.load(std::memory_order_seq_cst) != writes)
++    return;
++  u32 expected = fetched;
++  if (!fifo.CPReadPointer.compare_exchange_strong(expected, next, std::memory_order_seq_cst))
++    return;
++  u32 distance = fifo.CPReadWriteDistance.load(std::memory_order_seq_cst);
++  for (;;)
++  {
++    if (fifo.register_writes.load(std::memory_order_seq_cst) != writes)
++      return;
++    ASSERT_MSG(COMMANDPROCESSOR, distance >= GPFifo::GATHER_PIPE_SIZE,
++               "fifo.CPReadWriteDistance = {} is shorter than the chunk the FIFO loop ran",
++               distance);
++    if (distance < GPFifo::GATHER_PIPE_SIZE)
++      return;
++    if (fifo.CPReadWriteDistance.compare_exchange_weak(
++            distance, distance - GPFifo::GATHER_PIPE_SIZE, std::memory_order_seq_cst))
++      return;
++  }
++}
++#endif
++
+ // Description: Main FIFO update loop
+ // Purpose: Keep the Core HW updated about the CPU-GPU distance
++#ifdef __LIBRETRO__
++// Porpoise: the video loop's busy time (porpoise_perf_take), against the CPU thread's.
++std::atomic<long long> g_porpoise_gpu_ns{0};
++namespace
++{
++struct PorpoiseGpuTimer
++{
++  std::chrono::steady_clock::time_point start = std::chrono::steady_clock::now();
++  ~PorpoiseGpuTimer()
++  {
++    g_porpoise_gpu_ns.fetch_add(std::chrono::duration_cast<std::chrono::nanoseconds>(
++                                    std::chrono::steady_clock::now() - start)
++                                    .count(),
++                                std::memory_order_relaxed);
++  }
++};
++}  // namespace
++#endif
++
+ void FifoManager::RunGpuLoop()
+ {
+   m_gpu_mainloop.Run(
+       [this] {
++#ifdef __LIBRETRO__
++        const PorpoiseGpuTimer porpoise_timer;
++#endif
+         // Run events from the CPU thread.
+         AsyncRequests::GetInstance()->PullEvents();
+ 
+@@ -330,6 +389,10 @@ void FifoManager::RunGpuLoop()
+               break;
+ 
+             u32 cyclesExecuted = 0;
++#ifdef __LIBRETRO__
++            const u32 writes = fifo.register_writes.load(std::memory_order_seq_cst);
++            const u32 fetchedPtr = fifo.CPReadPointer.load(std::memory_order_relaxed);
++#endif
+             u32 readPtr = fifo.CPReadPointer.load(std::memory_order_relaxed);
+             ReadDataFromFifo(readPtr);
+ 
+@@ -338,6 +401,7 @@ void FifoManager::RunGpuLoop()
+             else
+               readPtr += GPFifo::GATHER_PIPE_SIZE;
+ 
++#ifndef __LIBRETRO__
+             const s32 distance =
+                 static_cast<s32>(fifo.CPReadWriteDistance.load(std::memory_order_relaxed)) -
+                 GPFifo::GATHER_PIPE_SIZE;
+@@ -345,13 +409,18 @@ void FifoManager::RunGpuLoop()
+                        "Negative fifo.CPReadWriteDistance = {} in FIFO Loop !\nThat can produce "
+                        "instability in the game. Please report it.",
+                        distance);
++#endif
+ 
+             u8* write_ptr = m_video_buffer_write_ptr;
+             m_video_buffer_read_ptr = OpcodeDecoder::RunFifo(
+                 DataReader(m_video_buffer_read_ptr, write_ptr), &cyclesExecuted);
+ 
++#ifdef __LIBRETRO__
++            CommitChunk(fifo, writes, fetchedPtr, readPtr);
++#else
+             fifo.CPReadPointer.store(readPtr, std::memory_order_relaxed);
+             fifo.CPReadWriteDistance.fetch_sub(GPFifo::GATHER_PIPE_SIZE, std::memory_order_seq_cst);
++#endif
+             if ((write_ptr - m_video_buffer_read_ptr) == 0)
+             {
+               fifo.SafeCPReadPointer.store(fifo.CPReadPointer.load(std::memory_order_relaxed),
+diff --git a/Source/Core/VideoCommon/PixelShaderGen.cpp b/Source/Core/VideoCommon/PixelShaderGen.cpp
+index 5ce120e9ff..8b3e4f4540 100644
+--- a/Source/Core/VideoCommon/PixelShaderGen.cpp
++++ b/Source/Core/VideoCommon/PixelShaderGen.cpp
+@@ -3,6 +3,70 @@
+ 
+ #include "VideoCommon/PixelShaderGen.h"
+ 
++#ifdef __PROSPERO__
++#include <cstdio>
++#include <cstring>
++// PS5 test aid: /app0/dolphin-debug.txt naming "fifo" records a FIFO log
++// (DolphinLibretro/Main.cpp), naming "dump" dumps every frame as an image
++// (DolphinLibretro/Boot.cpp); naming "fog" makes every fogged pixel
++// show its fog intermediates as its colour -- red gl_FragCoord.z, green the top
++// byte of zCoord, blue the fog factor -- so a console run
++// can compare the GPU's values with the constants the CPU uploaded (logged by
++// PixelShaderManager); naming "objects A B" plays only objects A to B of each
++// frame of a FIFO log (Core/FifoPlayer/FifoPlayer.cpp), to bisect a frame. Never
++// shipped; the title deletes the file on any launch that is not a test run.
++static unsigned s_ps5_first_object, s_ps5_last_object;
++static unsigned s_ps5_fifo_frame = 300;
++int Ps5DolphinDebugMode()
++{
++  static int mode = -1;
++  if (mode < 0)
++  {
++    mode = 0;
++    if (FILE* file = std::fopen("/app0/dolphin-debug.txt", "rb"))
++    {
++      char word[32] = {};
++      if (std::fscanf(file, "%31s", word) == 1 && std::strcmp(word, "fog") == 0)
++        mode = 1;
++      else if (std::strcmp(word, "fifo") == 0)
++      {
++        // "fifo N" starts the log at frame N rather than 300.
++        mode = 2;
++        unsigned frame = 0;
++        if (std::fscanf(file, "%u", &frame) == 1 && frame != 0)
++          s_ps5_fifo_frame = frame;
++      }
++      else if (std::strcmp(word, "dump") == 0)
++        mode = 3;
++      else if (std::strcmp(word, "swloader") == 0)
++        mode = 4;
++      else if (std::strcmp(word, "cmploader") == 0)
++        mode = 5;
++      else if (std::strcmp(word, "objects") == 0 &&
++               std::fscanf(file, "%u %u", &s_ps5_first_object, &s_ps5_last_object) == 2)
++        mode = 6;
++      std::fclose(file);
++    }
++  }
++  return mode;
++}
++
++unsigned Ps5DolphinFifoFrame()
++{
++  Ps5DolphinDebugMode();
++  return s_ps5_fifo_frame;
++}
++
++bool Ps5DolphinObjectRange(unsigned* first, unsigned* last)
++{
++  if (Ps5DolphinDebugMode() != 6)
++    return false;
++  *first = s_ps5_first_object;
++  *last = s_ps5_last_object;
++  return true;
++}
++#endif
++
+ #include "Common/Assert.h"
+ #include "Common/CommonTypes.h"
+ #include "Common/EnumMap.h"
+@@ -1732,6 +1796,14 @@ static void WriteFog(ShaderCode& out, const pixel_shader_uid_data* uid_data)
+       WARN_LOG_FMT(VIDEO, "Unknown Fog Type! {}", uid_data->fog_fsel);
+   }
+ 
++#ifdef __PROSPERO__
++  if (Ps5DolphinDebugMode() == 1)
++  {
++    out.Write("\tprev.rgb = int3(iround(clamp(rawpos.z, 0.0, 1.0) * 255.0), (zCoord >> 16) & 255, "
++              "iround(fog * 255.0));\n");
++    return;
++  }
++#endif
+   out.Write("\tint ifog = iround(fog * 256.0);\n");
+   out.Write("\tprev.rgb = (prev.rgb * (256 - ifog) + " I_FOGCOLOR ".rgb * ifog) >> 8;\n");
+ }
+diff --git a/Source/Core/VideoCommon/PixelShaderManager.cpp b/Source/Core/VideoCommon/PixelShaderManager.cpp
+index d2bdadb9c8..eb084b4c8c 100644
+--- a/Source/Core/VideoCommon/PixelShaderManager.cpp
++++ b/Source/Core/VideoCommon/PixelShaderManager.cpp
+@@ -3,6 +3,7 @@
+ 
+ #include "VideoCommon/PixelShaderManager.h"
+ 
++#include <cstdio>
+ #include <iterator>
+ 
+ #include "Common/ChunkFile.h"
+@@ -406,6 +407,19 @@ void PixelShaderManager::SetFogParamChanged()
+     constants.fogi[1] = bpmem.fog.b_magnitude;
+     constants.fogi[3] = bpmem.fog.b_shift;
+     constants.fogParam3 = bpmem.fog.c_proj_fsel.hex;
++#ifdef __PROSPERO__
++    // The debug mode's CPU half (PixelShaderGen.cpp): the constants the fog
++    // shader is given, on each change, up to twenty lines.
++    extern int Ps5DolphinDebugMode();
++    static int logged = 0;
++    if (Ps5DolphinDebugMode() == 1 && logged < 20)
++    {
++      ++logged;
++      fprintf(stderr, "dolphin ps5 fog: A=%g C=%g b_magnitude=%d b_shift=%d fsel/proj=0x%x\n",
++              constants.fogf[0], constants.fogf[1], constants.fogi[1], constants.fogi[3],
++              constants.fogParam3);
++    }
++#endif
+   }
+   else
+   {
+diff --git a/Source/Core/VideoCommon/Present.cpp b/Source/Core/VideoCommon/Present.cpp
+index 95c2e83755..18ab44f05e 100644
+--- a/Source/Core/VideoCommon/Present.cpp
++++ b/Source/Core/VideoCommon/Present.cpp
+@@ -26,6 +26,11 @@
+ #ifdef __LIBRETRO__
+ #include "Core/Config/MainSettings.h"
+ #include "VideoCommon/VideoBackendBase.h"
++
++namespace Libretro::Video
++{
++void SendDuplicate();  // DolphinLibretro/Video.cpp
++}
+ #endif
+ 
+ std::unique_ptr<VideoCommon::Presenter> g_presenter;
+@@ -244,6 +249,13 @@ void Presenter::ViSwap(u32 xfb_addr, u32 fb_width, u32 fb_stride, u32 fb_height,
+ 
+     video_events.after_present_event.Trigger(present_info);
+   }
++#ifdef __LIBRETRO__
++  else
++  {
++    // The frontend repeats the last frame where Dolphin would have drawn it.
++    Libretro::Video::SendDuplicate();
++  }
++#endif
+ }
+ 
+ void Presenter::ImmediateSwap(u32 xfb_addr, u32 fb_width, u32 fb_stride, u32 fb_height)

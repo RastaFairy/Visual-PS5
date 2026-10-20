@@ -1,0 +1,115 @@
+{
+  "step": "stylus-polish",
+  "recorded": "2026-10-07T23:58:31.812289+00:00",
+  "revision": "working tree on 04cd031",
+  "command": "tools/verify.sh format; PS5_FRONTENDS=\"es-de picker\" PS5_VULKAN_TEMPLATE=\"$PWD/build/picker-template\" tools/verify.sh unit build integration evidence; tools/evidence.py compare evidence/",
+  "lines": [
+    "format: PASS",
+    "Unsigned negative Azahar movement regression: failed before the float cast; passes after",
+    "182 unit and 182 integration tests: PASS",
+    "Final native patches and build provenance: PASS",
+    "Production fresh Azahar launch: 600 frames, clean exit",
+    "Production DS Close Content -> Load Content -> Azahar: clean exit",
+    "Stored eboot.bin and both cores match staged SHA-256: PASS",
+    "Original owner Azahar crash: unresolved; not claimed fixed"
+  ],
+  "native_cores": {
+    "desmume": {
+      "sha256": "b1b4d20bf62a4115007646b76ae7f5e04ddb661b8f9cb5b79a00c940c3b801a4",
+      "bytes": 5626312,
+      "abi_passed": true,
+      "source_revision": "54540709d343bd93d021487af4408679ca187825",
+      "port_inputs_sha256": {
+        "tools/core-fork.sh": "392c8a7577eaa7a81e99f58a6e006cecab92610d959dc460aabc3ef1064ac1b0",
+        "tooling/native/ps5-core.ld": "5ffe0f0e99e23de5245afb46fa6dfda6dd860b53d942a5fe2f06eaf9e520df42",
+        "tooling/native/core_cxx_runtime.cpp": "6d7c11d8595f47601b3a281e616033ea5d28c6329872aa286d4d81c597509433",
+        "tools/build-desmume.sh": "55ad2647a5cb5333eb6dd4e3454af5cc93e5be2ea235910e5bc18d7506e63b24",
+        "tooling/desmume/touchpad-stylus.patch": "f24b0d6526095027c9597a6fc9bc1e7313404e61a1a7f29a836e1e58e561c313"
+      }
+    },
+    "azahar": {
+      "sha256": "605f966ff08951ddc2a24989da672400b5dd6553c78f0a1c93bffce1a84988f2",
+      "bytes": 62186680,
+      "abi_passed": true,
+      "source_revision": "4aef900a1a903d0aa6ea86fdb1e18236fb0d5907",
+      "port_inputs_sha256": {
+        "tools/core-fork.sh": "392c8a7577eaa7a81e99f58a6e006cecab92610d959dc460aabc3ef1064ac1b0",
+        "tooling/native/ps5-core.ld": "5ffe0f0e99e23de5245afb46fa6dfda6dd860b53d942a5fe2f06eaf9e520df42",
+        "tooling/native/core_cxx_runtime.cpp": "6d7c11d8595f47601b3a281e616033ea5d28c6329872aa286d4d81c597509433",
+        "tools/build-azahar.sh": "2418b991f7f4a71c4c4c984ab7831dad085861c6a40e82c0e8ca791acee2f40c",
+        "tooling/azahar/ps5-toolchain.cmake": "930762cf6f56d1e8b1a927bd70ac5e782f77cdb9b9622617973ef92ce881c398",
+        "tooling/azahar/touchpad-stylus.patch": "503e8b8bbdf0de597fe8497647d9db2b4ed58a08da3172db428ca1c6ae1ca91d"
+      }
+    }
+  },
+  "deployed_readback": {
+    "eboot.bin": {
+      "bytes": 38772204,
+      "sha256": "530b1c858a91bfa2d911763ffa0bafb9f4778133f6114019646b81e65084345f",
+      "matches_staged": true
+    },
+    "cores/desmume_libretro.so": {
+      "bytes": 5626312,
+      "sha256": "b1b4d20bf62a4115007646b76ae7f5e04ddb661b8f9cb5b79a00c940c3b801a4",
+      "matches_staged": true
+    },
+    "cores/azahar_libretro.so": {
+      "bytes": 62186680,
+      "sha256": "605f966ff08951ddc2a24989da672400b5dd6553c78f0a1c93bffce1a84988f2",
+      "matches_staged": true
+    }
+  },
+  "console_runs": {
+    "fresh-production": {
+      "raw_capture": "klog/run-PPSA99169-195447.log",
+      "frontend_log": "klog/retroarch-195447.log",
+      "frame_capture": "klog/game-195447.png",
+      "frame_sha256": "5c316e100b89c4686396137e4efe751daec449e0077cd0b2d36c8b1598f736f6",
+      "events": [
+        "rarch_main returned = 0",
+        "audio ps5: closed accepted=476769 played=476769 discarded=0 silence=40095 calls=2019 errors=0 peak=2780 capacity=3072 drain=00000100 close=00000000"
+      ],
+      "result": "clean exit; no fatal signal"
+    },
+    "load-content-production": {
+      "raw_capture": "klog/run-PPSA99169-195540.log",
+      "frontend_log": "klog/retroarch-195540.log",
+      "frame_capture": "klog/game-195540.png",
+      "frame_sha256": "183a123d50f47922e990de542ccb614e5ba514268e60159ed44308d6cebf6613",
+      "events": [
+        "audio ps5: closed accepted=312940 played=312058 discarded=882 silence=4102 calls=1235 errors=0 peak=1650 capacity=3072 drain=00000100 close=00000000",
+        "audio ps5: closed accepted=0 played=0 discarded=0 silence=1775616 calls=6936 errors=0 peak=0 capacity=3072 drain=00000100 close=00000000",
+        "input: pad script MARK at 57.005 s: frames=3338 worst_ms=1076.3 over_40ms=7",
+        "input: pad script MARK at 65.013 s: frames=3818 worst_ms=18.7 over_40ms=7",
+        "input: pad script STOP at 70.00 s",
+        "rarch_main returned = 0",
+        "audio ps5: closed accepted=997687 played=997687 discarded=0 silence=47561 calls=4083 errors=0 peak=3055 capacity=3072 drain=00000100 close=00000000"
+      ],
+      "result": "clean exit; no fatal signal"
+    }
+  },
+  "console_commands": [
+    "python3 klog/stylus-fix/run-azahar-production.py",
+    "python3 klog/stylus-fix/run-load-content-production.py"
+  ],
+  "cleanup": "Test launch files removed; exploratory config-directory history items removed: 1",
+  "changes": [
+    "Resolution-scaled antialiased DeSmuME pen: dark nib and outline, light barrel, rounded end; native and hybrid layouts, RGB565/XRGB8888 clipping tested under ASan/UBSan.",
+    "Azahar casts unsigned screen dimensions to float before multiplying signed mouse deltas; left/up motion no longer wraps."
+  ],
+  "preview": "klog/stylus-fix/stylus-preview.png (actual patched DrawStylus rasterizer, visually inspected)",
+  "diagnostics": {
+    "owner_report": "Load Content after DS was closed. Original capture faults in Dynarmic fmt error reporting; original cause is unresolved.",
+    "invalid_reload_tests": "Active-content RELOAD runs inside the current core input callback. The diagnostic first-fault record resolves to an unloaded DeSmuME retro_run. These crashes do not reproduce the owner sequence.",
+    "temporary_handler": "Removed from final build; no diagnostic hook in tools/build-azahar.sh.",
+    "deployment_cache": "The cache skipped DeSmuME after the manual diagnostic binary swap; independent hash readback failed. The production DS core was then uploaded atomically and all three stored hashes verified.",
+    "invalid_navigation": "Two exploratory menu runs selected a config directory due to the extra Use this directory item; excluded from Azahar acceptance.",
+    "initial_fresh_attempt": "An incorrectly escaped content path failed to load; corrected argument-list launch passed.",
+    "initial_host_failure": "Sandbox denied local socket creation; rerun with loopback sockets allowed passed all 182 tests.",
+    "diagnostic_identity_checks": "Runs using a saved original frontend intentionally differed from the staged build and failed the helper identity check; final production runs pass it."
+  },
+  "limits": [
+    "Original Azahar load crash remains open; investigation plan is in ignored parked/azahar-load-crash.md.",
+    "Physical touchpad motion and redesigned cursor appearance on the TV need owner acceptance."
+  ]
+}

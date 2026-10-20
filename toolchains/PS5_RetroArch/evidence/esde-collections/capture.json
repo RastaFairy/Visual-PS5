@@ -1,0 +1,23 @@
+{
+  "step": "esde-collections",
+  "recorded": "2026-10-05T02:32:04Z",
+  "console_run": "base PS5 13.40, runs 222652 (favourite), 222946 and 223054 (ES-DE)",
+  "revision": "1e6b8cb + RetroArch's favourites and play in ES-DE",
+  "command": "tools/run-title.sh --no-build --no-deploy --pad-script=tests/pad/history-favourite.txt --watch 25; tools/run-title.sh --no-build --no-deploy --relaunch-test=1 --relaunch-image=es-de/es-de.bin --frontend-capture=4 --watch 30",
+  "raw_capture": "klog/collections-evidence/summary.txt",
+  "raw_lines": 11,
+  "raw_bytes": 1283,
+  "lines": [
+    "==> base PS5 13.40, build of this commit (PS5_FRONTENDS='es-de picker')",
+    "RetroArch, tests/pad/history-favourite.txt (History tab, the newest game's menu, Add to Favorites):",
+    "  input: pad script MENU at 9.51 s: depth 2, list 'deferred_rpl_entry_actions' '', entry 3 of 7 'Add to Favorites'",
+    "  RetroArch's favourites (playlists/builtin/content_favorites.lpl): Jungle Run 2",
+    "ES-DE's next start (--relaunch-test=1 --relaunch-image=es-de/es-de.bin --frontend-capture=4 --watch 30):",
+    "  start: library from RetroArch's playlists: 14 systems, 16 games (16 with ES-DE's details kept), 15 cores, 1 favourites, 15 played, 0 failures",
+    "  es_settings.xml: CollectionSystemsAuto = favorites,recent (enabled once; it was empty)",
+    "  gamelist snes, Jungle Run 2: favorite true, lastplayed 20261004T221855 (ES-DE's, later than the runtime log's 22:18:53), playcount 8 (the runtime log's), playtime 838 (the runtime log's 0:13:58)",
+    "  the SNES card: 1 GAME (1 FAVORITE)",
+    "ES-DE scrolled (--frontend-capture=4,6,8,10 --frontend-scroll): the carousel holds the Favorites (heart) and Last Played (clock) collections",
+    "host tests: ps5_library (favourites, history, runtime logs, a time from the history place) PASS; esde_library (favourites from both frontends, play records, the collections once) PASS"
+  ]
+}

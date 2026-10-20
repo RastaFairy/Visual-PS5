@@ -1,0 +1,15 @@
+{
+  "step": "readme-galaxy",
+  "must_contain": [
+    "Approved wide galaxy banner added after the unchanged opening warning",
+    "Four subtle section accents added; headings remain real searchable text",
+    "Both screenshot frames embed original screenshot bytes unchanged",
+    "All 33 core and renderer rows unchanged; frontend showcase remains before highlights",
+    "All 74 images resolve; local browser shows no broken images or page overflow",
+    "Self-contained SVG assets contain no scripts, foreignObject, or external image dependencies"
+  ],
+  "must_not_contain": [
+    "FAIL"
+  ],
+  "human_check": "Wide galaxy banner, subtle starfield section accent, original screenshots inside frames, readable system table and warning placement reviewed in local browser."
+}

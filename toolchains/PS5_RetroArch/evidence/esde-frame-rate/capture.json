@@ -1,0 +1,22 @@
+{
+  "step": "esde-frame-rate",
+  "recorded": "2026-10-04T21:07:48Z",
+  "console_run": "base PS5 13.40, runs frontend-20261004-163532 (before), frontend-20261004-170557 (after); profiles frontend-20261004-164802, frontend-20261004-165545",
+  "revision": "eaba7a8 + frame-time capture and profiler; PS5_OpenGL e6990b5",
+  "command": "PS5_FRONTENDS=es-de tools/build-title.sh; tools/run-title.sh --no-build --relaunch-test=1 --relaunch-image=es-de/es-de.bin --frontend-capture=4,25,45 --frontend-scroll --watch 60",
+  "raw_capture": "klog/esde-frame-rate-summary.txt",
+  "raw_lines": 10,
+  "raw_bytes": 1323,
+  "lines": [
+    "==> tools/run-title.sh --no-build --relaunch-test=1 --relaunch-image=es-de/es-de.bin --frontend-capture=... --frontend-scroll [--frontend-profile] --watch 60   (base PS5, 13.40; Right pressed every 400 ms from 5 s)",
+    "before (PS5_OpenGL 54f01c7): 224 frames to 12 s, 17 presses: between swaps mean 35.72 ms, p95 57.87 ms, 174 over 25 ms",
+    "before (PS5_OpenGL 54f01c7): 324 frames to 24 s, 28 presses: between swaps mean 37.14 ms, p95 38.03 ms, 298 over 25 ms",
+    "before (PS5_OpenGL 54f01c7): 436 frames to 40 s, 37 presses: between swaps mean 36.64 ms, p95 38.01 ms, 402 over 25 ms",
+    "after (PS5_OpenGL e6990b5): 1199 frames to 25 s, 50 presses: between swaps mean 17.52 ms, p95 17.62 ms, 30 over 25 ms",
+    "after (PS5_OpenGL e6990b5): 1171 frames to 45 s, 49 presses: between swaps mean 17.08 ms, p95 17.62 ms, 8 over 25 ms",
+    "profile before (frontend-20261004-164802): 24567 samples, 75.0% self in util_clflushopt_range, 18288 of them under ps5_agc_gate2_run's scanout pool flush (ps5_agc_native_runtime.c:4223)",
+    "profile after (frontend-20261004-165545): 10267 samples, util_clflushopt_range 1.8% self",
+    "driver: PS5_OpenGL e6990b5 'platform: flush the scanout pool once, not on every unbatched write to it'; make test PASS",
+    "frames over 100 ms after the change: the startup ones and one at each capture (the capture's own readback and 6 MB write)"
+  ]
+}

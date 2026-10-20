@@ -1,0 +1,13 @@
+{
+  "step": "game-mode",
+  "note": "Game mode, the one way every frontend starts a game: ES-DE asks for Jungle Run 2, the title restarts as RetroArch on it with snes9x (RetroArch's own saves and settings), and when RetroArch quits the title restarts as ES-DE on that game, with the play counted.",
+  "must_contain": [
+    "kernel log: 191 eboot.bin, 192 es-de/es-de.bin, 193 eboot.bin, 194 es-de/es-de.bin; fatal signals 0",
+    "trace: game mode: RetroArch quit (status 0) after 11 s; back to the frontend",
+    "retroarch.log: [SRAM] Saved successfully to",
+    "gamelist snes: playcount 1, playtime 11",
+    "frontend capture PASS: 3 pictures from 2 process(es)"
+  ],
+  "must_not_contain": [],
+  "human_check": "The capture of the ES-DE after the game (process 194, 4 s) shows the SNES game list with Jungle Run 2 selected."
+}

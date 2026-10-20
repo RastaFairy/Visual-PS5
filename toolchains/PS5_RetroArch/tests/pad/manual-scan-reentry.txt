@@ -1,0 +1,29 @@
+# Import Content -> Manual Scan -> Content Directory, a folder chosen, then
+# Content Directory again: the second visit opens the browser on the folder's
+# parent with the folder selected, which a tester's v0.5.5-alpha.5 crashed on.
+# The menu's OK is B on this console (menu_swap_ok_cancel_buttons), and XMB's
+# tabs are Main Menu, Settings, History, Favourites, Images, Import Content.
+# The folder browser lists Parent Directory, <Use this directory>, then the
+# folders. Each MENU line prints the list on top and the selected entry.
+4.0 RIGHT
+4.5 RIGHT
+5.0 RIGHT
+5.5 RIGHT
+6.0 RIGHT
+7.5 MENU              # Import Content, Manual Scan
+8.0 B                 # Manual Scan
+9.5 MENU              # Manual Scan, Content Directory first
+10.0 B                # Content Directory: the browser at /app0, first visit
+11.5 MENU
+12.0 DOWN
+12.5 DOWN
+13.5 MENU             # /app0's first folder
+14.0 B                # into it
+15.5 MENU
+16.0 DOWN
+17.0 MENU             # <Use this directory>
+17.5 B                # use it: back on Manual Scan with the folder set
+19.0 MENU
+19.5 B                # Content Directory again: the parent, the folder pending
+21.0 MENU             # the browser on the parent, the folder selected
+22.0 STOP

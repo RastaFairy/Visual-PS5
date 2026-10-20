@@ -1,0 +1,13 @@
+PS5 RetroArch - legal use
+=========================
+
+PIRACY IS NOT CONDONED. This title contains no games, no BIOS files, no
+console firmware and no decryption keys, and none will ever be provided or
+linked to. Use only games you own, as backups you made yourself from your own
+discs, cartridges or digital purchases, and BIOS or firmware files dumped from
+hardware you own. Downloading or sharing games, BIOS files, firmware or keys
+you do not own is piracy: do not do it, and do not ask for help with it.
+
+Licences: every part of this title, its licence and its source are listed in
+licenses/README.txt. Snes9x, FinalBurn Neo and Genesis Plus GX may not be sold
+or used commercially.

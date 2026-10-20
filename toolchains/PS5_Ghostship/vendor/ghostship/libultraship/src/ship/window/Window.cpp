@@ -1,0 +1,178 @@
+#include "ship/window/Window.h"
+#include "ship/window/gui/Gui.h"
+#include <string>
+#include <fstream>
+#include <iostream>
+#include <stdexcept>
+#include "ship/controller/controldevice/controller/mapping/keyboard/KeyboardScancodes.h"
+#include "ship/Context.h"
+#include "ship/controller/controldeck/ControlDeck.h"
+
+#ifdef __APPLE__
+#include "ship/utils/AppleFolderManager.h"
+#endif
+
+namespace Ship {
+
+Window::Window(std::shared_ptr<Gui> gui, std::shared_ptr<MouseStateManager> mouseStateManager,
+               std::shared_ptr<Config> config)
+    : Component("Window"), mConfig(std::move(config)) {
+    mGui = gui;
+    mMouseStateManager = mouseStateManager;
+    mAvailableWindowBackends = std::make_shared<std::vector<int32_t>>();
+}
+
+Window::Window(std::shared_ptr<Gui> gui, std::shared_ptr<Config> config)
+    : Window(gui, std::make_shared<MouseStateManager>(), std::move(config)) {
+}
+
+Window::Window(std::vector<std::shared_ptr<GuiWindow>> guiWindows, std::shared_ptr<Config> config)
+    : Window(std::make_shared<Gui>(guiWindows), std::move(config)) {
+}
+
+Window::Window(std::shared_ptr<Config> config) : Window(std::vector<std::shared_ptr<GuiWindow>>(), std::move(config)) {
+}
+
+Window::~Window() {
+    mGui->ShutDownImGui(this);
+    SPDLOG_DEBUG("destruct window");
+}
+
+void Window::OnInit(const nlohmann::json& initArgs) {
+    Component::OnInit(initArgs);
+    if (mGui != nullptr && !GetChildren().Has(mGui)) {
+        GetChildren().Add(mGui);
+    }
+    mMouseStateManager->SetWindow(std::dynamic_pointer_cast<Window>(shared_from_this()));
+}
+
+void Window::ToggleFullscreen() {
+    SetFullscreen(!IsFullscreen());
+}
+
+float Window::GetCurrentAspectRatio() {
+    return (float)GetWidth() / (float)GetHeight();
+}
+
+int32_t Window::GetLastScancode() {
+    return mLastScancode;
+}
+
+void Window::SetLastScancode(int32_t scanCode) {
+    mLastScancode = scanCode;
+}
+
+std::shared_ptr<Gui> Window::GetGui() {
+    return mGui;
+}
+
+void Window::SaveWindowToConfig() {
+    // This accepts conf in because it can be run in the destruction of LUS.
+    auto config = GetConfig();
+    config->SetBool("Window.Fullscreen.Enabled", IsFullscreen());
+    if (IsFullscreen()) {
+        config->SetInt("Window.Fullscreen.Width", (int32_t)GetWidth());
+        config->SetInt("Window.Fullscreen.Height", (int32_t)GetHeight());
+    } else {
+        config->SetInt("Window.Width", (int32_t)GetWidth());
+        config->SetInt("Window.Height", (int32_t)GetHeight());
+        config->SetInt("Window.PositionX", GetPosX());
+        config->SetInt("Window.PositionY", GetPosY());
+    }
+}
+
+int32_t Window::GetWindowBackend() {
+    return mWindowBackend;
+}
+
+std::shared_ptr<std::vector<int32_t>> Window::GetAvailableWindowBackends() {
+    return mAvailableWindowBackends;
+}
+
+bool Window::IsAvailableWindowBackend(int32_t backendId) {
+    if (backendId < 0) {
+        return false;
+    }
+
+    return std::find(mAvailableWindowBackends->begin(), mAvailableWindowBackends->end(), backendId) !=
+           mAvailableWindowBackends->end();
+}
+
+bool Window::ShouldAutoCaptureMouse() {
+    return mMouseStateManager->ShouldAutoCaptureMouse();
+}
+
+void Window::SetAutoCaptureMouse(bool capture) {
+    mMouseStateManager->SetAutoCaptureMouse(capture);
+}
+
+bool Window::ShouldForceCursorVisibility() {
+    return mMouseStateManager->ShouldForceCursorVisibility();
+}
+
+void Window::SetForceCursorVisibility(bool visible) {
+    mMouseStateManager->SetForceCursorVisibility(visible);
+}
+
+int32_t Window::GetFullscreenScancode() {
+    return mFullscreenScancode;
+}
+
+int32_t Window::GetMouseCaptureScancode() {
+    return mMouseCaptureScancode;
+}
+
+void Window::SetFullscreenScancode(int32_t scancode) {
+    mFullscreenScancode = scancode;
+}
+
+void Window::SetMouseCaptureScancode(int32_t scancode) {
+    mMouseCaptureScancode = scancode;
+}
+
+std::shared_ptr<MouseStateManager> Window::GetMouseStateManager() {
+    return mMouseStateManager;
+}
+
+void Window::SetWindowBackend(int32_t backend) {
+    mWindowBackend = backend;
+    auto config = GetConfig();
+    config->SetInt("Window.Backend.Id", GetWindowBackend());
+    config->SetString("Window.Backend.Name", GetWindowBackendName());
+    config->Save();
+}
+
+void Window::AddAvailableWindowBackend(int32_t backend) {
+    mAvailableWindowBackends->push_back(backend);
+}
+
+int32_t Window::GetSavedWindowBackend() {
+    auto backendId = GetConfig()->GetInt("Window.Backend.Id", -1);
+    if (IsAvailableWindowBackend(backendId)) {
+        return backendId;
+    }
+
+    SPDLOG_TRACE(
+        "Could not find available WindowBackend matching id from config file ({}). Returning default WindowBackend.",
+        backendId);
+
+    if (mAvailableWindowBackends && !mAvailableWindowBackends->empty()) {
+        return mAvailableWindowBackends->front();
+    }
+    return -1;
+}
+
+std::string Window::GetWindowBackendName() {
+    return "";
+}
+
+std::shared_ptr<Config> Window::GetConfig() const {
+    if (!mConfig) {
+        throw std::runtime_error("Window requires Config dependency");
+    }
+    if (!mConfig->IsInitialized()) {
+        throw std::runtime_error("Window requires Config to be initialized");
+    }
+    return mConfig;
+}
+} // namespace Ship

@@ -1,0 +1,3 @@
+{"pid":204,"t":0.00,"step":"nogpu_start","app":24600,"list_count":1}
+{"pid":204,"t":0.13,"step":"nogpu_graphics_child_spawned","service_id":369198993}
+{"pid":204,"t":0.62,"step":"nogpu_graphics_child","service_id":369198993,"reported":0,"seconds":0.61,"child_pid":0,"opened":0,"frames":0,"matched":0,"width":0,"height":0}

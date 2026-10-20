@@ -1,0 +1,21 @@
+{
+  "step": "webui-qr",
+  "note": "Host-native production encoder and XMB/RGUI geometry decoded with independent zbarimg; network change/offline recovery, picker input, menu placement/routing and QR patch idempotence verified. All shipped frontend binaries cross-built and captured by digest.",
+  "must_contain": [
+    "test_current_ip_changes_offline_and_modal_lifecycle",
+    "test_encoder_decodes_and_preserves_quiet_zone",
+    "test_picker_buttons_consume_input",
+    "test_rgui_rendered_frame_decodes",
+    "test_xmb_rendered_frame_decodes",
+    "test_menu_hooks_apply_and_are_idempotent",
+    "Ran 176 tests",
+    "verify: PASS (format unit build integration evidence)",
+    "Shared QR encoder and runtime address refresh present in all three linked frontends: PASS",
+    "All three deployed frontend stored-byte SHA-256 digests match staged build: PASS"
+  ],
+  "must_not_contain": [
+    "FAILED",
+    "ERROR"
+  ],
+  "human_check": "Restart the installed title. Scan each overlay and confirm the console WebUI opens; exercise Triangle/triangle and Triangle/circle in the picker, XMB WebUI left of Settings, first RGUI main-menu entry, and ES-DE WebUI replacing Scraper. Actual console IP and screenshots stay in ignored klog."
+}

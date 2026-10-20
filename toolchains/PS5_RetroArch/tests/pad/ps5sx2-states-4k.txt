@@ -1,0 +1,14 @@
+# PS5SX2 with a PS2 game, started with --game=ps5sx2:<the .iso>.
+# The internal resolution goes to 6x (~4K) as the Quick Menu sets it; a state is saved
+# and loaded through the Quick Menu's actions; MARK lines give the frames made over each
+# stretch, and the pictures show the game before and after the load.
+2.0 OPTION ps5sx2_upscale 6
+10.0 MARK
+20.0 MARK
+22.0 SCREENSHOT
+24.0 SAVE_STATE 0
+30.0 MARK
+32.0 SCREENSHOT
+34.0 LOAD_STATE 0
+36.0 SCREENSHOT
+46.0 MARK

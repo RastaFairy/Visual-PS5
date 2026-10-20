@@ -1,0 +1,1159 @@
+/*
+ * ps5-native-app-boilerplate / ProsperoLight - Decode and presentation worker checks.
+ * Copyright (C) 2026 BlackBearReloaded
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+#define PROSPEROLIGHT_LAN_TELEMETRY 0
+#define PROSPEROLIGHT_PERFORMANCE_DETAIL 1
+#include "../src/moonlight_stream.cpp"
+#include "video_sps_fixtures.hpp"
+#include <atomic>
+#include <cassert>
+#include <chrono>
+#include <deque>
+#include <thread>
+
+// Videodec2 stand-in. Two buffer models are plausible on hardware and both
+// must work: the decoder keeps the frame buffer offered with each access unit
+// and later returns it (Queued), or it holds pictures internally and writes
+// each one into the buffer offered by the call that outputs it (SameCall).
+enum class Model
+{
+    Queued,
+    SameCall
+};
+static Model model;
+static unsigned output_depth; // Decode outputs once this many are held; 0 = never.
+static std::deque<void *> held;
+static unsigned internal_pictures;
+static unsigned resets, flushes, decodes, deletes, creates, submits;
+static bool fail_decode, fail_reset, fail_flush, fail_create, orphan_flush;
+// Seen on hardware: once a flush has returned a picture while others are still
+// held, the decoder refuses to decode until the rest are flushed too.
+static bool flushing;
+static bool cancel_query, cancel_create, fail_source_idle;
+static unsigned cancel_at, direct_maps;
+static uint64_t reject_affinity, accepted_affinity;
+static int32_t first_decode_error;
+static bool native_requires_headers;
+
+static std::atomic<unsigned> native_allocations;
+static std::atomic<bool> hold_presentation, presentation_entered;
+static int pending_after_flush = -1; // A frame arriving while a flush blocks.
+static std::atomic<int> pending_frames;
+static int decoder_token, classic_token;
+
+static native_renderer_state_t *mock_state;
+static uint8_t inputs[INPUT_SLOT_COUNT * 64];
+static uint8_t frames[FRAME_SLOT_COUNT * 64];
+
+static void fill_output(videodec2_output_t *output, void *buffer)
+{
+    const native_video_mode_t *mode = mock_state->mode;
+    output->buffer = buffer;
+    output->buffer_size = mock_state->frame_size;
+    output->codec = mode->codec_type;
+    output->width = mode->output_width;
+    output->height = mode->output_height;
+    output->pitch = mode->output_pitch;
+    output->picture_count = output->valid = 1;
+}
+
+// Worker-thread scenario: a stand-in for moonlight-common-c's frame queue.
+static std::atomic<unsigned> feed_total, feed_next, completed_units, refused_units;
+static std::atomic<bool> wake_requested;
+static std::atomic<unsigned> poll_calls;
+static uint8_t access_unit[] = {0, 0, 1, 0x65, 0x80};
+static LENTRY fragment;
+static DECODE_UNIT queued_unit;
+
+static void checkpoint(unsigned at)
+{
+    if (cancel_at == at)
+        mock_state->running = 0;
+}
+
+extern "C"
+{
+    void gs_logf(const char *, const char *, ...)
+    {
+    }
+    int prosperolight_logs_enabled(void)
+    {
+        return 1;
+    }
+    int prosperolight_debug_enabled(void)
+    {
+        return 0;
+    }
+    void prosperolight_debug_line(const char *, const char *, ...)
+    {
+    }
+    int lan_http_report_text(const char *)
+    {
+        return 0;
+    }
+    uint64_t PltGetMicroseconds(void)
+    {
+        return monotonic_us();
+    }
+    int LiGetPendingVideoFrames(void)
+    {
+        return pending_frames;
+    }
+    bool LiGetEstimatedRttInfo(uint32_t *, uint32_t *)
+    {
+        return false;
+    }
+    bool LiWaitForNextVideoFrame(VIDEO_FRAME_HANDLE *handle, PDECODE_UNIT *unit)
+    {
+        for (;;)
+        {
+            if (wake_requested.exchange(false))
+                return false;
+            const unsigned next = feed_next.load();
+            if (next < feed_total.load())
+            {
+                feed_next = next + 1;
+                queued_unit.frameNumber = static_cast<int>(next + 1);
+                queued_unit.frameType = next == 0 ? FRAME_TYPE_IDR : FRAME_TYPE_PFRAME;
+                *handle = &queued_unit;
+                *unit = &queued_unit;
+                return true;
+            }
+            std::this_thread::sleep_for(std::chrono::microseconds(100));
+        }
+    }
+    bool LiPollNextVideoFrame(VIDEO_FRAME_HANDLE *handle, PDECODE_UNIT *unit)
+    {
+        ++poll_calls;
+        if (feed_next.load() >= feed_total.load())
+            return false;
+        return LiWaitForNextVideoFrame(handle, unit);
+    }
+    void LiCompleteVideoFrame(VIDEO_FRAME_HANDLE, int status)
+    {
+        if (status == DR_NEED_IDR)
+            ++refused_units;
+        ++completed_units;
+    }
+    void LiWakeWaitForVideoFrame(void)
+    {
+        wake_requested = true;
+    }
+    int32_t sceKernelSendNotificationRequest(uint32_t, void *, size_t, int32_t)
+    {
+        return 0;
+    }
+    int sceKernelUsleep(uint32_t microseconds)
+    {
+        std::this_thread::sleep_for(
+            std::chrono::microseconds(microseconds < 500u ? microseconds : 500u));
+        return 0;
+    }
+    int ps5_thread_affinity_set(uint64_t)
+    {
+        return 0;
+    }
+    int32_t sceVideodec2Reset(void *)
+    {
+        ++resets;
+        checkpoint(8);
+        if (fail_reset)
+            return -99;
+        held.clear();
+        internal_pictures = 0;
+        flushing = false;
+        native_requires_headers = true;
+        return 0;
+    }
+    int32_t sceVideodec2Decode(void *, videodec2_input_t *input, videodec2_frame_t *frame,
+                               videodec2_output_t *output)
+    {
+        ++decodes;
+        if (mock_state->stream_aware && native_requires_headers)
+        {
+            bool sps = false, pps = false;
+            const auto *bytes = static_cast<const uint8_t *>(input->au);
+            for (size_t i = 0; i + 3 < input->au_size; ++i)
+                if (!bytes[i] && !bytes[i + 1] && bytes[i + 2] == 1)
+                {
+                    sps |= (bytes[i + 3] & 31) == 7;
+                    pps |= (bytes[i + 3] & 31) == 8;
+                }
+            assert(sps && pps); // Client knowledge cannot bootstrap a native instance.
+            native_requires_headers = false;
+        }
+        if (first_decode_error)
+        {
+            auto e = first_decode_error;
+            first_decode_error = 0;
+            return e;
+        }
+        if (fail_decode)
+            return -98;
+        if (flushing)
+            return -94;
+        if (model == Model::Queued)
+        {
+            held.push_back(frame->buffer);
+            frame->accepted = 1;
+            if (output_depth && held.size() >= output_depth)
+            {
+                fill_output(output, held.front());
+                held.pop_front();
+            }
+            return 0;
+        }
+        ++internal_pictures;
+        if (output_depth && internal_pictures >= output_depth)
+        {
+            fill_output(output, frame->buffer);
+            frame->accepted = 1;
+            --internal_pictures;
+        }
+        return 0;
+    }
+    int32_t sceVideodec2Flush(void *, videodec2_frame_t *frame, videodec2_output_t *output)
+    {
+        ++flushes;
+        if (fail_flush)
+            return -97;
+        if (orphan_flush)
+        {
+            frame->accepted = 1; // Kept, but belonging to no access unit.
+            return 0;
+        }
+        if (pending_after_flush >= 0)
+            pending_frames = pending_after_flush;
+        if (model == Model::Queued)
+        {
+            if (!held.empty())
+            {
+                fill_output(output, held.front());
+                held.pop_front();
+            }
+            flushing = !held.empty();
+            return 0;
+        }
+        if (internal_pictures)
+        {
+            fill_output(output, frame->buffer);
+            frame->accepted = 1;
+            --internal_pictures;
+        }
+        flushing = internal_pictures != 0;
+        return 0;
+    }
+    int32_t sceVideodec2QueryDecoderMemoryInfo(const videodec2_decoder_config_t *,
+                                               videodec2_decoder_memory_t *m)
+    {
+        checkpoint(1);
+        m->cpu_size = m->gpu_size = m->cpu_gpu_size = 16384;
+        m->max_frame_size = 64;
+        if (cancel_query)
+            mock_state->running = 0;
+        return 0;
+    }
+    int32_t sceKernelAvailableFlexibleMemorySize(size_t *size)
+    {
+        *size = 1024 * 1024;
+        return 0;
+    }
+    int32_t sceKernelMapNamedFlexibleMemory(void **p, size_t n, int, int, const char *)
+    {
+        checkpoint(2);
+        *p = malloc(n);
+        if (*p)
+            ++native_allocations;
+        return *p ? 0 : -1;
+    }
+    int32_t sceKernelReleaseFlexibleMemory(void *, size_t)
+    {
+        return 0;
+    }
+    int32_t sceKernelVirtualQuery(void *, int, void *p, size_t n)
+    {
+        memset(p, 0, n);
+        return 0;
+    }
+    int32_t sceKernelAllocateDirectMemory(int64_t, int64_t, size_t, size_t, int, int64_t *start)
+    {
+        *start = 1;
+        return 0;
+    }
+    int32_t sceKernelMapDirectMemory(void **p, size_t n, int, int, int64_t, size_t)
+    {
+        ++direct_maps;
+        checkpoint(direct_maps <= 2 ? direct_maps + 2 : direct_maps + 3);
+        *p = malloc(n);
+        if (*p)
+            ++native_allocations;
+        return *p ? 0 : -1;
+    }
+    int32_t sceKernelMunmap(void *p, size_t)
+    {
+        if (p)
+        {
+            assert(native_allocations);
+            --native_allocations;
+        }
+        free(p);
+        return 0;
+    }
+    int32_t sceKernelReleaseDirectMemory(int64_t, size_t)
+    {
+        return 0;
+    }
+    int32_t sceVideodec2DeleteDecoder(void *)
+    {
+        ++deletes;
+        return 0;
+    }
+    int32_t sceVideodec2CreateDecoder(const videodec2_decoder_config_t *config,
+                                      const videodec2_decoder_memory_t *, void **decoder)
+    {
+        ++creates;
+        checkpoint(5);
+        if (config->cpu_affinity == reject_affinity && reject_affinity)
+            return -95;
+        accepted_affinity = config->cpu_affinity;
+        if (cancel_create)
+            mock_state->running = 0;
+        if (fail_create)
+            return -95;
+        assert(config->pipeline_depth == 1);
+        held.clear();
+        internal_pictures = 0;
+        flushing = false;
+        model = Model::SameCall;
+        output_depth = 1;
+        *decoder = &classic_token;
+        return 0;
+    }
+}
+void native_agc_reset_performance()
+{
+}
+int native_agc_finish_frame(void)
+{
+    return fail_source_idle ? -97 : 0;
+}
+static uint64_t repeat_submits;
+int native_agc_repeat_frame(void)
+{
+    ++repeat_submits;
+    return 0;
+}
+int native_agc_scanout_counter(uint64_t *count, uint64_t *argument)
+{
+    *count = submits + repeat_submits;
+    *argument = submits;
+    return 0;
+}
+void native_agc_output_status(uint32_t *width, uint32_t *height, uint32_t *refresh_x100)
+{
+    *width = 3840;
+    *height = 2160;
+    *refresh_x100 = 11988;
+}
+int native_agc_vrr_active(void)
+{
+    return 0;
+}
+int native_agc_vsync_active(void)
+{
+    return 1;
+}
+int native_agc_present_nv12(const void *source, size_t, uint32_t, uint32_t, uint32_t, uint32_t,
+                            uint32_t, const native_agc_metrics_t *metrics)
+{
+    assert(metrics);
+    if (hold_presentation.load())
+    {
+        presentation_entered = true;
+        while (hold_presentation.load())
+            std::this_thread::sleep_for(std::chrono::microseconds(100));
+        // ASan also checks that replacement did not free this borrowed surface.
+        assert(*static_cast<const uint8_t *>(source) == 0x5a);
+    }
+    ++submits;
+    return 0;
+}
+int native_agc_present_main10(const void *, size_t, uint32_t, uint32_t, uint32_t, uint32_t,
+                              uint32_t, const native_agc_metrics_t *)
+{
+    return -96;
+}
+
+using Pool = moonlight::SlotPool<FRAME_SLOT_COUNT>;
+
+static native_renderer_state_t *make_state(unsigned depth, Model decoder_model,
+                                           unsigned decoder_output_depth)
+{
+    auto *state = new native_renderer_state_t{};
+    state->mode = &video_modes[0];
+    state->stream_fps = 120;
+    state->input_memory = inputs;
+    state->frame_memory = frames;
+    state->input_size = state->frame_size = 64;
+    state->pipeline_depth = state->requested_depth = depth;
+    state->drain_enabled = depth > 1;
+    state->decoder = &decoder_token;
+    state->decoder_config.pipeline_depth = depth;
+    state->running = 1;
+    renderer_sync_init(state);
+    mock_state = state;
+    model = decoder_model;
+    output_depth = decoder_output_depth;
+    held.clear();
+    internal_pictures = 0;
+    resets = flushes = decodes = deletes = creates = submits = 0;
+    cancel_at = direct_maps = 0;
+    reject_affinity = accepted_affinity = 0;
+    first_decode_error = 0;
+    fail_decode = fail_reset = fail_flush = fail_create = orphan_flush = flushing = false;
+    pending_frames = 0;
+    pending_after_flush = -1;
+    std::atomic_store(&connection_terminated, 0);
+    std::atomic_store(&connection_error, 0);
+    return state;
+}
+
+static int decode(native_renderer_state_t *state, DECODE_UNIT *unit, int frame, int type)
+{
+    uint64_t busy = 0;
+    unit->frameNumber = frame;
+    unit->frameType = type;
+    return decode_access_unit(state, unit, &busy);
+}
+
+static void pipelined_then_drained(Model decoder_model)
+{
+    DECODE_UNIT unit{};
+    unit.fullLength = sizeof(access_unit);
+    unit.bufferList = &fragment;
+    auto *state = make_state(3, decoder_model, 3);
+    frame_trace.count = frame_trace.omitted = 0;
+    // Behind: frames are waiting, so pictures stay in the pipeline.
+    pending_frames = 2;
+    for (int i = 0; i < 20; ++i)
+    {
+        assert(decode(state, &unit, i + 1, i ? FRAME_TYPE_PFRAME : FRAME_TYPE_IDR) == DR_OK);
+        assert(drain_decoder(state) == 0);
+        assert(!state->decoder_needs_reset);
+        assert(state->submission_count == (i < 2 ? static_cast<unsigned>(i + 1) : 2u));
+    }
+    assert(decodes == 20 && flushes == 0 && state->decoded == 18 && state->decoder_delayed == 2);
+    // No presenter runs here: every newer picture replaces the waiting one.
+    assert(state->not_displayed == 17 && state->mailbox.full && state->mailbox.item.frame == 18);
+    assert(state->frames.count(Pool::Ready) == 1);
+    assert(state->frames.count(Pool::Decoding) == (decoder_model == Model::Queued ? 2u : 0u));
+    assert(frame_trace.samples[0].outcome == 2 && frame_trace.samples[17].outcome == 0);
+    assert(frame_trace.samples[19].outcome == 0); // Still inside the decoder.
+    // Caught up: take what the pipeline holds instead of waiting a frame time.
+    pending_frames = 0;
+    drain_decoder(state);
+    assert(flushes == 2 && state->drain_calls == 2 && state->decoded == 20);
+    assert(state->submission_count == 0 && state->frames.count(Pool::Decoding) == 0);
+    assert(state->mailbox.item.frame == 20 && state->pipeline_depth == 3 && state->drain_enabled);
+    assert(state->drain_faults == 0 && state->decoder_recreations == 0);
+    // Keeping up from here on behaves like depth one: one flush per frame.
+    for (int i = 20; i < 30; ++i)
+    {
+        assert(decode(state, &unit, i + 1, FRAME_TYPE_PFRAME) == DR_OK);
+        drain_decoder(state);
+        assert(state->submission_count == 0 && state->mailbox.item.frame == i + 1);
+    }
+    assert(state->decoded == 30 && flushes == 12);
+    renderer_sync_destroy(state);
+    delete state;
+}
+
+static void a_started_drain_runs_to_completion(Model decoder_model)
+{
+    DECODE_UNIT unit{};
+    unit.fullLength = sizeof(access_unit);
+    unit.bufferList = &fragment;
+    auto *state = make_state(3, decoder_model, 3);
+    // One frame was waiting, so the first picture stays in the pipeline.
+    pending_frames = 1;
+    assert(decode(state, &unit, 1, FRAME_TYPE_IDR) == DR_OK);
+    assert(drain_decoder(state) == 0 && flushes == 0 && state->submission_count == 1);
+    // Caught up after the second frame: the drain starts with two pictures held,
+    // and the next frame arrives while the first flush is still blocking.
+    pending_frames = 0;
+    assert(decode(state, &unit, 2, FRAME_TYPE_PFRAME) == DR_OK);
+    assert(state->submission_count == 2);
+    pending_after_flush = 1;
+    drain_decoder(state);
+    pending_after_flush = -1;
+    // Both pictures were taken: stopping after the first would have left the
+    // decoder between two flushes, where it refuses the next access unit.
+    assert(flushes == 2 && state->decoded == 2 && state->submission_count == 0 && !flushing);
+    assert(decode(state, &unit, 3, FRAME_TYPE_PFRAME) == DR_OK);
+    assert(resets == 0 && state->pipeline_faults == 0 && state->decode_errors == 0);
+    assert(state->pipeline_depth == 3 && state->decoder_recreations == 0);
+    // The model itself: a decode between two flushes is an error the client counts.
+    pending_frames = 1;
+    assert(decode(state, &unit, 4, FRAME_TYPE_PFRAME) == DR_OK); // 3 and 4 are now held.
+    flushing = true;
+    assert(decode(state, &unit, 5, FRAME_TYPE_PFRAME) == DR_NEED_IDR);
+    assert(state->decode_errors == 1 && state->last_decode_error == -94);
+    renderer_sync_destroy(state);
+    delete state;
+}
+
+static void classic_depth_one()
+{
+    DECODE_UNIT unit{};
+    unit.fullLength = sizeof(access_unit);
+    unit.bufferList = &fragment;
+    // H.264-like: the picture only appears after a flush into the same buffer.
+    auto *state = make_state(1, Model::SameCall, 0);
+    for (int i = 0; i < 10; ++i)
+    {
+        assert(decode(state, &unit, i + 1, i ? FRAME_TYPE_PFRAME : FRAME_TYPE_IDR) == DR_OK);
+        assert(drain_decoder(state) == 0);
+    }
+    assert(flushes == 10 && state->flush_calls == 10 && state->drain_calls == 0);
+    assert(state->decoded == 10 && state->decoder_delayed == 0 && state->submission_count == 0);
+    renderer_sync_destroy(state);
+    delete state;
+    // Queued buffers at depth one behave the same.
+    state = make_state(1, Model::Queued, 0);
+    for (int i = 0; i < 10; ++i)
+        assert(decode(state, &unit, i + 1, FRAME_TYPE_PFRAME) == DR_OK);
+    assert(flushes == 10 && state->decoded == 10 && state->frames.count(Pool::Decoding) == 0);
+    renderer_sync_destroy(state);
+    delete state;
+    // HEVC-like: the picture is returned by the decode call itself.
+    state = make_state(1, Model::SameCall, 1);
+    for (int i = 0; i < 10; ++i)
+        assert(decode(state, &unit, i + 1, FRAME_TYPE_PFRAME) == DR_OK);
+    assert(flushes == 0 && state->decoded == 10);
+    // A decoder that never produces a picture is an error, not a silent stall.
+    output_depth = 0;
+    fail_flush = true;
+    assert(decode(state, &unit, 11, FRAME_TYPE_PFRAME) == DR_NEED_IDR);
+    assert(state->decoder_needs_reset && state->pipeline_faults == 0);
+    renderer_sync_destroy(state);
+    delete state;
+}
+
+static void errors_reset_and_bounded_backlog()
+{
+    DECODE_UNIT unit{};
+    unit.fullLength = sizeof(access_unit);
+    unit.bufferList = &fragment;
+    auto *state = make_state(3, Model::Queued, 3);
+    pending_frames = 1;
+    for (int i = 0; i < 5; ++i)
+        assert(decode(state, &unit, i + 1, FRAME_TYPE_PFRAME) == DR_OK);
+    fail_decode = true;
+    assert(decode(state, &unit, 6, FRAME_TYPE_PFRAME) == DR_NEED_IDR);
+    assert(state->decoder_needs_reset && state->pipeline_faults == 1 && resets == 0);
+    fail_reset = true;
+    assert(decode(state, &unit, 7, FRAME_TYPE_IDR) == DR_NEED_IDR);
+    assert(resets == 1 && state->pipeline_faults == 2);
+    fail_decode = fail_reset = false;
+    assert(decode(state, &unit, 8, FRAME_TYPE_IDR) == DR_OK);
+    // The reset abandoned every picture the decoder held.
+    assert(resets == 2 && state->submission_count == 1);
+    assert(state->frames.count(Pool::Decoding) == 1);
+    // No unbounded backlog: a pipeline never holds more than its depth.
+    output_depth = 0;
+    assert(decode(state, &unit, 9, FRAME_TYPE_PFRAME) == DR_OK);
+    assert(decode(state, &unit, 10, FRAME_TYPE_PFRAME) == DR_OK);
+    assert(decode(state, &unit, 11, FRAME_TYPE_PFRAME) == DR_NEED_IDR);
+    assert(state->submission_count == 4 && state->pipeline_faults == 3);
+    // Oversized or empty access units are refused before reaching the decoder.
+    const unsigned before = decodes;
+    unit.fullLength = 65;
+    assert(decode(state, &unit, 12, FRAME_TYPE_IDR) == DR_NEED_IDR);
+    unit.fullLength = sizeof(access_unit);
+    unit.bufferList = nullptr;
+    assert(decode(state, &unit, 13, FRAME_TYPE_IDR) == DR_NEED_IDR);
+    assert(decodes == before);
+    renderer_sync_destroy(state);
+    delete state;
+}
+
+static void fallback_to_depth_one()
+{
+    DECODE_UNIT unit{};
+    unit.fullLength = sizeof(access_unit);
+    unit.bufferList = &fragment;
+    // A flush that fails mid-stream: rebuild at depth one, resume on a keyframe.
+    auto *state = make_state(3, Model::SameCall, 3);
+    assert(decode(state, &unit, 1, FRAME_TYPE_IDR) == DR_OK);
+    fail_flush = true;
+    drain_decoder(state);
+    fail_flush = false;
+    assert(state->drain_faults == 1 && state->decoder_recreations == 1 && deletes == 1);
+    assert(creates == 1 && state->pipeline_depth == 1 && !state->drain_enabled);
+    assert(state->decoder == &classic_token && state->submission_count == 0);
+    assert(state->await_keyframe && state->running);
+    const unsigned before = decodes;
+    assert(decode(state, &unit, 2, FRAME_TYPE_PFRAME) == DR_NEED_IDR);
+    assert(decodes == before);
+    assert(decode(state, &unit, 3, FRAME_TYPE_IDR) == DR_OK);
+    assert(decode(state, &unit, 4, FRAME_TYPE_PFRAME) == DR_OK);
+    assert(state->decoded == 2 && state->mailbox.item.frame == 4);
+    renderer_sync_destroy(state);
+    delete state;
+    // A flush that takes a buffer without returning a picture is caught too.
+    state = make_state(3, Model::Queued, 3);
+    assert(decode(state, &unit, 1, FRAME_TYPE_IDR) == DR_OK);
+    orphan_flush = true;
+    drain_decoder(state);
+    orphan_flush = false;
+    assert(state->drain_faults == 1 && state->pipeline_depth == 1);
+    assert(state->frames.count(Pool::Decoding) == 0);
+    renderer_sync_destroy(state);
+    delete state;
+    // If the decoder cannot be rebuilt, the stream ends instead of stalling.
+    state = make_state(3, Model::SameCall, 3);
+    assert(decode(state, &unit, 1, FRAME_TYPE_IDR) == DR_OK);
+    fail_flush = fail_create = true;
+    drain_decoder(state);
+    assert(!state->running && state->decoder == nullptr && connection_terminated);
+    assert(connection_error == -95);
+    renderer_sync_destroy(state);
+    delete state;
+}
+
+static void presentation_hands_slots_back()
+{
+    DECODE_UNIT unit{};
+    unit.fullLength = sizeof(access_unit);
+    unit.bufferList = &fragment;
+    auto *state = make_state(1, Model::SameCall, 1);
+    frame_trace.count = frame_trace.omitted = 0;
+    assert(decode(state, &unit, 1, FRAME_TYPE_IDR) == DR_OK);
+    stream_ready_frame_t item{};
+    assert(state->mailbox.take(&item) && item.frame == 1 && item.slot == 0);
+    state->frames.state[static_cast<size_t>(item.slot)] = Pool::Presenting;
+    // While frame 1 is on its way to the display its slot is never offered.
+    assert(decode(state, &unit, 2, FRAME_TYPE_PFRAME) == DR_OK);
+    assert(state->mailbox.item.slot != item.slot);
+    assert(submit_presentation(state, item) == 0 && submits == 1);
+    assert(complete_presentation(state, item) == 0 && state->presented == 1);
+    assert(state->frames.state[static_cast<size_t>(item.slot)] == Pool::Free);
+    assert(frame_trace.samples[0].outcome == 1 && frame_trace.samples[0].completion_us);
+    assert(item.hud.pipeline_depth == 1 && item.hud.video_codec == state->mode->codec_preference);
+    renderer_sync_destroy(state);
+    delete state;
+}
+
+static void workers_run_and_join()
+{
+    auto *state = make_state(3, Model::Queued, 3);
+    queued_unit = {};
+    queued_unit.fullLength = sizeof(access_unit);
+    queued_unit.bufferList = &fragment;
+    feed_next = completed_units = refused_units = 0;
+    wake_requested = false;
+    feed_total = 500;
+    active_renderer = state;
+    moonlight_video_callbacks.start();
+    assert(state->decode_started && state->present_started);
+    for (unsigned waited = 0; completed_units.load() < 500 && waited < 100000; ++waited)
+        std::this_thread::sleep_for(std::chrono::microseconds(100));
+    assert(completed_units.load() == 500 && refused_units.load() == 0);
+    // Let the presenter retire what is left, then stop both workers.
+    for (unsigned waited = 0; waited < 100000; ++waited)
+    {
+        pthread_mutex_lock(&state->lock);
+        const bool idle = !state->mailbox.full && state->frames.count(Pool::Presenting) == 0;
+        pthread_mutex_unlock(&state->lock);
+        if (idle)
+            break;
+        std::this_thread::sleep_for(std::chrono::microseconds(100));
+    }
+    moonlight_video_callbacks.stop();
+    moonlight_video_callbacks.cleanup();
+    assert(!active_renderer && !state->decode_started && !state->present_started);
+    assert(state->access_units == 500 && state->decoded == 500 && state->submission_count == 0);
+    assert(state->presented >= 1 && state->presented + state->not_displayed == 500);
+    assert(submits == state->presented && state->present_errors == 0);
+    assert(state->frames.count(Pool::Free) == FRAME_SLOT_COUNT);
+    assert(state->drain_faults == 0 && state->pipeline_depth == 3);
+    renderer_sync_destroy(state);
+    delete state;
+}
+
+// moonlight-common-c's own connection preamble: its pull-renderer check, then
+// the placeholder fill, which writes into the caller's struct (linked from the
+// real FakeCallbacks.c).
+extern "C" void fixupMissingCallbacks(PDECODER_RENDERER_CALLBACKS *video,
+                                      PAUDIO_RENDERER_CALLBACKS *audio,
+                                      PCONNECTION_LISTENER_CALLBACKS *listener);
+
+static bool library_accepts_video_callbacks()
+{
+    PDECODER_RENDERER_CALLBACKS video = &moonlight_video_callbacks;
+    PAUDIO_RENDERER_CALLBACKS audio = nullptr;
+    PCONNECTION_LISTENER_CALLBACKS listener = nullptr;
+
+    if ((video->capabilities & CAPABILITY_PULL_RENDERER) && video->submitDecodeUnit)
+        return false; // LiStartConnection() returns -1 here.
+    fixupMissingCallbacks(&video, &audio, &listener);
+    assert(video == &moonlight_video_callbacks);
+    return true;
+}
+
+static void every_connection_of_a_process_is_accepted()
+{
+    for (unsigned connection = 0; connection < 3; ++connection)
+    {
+        const uint32_t slices = connection == 1 ? 4u : 8u;
+        prepare_video_callbacks(slices, false);
+        assert(moonlight_video_callbacks.capabilities ==
+               (CAPABILITY_PULL_RENDERER | CAPABILITY_SLICES_PER_FRAME(slices) |
+                (PROSPEROLIGHT_REFERENCE_FRAME_INVALIDATION
+                     ? CAPABILITY_REFERENCE_FRAME_INVALIDATION_HEVC
+                     : 0)));
+        assert(library_accepts_video_callbacks());
+        // The library has now filled the empty submit slot in our struct: left
+        // like this, the next connection would be refused.
+        assert(moonlight_video_callbacks.submitDecodeUnit != nullptr);
+        assert(!library_accepts_video_callbacks());
+    }
+    prepare_video_callbacks(8, true);
+    assert(bool(moonlight_video_callbacks.capabilities &
+                CAPABILITY_REFERENCE_FRAME_INVALIDATION_AVC) ==
+           bool(PROSPEROLIGHT_REFERENCE_FRAME_INVALIDATION));
+    assert(moonlight_video_callbacks.submitDecodeUnit == nullptr);
+    assert(moonlight_video_callbacks.setup == moonlight_renderer_setup);
+}
+
+static void paced_ready_queue_retains_surface_ownership()
+{
+    DECODE_UNIT unit{};
+    unit.fullLength = sizeof(access_unit);
+    unit.bufferList = &fragment;
+    auto *state = make_state(1, Model::SameCall, 1);
+    state->mailbox.capacity = 2;
+    for (int frame = 1; frame <= 3; ++frame)
+        assert(decode(state, &unit, frame, FRAME_TYPE_PFRAME) == DR_OK);
+    assert(state->not_displayed == 1 && state->frames.count(Pool::Ready) == 2);
+    stream_ready_frame_t ready{};
+    assert(state->mailbox.take(&ready) && ready.frame == 2);
+    state->frames.release(ready.slot);
+    assert(state->mailbox.take(&ready) && ready.frame == 3);
+    state->frames.release(ready.slot);
+    assert(!state->mailbox.full && state->frames.count(Pool::Free) == FRAME_SLOT_COUNT);
+    renderer_sync_destroy(state);
+    delete state;
+}
+
+static native_renderer_state_t *uninitialized_owner()
+{
+    auto *state = make_state(1, Model::SameCall, 1);
+    state->decoder = nullptr;
+    state->input_memory = state->frame_memory = nullptr;
+    state->stream_aware = true;
+    state->owned_resources = make_decoder_resources();
+    state->owned_input_start = state->owned_frame_start = -1;
+    state->input_size = 64;
+    state->requested_cpu_mask = moonlight::kClassicDecoderCpuMask;
+    state->process_cpu_mask = moonlight::kTitleCpuMask;
+    state->layout =
+        moonlight::plan_thread_layout(state->process_cpu_mask, state->requested_cpu_mask);
+    state->lifecycle.wait(monotonic_us());
+    return state;
+}
+static std::vector<uint8_t> id_nal(bool pps, unsigned id, unsigned parent = 0)
+{
+    fixture::Writer w;
+    if (!pps)
+    {
+        w.ue(0);
+        w.ue(2);
+    }
+    w.ue(id);
+    if (pps)
+        w.ue(parent);
+    auto bytes = w.nal(moonlight::video::Codec::H264);
+    bytes[4] = pps ? 0x68 : 0x65;
+    return bytes;
+}
+static void stream_aware_owner()
+{
+    using namespace moonlight::video;
+    auto *state = uninitialized_owner();
+    auto sps = fixture::h264(1920, 1080, 1, 42, true, 2);
+    LENTRY parameters{};
+    parameters.bufferType = BUFFER_TYPE_SPS;
+    parameters.data = reinterpret_cast<char *>(sps.data());
+    parameters.length = sps.size();
+    auto pp = id_nal(true, 0), pic = id_nal(false, 0);
+    LENTRY pps{}, picture{};
+    pps.bufferType = BUFFER_TYPE_PPS;
+    pps.data = reinterpret_cast<char *>(pp.data());
+    pps.length = pp.size();
+    picture.bufferType = BUFFER_TYPE_PICDATA;
+    picture.data = reinterpret_cast<char *>(pic.data());
+    picture.length = pic.size();
+    parameters.next = &pps;
+    pps.next = &picture;
+    DECODE_UNIT unit{};
+    unit.bufferList = &parameters;
+    unit.frameType = FRAME_TYPE_IDR;
+    unit.fullLength = sps.size();
+    assert(prepare_stream_decoder(state, &unit));
+    assert(state->decoder && state->lifecycle.generation == 1 && creates == 1);
+    assert(prepare_stream_decoder(state, &unit));
+    assert(creates == 1);
+    hold_presentation = true;
+    presentation_entered = false;
+    *static_cast<uint8_t *>(state->frame_memory) = 0x5a;
+    stream_ready_frame_t borrowed{};
+    borrowed.slot = 0;
+    borrowed.buffer = state->frame_memory;
+    borrowed.buffer_size = state->frame_size;
+    borrowed.frame = 1;
+    borrowed.ready_us = borrowed.arrival_us = monotonic_us();
+    publish_ready_frame(state, borrowed);
+    for (unsigned wait = 0; !presentation_entered && wait < 5000; ++wait)
+        std::this_thread::sleep_for(std::chrono::microseconds(100));
+    assert(presentation_entered);
+    const auto before_replacement = native_allocations.load();
+    sps = fixture::h264(1920, 1080, 2, 42, true, 3);
+    parameters.data = reinterpret_cast<char *>(sps.data());
+    parameters.length = sps.size();
+    bool replaced = false;
+    std::thread replacement([&] { replaced = prepare_stream_decoder(state, &unit); });
+    std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    assert(native_allocations.load() == before_replacement);
+    hold_presentation = false;
+    replacement.join();
+    assert(replaced);
+    assert(creates == 2 && deletes == 1 && state->lifecycle.generation == 2);
+    assert(recover_stream_capacity(state));
+    assert(creates == 3 && state->decoder_config.max_dpb_frames == 5);
+    assert(!recover_stream_capacity(state));
+    assert(!state->running && creates == 3);
+    fail_source_idle = true;
+    const auto retained = native_allocations.load();
+    assert(retained > 0 && !retire_stream_decoder(state));
+    assert(native_allocations == retained && state->decoder);
+    fail_source_idle = false;
+    assert(retire_stream_decoder(state));
+    assert(native_allocations == 0);
+    renderer_sync_destroy(state);
+    delete state;
+    // A valid over-declared level is not limited by the old mode's default.
+    state = uninitialized_owner();
+    auto higher_level = fixture::h264(1920, 1080, 1, 52, true, 2);
+    parameters.data = reinterpret_cast<char *>(higher_level.data());
+    parameters.length = higher_level.size();
+    assert(prepare_stream_decoder(state, &unit));
+    assert(state->lifecycle.stream.level == 52);
+    assert(retire_stream_decoder(state));
+    assert(native_allocations == 0);
+    renderer_sync_destroy(state);
+    delete state;
+    state = uninitialized_owner();
+    parameters.data = nullptr;
+    parameters.length = 8;
+    assert(!prepare_stream_decoder(state, &unit));
+    assert(!state->running && creates == 0 && !state->lifecycle.stream.verified);
+    assert(retire_stream_decoder(state));
+    assert(native_allocations == 0);
+    renderer_sync_destroy(state);
+    delete state;
+    for (unsigned stage = 0; stage < 2; ++stage)
+    {
+        state = uninitialized_owner();
+        cancel_query = stage == 0;
+        cancel_create = stage == 1;
+        Requirements r{};
+        assert(parse_sps(Codec::H264, sps.data(), sps.size(), r) == ParseResult::Valid);
+        assert(!configure_stream_decoder(state, r, plan(r, {})));
+        assert(state->lifecycle.generation == 0 && !state->present_started);
+        cancel_query = cancel_create = false;
+        assert(retire_stream_decoder(state));
+        assert(native_allocations == 0);
+        renderer_sync_destroy(state);
+        delete state;
+    }
+}
+
+static void dispose_owner(native_renderer_state_t *state)
+{
+    assert(retire_stream_decoder(state));
+    assert(native_allocations == 0);
+    renderer_sync_destroy(state);
+    delete state;
+}
+static void pending_parameters_and_placement()
+{
+    auto *state = uninitialized_owner();
+    auto a = fixture::h264(1920, 1080, 1, 42, true, 2);
+    auto b = fixture::h264(1920, 1080, 2, 42, true, 3, 1);
+    auto p0 = id_nal(true, 0), p1 = id_nal(true, 1, 1), pic = id_nal(false, 0);
+    LENTRY sps{}, pps{}, picture{};
+    sps.bufferType = BUFFER_TYPE_SPS;
+    pps.bufferType = BUFFER_TYPE_PPS;
+    picture.bufferType = BUFFER_TYPE_PICDATA;
+    sps.next = &pps;
+    pps.next = &picture;
+    auto update = [&](std::vector<uint8_t> &sp, std::vector<uint8_t> &pp)
+    {
+        sps.data = reinterpret_cast<char *>(sp.data());
+        sps.length = sp.size();
+        pps.data = reinterpret_cast<char *>(pp.data());
+        pps.length = pp.size();
+        picture.data = reinterpret_cast<char *>(pic.data());
+        picture.length = pic.size();
+    };
+    DECODE_UNIT unit{};
+    unit.bufferList = &sps;
+    unit.frameType = FRAME_TYPE_IDR;
+    update(a, p0);
+    assert(prepare_stream_decoder(state, &unit));
+    assert(creates == 1);
+    state->parameter_sets.submitted();
+    unit.frameType = FRAME_TYPE_PFRAME;
+    update(b, p1);
+    // A future SPS/PPS is advertised while the picture still uses PPS0.
+    assert(prepare_stream_decoder(state, &unit));
+    assert(creates == 1 && state->running);
+    assert(future_parameter(state, &sps) && future_parameter(state, &pps));
+    pic = id_nal(false, 1);
+    update(b, p1);
+    assert(!prepare_stream_decoder(state, &unit));
+    assert(creates == 1 && state->running);
+    assert(state->transition_wait_since && !state->parameters_requested);
+    state->parameters_requested = true;
+    assert(!prepare_stream_decoder(state, &unit));
+    assert(state->parameter_transition_waits == 1);
+    unit.frameType = FRAME_TYPE_IDR;
+    assert(prepare_stream_decoder(state, &unit));
+    assert(creates == 2 && deletes == 1);
+    assert(state->lifecycle.stream.parameter_id == 1 && !state->transition_wait_since);
+    assert(prepare_stream_decoder(state, &unit));
+    assert(creates == 2);
+    // Same semantic facts, a different SPS identity: no recreation, forward sets.
+    b = fixture::h264(1920, 1080, 2, 42, true, 3, 2);
+    p1 = id_nal(true, 1, 2);
+    update(b, p1);
+    assert(prepare_stream_decoder(state, &unit));
+    assert(creates == 2);
+    assert(state->lifecycle.stream.parameter_id == 2 && !future_parameter(state, &sps));
+    // Cancel a new pending transition and clear it only after the worker joins.
+    b = fixture::h264(1920, 1080, 3, 42, true, 4, 2);
+    update(b, p1);
+    unit.frameType = FRAME_TYPE_PFRAME;
+    assert(!prepare_stream_decoder(state, &unit));
+    join_video_workers(state);
+    assert(!state->transition_wait_since && !state->parameter_sets.sps[2].verified);
+    dispose_owner(state);
+    // Requested 5-core layout and safe stable receive/audio reservation.
+    for (bool fallback : {false, true})
+    {
+        state = uninitialized_owner();
+        state->requested_cpu_mask = moonlight::decoder_cpu_mask(5, state->process_cpu_mask);
+        if (fallback)
+            reject_affinity = state->requested_cpu_mask;
+        moonlight::video::Requirements r{};
+        assert(moonlight::video::parse_sps(moonlight::video::Codec::H264, a.data(), a.size(), r) ==
+               moonlight::video::ParseResult::Valid);
+        assert(configure_stream_decoder(state, r, moonlight::video::plan(r, {})));
+        assert(state->decoder_cpu_mask ==
+               (fallback ? moonlight::kClassicDecoderCpuMask : state->requested_cpu_mask));
+        assert(accepted_affinity == state->decoder_cpu_mask && state->decode_placement_result == 0);
+        assert(!(state->decoder_cpu_mask & (state->layout.receive | state->layout.decode |
+                                            state->layout.present | state->layout.other)));
+        reject_affinity = 0;
+        assert(configure_stream_decoder(state, r, moonlight::video::plan(r, {})));
+        assert(state->decoder_cpu_mask == state->requested_cpu_mask);
+        dispose_owner(state);
+    }
+}
+static void first_access_unit_and_cancellation()
+{
+    using namespace moonlight::video;
+    auto sps = fixture::h264(1920, 1080, 1, 42, true, 2);
+    LENTRY parameter{};
+    parameter.data = reinterpret_cast<char *>(sps.data());
+    parameter.length = sps.size();
+    parameter.bufferType = BUFFER_TYPE_SPS;
+    DECODE_UNIT unit{};
+    unit.bufferList = &parameter;
+    auto pp = id_nal(true, 0), pic = id_nal(false, 0);
+    LENTRY pps{}, picture{};
+    pps.bufferType = BUFFER_TYPE_PPS;
+    pps.data = reinterpret_cast<char *>(pp.data());
+    pps.length = pp.size();
+    picture.bufferType = BUFFER_TYPE_PICDATA;
+    picture.data = reinterpret_cast<char *>(pic.data());
+    picture.length = pic.size();
+    parameter.next = &pps;
+    pps.next = &picture;
+    unit.fullLength = sps.size() + pp.size() + pic.size();
+    unit.frameType = FRAME_TYPE_IDR;
+    auto *state = uninitialized_owner();
+    first_decode_error = int32_t(0x811d0302u);
+    assert(decode(state, &unit, 1, FRAME_TYPE_IDR) == DR_NEED_IDR);
+    assert(state->running && state->decoded == 0 && state->lifecycle.generation == 2 &&
+           creates == 2);
+    assert(state->lifecycle.attempts == 1 && state->await_keyframe);
+    assert(decode(state, &unit, 2, FRAME_TYPE_IDR) == DR_OK);
+    assert(state->decoded == 1 && state->lifecycle.successes == 1);
+    assert(!state->await_keyframe && !state->parameters_requested && !state->transition_wait_since);
+    dispose_owner(state);
+    for (unsigned point = 1; point <= 8; ++point)
+    {
+        state = uninitialized_owner();
+        cancel_at = point;
+        Requirements r{};
+        assert(parse_sps(Codec::H264, sps.data(), sps.size(), r) == ParseResult::Valid);
+        assert(!configure_stream_decoder(state, r, plan(r, {})));
+        assert(!state->running && !state->present_started && state->lifecycle.generation == 0);
+        cancel_at = 0;
+        dispose_owner(state);
+    }
+    state = uninitialized_owner();
+    Requirements waiting_requirements{};
+    assert(parse_sps(Codec::H264, sps.data(), sps.size(), waiting_requirements) ==
+           ParseResult::Valid);
+    assert(configure_stream_decoder(state, waiting_requirements, plan(waiting_requirements, {})) &&
+           state->decoded == 0);
+    join_video_workers(state);
+    assert(!state->present_started);
+    dispose_owner(state);
+    state = uninitialized_owner();
+    state->lifecycle.wait(monotonic_us() - Lifecycle::startup_timeout_us - 1);
+    feed_total = feed_next = 0;
+    video_decode_thread(state); // no packet is needed to make the deadline fire
+    assert(!state->running && state->lifecycle.state == State::Failed && creates == 0);
+    dispose_owner(state);
+    state = uninitialized_owner();
+    feed_total = feed_next = 0;
+    poll_calls = 0;
+    std::thread waiting([&] { video_decode_thread(state); });
+    for (unsigned i = 0; i < 5000 && !poll_calls.load(); ++i)
+        std::this_thread::sleep_for(std::chrono::microseconds(100));
+    assert(poll_calls);
+    state->running = 0;
+    waiting.join();
+    dispose_owner(state);
+}
+
+static void parameter_activation_regressions()
+{
+    using namespace moonlight::video;
+    auto *state = uninitialized_owner();
+    auto sp = fixture::h264(1920, 1080, 1, 42, true, 2);
+    auto pp = id_nal(true, 0), pic = id_nal(false, 0);
+    LENTRY sps{}, pps{}, picture{};
+    sps.bufferType = BUFFER_TYPE_SPS;
+    pps.bufferType = BUFFER_TYPE_PPS;
+    picture.bufferType = BUFFER_TYPE_PICDATA;
+    sps.next = &pps;
+    pps.next = &picture;
+    DECODE_UNIT unit{};
+    unit.bufferList = &sps;
+    auto update = [&]
+    {
+        sps.data = reinterpret_cast<char *>(sp.data());
+        sps.length = sp.size();
+        pps.data = reinterpret_cast<char *>(pp.data());
+        pps.length = pp.size();
+        picture.data = reinterpret_cast<char *>(pic.data());
+        picture.length = pic.size();
+        unit.fullLength = sp.size() + pp.size() + pic.size();
+    };
+    update();
+    assert(decode(state, &unit, 1, FRAME_TYPE_IDR) == DR_OK);
+    assert(state->parameter_sets.native_ready(0, state->lifecycle.stream));
+    const auto initial_resets = resets;
+    assert(decode(state, &unit, 2, FRAME_TYPE_IDR) == DR_OK);
+    assert(creates == 1 && resets == initial_resets);
+    // Equivalent Annex-B framing must preserve native knowledge even on a P frame.
+    sp.erase(sp.begin());
+    pp.erase(pp.begin());
+    sp.insert(sp.end(), 3, 0);
+    pp.insert(pp.end(), 3, 0);
+    pic[4] = 0x41;
+    update();
+    assert(decode(state, &unit, 2, FRAME_TYPE_PFRAME) == DR_OK);
+    assert(creates == 1 && resets == initial_resets && !state->transition_wait_since &&
+           !state->parameters_requested);
+    assert(state->parameter_sets.native_ready(0, state->lifecycle.stream));
+    // Same ID and resources; changed POC syntax requires a complete IDR/reset.
+    const auto old = state->lifecycle.stream;
+    sp = fixture::h264(1920, 1080, 1, 42, true, 2, 0, 1);
+    pic[4] = 0x41;
+    update();
+    assert(decode(state, &unit, 3, FRAME_TYPE_PFRAME) == DR_NEED_IDR);
+    assert(state->lifecycle.stream.identity == old.identity && creates == 1);
+    assert(!state->parameter_sets.native_ready(0, state->parameter_sets.sps[0]));
+    // Even a promoted unit.frameType is not an actual IDR NAL.
+    assert(decode(state, &unit, 4, FRAME_TYPE_IDR) == DR_OK);
+    assert(resets == initial_resets);
+    pic[4] = 0x65;
+    update();
+    assert(decode(state, &unit, 5, FRAME_TYPE_IDR) == DR_OK);
+    assert(creates == 1 && resets == initial_resets + 1);
+    assert(!state->lifecycle.changed(old) && state->lifecycle.stream.identity != old.identity);
+    // Advertised future PPS must be freshly supplied to the replacement.
+    sp = fixture::h264(1920, 1080, 2, 42, true, 3, 1);
+    pp = id_nal(true, 1, 1);
+    update();
+    assert(decode(state, &unit, 6, FRAME_TYPE_PFRAME) == DR_OK);
+    pic = id_nal(false, 1);
+    update();
+    sps.next = &picture;
+    unit.fullLength = sp.size() + pic.size();
+    assert(decode(state, &unit, 7, FRAME_TYPE_IDR) == DR_NEED_IDR);
+    assert(creates == 1);
+    assert(decode(state, &unit, 8, FRAME_TYPE_IDR) == DR_OK && creates == 1);
+    sps.next = &pps;
+    update();
+    assert(decode(state, &unit, 9, FRAME_TYPE_IDR) == DR_OK && creates == 2);
+    assert(state->parameter_sets.native_ready(1, state->lifecycle.stream));
+    // Unknown PPS never falls back to the only supplied SPS.
+    pic = id_nal(false, 7);
+    update();
+    assert(decode(state, &unit, 10, FRAME_TYPE_IDR) == DR_NEED_IDR);
+    assert(creates == 2);
+    pic = id_nal(false, 1);
+    update();
+    auto conflicting = id_nal(true, 1, 0);
+    LENTRY conflict{};
+    conflict.bufferType = BUFFER_TYPE_PPS;
+    conflict.data = reinterpret_cast<char *>(conflicting.data());
+    conflict.length = conflicting.size();
+    pps.next = &conflict;
+    conflict.next = &picture;
+    assert(!prepare_stream_decoder(state, &unit) && creates == 2);
+    assert(!decoder_deadline(state, state->transition_wait_since + Lifecycle::startup_timeout_us));
+    dispose_owner(state);
+}
+
+int main()
+{
+    stream_aware_owner();
+    pending_parameters_and_placement();
+    first_access_unit_and_cancellation();
+    parameter_activation_regressions();
+    fragment.data = reinterpret_cast<char *>(access_unit);
+    fragment.length = sizeof(access_unit);
+    pipelined_then_drained(Model::Queued);
+    pipelined_then_drained(Model::SameCall);
+    a_started_drain_runs_to_completion(Model::Queued);
+    a_started_drain_runs_to_completion(Model::SameCall);
+    classic_depth_one();
+    paced_ready_queue_retains_surface_ownership();
+    errors_reset_and_bounded_backlog();
+    fallback_to_depth_one();
+    presentation_hands_slots_back();
+    workers_run_and_join();
+    every_connection_of_a_process_is_accepted();
+    puts("Adaptive pipeline / drain / depth-one fallback / reset / slot ownership / workers / "
+         "reconnection PASS");
+}

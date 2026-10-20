@@ -1,0 +1,15 @@
+.DS_Store
+build/
+dist/
+klog/
+.deps/
+*.log
+# never: the game and anything made from it
+rom/
+*.z64
+*.n64
+*.v64
+sm64.o2r
+userdata/
+game/
+*.o2r

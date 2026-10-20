@@ -1,0 +1,12 @@
+{
+  "step": "ppsspp-resolution-crash-before",
+  "note": "Issue 63 before the fix, on build a2c7800a (aa7f0b2's code): raising PPSSPP's Internal Resolution as the Quick Menu does restarts the video driver, and RetroArch dies at rip=0 with [rsp] inside PPSSPP, as reported.",
+  "must_contain": [
+    "build identity: a2c7800a",
+    "pad script OPTION ppsspp_internal_resolution=3840x2176 at 30.00 s: 1",
+    "crash: signal 11 fault=0x0000000000000000 rip=0x0000000000000000",
+    "[rsp]=0x000000040084aabb"
+  ],
+  "must_not_contain": [],
+  "human_check": "The reporter's steps on the console: RetroArch closes to the home screen."
+}

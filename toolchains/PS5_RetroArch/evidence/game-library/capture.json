@@ -1,0 +1,24 @@
+{
+  "step": "game-library",
+  "recorded": "2026-10-04T22:52:02Z",
+  "console_run": "base PS5 13.40, run frontend-20261004-184900",
+  "revision": "e98cca4 + game library",
+  "command": "PS5_FRONTENDS='es-de picker' tools/build-title.sh; tools/run-title.sh --no-build --relaunch-test=1 --relaunch-image=es-de/es-de.bin --frontend-capture=4,20 --frontend-launch --retroarch-frames=600 --watch 80",
+  "raw_capture": "klog/library-summary.txt",
+  "raw_lines": 12,
+  "raw_bytes": 1310,
+  "lines": [
+    "==> PS5_FRONTENDS='es-de picker' tools/build-title.sh; tools/run-title.sh --no-build --relaunch-test=1 --relaunch-image=es-de/es-de.bin --frontend-capture=4,20 --frontend-launch --retroarch-frames=600 --watch 80   (base PS5, 13.40)",
+    "es-de-ps5.log (first start): start: library from RetroArch's playlists: 14 systems, 16 games (1 with ES-DE's details kept), 15 cores, 0 failures",
+    "es-de-ps5.log (after the game): start: library from RetroArch's playlists: 14 systems, 16 games (16 with ES-DE's details kept), 15 cores, 0 failures",
+    "es_log: Only parsing the gamelist.xml files, not scanning system directories",
+    "es_log: Parsed configuration for 209 systems, loaded 14 systems (collections not included)",
+    "es_log: Total game count: 15",
+    "es_log: Back from \"Jungle Run 2 - Partner's Island Quest (USA) (En,Fr) (Rev 1)\" after 10 seconds in RetroArch (status 0)",
+    "custom_systems/es_systems.xml: 14 systems: arcade cps fbneo gb gba gbc mame n3ds neogeo nes ps2 psp psx snes",
+    "psx command: /app0/eboot.bin -L /app0/cores/mednafen_psx_hw_libretro.so %ROM%",
+    "gamelist snes: playcount 2, playtime 21 (kept from earlier ES-DE runs, this play added)",
+    "kernel log: EXEC eboot.bin es-de.bin eboot.bin es-de.bin; fatal signals 0",
+    "capture 209 at 4 s: the system carousel, Game Boy Color, SNES, Neo-Geo, PlayStation, PlayStation 2, PSP in view"
+  ]
+}

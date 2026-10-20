@@ -1,0 +1,23 @@
+{
+  "step": "loadexec-second-image",
+  "recorded": "2026-10-04T18:52:09Z",
+  "console_run": "base PS5 13.40, run relaunch-20261004-145017",
+  "revision": "f2efc8c + relaunch image option (build 256cb475)",
+  "command": "tools/run-title.sh --no-build --relaunch-test=1 --relaunch-image=probe/eboot-copy.bin --watch 45",
+  "raw_capture": "klog/loadexec-second-image-summary.txt",
+  "raw_lines": 11,
+  "raw_bytes": 880,
+  "lines": [
+    "==> tools/run-title.sh --no-build --relaunch-test=1 --relaunch-image=probe/eboot-copy.bin --watch 45   (base PS5, 13.40)",
+    "build identity: 256cb4751af5c8418de5b17425b8adf61536caac28f7f5f5b88672d08f0243bc",
+    "image: a copy of this build's eboot.bin uploaded to /app0/probe/eboot-copy.bin",
+    "generation 0: image=/app0/probe/eboot-copy.bin argc=1 argv=[\"\"] pid=131 flexible_free=419430400 action=restart",
+    "generation 1: image=/app0/probe/eboot-copy.bin argc=1 argv=[\"--ps5-relaunch=1\"] pid=132 flexible_free=419430400 action=continue",
+    "kernel log: EXEC /app0/eboot.bin",
+    "kernel log: EXEC /app0/eboot.bin",
+    "kernel log: EXEC /app0/probe/eboot-copy.bin",
+    "kernel log: \"Kill for LoadExec(...) => 0\" x1, fatal signals 0",
+    "relaunch test PASS: 1 restarts, every one with its arguments",
+    "conclusion: LoadExec starts another image of the title in /app0 with its arguments; EmulationStation can be its own executable"
+  ]
+}

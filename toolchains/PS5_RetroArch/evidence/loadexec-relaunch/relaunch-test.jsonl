@@ -1,0 +1,6 @@
+{"run":"relaunch-20261004-133221","generation":0,"count":5,"argument_generation":-1,"argc":1,"argv":[""],"flexible_free":419430400,"pid":117,"monotonic_ns":4364135674892,"action":"restart"}
+{"run":"relaunch-20261004-133221","generation":1,"count":5,"argument_generation":1,"argc":1,"argv":["--ps5-relaunch=1"],"flexible_free":419430400,"pid":118,"monotonic_ns":4364693593182,"action":"restart"}
+{"run":"relaunch-20261004-133221","generation":2,"count":5,"argument_generation":2,"argc":1,"argv":["--ps5-relaunch=2"],"flexible_free":419430400,"pid":119,"monotonic_ns":4365291922439,"action":"restart"}
+{"run":"relaunch-20261004-133221","generation":3,"count":5,"argument_generation":3,"argc":1,"argv":["--ps5-relaunch=3"],"flexible_free":419430400,"pid":120,"monotonic_ns":4365899064955,"action":"restart"}
+{"run":"relaunch-20261004-133221","generation":4,"count":5,"argument_generation":4,"argc":1,"argv":["--ps5-relaunch=4"],"flexible_free":419430400,"pid":121,"monotonic_ns":4366497903389,"action":"restart"}
+{"run":"relaunch-20261004-133221","generation":5,"count":5,"argument_generation":5,"argc":1,"argv":["--ps5-relaunch=5"],"flexible_free":419430400,"pid":122,"monotonic_ns":4367105738066,"action":"continue"}

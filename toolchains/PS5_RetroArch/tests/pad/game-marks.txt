@@ -1,0 +1,6 @@
+# A game's frame rate over ten seconds, then a picture and the end of the run.
+# Started with --game=<core>:<content>; MARK prints the new frames since the last one.
+5.0 MARK
+15.0 MARK
+16.0 SCREENSHOT
+18.0 STOP

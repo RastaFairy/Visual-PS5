@@ -1,0 +1,22 @@
+{
+  "step": "four-cores-2026-10-06",
+  "recorded": "2026-10-07T03:08:38Z",
+  "console_run": "base PS5 13.40, runs 224859-230600 (pad script tests/pad/boot-and-start.txt)",
+  "revision": "working tree on 7414eba (this commit)",
+  "command": "PS5_FRONTENDS='es-de picker' tools/build-title.sh; tools/run-title.sh --no-build --game=<core>:<content> --pad-script=tests/pad/boot-and-start.txt --watch 120",
+  "raw_capture": "klog/four-cores/runs-20261006.txt",
+  "raw_lines": 10,
+  "raw_bytes": 775,
+  "lines": [
+    "224859 core=cores/opera_libretro.so format= content=1fail",
+    "225106 core=cores/puae_libretro.so format=XRGB8888 content=0fail",
+    "225313 core=cores/neocd_libretro.so format=RGB565 content=1fail",
+    "225520 core=cores/scummvm_libretro.so format=RGB565 content=0fail",
+    "230131 core=cores/neocd_libretro.so format=RGB565 content=0fail",
+    "230600 core=cores/opera_libretro.so format=RGB565 content=0fail",
+    "four-run-puae: MARK at 25.010 s: frames=1265 worst_ms=23.1 over_40ms=0 | rarch_main returned = 0",
+    "four-run-scummvm: MARK at 25.014 s: frames=1497 worst_ms=33.5 over_40ms=0 | rarch_main returned = 0",
+    "disc-run-neocd: MARK at 25.009 s: frames=1430 worst_ms=293.7 over_40ms=3 | rarch_main returned = 0",
+    "disc-run-opera: MARK at 25.004 s: frames=1500 worst_ms=27.0 over_40ms=0 | rarch_main returned = 0"
+  ]
+}

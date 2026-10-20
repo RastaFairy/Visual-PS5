@@ -1,0 +1,16 @@
+{
+  "step": "ppsspp-resolution-change",
+  "note": "Issue 63 after the fix, on build 191ff52c: PPSSPP reports 4800x2720 as its maximum geometry, so the larger size is a geometry change without a video restart (one video_vulkan init in the run); the game runs to the script's STOP.",
+  "must_contain": [
+    "build identity: 191ff52c",
+    "pad script OPTION ppsspp_internal_resolution=3840x2176 at 30.01 s: 1",
+    "[Environ] SET_SYSTEM_AV_INFO: 3840x2160",
+    "NotifyDisplayResized: 3840x2160",
+    "pad script SCREENSHOT at 45.01 s",
+    "pad script STOP at 55.00 s"
+  ],
+  "must_not_contain": [
+    "crash: signal"
+  ],
+  "human_check": "Change Internal Resolution in the Quick Menu while a PSP game runs: the game carries on at the new size."
+}

@@ -1,0 +1,13 @@
+{
+  "step": "frontend-picker",
+  "note": "The title opens on a frontend picker in PS5_VulkanTemplate's Gloss theme, with a preview of each frontend; choosing one restarts the title as it (RetroArch, or ES-DE), and quitting either goes back to the picker.",
+  "must_contain": [
+    "181 eboot.bin, 182 picker/picker.bin, 183 es-de/es-de.bin, 184 eboot.bin, 185 picker/picker.bin; fatal signals 0",
+    "186 eboot.bin, 187 picker/picker.bin, 188 eboot.bin, 189 eboot.bin, 190 picker/picker.bin; fatal signals 0",
+    "trace: frontend: RetroArch quit; back to the picker",
+    "picker record: {\"frames\":300,\"choice\":\"es-de\",\"next\":\"/app0/es-de/es-de.bin\"}",
+    "picker record: {\"frames\":300,\"choice\":\"retroarch\",\"next\":\"/app0/eboot.bin\"}"
+  ],
+  "must_not_contain": [],
+  "human_check": "The owner confirmed quitting ES-DE returns to the picker; the picker picture shows the Gloss pre-screen with both previews."
+}

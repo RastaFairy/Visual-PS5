@@ -1,0 +1,131 @@
+{
+  "step": "webui-qr",
+  "recorded": "2026-10-07T21:57:01.287286+00:00",
+  "revision": "working tree on 6c75f742dad0aceeb9e2827a8a109eaf7260d810",
+  "console_run": "Deployed to configured base PS5; all three frontend stored-byte SHA-256 digests match. No title launch or phone scan performed.",
+  "command": "PS5_FRONTENDS='es-de picker' PS5_VULKAN_TEMPLATE=\"$PWD/build/picker-template\" tools/verify.sh",
+  "raw_capture": "klog/webui-qr/gates.log",
+  "raw_lines": 2297,
+  "raw_bytes": 146953,
+  "lines": [
+    "test_current_ip_changes_offline_and_modal_lifecycle (tests.test_webui_qr.WebUIQR.test_current_ip_changes_offline_and_modal_lifecycle) ... ok",
+    "test_encoder_decodes_and_preserves_quiet_zone (tests.test_webui_qr.WebUIQR.test_encoder_decodes_and_preserves_quiet_zone) ... ok",
+    "test_menu_hooks_apply_and_are_idempotent (tests.test_webui_qr.WebUIQR.test_menu_hooks_apply_and_are_idempotent) ... ok",
+    "test_picker_buttons_consume_input (tests.test_webui_qr.WebUIQR.test_picker_buttons_consume_input) ... ok",
+    "test_rgui_rendered_frame_decodes (tests.test_webui_qr.WebUIQR.test_rgui_rendered_frame_decodes) ... ok",
+    "test_upstream_encoder_is_unmodified (tests.test_webui_qr.WebUIQR.test_upstream_encoder_is_unmodified) ... ok",
+    "test_xmb_rendered_frame_decodes (tests.test_webui_qr.WebUIQR.test_xmb_rendered_frame_decodes) ... ok",
+    "",
+    "----------------------------------------------------------------------",
+    "Ran 7 tests in 1.061s",
+    "",
+    "OK",
+    "== format",
+    "   PASS (9s)",
+    "== unit",
+    "Ran 176 tests in 248.547s",
+    "   PASS (248s)",
+    "== build",
+    "   PASS (250s)",
+    "== integration",
+    "Ran 176 tests in 221.248s",
+    "   PASS (229s)",
+    "== evidence",
+    "100 capture(s) replayed, 0 failed",
+    "   PASS (0s)",
+    "verify: PASS (format unit build integration evidence)",
+    "Shared QR encoder and runtime address refresh present in all three linked frontends: PASS",
+    "Deployment: 9 changed files verified; 13614 previously verified files retained.",
+    "All three deployed frontend stored-byte SHA-256 digests match staged build: PASS"
+  ],
+  "staged_artifacts": {
+    "eboot.bin": {
+      "bytes": 38771100,
+      "sha256": "1de6c0ceb87394af8630ef139c0ac8fc474590a1156524409a35054f17d79bf2"
+    },
+    "es-de/es-de.bin": {
+      "bytes": 48154397,
+      "sha256": "ac4dde1b3f41f06b633d24efbdbe5f6978e26ea91a15b1779a6f79c40478c9a5"
+    },
+    "picker/picker.bin": {
+      "bytes": 29608493,
+      "sha256": "411e2b6f604878bd00b8d2b67e797b2ae91f1682ad046719464d04c57fa9fe04"
+    },
+    "licenses/qrcodegen/MIT.txt": {
+      "bytes": 1236,
+      "sha256": "adf9fc352901c471b16017816d79d509299fd402488964781b01563478ee3834"
+    },
+    "manifest.sha256": {
+      "bytes": 1785399,
+      "sha256": "9ba5d01036c5b1eaf656dab98b68d332d931e92cee2ec459daeb2f52a9d77b7b"
+    }
+  },
+  "native_symbols": {
+    "retroarch": {
+      "elf": "build/llvm-pie.elf",
+      "symbols": [
+        "141: 0000000000000000     0 FUNC    GLOBAL DEFAULT  UND freeifaddrs",
+        "161: 0000000000000000     0 FUNC    GLOBAL DEFAULT  UND getifaddrs",
+        "42938: 0000000000000000     0 FUNC    GLOBAL DEFAULT  UND freeifaddrs",
+        "42958: 0000000000000000     0 FUNC    GLOBAL DEFAULT  UND getifaddrs",
+        "43395: 00000000000ce460  1514 FUNC    GLOBAL DEFAULT    1 ps5_webui_qr_encode",
+        "43396: 00000000000cea50   336 FUNC    GLOBAL DEFAULT    1 ps5_webui_qr_refresh"
+      ]
+    },
+    "es-de": {
+      "elf": "build/frontend/es-de/es-de.elf",
+      "symbols": [
+        "88: 0000000000000000     0 FUNC    GLOBAL DEFAULT  UND getifaddrs",
+        "90: 0000000000000000     0 FUNC    GLOBAL DEFAULT  UND freeifaddrs",
+        "610: 00000000000469d0  1457 FUNC    LOCAL  DEFAULT    1 ps5_webui_qr_encode",
+        "611: 0000000000046f90   339 FUNC    LOCAL  DEFAULT    1 ps5_webui_qr_refresh",
+        "76777: 0000000000000000     0 FUNC    GLOBAL DEFAULT  UND getifaddrs",
+        "76779: 0000000000000000     0 FUNC    GLOBAL DEFAULT  UND freeifaddrs"
+      ]
+    },
+    "picker": {
+      "elf": "build/picker/title/build/ps5/link/llvm-pie.elf",
+      "symbols": [
+        "133: 0000000000000000     0 FUNC    GLOBAL DEFAULT  UND getifaddrs",
+        "135: 0000000000000000     0 FUNC    GLOBAL DEFAULT  UND freeifaddrs",
+        "33877: 000000000039f200   336 FUNC    GLOBAL DEFAULT    1 ps5_webui_qr_refresh",
+        "36333: 000000000039ea50  1967 FUNC    GLOBAL DEFAULT    1 ps5_webui_qr_encode",
+        "36335: 0000000000000000     0 FUNC    GLOBAL DEFAULT  UND getifaddrs",
+        "36337: 0000000000000000     0 FUNC    GLOBAL DEFAULT  UND freeifaddrs"
+      ]
+    }
+  },
+  "resolved_build_failures": [
+    "SDK network headers required explicit netinet/in.h and sys/time.h includes.",
+    "XMB uses its unconditional network texture, since netplay is not enabled.",
+    "Sibling template moved; used an isolated checkout at the existing pinned b577e950 commit.",
+    "Picker wraps program source in a C++ namespace; compile shared network implementation as a separate C source."
+  ],
+  "limits": [
+    "No console launch or phone scan performed for this build.",
+    "Hardware interface selection, rendered text and controller behavior require the live check."
+  ],
+  "deployment": {
+    "command": "python3 tools/deploy-title.py",
+    "raw_capture": "klog/webui-qr/deploy.log",
+    "changed_files_verified": 9,
+    "unchanged_files_retained": 13614,
+    "readback": {
+      "eboot.bin": {
+        "bytes": 38771100,
+        "sha256": "1de6c0ceb87394af8630ef139c0ac8fc474590a1156524409a35054f17d79bf2",
+        "matches_staged": true
+      },
+      "picker/picker.bin": {
+        "bytes": 29608493,
+        "sha256": "411e2b6f604878bd00b8d2b67e797b2ae91f1682ad046719464d04c57fa9fe04",
+        "matches_staged": true
+      },
+      "es-de/es-de.bin": {
+        "bytes": 48154397,
+        "sha256": "ac4dde1b3f41f06b633d24efbdbe5f6978e26ea91a15b1779a6f79c40478c9a5",
+        "matches_staged": true
+      }
+    }
+  }
+}

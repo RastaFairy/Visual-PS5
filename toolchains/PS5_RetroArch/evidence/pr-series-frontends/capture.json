@@ -1,0 +1,21 @@
+{
+  "step": "pr-series-frontends",
+  "recorded": "2026-10-17T22:10:00Z",
+  "console_run": "",
+  "revision": "20dd7fe (this series), in build 838fd9a3",
+  "command": "tools/run-title.sh --no-build --no-deploy --home-launch --watch 30; tools/run-title.sh --no-build --no-deploy --relaunch-test=1 --relaunch-image=es-de/es-de.bin --frontend-capture=20 --watch 40",
+  "raw_capture": "klog/pr-series-frontends/record.txt",
+  "raw_lines": 9,
+  "raw_bytes": 1086,
+  "lines": [
+    "Console: the owner's base PS5 on a 1440p display with 120 Hz and VRR, build identity 838fd9a3ca99e21ce4adba405a3f3867a0c4ce411ee89981e0a8111dcef02797 (this series at 20dd7fe with PS5_FRONTENDS=\"es-de picker\", PS5_WITH_SWANSTATION=1, PS5_WITH_MELONDSDS=1), 2026-10-17.",
+    "A launch as from the home screen:",
+    "  frontend: mode '', test run 0, picker test 0, picker 1, es-de 1, remembered ask, L1 0 -> picker",
+    "Handed over to ES-DE (--relaunch-image=es-de/es-de.bin):",
+    "  frontend capture PASS: 1 pictures from 1 process(es) in klog/frontend-20261017-220806",
+    "  relaunch test PASS: handed over to /app0/es-de/es-de.bin",
+    "  es-de-ps5.log: start: library from RetroArch's playlists: 33 systems, 281 games (279 with ES-DE's details kept), 35 cores, 0 favourites, 3 played, 0 failures",
+    "  The library's 33 systems are the 33 content folders that hold files on the console now.",
+    "  Once, the launch right after a forwarder run whose title had closed itself ended before main() (the kernel log: SceSysCore exit_value=ffffffff, no trace written); the same sequence run again, and the home launch after it, worked."
+  ]
+}

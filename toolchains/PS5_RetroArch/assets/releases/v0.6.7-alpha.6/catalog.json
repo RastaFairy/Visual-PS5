@@ -1,0 +1,17 @@
+{
+  "capture": "Unedited frames read back on the PS5 by the frontends' own capture tests (lossless PNG); the pre-screen picture is assets/readme/pre-screen.png",
+  "resolution": [
+    1920,
+    1080
+  ],
+  "files": [
+    {
+      "file": "es-de-collections-ps5.png",
+      "sha256": "728144ae6b1208153c8fe77cf6bb27413e273798504b21f037820969ee63ac0d"
+    },
+    {
+      "file": "../../readme/pre-screen.png",
+      "sha256": "6e703f44d3195278e0e4966f8182da12891a751e44e9cf7545e7f6935e18a80d"
+    }
+  ]
+}

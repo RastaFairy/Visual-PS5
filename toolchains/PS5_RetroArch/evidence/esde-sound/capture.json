@@ -1,0 +1,20 @@
+{
+  "step": "esde-sound",
+  "recorded": "2026-10-05T03:20:21Z",
+  "console_run": "base PS5 13.40, run 231157",
+  "revision": "bf939c4 + PS5_OpenGL ec06d8c",
+  "command": "tools/run-title.sh --no-build --relaunch-test=1 --relaunch-image=es-de/es-de.bin --frontend-capture=4,12 --frontend-scroll --watch 35",
+  "raw_capture": "klog/esde-sound/summary.txt",
+  "raw_lines": 8,
+  "raw_bytes": 708,
+  "lines": [
+    "==> tools/run-title.sh --no-build --relaunch-test=1 --relaunch-image=es-de/es-de.bin --frontend-capture=4,12 --frontend-scroll --watch 35   (base PS5 13.40, build 716a3c05, run 231157)",
+    "SDL2: PS5_OpenGL ec06d8c integration/SDL2 (SDL_AUDIO on: the fork's PS5 driver), build/sdl2-retroarch-20261004-224929; SDL_config.h: SDL_AUDIO_DRIVER_PS5 1",
+    "es_log: Setting up AudioManager...",
+    "es_log: Audio driver: ps5",
+    "es_log: Detected playback device: System audio output device",
+    "es_log: no 'Failed to create sample conversion stream' and no 'Unable to open audio device'",
+    "process 277, frame 174 at 4 s: 1920x1080, GL error 0, sound ps5 (0 playing)",
+    "process 277, frame 610 at 12 s: 1920x1080, GL error 0, sound ps5 (1 playing)"
+  ]
+}

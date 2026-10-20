@@ -1,0 +1,36 @@
+	s_inst_prefetch 0x1                                        // 000000000000: BFA00001
+	s_mov_b32 m0, s12                                          // 000000000004: BEFC030C
+	s_mov_b64 vcc, exec                                        // 000000000008: BEEA047E
+	s_wqm_b64 exec, exec                                       // 00000000000C: BEFE0A7E
+	v_interp_p1_f32_e32 v6, v0, attr0.x                        // 000000000010: C8180000
+	v_interp_p1_f32_e32 v7, v0, attr0.y                        // 000000000014: C81C0100
+	v_interp_p1_f32_e32 v2, v0, attr0.z                        // 000000000018: C8080200
+	v_interp_p1_f32_e32 v10, v0, attr1.x                       // 00000000001C: C8280400
+	v_interp_p1_f32_e32 v9, v0, attr1.y                        // 000000000020: C8240500
+	v_interp_p1_f32_e32 v8, v0, attr1.w                        // 000000000024: C8200700
+	v_interp_p2_f32_e32 v6, v1, attr0.x                        // 000000000028: C8190001
+	v_interp_p2_f32_e32 v7, v1, attr0.y                        // 00000000002C: C81D0101
+	v_interp_p2_f32_e32 v2, v1, attr0.z                        // 000000000030: C8090201
+	v_interp_p1_f32_e32 v0, v0, attr1.z                        // 000000000034: C8000600
+	v_interp_p2_f32_e32 v10, v1, attr1.x                       // 000000000038: C8290401
+	v_interp_p2_f32_e32 v9, v1, attr1.y                        // 00000000003C: C8250501
+	v_interp_p2_f32_e32 v8, v1, attr1.w                        // 000000000040: C8210701
+	v_interp_p2_f32_e32 v0, v1, attr1.z                        // 000000000044: C8010601
+	v_mul_f32_e32 v3, 0x40400000, v2                           // 000000000048: 100604FF 40400000
+	v_sin_f32_e32 v3, v3                                       // 000000000050: 7E066B03
+	v_mul_f32_e32 v3, 0.5, v3                                  // 000000000054: 100606F0
+	v_add_f32_e32 v1, 0.5, v3                                  // 000000000058: 060206F0
+	image_sample v[2:5], v[6:7], s[0:7], s[8:11] dmask:0xf dim:SQ_RSRC_IMG_2D// 00000000005C: F0800F08 00400206
+	s_waitcnt vmcnt(0)                                         // 000000000064: BF8C3F70
+	v_mul_f32_e32 v10, v2, v10                                 // 000000000068: 10141502
+	v_mul_f32_e32 v9, v9, v3                                   // 00000000006C: 10120709
+	v_mul_f32_e32 v8, v8, v5                                   // 000000000070: 10100B08
+	v_mul_f32_e32 v0, v0, v4                                   // 000000000074: 10000900
+	v_mul_f32_e32 v10, v10, v1                                 // 000000000078: 1014030A
+	v_mul_f32_e32 v9, v9, v1                                   // 00000000007C: 10120309
+	v_mul_f32_e32 v0, v0, v1                                   // 000000000080: 10000300
+	v_cvt_pkrtz_f16_f32_e32 v1, v10, v9                        // 000000000084: 5E02130A
+	v_cvt_pkrtz_f16_f32_e32 v0, v0, v8                         // 000000000088: 5E001100
+	s_mov_b64 exec, vcc                                        // 00000000008C: BEFE046A
+	exp mrt0 v1, v1, v0, v0 done compr vm                      // 000000000090: F8001C0F 00000001
+	s_endpgm                                                   // 000000000098: BF810000

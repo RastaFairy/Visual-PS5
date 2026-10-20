@@ -1,0 +1,15 @@
+{
+  "step": "framegen-hardware-image-size-before",
+  "recorded": "2026-10-19T02:51:51Z",
+  "console_run": "223333",
+  "revision": "ca9ac80",
+  "command": "tools/run-title.sh --no-build --no-deploy \"--game=dolphin:/app0/content/gc/<gc game>.gcz\" --pad-script=<\"40 RECORD 60\", \"50 STOP\"> --watch 75; python3 evidence/framegen-hardware-image-size/check.py klog/pad-<run>/rec-1",
+  "raw_capture": "klog/evidence-fgsize-before.txt",
+  "raw_lines": 3,
+  "raw_bytes": 246,
+  "lines": [
+    "    build identity: c0ece029861c562e603d815bc0eac0577034ada055b9ddc9d8e13ba08c6e8dcb",
+    "[INFO] [FrameGen] network ready for 2560x2112 frames.",
+    "rec-1: 29 generated pictures: mean difference from their neighbours 31.5, left bar 0.0 (real pictures 0.0)"
+  ]
+}

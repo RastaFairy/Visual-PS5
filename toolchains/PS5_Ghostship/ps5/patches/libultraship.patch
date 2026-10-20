@@ -1,0 +1,389 @@
+diff --git a/cmake/dependencies/common.cmake b/cmake/dependencies/common.cmake
+index bfcb7815..9b521703 100644
+--- a/cmake/dependencies/common.cmake
++++ b/cmake/dependencies/common.cmake
+@@ -32,15 +32,22 @@ target_sources(ImGui
+     ${imgui_SOURCE_DIR}/backends/imgui_impl_sdl2.cpp
+ )
+ 
+-if(NOT CMAKE_SYSTEM_NAME STREQUAL "iOS")
++if(NOT CMAKE_SYSTEM_NAME STREQUAL "iOS" AND NOT PS5)
+     target_sources(ImGui PRIVATE ${imgui_SOURCE_DIR}/backends/imgui_impl_opengl3.cpp)
+ endif()
+ 
+ target_include_directories(ImGui PUBLIC ${imgui_SOURCE_DIR} ${imgui_SOURCE_DIR}/backends PRIVATE ${SDL2_INCLUDE_DIRS})
++if(PS5)
++    # volk: RADV is linked into the title, there is no loader
++    target_link_libraries(ImGui PUBLIC SDL2::SDL2 volk)
++    target_compile_definitions(ImGui PUBLIC IMGUI_IMPL_VULKAN_USE_VOLK)
++endif()
+ 
+ # ========= Vulkan =============
+ if (NOT CMAKE_SYSTEM_NAME STREQUAL "iOS" AND NOT CMAKE_SYSTEM_NAME STREQUAL "Android")
+-    list(INSERT CMAKE_MODULE_PATH 0 "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
++    if(NOT PS5) # CMake's own FindVulkan finds RADV's headers; this one needs a newer CMake
++        list(INSERT CMAKE_MODULE_PATH 0 "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
++    endif()
+ 
+     if(WIN32 AND NOT DEFINED ENV{VULKAN_SDK} AND EXISTS "C:/VulkanSDK")
+         file(GLOB _lus_sdk_dirs LIST_DIRECTORIES true "C:/VulkanSDK/*")
+diff --git a/include/fast/backends/gfx_vulkan.h b/include/fast/backends/gfx_vulkan.h
+index da9c2ed3..8e07f04f 100644
+--- a/include/fast/backends/gfx_vulkan.h
++++ b/include/fast/backends/gfx_vulkan.h
+@@ -14,7 +14,11 @@
+ #include "gfx_rendering_api.h"
+ #include "../interpreter.h"
+ 
++#ifdef __PROSPERO__
++#include <volk.h> // the Vulkan commands are volk's pointers: there is no loader to link
++#else
+ #include <vulkan/vulkan.h>
++#endif
+ #include <unordered_map>
+ #include <vector>
+ #include <map>
+@@ -238,6 +242,11 @@ class GfxRenderingAPIVK final : public GfxRenderingAPI {
+         std::vector<VkImageView> garbageViews;
+         std::vector<VkBuffer> garbageBuffers;
+         std::vector<VkDeviceMemory> garbageMemory;
++
++        // Command buffers from commandPool, reused after each pool reset. vkResetCommandPool
++        // does not free them, and the driver walks every one on each reset.
++        std::vector<VkCommandBuffer> commandBuffers;
++        size_t commandBuffersUsed = 0;
+     };
+ 
+     uint32_t FindMemoryType(uint32_t typeBits, VkMemoryPropertyFlags props);
+@@ -253,6 +262,7 @@ class GfxRenderingAPIVK final : public GfxRenderingAPI {
+     VkRenderPass GetRenderPass(uint32_t msaaLevel, bool hasDepth);
+     VkSampler GetSampler(bool linear, uint32_t cms, uint32_t cmt, bool autoMipmap = false);
+     void EnsureUploadCmd();
++    VkCommandBuffer AcquireCommandBuffer();
+     void FlushUploads();
+     // Grow a frame slot's staging buffer to fit an oversized upload (e.g. a 4K HD
+     // replacement = 64 MB > the 32 MB default). Caller must ensure the queue is idle.
+diff --git a/src/CMakeLists.txt b/src/CMakeLists.txt
+index 703dcf65..a5e2ba39 100644
+--- a/src/CMakeLists.txt
++++ b/src/CMakeLists.txt
+@@ -266,8 +266,10 @@ if (CMAKE_SYSTEM_NAME STREQUAL "iOS")
+         )
+     endif()
+ else()
++    if(NOT PS5)
++        target_compile_definitions(libultraship PRIVATE ENABLE_OPENGL)
++    endif()
+     target_compile_definitions(libultraship PRIVATE
+-        ENABLE_OPENGL
+         $<$<CONFIG:Debug>:_DEBUG>
+         $<$<NOT:$<CONFIG:Debug>>:NDEBUG>
+         SPDLOG_ACTIVE_LEVEL=${SPDLOG_MIN_CUTOFF}
+diff --git a/src/fast/Fast3dGui.cpp b/src/fast/Fast3dGui.cpp
+index 4490c7a2..98894f50 100644
+--- a/src/fast/Fast3dGui.cpp
++++ b/src/fast/Fast3dGui.cpp
+@@ -35,6 +35,8 @@
+ #ifdef ENABLE_OPENGL
+ #include <imgui_impl_opengl3.h>
+ #include <imgui_impl_sdl2.h>
++#elif defined(__PROSPERO__)
++#include <imgui_impl_sdl2.h>
+ #endif
+ 
+ #if defined(ENABLE_DX11) || defined(ENABLE_DX12)
+diff --git a/src/fast/backends/gfx_sdl2.cpp b/src/fast/backends/gfx_sdl2.cpp
+index 9d6a4e75..c94a081e 100644
+--- a/src/fast/backends/gfx_sdl2.cpp
++++ b/src/fast/backends/gfx_sdl2.cpp
+@@ -1,6 +1,6 @@
+ #include <stdio.h>
+ 
+-#if defined(ENABLE_OPENGL) || defined(__APPLE__)
++#if defined(ENABLE_OPENGL) || defined(__APPLE__) || defined(__PROSPERO__)
+ 
+ #ifdef __MINGW32__
+ #define FOR_WINDOWS 1
+diff --git a/src/fast/backends/gfx_vulkan.cpp b/src/fast/backends/gfx_vulkan.cpp
+index d6b65d09..ceef9341 100644
+--- a/src/fast/backends/gfx_vulkan.cpp
++++ b/src/fast/backends/gfx_vulkan.cpp
+@@ -19,6 +19,15 @@
+ 
+ #include "fast/backends/gfx_vulkan.h"
+ 
++#ifdef __PROSPERO__
++// PlayStation 5: no Vulkan loader. RADV is linked into the title, and volk fetches
++// every command from its entry point.
++extern "C" VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL vk_icdGetInstanceProcAddr(VkInstance instance, const char* name);
++// PS5 DevLoop's grab (ps5/src/devloop_shot.c): the frame on screen, when asked for
++extern "C" bool ps5_shot_requested(void);
++extern "C" void ps5_shot_write(const uint8_t* pixels, int width, int height, bool bgr);
++#endif
++
+ #include <vector>
+ #include <algorithm>
+ #include <cstring>
+@@ -566,15 +575,25 @@ VkSampler GfxRenderingAPIVK::GetSampler(bool linear, uint32_t cms, uint32_t cmt,
+     return sampler;
+ }
+ 
++VkCommandBuffer GfxRenderingAPIVK::AcquireCommandBuffer() {
++    FrameSlot& slot = mFrames[mFrameSlot];
++    if (slot.commandBuffersUsed == slot.commandBuffers.size()) {
++        VkCommandBufferAllocateInfo ai = { VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO };
++        ai.commandPool = slot.commandPool;
++        ai.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
++        ai.commandBufferCount = 1;
++        VkCommandBuffer cmd;
++        VK_CHECK(vkAllocateCommandBuffers(mDevice, &ai, &cmd));
++        slot.commandBuffers.push_back(cmd);
++    }
++    return slot.commandBuffers[slot.commandBuffersUsed++];
++}
++
+ void GfxRenderingAPIVK::EnsureUploadCmd() {
+     if (mUploadCmd != VK_NULL_HANDLE) {
+         return;
+     }
+-    VkCommandBufferAllocateInfo ai = { VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO };
+-    ai.commandPool = mFrames[mFrameSlot].commandPool;
+-    ai.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+-    ai.commandBufferCount = 1;
+-    VK_CHECK(vkAllocateCommandBuffers(mDevice, &ai, &mUploadCmd));
++    mUploadCmd = AcquireCommandBuffer();
+     VkCommandBufferBeginInfo bi = { VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO };
+     bi.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+     VK_CHECK(vkBeginCommandBuffer(mUploadCmd, &bi));
+@@ -763,6 +782,9 @@ bool GfxRenderingAPIVK::VulkanInit(SDL_Window* window) {
+     SDL_Vulkan_GetInstanceExtensions(window, &sdlExtCount, instanceExts.data());
+ 
+     uint32_t availExtCount = 0;
++#ifdef __PROSPERO__
++    volkInitializeCustom(vk_icdGetInstanceProcAddr);
++#endif
+     vkEnumerateInstanceExtensionProperties(nullptr, &availExtCount, nullptr);
+     std::vector<VkExtensionProperties> availExts(availExtCount);
+     vkEnumerateInstanceExtensionProperties(nullptr, &availExtCount, availExts.data());
+@@ -791,6 +813,9 @@ bool GfxRenderingAPIVK::VulkanInit(SDL_Window* window) {
+         SPDLOG_ERROR("Vulkan: vkCreateInstance failed");
+         return false;
+     }
++#ifdef __PROSPERO__
++    volkLoadInstance(mInstance);
++#endif
+ 
+     if (!SDL_Vulkan_CreateSurface(window, mInstance, &mSurface)) {
+         SPDLOG_ERROR("Vulkan: SDL_Vulkan_CreateSurface failed: {}", SDL_GetError());
+@@ -1052,6 +1077,7 @@ void GfxRenderingAPIVK::NewFrame() {
+     }
+     CollectGarbage(slot);
+     VK_CHECK(vkResetCommandPool(mDevice, slot.commandPool, 0));
++    slot.commandBuffersUsed = 0;
+     VK_CHECK(vkResetDescriptorPool(mDevice, slot.descriptorPool, 0));
+ 
+     // Re-create the static set 0 (pool reset destroyed it)
+@@ -1743,11 +1769,7 @@ void GfxRenderingAPIVK::EnsurePassActive(int fbId) {
+     }
+ 
+     if (fb.mCommandBuffer == VK_NULL_HANDLE) {
+-        VkCommandBufferAllocateInfo ai = { VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO };
+-        ai.commandPool = mFrames[mFrameSlot].commandPool;
+-        ai.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+-        ai.commandBufferCount = 1;
+-        VK_CHECK(vkAllocateCommandBuffers(mDevice, &ai, &fb.mCommandBuffer));
++        fb.mCommandBuffer = AcquireCommandBuffer();
+         VkCommandBufferBeginInfo bi = { VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO };
+         bi.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+         VK_CHECK(vkBeginCommandBuffer(fb.mCommandBuffer, &bi));
+@@ -2302,6 +2324,62 @@ void GfxRenderingAPIVK::EndFrame() {
+         mScreenReadbackDataReady = true;
+     }
+ 
++#ifdef __PROSPERO__
++    {
++        // GHOSTSHIP_PS5_FPS=1 (env.txt): frames presented a second, to klog every ten seconds
++        static const bool report = getenv("GHOSTSHIP_PS5_FPS") != nullptr;
++        static uint64_t since;
++        static unsigned frames;
++        if (report) {
++            const uint64_t now = SDL_GetTicks64();
++            frames++;
++            if (since == 0) {
++                since = now;
++                frames = 0;
++            } else if (now - since >= 10000) {
++                fprintf(stderr, "vulkan: %.1f frames a second\n", frames * 1000.0 / (now - since));
++                since = now;
++                frames = 0;
++            }
++        }
++    }
++    {
++        static VkBuffer shotBuffer = VK_NULL_HANDLE;
++        static VkDeviceMemory shotMemory = VK_NULL_HANDLE;
++        static uint8_t* shotMapped = nullptr;
++        static VkExtent2D shotExtent = {};
++        static int shotFramesLeft = 0; // until the copy below has certainly run on the GPU
++
++        if (shotFramesLeft > 0) {
++            if (--shotFramesLeft == 0) {
++                ps5_shot_write(shotMapped, (int)shotExtent.width, (int)shotExtent.height,
++                               mSwapchainFormat == VK_FORMAT_B8G8R8A8_UNORM);
++            }
++        } else if (ps5_shot_requested()) {
++            if (shotBuffer == VK_NULL_HANDLE || shotExtent.width != mSwapchainExtent.width ||
++                shotExtent.height != mSwapchainExtent.height) {
++                if (shotBuffer != VK_NULL_HANDLE) {
++                    vkDeviceWaitIdle(mDevice);
++                    vkUnmapMemory(mDevice, shotMemory);
++                    vkDestroyBuffer(mDevice, shotBuffer, nullptr);
++                    vkFreeMemory(mDevice, shotMemory, nullptr);
++                }
++                shotExtent = mSwapchainExtent;
++                CreateBuffer((VkDeviceSize)shotExtent.width * shotExtent.height * 4, VK_BUFFER_USAGE_TRANSFER_DST_BIT,
++                             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, shotBuffer,
++                             shotMemory, &shotMapped);
++            }
++            FullBarrier(screen.mCommandBuffer);
++            VkBufferImageCopy copy = {};
++            copy.imageSubresource = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1 };
++            copy.imageExtent = { shotExtent.width, shotExtent.height, 1 };
++            vkCmdCopyImageToBuffer(screen.mCommandBuffer, mSwapchainImages[mSwapchainImageIndex],
++                                   VK_IMAGE_LAYOUT_GENERAL, shotBuffer, 1, &copy);
++            shotFramesLeft = 4;
++        }
++    }
++#endif
++
+     // GENERAL -> PRESENT_SRC for the swapchain image
+     {
+         VkImageMemoryBarrier barrier = { VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
+diff --git a/src/ship/Context.cpp b/src/ship/Context.cpp
+index 2ee0d7d9..e9f58967 100644
+--- a/src/ship/Context.cpp
++++ b/src/ship/Context.cpp
+@@ -432,6 +432,11 @@ const std::string& Context::GetShortName() const {
+ }
+ 
+ std::string Context::GetAppBundlePath() {
++#ifdef __PROSPERO__
++    // PlayStation 5: the title's own folder, read-write, is all a title sees
++    return "/app0";
++#endif
++
+ #if defined(__ANDROID__)
+     const char* externaldir = SDL_AndroidGetExternalStoragePath();
+     if (externaldir != NULL) {
+@@ -498,6 +503,11 @@ std::string Context::GetAppBundlePath() {
+ }
+ 
+ std::string Context::GetAppDirectoryPath(const std::string& appName) {
++#ifdef __PROSPERO__
++    // PlayStation 5: settings, saves and logs, apart from what a release carries
++    return "/app0/userdata";
++#endif
++
+ #if defined(__ANDROID__)
+     const char* externaldir = SDL_AndroidGetExternalStoragePath();
+     if (externaldir != NULL) {
+@@ -570,6 +580,11 @@ std::string Context::LocateFileAcrossAppDirs(const std::string& path, const std:
+     if (std::filesystem::exists(fpath)) {
+         return fpath;
+     }
++#ifdef __PROSPERO__
++    // PlayStation 5: a title has no working directory ("./file" is an invalid
++    // argument to stat, not a missing file): where the file would be made
++    return GetPathRelativeToAppDirectory(path, appName);
++#endif
+     // current dir
+     return "./" + std::string(path);
+ }
+diff --git a/src/ship/controller/physicaldevice/SDLAddRemoveDeviceEventHandler.cpp b/src/ship/controller/physicaldevice/SDLAddRemoveDeviceEventHandler.cpp
+index 3a80008b..8b84d09a 100644
+--- a/src/ship/controller/physicaldevice/SDLAddRemoveDeviceEventHandler.cpp
++++ b/src/ship/controller/physicaldevice/SDLAddRemoveDeviceEventHandler.cpp
+@@ -1,3 +1,7 @@
++#ifdef __PROSPERO__
++#include <imgui.h>
++#include <imgui_impl_sdl2.h>
++#endif
+ #include "ship/controller/physicaldevice/SDLAddRemoveDeviceEventHandler.h"
+ #include <SDL2/SDL.h>
+ #include "ship/controller/controldeck/ControlDeck.h"
+@@ -29,6 +33,12 @@ void SDLAddRemoveDeviceEventHandler::UpdateElement() {
+         if (mControlDeck) {
+             mControlDeck->GetConnectedPhysicalDeviceManager()->HandlePhysicalDeviceConnect(event.cdevice.which);
+         }
++#ifdef __PROSPERO__
++        // PlayStation 5: ImGui's SDL backend looks for a controller once, and never sees
++        // this event (it is taken here): have it look again, so the menu answers to a
++        // controller that was switched on after the title started
++        ImGui_ImplSDL2_SetGamepadMode(ImGui_ImplSDL2_GamepadMode_AutoFirst);
++#endif
+     }
+ 
+     while (SDL_PeepEvents(&event, 1, SDL_GETEVENT, SDL_CONTROLLERDEVICEREMOVED, SDL_CONTROLLERDEVICEREMOVED) > 0) {
+@@ -37,6 +47,9 @@ void SDLAddRemoveDeviceEventHandler::UpdateElement() {
+         if (mControlDeck) {
+             mControlDeck->GetConnectedPhysicalDeviceManager()->HandlePhysicalDeviceDisconnect(event.cdevice.which);
+         }
++#ifdef __PROSPERO__
++        ImGui_ImplSDL2_SetGamepadMode(ImGui_ImplSDL2_GamepadMode_AutoFirst);
++#endif
+     }
+ }
+ } // namespace Ship
+diff --git a/src/ship/log/Logger.cpp b/src/ship/log/Logger.cpp
+index 9fb58eeb..e42092b2 100644
+--- a/src/ship/log/Logger.cpp
++++ b/src/ship/log/Logger.cpp
+@@ -80,7 +80,14 @@ void Logger::OnInit(const nlohmann::json& /*initArgs*/) {
+         mLogger = std::make_shared<spdlog::async_logger>(mAppName, sinks.begin(), sinks.end(), spdlog::thread_pool(),
+                                                          spdlog::async_overflow_policy::block);
+         mLogger->set_level(spdlog::level::warn);
++#ifdef __PROSPERO__
++        // PlayStation 5: a flush is a slow write there, and one for every line made the
++        // first-run conversion of the ROM take twenty minutes. Errors at once, the rest in time.
++        mLogger->flush_on(spdlog::level::err);
++        spdlog::flush_every(std::chrono::seconds(2));
++#else
+         mLogger->flush_on(spdlog::level::info);
++#endif
+ #endif
+ 
+         mLogger->set_pattern("[%Y-%m-%d %H:%M:%S.%e] [%@] [%l] %v");
+diff --git a/src/ship/window/gui/Gui.cpp b/src/ship/window/gui/Gui.cpp
+index 73bed45f..2bd9be19 100644
+--- a/src/ship/window/gui/Gui.cpp
++++ b/src/ship/window/gui/Gui.cpp
+@@ -1,5 +1,10 @@
+ #define NOMINMAX
+ 
++#ifdef __PROSPERO__
++#include <unistd.h>
++#include <imgui.h>
++#include <imgui_impl_sdl2.h>
++#endif
+ #include "ship/window/gui/Gui.h"
+ 
+ #include <algorithm>
+@@ -256,6 +261,18 @@ void Gui::DrawMenu() {
+ 
+     ImGui::DockSpace(dockId, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_None | ImGuiDockNodeFlags_NoDockingInCentralNode);
+ 
++#ifdef __PROSPERO__
++    // PlayStation 5: ImGui's SDL backend looks for a controller on its first frame only,
++    // which may be before the pad is known, and the menu opens with the pad alone: look
++    // again, twice a second, until it has one
++    if (!(mImGuiIo->BackendFlags & ImGuiBackendFlags_HasGamepad)) {
++        static unsigned frames;
++        if (++frames % 30 == 0) {
++            ImGui_ImplSDL2_SetGamepadMode(ImGui_ImplSDL2_GamepadMode_AutoFirst);
++        }
++    }
++#endif
++
+     if (ImGui::IsKeyPressed(TOGGLE_BTN, false) || ImGui::IsKeyPressed(ImGuiKey_Escape, false) ||
+         (ImGui::IsKeyPressed(TOGGLE_PAD_BTN, false) && mConsoleVariable->GetInteger(CVAR_IMGUI_CONTROLLER_NAV, 0))) {
+         if ((ImGui::IsKeyPressed(ImGuiKey_Escape, false) || ImGui::IsKeyPressed(TOGGLE_PAD_BTN, false)) && GetMenu()) {

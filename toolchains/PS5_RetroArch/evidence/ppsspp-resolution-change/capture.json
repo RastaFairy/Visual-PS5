@@ -1,0 +1,30 @@
+{
+  "step": "ppsspp-resolution-change",
+  "recorded": "2026-10-19T01:58:46Z",
+  "console_run": "214921",
+  "revision": "3c23512",
+  "command": "printf 'ppsspp_internal_resolution = \"2880x1632\"\\n' to config/PPSSPP/PPSSPP.opt; tools/run-title.sh --no-build --no-deploy \"--game=ppsspp:/app0/content/psp/<psp game>.cso\" --pad-script=tests/pad/ppsspp-resolution-change.txt --watch 80",
+  "raw_capture": "klog/evidence-63-after-focus.txt",
+  "raw_lines": 18,
+  "raw_bytes": 1324,
+  "lines": [
+    "    armed pad script tests/pad/ppsspp-resolution-change.txt",
+    "==> [run] ok launched PPSA99169 result=0x00006018 via lncUtilApp/foreground as user <user> (the console reports the title running)",
+    "    build identity: 191ff52ccdb6eb3b157895e1ca3804f477e180f206dfaf1b9c2452493cd072d4",
+    "    core loader: ready symbols=20618 relocations=28867 mapped_bytes=24920064 base=400840000",
+    "    core loader: ready symbols=20618 relocations=28867 mapped_bytes=24920064 base=400840000",
+    "    video driver: video_vulkan init entered",
+    "    input: pad script loaded, 0 presses",
+    "    input: pad script OPTION ppsspp_internal_resolution=3840x2176 at 30.01 s: 1",
+    "    input: pad script SCREENSHOT at 45.01 s: /app0/pad-shot-1.png 1",
+    "    input: pad script STOP at 55.00 s",
+    "    pad script: 1 picture(s) saved to klog/pad-214921",
+    "==> [run] VERDICT: it exited on its own before 80s",
+    "[INFO] [PS5] build identity: 191ff52ccdb6eb3b157895e1ca3804f477e180f206dfaf1b9c2452493cd072d4",
+    "[INFO] [Core] Geometry: 2880x1620, Aspect: 1.778, FPS: 59.94, Sample rate: 44100.00 Hz.",
+    "[INFO] [Video] Set video size to: fullscreen.",
+    "[libretro INFO] [G3D] FramebufferManagerCommon::NotifyDisplayResized: 2880x1620",
+    "[INFO] [Environ] SET_SYSTEM_AV_INFO: 3840x2160, Aspect: 1.778, FPS: 59.94, Sample rate: 44100.00 Hz.",
+    "[libretro INFO] [G3D] FramebufferManagerCommon::NotifyDisplayResized: 3840x2160"
+  ]
+}

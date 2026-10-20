@@ -1,0 +1,12 @@
+{
+  "step": "picker-null-imports",
+  "note": "The frontend picker, built from PS5_VulkanTemplate, imported mkstemp and readlink from RADV's archive through stubs whose modules give a title nothing (null at run time). PS5_Vulkan f3cbf87 binds them to the platform layer, PS5_VulkanTemplate 08649131 refuses such an import at link time; the picker built from that pin imports none and still draws, chooses and hands over on the console.",
+  "must_contain": [
+    "picker after (PS5_VulkanTemplate 08649131, PS5_Vulkan f3cbf87): link-title.sh guard passed; imports none of strcasestr mkstemp readlink link symlink",
+    "picker test PASS: 300 frames",
+    "frontend: RetroArch quit; back to the picker",
+    "fatal lines in the run's kernel log: 0"
+  ],
+  "must_not_contain": [],
+  "human_check": "klog/picker-194705/picker.png shows the Gloss picker: 'Choose a frontend', the RetroArch card (XMB preview) selected beside the EmulationStation card (Alekfull NX SNES preview)."
+}

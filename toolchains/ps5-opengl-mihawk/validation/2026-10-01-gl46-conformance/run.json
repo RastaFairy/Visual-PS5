@@ -1,0 +1,172 @@
+{
+  "schema": 1,
+  "date": "2026-10-01",
+  "directory": "2026-10-01-gl46-conformance",
+  "cts_release": "opengl-cts-4.6.8.1",
+  "runner": "the sessions of cts-runner --type=gl46",
+  "source_commit": "3b8c0ca075f282f13ecbb3db2d468c2d5db91c4f",
+  "eboot_sha256": "979f24f00421be7ee22e679394bef07f0c13fc9a4832bb2199a4eedd585ee5af",
+  "sessions": [
+    {
+      "index": 1,
+      "log": "config-gl45-es3-main-cfg-1-run-0-width-256-height-256-egl.qpa",
+      "command_line": "--deqp-caselist-file=gl_cts/data/mustpass/gl/aosp_mustpass/main/gl45-es3-main.txt --deqp-screen-rotation=unspecified --deqp-surface-width=256 --deqp-surface-height=256 --deqp-watchdog=disable --deqp-base-seed=-1 --deqp-surface-type=pbuffer --deqp-gl-config-id=2 --deqp-gl-context-type=egl",
+      "cases": 1325,
+      "results": {
+        "Pass": 1325
+      },
+      "raw_logs_sha256": {
+        "config-gl45-es3-main-cfg-1-run-0-width-256-height-256-egl.qpa": "52283c3e2df02e14749e2765b1dd20dae677d719c79ba2ff2e70a693b2998391"
+      }
+    },
+    {
+      "index": 2,
+      "log": "config-gl45-es31-main-cfg-1-run-1-width-256-height-256-egl.qpa",
+      "command_line": "--deqp-caselist-file=gl_cts/data/mustpass/gl/aosp_mustpass/main/gl45-es31-main.txt --deqp-screen-rotation=unspecified --deqp-surface-width=256 --deqp-surface-height=256 --deqp-watchdog=disable --deqp-base-seed=-1 --deqp-surface-type=pbuffer --deqp-gl-config-id=2 --deqp-gl-context-type=egl",
+      "cases": 31248,
+      "results": {
+        "NotSupported": 382,
+        "Pass": 30866
+      },
+      "raw_logs_sha256": {
+        "config-gl45-es31-main-cfg-1-run-1-width-256-height-256-egl.qpa": "771c64d69fd5dec9626725c0e5bb2f728a70b9b17638765c2159d4e06af8ff97"
+      }
+    },
+    {
+      "index": 3,
+      "log": "config-gl30-khr-main-cfg-1-run-0-width-64-height-64-seed-1-egl.qpa",
+      "command_line": "--deqp-caselist-file=gl_cts/data/mustpass/gl/khronos_mustpass_noctx/main/gl30-khr-main.txt --deqp-screen-rotation=unspecified --deqp-surface-width=64 --deqp-surface-height=64 --deqp-watchdog=disable --deqp-base-seed=1 --deqp-surface-type=pbuffer --deqp-gl-config-id=2 --deqp-gl-context-type=egl",
+      "cases": 1,
+      "results": {
+        "NotSupported": 1
+      },
+      "raw_logs_sha256": {
+        "config-gl30-khr-main-cfg-1-run-0-width-64-height-64-seed-1-egl.qpa": "e9d0745a931bc32aa60d4b56483f3975ae3e6b4427aa1f239656e81412845511"
+      }
+    },
+    {
+      "index": 4,
+      "log": "config-gl40-khr-main-cfg-1-run-1-width-64-height-64-seed-1-egl.qpa",
+      "command_line": "--deqp-caselist-file=gl_cts/data/mustpass/gl/khronos_mustpass_noctx/main/gl40-khr-main.txt --deqp-screen-rotation=unspecified --deqp-surface-width=64 --deqp-surface-height=64 --deqp-watchdog=disable --deqp-base-seed=1 --deqp-surface-type=pbuffer --deqp-gl-config-id=2 --deqp-gl-context-type=egl",
+      "cases": 1,
+      "results": {
+        "Pass": 1
+      },
+      "raw_logs_sha256": {
+        "config-gl40-khr-main-cfg-1-run-1-width-64-height-64-seed-1-egl.qpa": "713e82fc4d03e16d42cd3991d4927c0597619c2f69363694a3b14647791b365e"
+      }
+    },
+    {
+      "index": 5,
+      "log": "config-gl43-khr-main-cfg-1-run-2-width-64-height-64-seed-1-egl.qpa",
+      "command_line": "--deqp-caselist-file=gl_cts/data/mustpass/gl/khronos_mustpass_noctx/main/gl43-khr-main.txt --deqp-screen-rotation=unspecified --deqp-surface-width=64 --deqp-surface-height=64 --deqp-watchdog=disable --deqp-base-seed=1 --deqp-surface-type=pbuffer --deqp-gl-config-id=2 --deqp-gl-context-type=egl",
+      "cases": 12,
+      "results": {
+        "NotSupported": 12
+      },
+      "raw_logs_sha256": {
+        "config-gl43-khr-main-cfg-1-run-2-width-64-height-64-seed-1-egl.qpa": "4b2f334cb084fc47292f392e8acf6e61620d32c12fb5ee0e42710ee17695856d"
+      }
+    },
+    {
+      "index": 6,
+      "log": "config-gl45-khr-main-cfg-1-run-3-width-64-height-64-seed-1-egl.qpa",
+      "command_line": "--deqp-caselist-file=gl_cts/data/mustpass/gl/khronos_mustpass_noctx/main/gl45-khr-main.txt --deqp-screen-rotation=unspecified --deqp-surface-width=64 --deqp-surface-height=64 --deqp-watchdog=disable --deqp-base-seed=1 --deqp-surface-type=pbuffer --deqp-gl-config-id=2 --deqp-gl-context-type=egl",
+      "cases": 8,
+      "results": {
+        "NotSupported": 6,
+        "Pass": 2
+      },
+      "raw_logs_sha256": {
+        "config-gl45-khr-main-cfg-1-run-3-width-64-height-64-seed-1-egl.qpa": "aee171583cb362c15970fef5fd9fccc4488873b0f43c1843ba2516dc099a834f"
+      }
+    },
+    {
+      "index": 7,
+      "log": "config-gl46-khr-single-cfg-1-run-3-width-64-height-64-seed-1-egl.qpa",
+      "command_line": "--deqp-caselist-file=gl_cts/data/mustpass/gl/khronos_mustpass_single/main/gl46-khr-single.txt --deqp-screen-rotation=unspecified --deqp-surface-width=64 --deqp-surface-height=64 --deqp-watchdog=disable --deqp-base-seed=1 --deqp-surface-type=pbuffer --deqp-gl-config-id=2 --deqp-gl-context-type=egl",
+      "cases": 11348,
+      "results": {
+        "NotSupported": 6292,
+        "Pass": 5056
+      },
+      "raw_logs_sha256": {
+        "config-gl46-khr-single-cfg-1-run-3-width-64-height-64-seed-1-egl.qpa": "824299d38c4f9cab349d70574a47a18e139a46de045660db3891833d14d68058"
+      }
+    },
+    {
+      "index": 8,
+      "log": "config-gl46-main-cfg-2-run-0-width-64-height-64-seed-1-egl.qpa",
+      "command_line": "--deqp-caselist-file=gl_cts/data/mustpass/gl/khronos_mustpass/main/gl46-main.txt --deqp-screen-rotation=unspecified --deqp-surface-width=64 --deqp-surface-height=64 --deqp-watchdog=disable --deqp-base-seed=1 --deqp-surface-type=pbuffer --deqp-gl-config-id=2 --deqp-gl-context-type=egl",
+      "cases": 19714,
+      "results": {
+        "CompatibilityWarning": 1,
+        "NotSupported": 4378,
+        "Pass": 15335
+      },
+      "raw_logs_sha256": {
+        "config-gl46-main-cfg-2-run-0-width-64-height-64-seed-1-egl.qpa": "d55fab7045df8635231a417f0e8cdc8284138b13516347a059f0292374a3f0c9"
+      }
+    },
+    {
+      "index": 9,
+      "log": "config-gl46-main-cfg-2-run-1-width-113-height-47-seed-2-egl.qpa",
+      "command_line": "--deqp-caselist-file=gl_cts/data/mustpass/gl/khronos_mustpass/main/gl46-main.txt --deqp-screen-rotation=unspecified --deqp-surface-width=113 --deqp-surface-height=47 --deqp-watchdog=disable --deqp-base-seed=2 --deqp-surface-type=pbuffer --deqp-gl-config-id=2 --deqp-gl-context-type=egl",
+      "cases": 19714,
+      "results": {
+        "CompatibilityWarning": 1,
+        "NotSupported": 4378,
+        "Pass": 15335
+      },
+      "raw_logs_sha256": {
+        "config-gl46-main-cfg-2-run-1-width-113-height-47-seed-2-egl.qpa": "90348d1c5242a0c37a7e50a6e00854fcb8959e61498318aeebcc7e2dd8d47b8d"
+      }
+    },
+    {
+      "index": 10,
+      "log": "config-gl46-main-cfg-2-run-2-width-64-height--1-seed-3-egl.qpa",
+      "command_line": "--deqp-caselist-file=gl_cts/data/mustpass/gl/khronos_mustpass/main/gl46-main.txt --deqp-screen-rotation=unspecified --deqp-surface-width=64 --deqp-surface-height=-1 --deqp-watchdog=disable --deqp-base-seed=3 --deqp-gl-config-name=rgba8888d24s8 --deqp-surface-type=fbo --deqp-gl-config-id=2 --deqp-gl-context-type=egl",
+      "cases": 19714,
+      "results": {
+        "CompatibilityWarning": 1,
+        "NotSupported": 4378,
+        "Pass": 15335
+      },
+      "raw_logs_sha256": {
+        "config-gl46-main-cfg-2-run-2-width-64-height--1-seed-3-egl.qpa": "ca01eeff38101e54bda6aade79c164e1baf05cc9e51f92540a1c929dd79d0aca"
+      }
+    },
+    {
+      "index": 11,
+      "log": "config-gl46-main-cfg-2-run-3-width--1-height-64-seed-3-egl.qpa",
+      "command_line": "--deqp-caselist-file=gl_cts/data/mustpass/gl/khronos_mustpass/main/gl46-main.txt --deqp-screen-rotation=unspecified --deqp-surface-width=-1 --deqp-surface-height=64 --deqp-watchdog=disable --deqp-base-seed=3 --deqp-gl-config-name=rgba8888d24s8 --deqp-surface-type=fbo --deqp-gl-config-id=2 --deqp-gl-context-type=egl",
+      "cases": 19714,
+      "results": {
+        "CompatibilityWarning": 1,
+        "NotSupported": 4378,
+        "Pass": 15335
+      },
+      "raw_logs_sha256": {
+        "config-gl46-main-cfg-2-run-3-width--1-height-64-seed-3-egl.qpa": "3e31d3cd8a3b777f75ad01a510aa4c842d4e4a38c8aba44bbb7fa45ac19a1ded"
+      }
+    }
+  ],
+  "totals": {
+    "CompatibilityWarning": 4,
+    "NotSupported": 24205,
+    "Pass": 98590,
+    "cases": 122799,
+    "warnings": 4
+  },
+  "window_surface_run": {
+    "environment": "PS5_CTS_OFFSCREEN_WINDOW=1",
+    "cases": 22,
+    "covers_not_supported": 19,
+    "raw_logs_sha256": {
+      "config-gl30-khr-main-cfg-1-run-0-width-64-height-64-seed-1-egl.qpa": "f61d71b2f6f6c82274e4776ecfe350546316f13e0aaaa542b36ad4825691bd9c",
+      "config-gl40-khr-main-cfg-1-run-1-width-64-height-64-seed-1-egl.qpa": "0ce731364574d4e4e539577ab68d0e1ff509c08162da0d10038bc93fa5ed731c",
+      "config-gl43-khr-main-cfg-1-run-2-width-64-height-64-seed-1-egl.qpa": "4de7a4ad8dda14fad1e6e53885b4d17016660f7889f79c96df7a7aa58a881bfa",
+      "config-gl45-khr-main-cfg-1-run-3-width-64-height-64-seed-1-egl.qpa": "689053cbbaa7466779805923ea8cb4e31e15bc774dbbf69270bd03fd269ffe9d"
+    }
+  }
+}

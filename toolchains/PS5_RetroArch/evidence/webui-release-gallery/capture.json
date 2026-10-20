@@ -1,0 +1,103 @@
+{
+  "step": "webui-release-gallery",
+  "revision": "working tree on 1e7edf5",
+  "command": "Browser captures from installed build 8135742c; compare catalog SHA-256 values and inspect build/release-preview/index.html",
+  "raw_capture": "assets/releases/v1.0.0-beta.1/catalog.json",
+  "raw_lines": 87,
+  "lines": [
+    "10 unedited WebUI screenshots cataloged and linked with captions",
+    "All 15 preview images loaded in browser, including 4 existing QR captures",
+    "Permanent warning text matches README and stays above every other image",
+    "No warning-related lines removed",
+    "No game uploaded, metadata saved, files transferred, or scrape job started"
+  ],
+  "catalog": {
+    "capture": "Unedited browser screenshots of the installed console WebUI. Add Game uses an unsaved LaunchBox metadata draft; no backup uploaded, no library edits saved, no download started. Full-page captures preserve scrollable page contents.",
+    "build": "8135742c",
+    "source_commit": "1e7edf5",
+    "files": [
+      {
+        "file": "webui-add-game-details.jpg",
+        "resolution": [
+          1265,
+          712
+        ],
+        "sha256": "011e27a0713f3e50dc1590df32fbccde04f9a3347b67f7fad9d744a1d5b6eb66"
+      },
+      {
+        "file": "webui-add-game-manual-media.jpg",
+        "resolution": [
+          1265,
+          712
+        ],
+        "sha256": "0dfa0a64e524c0086cde7a876950224441ef933fa7c67a5f666160127def29a7"
+      },
+      {
+        "file": "webui-add-game-media.jpg",
+        "resolution": [
+          1265,
+          712
+        ],
+        "sha256": "2873f3e14454a50e352e7a37783b9a3178a54f64ae8afe91ca2f3e82fa2bfefc"
+      },
+      {
+        "file": "webui-download-media.jpg",
+        "resolution": [
+          1264,
+          2374
+        ],
+        "sha256": "b14d824debffa2b511e6c2f2d91717f47e1b795c8501b4967a8b40a9842c61cb"
+      },
+      {
+        "file": "webui-download-sources.jpg",
+        "resolution": [
+          1265,
+          712
+        ],
+        "sha256": "dc064904f1810e24989a4da693e0a00bc360897728b5b5cd0b798a7df6d517c8"
+      },
+      {
+        "file": "webui-game-details.jpg",
+        "resolution": [
+          1265,
+          712
+        ],
+        "sha256": "6e33d68dabad4f20563343fd4629b369eecb2095c25e2f821e84920969d0b5b0"
+      },
+      {
+        "file": "webui-game-files.jpg",
+        "resolution": [
+          1265,
+          712
+        ],
+        "sha256": "dd0e0e8220ee4d97a20244bc18430f43016b6bb2cb92c8552eef934ce6c73a66"
+      },
+      {
+        "file": "webui-game-media.jpg",
+        "resolution": [
+          1265,
+          712
+        ],
+        "sha256": "b1b38315638e13f5a17d016223ea87e8ddc94cb3120b7aca16dcf82bd9576494"
+      },
+      {
+        "file": "webui-game-savestates.jpg",
+        "resolution": [
+          1265,
+          712
+        ],
+        "sha256": "9cade05983ae5fc6d51ca0f2461e3caa98b17d19c9663fca2655635ee8df0c07"
+      },
+      {
+        "file": "webui-games-neogeo-b.jpg",
+        "resolution": [
+          1264,
+          1951
+        ],
+        "sha256": "63c582f50e5e38a0c3876059c63e011a6f8bd9d286bd6ca8e279b495329c2602"
+      }
+    ]
+  },
+  "note_sha256": "041a3db01b7c3baaa0b45321b66833c47fc7f9b2124ad1d89794de40e62d9bcc",
+  "scope": "Screenshots and release prose only; application code and console deployment unchanged."
+}

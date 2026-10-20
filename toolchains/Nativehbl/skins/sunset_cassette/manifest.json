@@ -1,0 +1,24 @@
+{
+  "name": "Sunset Cassette",
+  "colors": {
+    "bg_top": "#28101AFF",
+    "bg_bottom": "#12060EFF",
+    "bg_grid": "#4E2A38FF",
+    "panel": "#24121CFF",
+    "panel_soft": "#341A28FF",
+    "panel_strong": "#421E32FF",
+    "border": "#844A60FF",
+    "border_active": "#FFB072FF",
+    "text": "#FFF5EEFF",
+    "text_soft": "#F4C7BCFF",
+    "text_muted": "#C48E8DFF",
+    "accent": "#FF7D5EFF",
+    "accent_alt": "#FF8850FF",
+    "accent_soft": "#FF6EA84E",
+    "ps_cross": "#FF884DFF",
+    "ps_circle": "#FF849FFF",
+    "ps_square": "#FFB65DFF",
+    "ps_triangle": "#76FFD2FF",
+    "status_bg": "#120810D6"
+  }
+}

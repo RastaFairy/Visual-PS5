@@ -1,0 +1,12 @@
+{
+  "step": "loadexec-second-image",
+  "note": "sceSystemServiceLoadExec starts another executable of the title (/app0/probe/eboot-copy.bin) as a new process with its arguments: a frontend can be its own program beside eboot.bin.",
+  "must_contain": [
+    "kernel log: EXEC /app0/probe/eboot-copy.bin",
+    "generation 1: image=/app0/probe/eboot-copy.bin argc=1 argv=[\"--ps5-relaunch=1\"] pid=132",
+    "relaunch test PASS: 1 restarts, every one with its arguments",
+    "fatal signals 0"
+  ],
+  "must_not_contain": [],
+  "human_check": ""
+}

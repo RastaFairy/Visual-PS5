@@ -1,0 +1,313 @@
+--- a/src/citra_libretro/input/mouse_tracker.cpp
++++ b/src/citra_libretro/input/mouse_tracker.cpp
+@@ -63,7 +63,8 @@
+     }
+ };
+ 
+-MouseTracker::MouseTracker() {
++MouseTracker::MouseTracker() : x(0), y(0), lastMouseX(0), lastMouseY(0),
++    projectedX(0), projectedY(0), isPressed(false) {
+     // Create renderer-specific cursor renderer based on current graphics API
+     cursor_renderer = nullptr;
+     switch (Settings::values.graphics_api.GetValue()) {
+@@ -104,13 +105,24 @@
+ 
+     if (LibRetro::settings.enable_mouse_touchscreen) {
+         state |= LibRetro::CheckInput(0, RETRO_DEVICE_MOUSE, 0, RETRO_DEVICE_ID_MOUSE_LEFT);
+-    }
+-
+-    if (LibRetro::settings.enable_touch_touchscreen) {
+-        state |= LibRetro::CheckInput(0, RETRO_DEVICE_POINTER, 0, RETRO_DEVICE_ID_POINTER_PRESSED);
+-    }
+-
+-    if (state == true) {
++        const int dx = LibRetro::CheckInput(0, RETRO_DEVICE_MOUSE, 0, RETRO_DEVICE_ID_MOUSE_X);
++        const int dy = LibRetro::CheckInput(0, RETRO_DEVICE_MOUSE, 0, RETRO_DEVICE_ID_MOUSE_Y);
++        // DualSense contact units are 1920 x 1080, independent of render scale.
++        mouseRemainderX += dx * static_cast<float>(layout.bottom_screen.GetWidth()) / 1920.0f;
++        mouseRemainderY += dy * static_cast<float>(layout.bottom_screen.GetHeight()) / 1080.0f;
++        const int mx = static_cast<int>(mouseRemainderX);
++        const int my = static_cast<int>(mouseRemainderY);
++        OnMouseMove(mx, my);
++        mouseRemainderX -= mx;
++        mouseRemainderY -= my;
++        wasMoved = dx != 0 || dy != 0;
++    }
++
++    const bool pointerPressed = LibRetro::settings.enable_touch_touchscreen &&
++        LibRetro::CheckInput(0, RETRO_DEVICE_POINTER, 0, RETRO_DEVICE_ID_POINTER_PRESSED);
++    state |= pointerPressed;
++
++    if (pointerPressed) {
+         auto pointerX = LibRetro::CheckInput(0, RETRO_DEVICE_POINTER, 0, RETRO_DEVICE_ID_POINTER_X);
+         auto pointerY = LibRetro::CheckInput(0, RETRO_DEVICE_POINTER, 0, RETRO_DEVICE_ID_POINTER_Y);
+         auto newX = static_cast<int>((pointerX + 0x7fff) / (float)(0x7fff * 2) * bufferWidth);
+@@ -172,7 +184,8 @@
+                     static_cast<int>(controllerY * heightSpeed));
+     }
+ 
+-    Restrict(0, 0, layout.bottom_screen.GetWidth(), layout.bottom_screen.GetHeight());
++    Restrict(0, 0, std::max(0, static_cast<int>(layout.bottom_screen.GetWidth()) - 1),
++             std::max(0, static_cast<int>(layout.bottom_screen.GetHeight()) - 1));
+ 
+     // Store as bottom-screen-local pixel coordinates
+     projectedX = static_cast<float>(x);
+@@ -180,7 +193,7 @@
+ 
+     isPressed = state;
+ 
+-    if (wasMoved) {
++    if (wasMoved || state) {
+         last_moved = std::chrono::steady_clock::now();
+     }
+ 
+@@ -340,47 +353,40 @@
+         return; // No framebuffer data available
+     }
+ 
+-    // Convert coordinates to screen space
+-    int centerX = static_cast<int>(projectedX);
+-    int centerY = static_cast<int>(projectedY);
+-    int radius = static_cast<int>(renderRatio);
+-
+-    // Calculate cursor dimensions within bounds
+-    int verticalLeft = std::max(centerX - radius / 5, static_cast<int>(layout.bottom_screen.left));
+-    int verticalRight =
+-        std::min(centerX + radius / 5, static_cast<int>(layout.bottom_screen.right));
+-    int verticalTop = std::max(centerY - radius, static_cast<int>(layout.bottom_screen.top));
+-    int verticalBottom = std::min(centerY + radius, static_cast<int>(layout.bottom_screen.bottom));
+-
+-    int horizontalLeft = std::max(centerX - radius, static_cast<int>(layout.bottom_screen.left));
+-    int horizontalRight = std::min(centerX + radius, static_cast<int>(layout.bottom_screen.right));
+-    int horizontalTop = std::max(centerY - radius / 5, static_cast<int>(layout.bottom_screen.top));
+-    int horizontalBottom =
+-        std::min(centerY + radius / 5, static_cast<int>(layout.bottom_screen.bottom));
+-
+-    // Draw cursor directly to framebuffer (assuming RGBA8888 format)
+-    uint32_t* pixels = static_cast<uint32_t*>(framebuffer_data);
+-    const uint32_t cursorColor = 0xFFFFFFFF; // White cursor
+-
+-    // Draw vertical line of cursor
+-    for (int y = verticalTop; y < verticalBottom; ++y) {
+-        for (int x = verticalLeft; x < verticalRight; ++x) {
+-            if (x >= 0 && x < bufferWidth && y >= 0 && y < bufferHeight) {
+-                int pixelIndex = y * bufferWidth + x;
+-                // XOR blend for visibility on any background
+-                pixels[pixelIndex] ^= cursorColor;
++    // Same supersampled white pen and dark nib/outline as DeSmuME.
++    const float size = std::max(1.0f, renderRatio / 8.0f);
++    const int x = static_cast<int>(projectedX), y = static_cast<int>(projectedY);
++    auto* pixels = static_cast<uint32_t*>(framebuffer_data);
++    for (int py = std::max(0, static_cast<int>(y - 21 * size));
++         py < std::min(bufferHeight, static_cast<int>(y + 2 * size)); ++py) {
++        for (int px = std::max(0, static_cast<int>(x - 2 * size));
++             px < std::min(bufferWidth, static_cast<int>(x + 17 * size)); ++px) {
++            if (!layout.IsWithinTouchscreen(px, py))
++                continue;
++            const uint32_t original = pixels[py * bufferWidth + px];
++            unsigned red = 0, green = 0, blue = 0, covered = 0;
++            for (int sy = 0; sy < 2; ++sy) {
++                for (int sx = 0; sx < 2; ++sx) {
++                    const float dx = (px - x + (sx - 0.5f) * 0.5f) / size;
++                    const float dy = (py - y + (sy - 0.5f) * 0.5f) / size;
++                    const float along = dx * 0.6f - dy * 0.8f;
++                    const float side = dx * 0.8f + dy * 0.6f;
++                    const float radius = std::min(1.6f, along * 0.32f);
++                    const float cap = std::max(0.0f, along - 22.0f);
++                    uint32_t colour = original;
++                    if (along >= 0 && side * side + cap * cap <= radius * radius) {
++                        ++covered;
++                        colour = along > 5.0f && along < 20.5f &&
++                                 std::abs(side) < radius - 0.45f ? 0xffffff : 0x202830;
++                    }
++                    red += (colour >> 16) & 255;
++                    green += (colour >> 8) & 255;
++                    blue += colour & 255;
++                }
+             }
+-        }
+-    }
+-
+-    // Draw horizontal line of cursor
+-    for (int y = horizontalTop; y < horizontalBottom; ++y) {
+-        for (int x = horizontalLeft; x < horizontalRight; ++x) {
+-            if (x >= 0 && x < bufferWidth && y >= 0 && y < bufferHeight) {
+-                int pixelIndex = y * bufferWidth + x;
+-                // XOR blend for visibility on any background
+-                pixels[pixelIndex] ^= cursorColor;
+-            }
++            if (covered)
++                pixels[py * bufferWidth + px] = (original & 0xff000000) |
++                    ((red / 4) << 16) | ((green / 4) << 8) | (blue / 4);
+         }
+     }
+ }
+--- a/src/citra_libretro/input/mouse_tracker.h
++++ b/src/citra_libretro/input/mouse_tracker.h
+@@ -61,6 +61,7 @@
+ private:
+     int x;
+     int y;
++    float mouseRemainderX = 0, mouseRemainderY = 0;
+ 
+     float lastMouseX;
+     float lastMouseY;
+--- a/src/video_core/renderer_vulkan/renderer_vulkan.cpp
++++ b/src/video_core/renderer_vulkan/renderer_vulkan.cpp
+@@ -485,26 +485,24 @@
+         present_pipelines[i] = pipeline;
+     }
+ 
+-    // Build cursor pipeline (simple position-only, inverted color blending)
++    // Build the DeSmuME-style pen pipeline (position and local pen coordinates).
+     {
+         const vk::VertexInputBindingDescription cursor_binding = {
+             .binding = 0,
+-            .stride = sizeof(float) * 2,
++            .stride = sizeof(float) * 4,
+             .inputRate = vk::VertexInputRate::eVertex,
+         };
+ 
+-        const vk::VertexInputAttributeDescription cursor_attribute = {
+-            .location = 0,
+-            .binding = 0,
+-            .format = vk::Format::eR32G32Sfloat,
+-            .offset = 0,
++        const std::array cursor_attributes = {
++            vk::VertexInputAttributeDescription{0, 0, vk::Format::eR32G32Sfloat, 0},
++            vk::VertexInputAttributeDescription{1, 0, vk::Format::eR32G32Sfloat, sizeof(float) * 2},
+         };
+ 
+         const vk::PipelineVertexInputStateCreateInfo cursor_vertex_input = {
+             .vertexBindingDescriptionCount = 1,
+             .pVertexBindingDescriptions = &cursor_binding,
+-            .vertexAttributeDescriptionCount = 1,
+-            .pVertexAttributeDescriptions = &cursor_attribute,
++            .vertexAttributeDescriptionCount = 2,
++            .pVertexAttributeDescriptions = cursor_attributes.data(),
+         };
+ 
+         const vk::PipelineInputAssemblyStateCreateInfo cursor_input_assembly = {
+@@ -528,11 +526,11 @@
+ 
+         const vk::PipelineColorBlendAttachmentState cursor_blend_attachment = {
+             .blendEnable = true,
+-            .srcColorBlendFactor = vk::BlendFactor::eOneMinusDstColor,
+-            .dstColorBlendFactor = vk::BlendFactor::eOneMinusSrcColor,
++            .srcColorBlendFactor = vk::BlendFactor::eOne,
++            .dstColorBlendFactor = vk::BlendFactor::eOneMinusSrcAlpha,
+             .colorBlendOp = vk::BlendOp::eAdd,
+             .srcAlphaBlendFactor = vk::BlendFactor::eOne,
+-            .dstAlphaBlendFactor = vk::BlendFactor::eZero,
++            .dstAlphaBlendFactor = vk::BlendFactor::eOneMinusSrcAlpha,
+             .alphaBlendOp = vk::BlendOp::eAdd,
+             .colorWriteMask = vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG |
+                               vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA,
+@@ -1075,40 +1073,20 @@
+     // Convert from bottom-screen-local to layout-absolute, then to NDC
+     const float abs_x = layout.bottom_screen.left + cursor.projected_x;
+     const float abs_y = layout.bottom_screen.top + cursor.projected_y;
+-    const float cx = (abs_x / buf_w) * 2.0f - 1.0f;
+-    const float cy = (abs_y / buf_h) * 2.0f - 1.0f;
+-    const float ratio = static_cast<float>(layout.bottom_screen.GetHeight()) / 30.0f;
+-    const float rw = ratio / buf_w;
+-    const float rh = ratio / buf_h;
+-
+-    // Bottom screen bounds in NDC
+-    const float bl = (layout.bottom_screen.left / buf_w) * 2.0f - 1.0f;
+-    const float bt = (layout.bottom_screen.top / buf_h) * 2.0f - 1.0f;
+-    const float br = (layout.bottom_screen.right / buf_w) * 2.0f - 1.0f;
+-    const float bb = (layout.bottom_screen.bottom / buf_h) * 2.0f - 1.0f;
+-
+-    // Crosshair geometry clamped to bottom screen bounds
+-    const float vl = std::fmax(cx - rw / 5.0f, bl);
+-    const float vr = std::fmin(cx + rw / 5.0f, br);
+-    const float vt = std::fmax(cy - rh, bt);
+-    const float vb = std::fmin(cy + rh, bb);
+-
+-    const float hl = std::fmax(cx - rw, bl);
+-    const float hr = std::fmin(cx + rw, br);
+-    const float ht = std::fmax(cy - rh / 5.0f, bt);
+-    const float hb = std::fmin(cy + rh / 5.0f, bb);
+-
+-    // 12 vertices = 4 triangles (2 for vertical bar, 2 for horizontal bar)
+-    // clang-format off
++    const float scale = std::max(1.0f, layout.bottom_screen.GetHeight() / 240.0f);
++    // Clip positions and local coordinates together, so clipping never distorts the pen.
++    const float left = std::max(abs_x - 2 * scale, float(layout.bottom_screen.left));
++    const float top = std::max(abs_y - 21 * scale, float(layout.bottom_screen.top));
++    const float right = std::min(abs_x + 17 * scale, float(layout.bottom_screen.right));
++    const float bottom = std::min(abs_y + 2 * scale, float(layout.bottom_screen.bottom));
++    const float l = left / buf_w * 2 - 1, r = right / buf_w * 2 - 1;
++    const float t = top / buf_h * 2 - 1, b = bottom / buf_h * 2 - 1;
++    const float u0 = (left - abs_x) / scale, u1 = (right - abs_x) / scale;
++    const float v0 = (top - abs_y) / scale, v1 = (bottom - abs_y) / scale;
+     const float vertices[] = {
+-        // Vertical bar
+-        vl, vt,  vr, vt,  vr, vb,
+-        vl, vt,  vr, vb,  vl, vb,
+-        // Horizontal bar
+-        hl, ht,  hr, ht,  hr, hb,
+-        hl, ht,  hr, hb,  hl, hb,
+-    };
+-    // clang-format on
++        l, t, u0, v0, r, t, u1, v0, r, b, u1, v1,
++        l, t, u0, v0, r, b, u1, v1, l, b, u0, v1,
++    };
+ 
+     const u64 size = sizeof(vertices);
+     auto [data, offset, invalidate] = vertex_buffer.Map(size, 16);
+@@ -1118,8 +1096,8 @@
+     scheduler.Record([this, offset = offset, pipeline = cursor_pipeline](vk::CommandBuffer cmdbuf) {
+         cmdbuf.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline);
+         cmdbuf.bindVertexBuffers(0, vertex_buffer.Handle(), {0});
+-        const u32 first_vertex = static_cast<u32>(offset) / (sizeof(float) * 2);
+-        cmdbuf.draw(12, 1, first_vertex, 0);
++        const u32 first_vertex = static_cast<u32>(offset) / (sizeof(float) * 4);
++        cmdbuf.draw(6, 1, first_vertex, 0);
+     });
+ }
+ 
+--- a/src/video_core/host_shaders/vulkan_cursor.vert
++++ b/src/video_core/host_shaders/vulkan_cursor.vert
+@@ -7,6 +7,10 @@
+ 
+ layout (location = 0) in vec2 vert_position;
+ 
++layout (location = 1) in vec2 vert_stylus;
++layout (location = 0) out vec2 stylus;
++
+ void main() {
++    stylus = vert_stylus;
+     gl_Position = vec4(vert_position, 0.0, 1.0);
+ }
+--- a/src/video_core/host_shaders/vulkan_cursor.frag
++++ b/src/video_core/host_shaders/vulkan_cursor.frag
+@@ -5,8 +5,26 @@
+ #version 450 core
+ #extension GL_ARB_separate_shader_objects : enable
+ 
++layout (location = 0) in vec2 stylus;
+ layout (location = 0) out vec4 color;
+ 
+ void main() {
+-    color = vec4(1.0, 1.0, 1.0, 1.0);
++    // Match DeSmuME's four subpixel samples, including its integer pixel origin.
++    vec2 pixel = fwidth(stylus);
++    vec2 origin = stylus - 0.5 * pixel;
++    color = vec4(0.0);
++    for (int sy = 0; sy < 2; ++sy) {
++        for (int sx = 0; sx < 2; ++sx) {
++            vec2 p = origin + (vec2(sx, sy) - 0.5) * 0.5 * pixel;
++            float along = p.x * 0.6 - p.y * 0.8;
++            float side = p.x * 0.8 + p.y * 0.6;
++            float radius = min(1.6, along * 0.32);
++            float cap = max(0.0, along - 22.0);
++            if (along >= 0.0 && side * side + cap * cap <= radius * radius) {
++                vec3 ink = along > 5.0 && along < 20.5 && abs(side) < radius - 0.45
++                    ? vec3(1.0) : vec3(32.0, 40.0, 48.0) / 255.0;
++                color += vec4(ink, 1.0) * 0.25;
++            }
++        }
++    }
+ }

@@ -1,0 +1,14 @@
+{
+  "repository": "mihawk-99/ps5-opengl",
+  "branch": "main",
+  "commit": "ec06d8c2da0359e274e409046f0a9586965e4010",
+  "sourceCommit": "ec06d8c2da0359e274e409046f0a9586965e4010",
+  "sourceRef": "main",
+  "method": "vendored-snapshot",
+  "vendoredSnapshot": true,
+  "vendorRepository": "RastaFairy/Visual-PS5",
+  "vendoredAt": "2026-10-20T15:43:39Z",
+  "submodulesMaterialized": true,
+  "originalMethod": "vendored-snapshot",
+  "sourceRevisionRecorded": true
+}

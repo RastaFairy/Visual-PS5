@@ -1,0 +1,22 @@
+{
+  "step": "sdk-iswctype",
+  "recorded": "2026-10-05T03:17:30Z",
+  "console_run": "base PS5 13.40, runs 231157 and 231524",
+  "revision": "5ee2d48 + payload SDK b5efad5",
+  "command": "tools/run-title.sh --no-build --relaunch-test=1 --relaunch-image=es-de/es-de.bin --frontend-capture=4,12 --frontend-scroll --watch 35",
+  "raw_capture": "klog/sdk-iswctype/summary.txt",
+  "raw_lines": 10,
+  "raw_bytes": 857,
+  "lines": [
+    "==> base PS5 13.40, build 716a3c05 (PS5_FRONTENDS='es-de picker'), payload SDK b5efad52 (ps5_iswctype_l from the rune type)",
+    "frontends/common/frontend_shims.c: no iswctype_l of its own; tools/build-frontend.sh binds iswctype_l=ps5_iswctype_l",
+    "ES-DE start (--relaunch-test=1 --relaunch-image=es-de/es-de.bin --frontend-capture=4,12 --frontend-scroll --watch 35, run 231157):",
+    "  es_log: Setting up AudioManager... Audio driver: ps5 (ES-DE ran past std::locale, where the console's iswctype faulted)",
+    "  frontend capture PASS: 2 pictures from 1 process(es), GL error 0",
+    "game mode on the new SDK (--frontend-launch --retroarch-frames=600 --watch 80, run 231524):",
+    "  game mode: RetroArch quit (status 0) after 11 s; back to the frontend",
+    "  frontend capture PASS: 3 pictures from 2 process(es)",
+    "  fatal lines in the run's kernel log: 0",
+    "host: PS5_PayloadSDK make test PASS"
+  ]
+}

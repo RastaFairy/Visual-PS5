@@ -1,0 +1,10 @@
+{
+  "step": "framegen-hardware-image-size-before",
+  "note": "Before: Dolphin reports 2560x2112 for a 3840x2160 image; the generated pictures are a crop of the real ones, far from their neighbours (the doubled image).",
+  "must_contain": [
+    "network ready for 2560x2112 frames",
+    "mean difference from their neighbours 31.5"
+  ],
+  "must_not_contain": [],
+  "human_check": ""
+}

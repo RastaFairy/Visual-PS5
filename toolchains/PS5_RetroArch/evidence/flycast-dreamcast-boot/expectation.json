@@ -1,0 +1,13 @@
+{
+  "step": "flycast-dreamcast-boot",
+  "note": "Flycast from PS5_Flycast loads in the title, renders through the frontend's Vulkan device with per-pixel transparency at 2880x2160, boots Dreamcast Test Game through its HLE BIOS (no dc_boot.bin on the console), plays its intro, title screen and attract demo with sound, and takes the pad: START skipped the film, left the title screen and reached Select a memory card. Frames: 30 a second in the intro film (the film's rate), about 60 in the attract demo (run 210719, 598 frames over 50-60 s); stalls of 0.5-1.4 s early on. RetroArch exited normally.",
+  "must_contain": [
+    "Loading dynamic libretro core from: \"/app0/cores/flycast_libretro.so\"",
+    "Did not load BIOS, using reios",
+    "OITVulkanRenderer::Init",
+    "rarch_main returned = 0",
+    "Select a memory card after START"
+  ],
+  "must_not_contain": [],
+  "human_check": "Agent inspected klog/pad-210719 (title screen; attract demo with the hero in 3D) and klog/pad-211230 (intro film; title screen; Select a memory card after START). The owner's own play is not yet recorded."
+}

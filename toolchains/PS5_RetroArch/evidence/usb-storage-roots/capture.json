@@ -1,0 +1,27 @@
+{
+  "step": "usb-storage-roots",
+  "recorded": "2026-10-07T00:44:06Z",
+  "console_run": "base PS5 13.40, ShadowMountPlus 1.7beta4 loaded, one USB drive; run-PPSA99169-204255",
+  "revision": "working tree on 1cdf298 (this commit)",
+  "command": "PS5_FRONTENDS='es-de picker' PS5_REUSE_STAGED_CORES=mame tools/build-title.sh; tools/run-title.sh --no-build --watch 30; /app0/trace.txt over FTP",
+  "raw_capture": "klog/usb-storage-roots/trace-storage-204255.txt",
+  "raw_lines": 15,
+  "raw_bytes": 844,
+  "lines": [
+    "frontend ps5: directory /app0/cores opened=1 entries=32 errno=0",
+    "frontend ps5: directory /app0 opened=1 entries=35 errno=0",
+    "frontend ps5: directory /data opened=1 entries=12 errno=0",
+    "frontend ps5: directory /mnt opened=1 entries=16 errno=0",
+    "frontend ps5: /mnt holds disc system_data.tmp rnps ext0 sandbox rnps2.tmp rnps2 pfs usb1 usb0 usb3 usb2 usb5 usb4 usb7 usb6",
+    "frontend ps5: storage /mnt/ext0 (EXTENDED 0) absent",
+    "frontend ps5: storage /mnt/ext1 (EXTENDED 1) absent",
+    "frontend ps5: storage /mnt/usb0 (USB 0) available",
+    "frontend ps5: storage /mnt/usb1 (USB 1) absent",
+    "frontend ps5: storage /mnt/usb2 (USB 2) absent",
+    "frontend ps5: storage /mnt/usb3 (USB 3) absent",
+    "frontend ps5: storage /mnt/usb4 (USB 4) absent",
+    "frontend ps5: storage /mnt/usb5 (USB 5) absent",
+    "frontend ps5: storage /mnt/usb6 (USB 6) absent",
+    "frontend ps5: storage /mnt/usb7 (USB 7) absent"
+  ]
+}

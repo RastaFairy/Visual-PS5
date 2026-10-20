@@ -1,0 +1,13 @@
+{
+  "step": "child-processes",
+  "note": "Sony's local processes (sceSystemServiceAddLocalProcess, ../PS5_Proton's route) on the base PS5 13.40: a headless child starts from a LoadExec'd frontend in 0.12 s and closes cleanly, but shares the application's memory budget, dies with the parent's LoadExec, and cannot have the GPU: a graphics child fails at startup (gbase_gvmsw_open 6978) and Sony then kills the whole application.",
+  "must_contain": [
+    "headless child closed: kill status 0, present after 0",
+    "(one budget)",
+    "listed after 0",
+    "gbase_gvmsw_open 6978 error; exception 0xa0020104",
+    "graphics child from a parent that never opened the display"
+  ],
+  "must_not_contain": [],
+  "human_check": ""
+}

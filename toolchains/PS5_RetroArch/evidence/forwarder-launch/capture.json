@@ -1,0 +1,28 @@
+{
+  "step": "forwarder-launch",
+  "recorded": "2026-10-17T22:10:00Z",
+  "console_run": "",
+  "revision": "20dd7fe (this series), in build 838fd9a3",
+  "command": "tools/run-title.sh --no-build --no-deploy --relaunch-test=1 --relaunch-arg=--rom --relaunch-arg=\"nes/<a backup>\" --relaunch-arg=--core --relaunch-arg=fceumm --relaunch-arg=--exit-after-game --retroarch-arg=--appendconfig=/app0/tests/no-save.cfg --retroarch-frames=600 --watch 45; then tools/run-title.sh --no-build --no-deploy --home-launch --watch 30",
+  "raw_capture": "klog/forwarder-launch/record.txt",
+  "raw_lines": 16,
+  "raw_bytes": 1680,
+  "lines": [
+    "Console: the owner's base PS5 on a 1440p display with 120 Hz and VRR, build identity 838fd9a3ca99e21ce4adba405a3f3867a0c4ce411ee89981e0a8111dcef02797 (this series at 20dd7fe with PS5_FRONTENDS=\"es-de picker\", PS5_WITH_SWANSTATION=1, PS5_WITH_MELONDSDS=1), 2026-10-17.",
+    "The control payload launches with no arguments, so the relaunch test restarts the title with a forwarder's: --rom nes/<a backup> --core fceumm --exit-after-game; RetroArch quits after 600 frames:",
+    "  armed relaunch test: 1 restarts, run relaunch-20261017-220459",
+    "  each restart carries: ['--rom', 'nes/<a backup in content/nes>', '--core', 'fceumm', '--exit-after-game']",
+    "  relaunch test: generation 0 of 1 (arguments name -1), restart",
+    "  relaunch test: generation 1 of 1 (arguments name 1), continue",
+    "  forwarder: /app0/content/nes/<a backup in content/nes> with /app0/cores/fceumm_libretro.so, closing after it",
+    "  forwarder: RetroArch quit (status 0) after 11 s; the title closes",
+    "  relaunch test PASS: 1 restarts, every one with its arguments",
+    "  retroarch-game.log: [INFO] [PS5] build identity: 838fd9a3ca99e21ce4adba405a3f3867a0c4ce411ee89981e0a8111dcef02797",
+    "  retroarch-game.log: [INFO] [Core] Loading dynamic libretro core from: \"/app0/cores/fceumm_libretro.so\".",
+    "  retroarch-game.log: [INFO] [Config] Appending config: \"/app0/config/game-mode.cfg\".",
+    "  retroarch-game.log: [INFO] [Config] Appending config: \"/app0/tests/no-save.cfg\".",
+    "  retroarch-game.log: [INFO] [Content] Loading content file: \"/app0/content/nes/<a backup in content/nes>#<its .nes>\".",
+    "  After a second such run, a launch from the home screen at once:",
+    "  frontend: mode '', test run 0, picker test 0, picker 1, es-de 1, remembered ask, L1 0 -> picker"
+  ]
+}

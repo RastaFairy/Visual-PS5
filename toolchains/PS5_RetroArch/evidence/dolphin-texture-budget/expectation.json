@@ -1,0 +1,15 @@
+{
+  "step": "dolphin-texture-budget",
+  "note": "Issue 5 after the fix, on build 191ff52c: with Load Custom Textures on and the owner's pack in place, the cache starts with a 512 MiB budget (no error), unloads nothing, and the game runs to the script's STOP.",
+  "must_contain": [
+    "build identity: 191ff52c",
+    "Active title: <gc game> (<game id>)",
+    "pad script STOP at 70.01 s"
+  ],
+  "must_not_contain": [
+    "Not enough system memory",
+    "Unloading asset",
+    "crash: signal"
+  ],
+  "human_check": "Start the game with the pack and Load Custom Textures on: the pack's textures show."
+}

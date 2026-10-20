@@ -1,0 +1,23 @@
+{
+  "step": "scraper-screenscraper",
+  "recorded": "2026-10-07T16:01:40Z",
+  "console_run": "none: host, against a fake ScreenScraper API (tests/test_scraper_screenscraper.py), fake developer and user accounts",
+  "revision": "working tree on c36ac76 (this commit)",
+  "command": "python3 -m unittest -v tests.test_scraper_screenscraper; bash tools/lint-shell.sh",
+  "raw_capture": "klog/scraper-screenscraper/raw.txt",
+  "raw_lines": 11,
+  "raw_bytes": 1051,
+  "lines": [
+    "test_a_build_without_the_developer_account_offers_no_screenscraper (tests.test_scraper_screenscraper.ScreenScraper.test_a_build_without_the_developer_account_offers_no_screenscraper) ... ok",
+    "test_a_quota_pauses_the_job_until_resumed (tests.test_scraper_screenscraper.ScreenScraper.test_a_quota_pauses_the_job_until_resumed) ... ok",
+    "test_pc_mode_is_refused_so_no_account_leaves_the_console (tests.test_scraper_screenscraper.ScreenScraper.test_pc_mode_is_refused_so_no_account_leaves_the_console) ... ok",
+    "test_ps5_mode_checksum_name_search_details_and_thread_limit (tests.test_scraper_screenscraper.ScreenScraper.test_ps5_mode_checksum_name_search_details_and_thread_limit) ... ok",
+    "test_sign_in_form_in_a_browser (tests.test_scraper_screenscraper.ScreenScraper.test_sign_in_form_in_a_browser) ... ok",
+    "test_sign_in_is_checked_kept_private_and_forgotten (tests.test_scraper_screenscraper.ScreenScraper.test_sign_in_is_checked_kept_private_and_forgotten) ... ok",
+    "Ran 6 tests in 15.941s",
+    "OK",
+    "==> [lint-shell] the ScreenScraper developer account is in no tracked or shipped file",
+    "lint-shell: PASS",
+    "build: tools/build-webui-daemon.sh prints \"ScreenScraper developer account: built in (scrambled)\"; tools/verify.sh PASS (format unit build integration evidence)"
+  ]
+}

@@ -1,0 +1,25 @@
+{
+  "step": "sdl-probe",
+  "recorded": "2026-10-04T19:05:36Z",
+  "console_run": "base PS5 13.40, run relaunch-20261004-150134",
+  "revision": "5e302e0 + frontend executable build (build c1383963)",
+  "command": "PS5_FRONTENDS=sdl-probe tools/build-title.sh; tools/run-title.sh --no-build --relaunch-test=1 --relaunch-image=es-de/sdl-probe.bin --watch 45",
+  "raw_capture": "klog/sdl-probe-summary.txt",
+  "raw_lines": 13,
+  "raw_bytes": 1011,
+  "lines": [
+    "==> PS5_FRONTENDS=sdl-probe tools/build-title.sh; tools/run-title.sh --no-build --relaunch-test=1 --relaunch-image=es-de/sdl-probe.bin --watch 45   (base PS5, 13.40)",
+    "build identity: c1383963b3c6f295268920948836d99fcadbeaee8f984f1201385ee919578370",
+    "es-de/sdl-probe.bin: 23,401,527 bytes, SDL2 2.30.12 (PS5 fork 8c56053) through PS5_OpenGL bridge, GL SDK ps5-opengl-gl46 (1920x1080 at 60); deployed and verified as stored",
+    "kernel log: EXEC /app0/eboot.bin",
+    "kernel log: EXEC /app0/es-de/sdl-probe.bin",
+    "kernel log: EXEC /app0/eboot.bin",
+    "kernel log: \"Kill for LoadExec(...) => 0\" x2, fatal signals 0",
+    "sdl probe: argv=[\"--ps5-relaunch=1\"] splash=0 drawable 1920x1080",
+    "sdl probe: GL vendor 'PS5 homebrew', renderer 'PS5 AGC', version '4.6 (Core Profile) Mesa 26.2.0'",
+    "sdl probe: frames [121, 120, 120], centre pixel matched [121, 120, 120], failure ''",
+    "sdl probe: joystick opened (SDL name 'ffashiofile'), 1 button press",
+    "relaunch test PASS: 1 restarts, every one with its arguments",
+    "Owner: \"I see red green blue then retroarch\""
+  ]
+}
