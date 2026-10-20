@@ -154,9 +154,9 @@ if fetched_repo.lower() != declared_repo.lower():
 if unresolved_submodule:
     record["unresolvedSubmodules"] = [unresolved_submodule]
     record["buildableWithoutExternalRepo"] = False
-with open(path, "w", encoding="utf-8", newline="\\n") as f:
+with open(path, "w", encoding="utf-8", newline="\n") as f:
     json.dump(record, f, ensure_ascii=False, indent=2)
-    f.write("\\n")
+    f.write("\n")
 PY
   if [[ -n "$unresolved_submodule" ]]; then
     record "$folder" "vendored-source-only" "$declared_repo" "$actual_repo" "$ref" "$commit" "Fuentes copiadas; falta el submódulo externo $unresolved_submodule. No se marca como compilación autónoma."
