@@ -194,7 +194,28 @@ function GetStatus {
     @{name='Clang';ok=$clang.ok;version='';detail=$clang.path},
     @{name='Make';ok=$make.ok;version='';detail=$make.path}
   )
-  $sdks=@();foreach($e in $script:Catalog){$p=Join-Path $script:Toolchains $e.folder;$marker=Test-Path (Join-Path $p '.ps5hs-source.json');if($e.method -eq 'git'){$installed=((Test-Path (Join-Path $p '.git')) -and (Test-Path (Join-Path $p 'README.md')))}else{$installed=$marker -or (Test-Path (Join-Path $p 'README.md'))};$category='backend';if($e.category){$category=[string]$e.category};$sdks+=@{id=$e.id;name=$e.name;folder=$e.folder;role=$e.role;license=$e.license;description=$e.description;category=$category;method=$e.method;href=('https://github.com/'+$e.repo);installed=$installed;path=$p;upstreamUnavailable=(GetPS5HSUpstreamUnavailable ([string]$e.repo));mirrorAlternatives=(GetPS5HSMirrorAlternatives ([string]$e.repo))}}
+  $sdks=@()
+  foreach($e in $script:Catalog) {
+    $p=Join-Path $script:Toolchains $e.folder
+    $localSource=GetPS5HSBundledToolchainInfo $e $p
+    $installed=[bool]$localSource.installed
+    $category='backend';if($e.category){$category=[string]$e.category}
+    $upstreamUnavailable=$null
+    $mirrorAlternatives=@()
+    if(!$localSource.bundled) {
+      $upstreamUnavailable=GetPS5HSUpstreamUnavailable ([string]$e.repo)
+      $mirrorAlternatives=GetPS5HSMirrorAlternatives ([string]$e.repo)
+    }
+    $sdks+=@{
+      id=$e.id;name=$e.name;folder=$e.folder;role=$e.role;license=$e.license;
+      description=$e.description;category=$category;method=$e.method;
+      href=('https://github.com/RastaFairy/Visual-PS5/tree/main/toolchains/'+$e.folder);
+      sourceHref=('https://github.com/'+$e.repo);
+      installed=$installed;bundled=[bool]$localSource.bundled;path=$p;
+      sourceCommit=[string]$localSource.commit;
+      upstreamUnavailable=$upstreamUnavailable;mirrorAlternatives=$mirrorAlternatives
+    }
+  }
   $sdkPackInfo=GetPS5HSToolchainPackSdkArchive
   $toolchainHealth=@{pinsLoaded=($null -ne $script:ToolchainPins);pinsPath=$script:ToolchainPinsPath;sdkPack=@{present=$sdkPackInfo.present;verified=$sdkPackInfo.verified;version=$sdkPackInfo.version;sha256=$sdkPackInfo.sha256;bytes=$sdkPackInfo.bytes;path=$sdkPackInfo.path}}
   return @{root=$script:Root;workspace=$script:Workspace;wslDistribution=$wslDist;sdks=$sdks;toolchainHealth=$toolchainHealth;prerequisites=@{git=$git.ok;gitPath=$git.path;dotnet10=$dot10;wsl=$wslOk;wslDotnet10=$wslDot;wslGitPython=$wslGitPython;items=$items}}
@@ -218,6 +239,48 @@ function WriteProjectFiles($P,[string]$Code,[string]$Dir) {
     }
   }
 }
+
+function GetPS5HSBundledToolchainInfo($Entry,[string]$Path) {
+  $result=@{installed=$false;bundled=$false;commit='';sourceInfo=$null}
+  $readme=$false
+  foreach($name in @('README.md','readme.md','README')) {
+    if(Test-Path -LiteralPath (Join-Path $Path $name) -PathType Leaf) {$readme=$true;break}
+  }
+  $gitDir=Join-Path $Path '.git'
+  if((Test-Path -LiteralPath $gitDir -PathType Container) -and $readme) {
+    $result.installed=$true
+    return $result
+  }
+  $markerPath=Join-Path $Path '.ps5hs-source.json'
+  $hasMarker=Test-Path -LiteralPath $markerPath -PathType Leaf
+  if($hasMarker -and $readme) {
+    try {
+      $sourceInfo=Get-Content -LiteralPath $markerPath -Raw | ConvertFrom-Json
+      $expected=[string]$Entry.repo
+      $sourceRepository=[string]$sourceInfo.repository
+      $mirrorRepository=[string]$sourceInfo.mirrorRepository
+      $declaredSource=[string]$sourceInfo.sourceRepository
+      $matches=($sourceRepository -eq $expected) -or
+        ($mirrorRepository -eq $expected) -or
+        ($declaredSource -eq $expected)
+      if($matches) {
+        $result.sourceInfo=$sourceInfo
+        $result.commit=[string]$(if($sourceInfo.sourceCommit){$sourceInfo.sourceCommit}else{$sourceInfo.commit})
+        $result.bundled=$true
+        $result.installed=$true
+        return $result
+      }
+    } catch {
+      # A malformed or unrelated marker is not trusted as a valid vendored source.
+    }
+  }
+  if($Entry.method -ne 'git') {
+    $result.installed=($hasMarker -or $readme)
+    $result.bundled=($hasMarker -and $readme)
+  }
+  return $result
+}
+
 function InstallRepo($Entry) {
   $dest=Join-Path $script:Toolchains $Entry.folder
   $marker=Test-Path (Join-Path $dest '.ps5hs-source.json')
@@ -233,7 +296,15 @@ function InstallRepo($Entry) {
       }
       return @{ok=$true;name=$Entry.name;message=$(if($marker){'Ya estaba clonado; no se ha sobrescrito.'}else{'Checkout Git existente reconocido y registrado sin sobrescribir archivos.'});path=$dest;commit=$commit}
     }
-    if(Test-Path $dest){throw "Existe una carpeta en $dest que no parece un checkout Git válido. No se ha sobrescrito para proteger sus archivos; renómbrala o revisa la carpeta manualmente."}
+    $localSource = GetPS5HSBundledToolchainInfo $Entry $dest
+    if ($localSource.bundled) {
+      return @{
+        ok=$true;name=$Entry.name;
+        message='Fuente vendorizada en RastaFairy/Visual-PS5/toolchains; se usa la copia local sin clonar ni consultar el upstream.';
+        path=$dest;commit=[string]$localSource.commit;vendored=$true
+      }
+    }
+    if(Test-Path $dest){throw "Existe una carpeta en $dest que no parece un checkout Git válido y no tiene un manifiesto de fuente coincidente. No se ha sobrescrito para proteger sus archivos; revisa la carpeta manualmente."}
   } elseif($marker -or (Test-Path (Join-Path $dest 'README.md'))){
     if($Entry.id -ne 'ps5-ultrapack') { return @{ok=$true;name=$Entry.name;message='Ya estaba instalado; no se ha sobrescrito.';path=$dest} }
   }
@@ -1466,8 +1537,25 @@ function BuildNativeProject([string]$ProjectPath,[bool]$CleanBeforeBuild=$false,
       $vulkanDir = Join-Path $script:Toolchains 'PS5_Vulkan'
       $payloadSdkDir = Join-Path $script:Toolchains 'PS5_PayloadSDK'
       $mesaDir = Join-Path $script:Toolchains 'PS5_Mesa'
-      if (!(Test-Path (Join-Path $vulkanDir '.git')) -or !(Test-Path (Join-Path $payloadSdkDir '.git')) -or !(Test-Path (Join-Path $mesaDir '.git'))) {
-        throw 'No están disponibles los checkouts Git completos de PS5_Vulkan, PS5_PayloadSDK y PS5_Mesa.'
+      $requiredVendorSources = @(
+        @{path=$vulkanDir;name='PS5_Vulkan';files=@('README.md','Makefile','tools/build.sh','tools/setup-native-dependencies.sh')},
+        @{path=$payloadSdkDir;name='PS5_PayloadSDK';files=@('README.md','platform/tools/setup-sdk.sh')},
+        @{path=$mesaDir;name='PS5_Mesa';files=@('README.md','meson.build')}
+      )
+      foreach($source in $requiredVendorSources) {
+        $manifestPath=Join-Path $source.path '.ps5hs-source.json'
+        $hasCheckout=Test-Path -LiteralPath (Join-Path $source.path '.git') -PathType Container
+        $hasVendorManifest=$false
+        if(Test-Path -LiteralPath $manifestPath -PathType Leaf) {
+          try {
+            $manifest=Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
+            $hasVendorManifest=([bool]$manifest.vendoredSnapshot -or ([string]$manifest.method -eq 'vendored-snapshot'))
+          } catch { $hasVendorManifest=$false }
+        }
+        $missingFiles=@($source.files | Where-Object { !(Test-Path -LiteralPath (Join-Path $source.path $_) -PathType Leaf) })
+        if((!$hasCheckout -and !$hasVendorManifest) -or $missingFiles.Count -gt 0) {
+          throw ("La fuente local $($source.name) no pasa la validación de vendorización. Faltan archivos: " + ($missingFiles -join ', ') + ".")
+        }
       }
       $helperRelativePaths = @('tools/ninja-build.sh','tools/build-host-tools.sh')
       $auditRelativePaths = @($helperRelativePaths) + @('.ps5hs-compatibility.json')
