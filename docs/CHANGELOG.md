@@ -1,5 +1,17 @@
 # Registro de cambios
 
+## 1.1.19 — 2026-10-20
+
+- El upstream comunitario `blackbearreloaded` desapareció de GitHub (ps5-opengl, ps5-native-app-boilerplate, ps5-homebrew-ui, ProsperoLight, ps5-fsr4, ps5-helixsr) y los builds OpenGL morían con `curl: (22) 404` al descargar el SDK ps5-opengl 1.0.2. Esta versión integra toolchains, pins y mirrors para que una copia local baste y la red sea opcional.
+- Nuevo manifiesto `runtime/toolchain-pins.json`: declara los upstreams caídos con sus mirrors verificados (LedyBacer y darkxex publican el tarball del SDK idéntico byte a byte, comprobado contra el SHA-256 original `30d8e51d…`) y fija versión, tamaño y SHA-256 del artefacto binario `ps5-opengl-sdk` 1.0.2.
+- `InstallRepo` clona con cadena de candidatos (upstream primero, mirrors después) y registra la fuente usada en `.ps5hs-source.json` (`mirrorRepository`); las copias locales adoptadas siguen intocables y con prioridad.
+- Nuevo permiso auditable `allowUpstreamSdkMirrorPatch`: con consentimiento, el IDE reescribe `tools/fetch-opengl-sdk.sh` del proyecto con la cadena de mirrors (marca `# PS5HS_MIRROR_CHAIN`, idempotente, pins de integridad intactos, registro SHA-256 antes/después en `.ps5hs-modifications.json`). Sin consentimiento, el script upstream queda intacto y el fallo es el 404 original. El parche se aplica tanto al crear el proyecto como antes de compilar uno existente.
+- Siembra offline del SDK: si `toolchain-pack/ps5-opengl-sdk/ps5-opengl-sdk-1.0.2.tar.gz` existe y verifica el pin, el IDE lo copia a `.deps/ps5-opengl/` del proyecto antes de compilar y el build del SDK no necesita red. Nuevo `runtime/Build-ToolchainPack.ps1` para construir el pack (y un respaldo ZIP opcional) desde las toolchains locales.
+- Panel SDKs y dock con salud de toolchains: estado por entrada (`LOCAL · UPSTREAM CAÍDO`, `MIRROR DISPONIBLE`, `SOLO COPIA LOCAL`) y estado del pack (`PACK SDK OK/AUSENTE/SHA MAL`); `GetStatus` expone `toolchainHealth`.
+- Documentación: nuevo `docs/TOOLCHAIN-VENDORING.md` con la arquitectura de capas, el manifiesto de pins, el parche, el pack y la postura de licencias (vendoring íntegro, MIT del IDE + GPL de los toolchains, sin binarios de Sony).
+- Verificación: parser real de PowerShell OK para `server.ps1`, `native-modification-policy.ps1`, `Build-ToolchainPack.ps1` y tests; `test-native-modification-policy.ps1` ampliado (13 claves + bloque del parche: denegado, autorizado, idempotente, irreconocible) y pasa en pwsh 7.4; nueva suite `test-toolchain-pins.js` registrada en CI; las 11 suites JS pasan; la cadena de mirrors y la siembra offline se probaron de extremo a extremo con el script real (upstream 404 → mirror LedyBacer → verificación y extracción correctas; con tarball sembrado, 3,8 s y cero red).
+
+
 ## 1.1.18 — 2026-10-19
 
 - Corrige el fallo `TypeError: buttons.forEach is not a function` que interrumpía la compilación justo después de confirmar el diálogo «Generar y compilar»: los flujos OpenGL/Vulkan (`buildNativeVisualProject`) y SharpProspero (`buildSharpWithConsent`) consultaban los botones del diálogo con `$` (un solo elemento) en lugar de `$$` (lista), por lo que `forEach` no existía y la promesa del control quedaba rechazada sin capturar antes de desactivar los botones.

@@ -46,7 +46,8 @@ jobs:
             'runtime/test-project-contracts.js',
             'runtime/test-api-contracts.js',
             'runtime/test-static-assets.js',
-            'runtime/test-build-flow.js'
+            'runtime/test-build-flow.js',
+            'runtime/test-toolchain-pins.js'
           )
           foreach ($test in $tests) {
             Write-Host "Running $test"
@@ -62,7 +63,8 @@ jobs:
             'runtime/check-syntax.ps1',
             'runtime/test-native-runtime.ps1',
             'runtime/native-modification-policy.ps1',
-            'runtime/test-native-modification-policy.ps1'
+            'runtime/test-native-modification-policy.ps1',
+            'runtime/Build-ToolchainPack.ps1'
           )
           foreach ($path in $paths) {
             $tokens = $null
@@ -82,11 +84,11 @@ jobs:
         run: ./runtime/test-native-modification-policy.ps1
       - name: Package versioned source ZIP
         shell: pwsh
-        run: git archive --format=zip --prefix=PS5-Homebrew-Studio/ --output=PS5-Homebrew-Studio-v1.1.18.zip HEAD
+        run: git archive --format=zip --prefix=PS5-Homebrew-Studio/ --output=PS5-Homebrew-Studio-v1.1.19.zip HEAD
       - name: Upload versioned source ZIP
         uses: actions/upload-artifact@v7.0.2
         with:
-          name: PS5-Homebrew-Studio-v1.1.18
-          path: PS5-Homebrew-Studio-v1.1.18.zip
+          name: PS5-Homebrew-Studio-v1.1.19
+          path: PS5-Homebrew-Studio-v1.1.19.zip
           if-no-files-found: error
           retention-days: 30

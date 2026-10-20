@@ -85,7 +85,7 @@ assert.throws(() => normalize({name:'Flujo valor fuera de rango',components:[com
 assert.throws(() => normalize({name:'Flujo indice sin opcion',components:[component({id:'component-1'}),component({id:'picker',type:'select',items:['A','B']})],flows:[{id:'f-index',componentId:'component-1',event:'activate',action:'setValue',targetId:'picker',value:'2'}]}), /índice entero que apunte a una opción real/);
 
 
-assert.match(html, /runtime\/project-contracts\.js\?v=1\.1\.18/);
+assert.match(html, /runtime\/project-contracts\.js\?v=1\.1\.19/);
 assert.match(server, /function TestPS5HSTitleId\(/);
 assert.match(server, /TestPS5HSTitleId \$titleId/);
 assert.match(server, /TestPS5HSTitleId \$TitleId/);

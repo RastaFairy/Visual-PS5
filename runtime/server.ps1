@@ -14,7 +14,70 @@ if (!(Test-Path -LiteralPath $script:NativeRuntimeProfileScript -PathType Leaf))
 $script:NativeModificationPolicyScript = Join-Path $PSScriptRoot 'native-modification-policy.ps1'
 if (!(Test-Path -LiteralPath $script:NativeModificationPolicyScript -PathType Leaf)) { throw 'Falta runtime/native-modification-policy.ps1; el IDE no iniciará sin el control de permisos de modificación.' }
 . $script:NativeModificationPolicyScript
-@($script:Toolchains,$script:Runtime,$script:Exports,$script:Workspace) | ForEach-Object { New-Item -ItemType Directory -Force -Path $_ | Out-Null }
+$script:ToolchainPinsPath = Join-Path $PSScriptRoot 'toolchain-pins.json'
+$script:ToolchainPins = $null
+if (Test-Path -LiteralPath $script:ToolchainPinsPath -PathType Leaf) {
+  try { $script:ToolchainPins = Get-Content -LiteralPath $script:ToolchainPinsPath -Raw | ConvertFrom-Json } catch { $script:ToolchainPins = $null }
+}
+function GetPS5HSUpstreamUnavailable([string]$Repo) {
+  if (!$script:ToolchainPins -or !$script:ToolchainPins.mirrors) { return $false }
+  $prop = $script:ToolchainPins.mirrors.PSObject.Properties[[string]$Repo]
+  return ($null -ne $prop)
+}
+function GetPS5HSMirrorAlternatives([string]$Repo) {
+  if (!$script:ToolchainPins -or !$script:ToolchainPins.mirrors) { return @() }
+  $prop = $script:ToolchainPins.mirrors.PSObject.Properties[[string]$Repo]
+  if (!$prop) { return @() }
+  return @(@($prop.Value.alternatives) | Where-Object { $_ } | ForEach-Object { [string]$_ })
+}
+function GetPS5HSSdkArtifactPin {
+  if (!$script:ToolchainPins -or !$script:ToolchainPins.artifacts) { return $null }
+  $prop = $script:ToolchainPins.artifacts.PSObject.Properties['ps5-opengl-sdk']
+  if (!$prop) { return $null }
+  return $prop.Value
+}
+function GetPS5HSSdkMirrorUrls {
+  $pin = GetPS5HSSdkArtifactPin
+  if ($pin -and $pin.urls) { return @(@($pin.urls) | ForEach-Object { [string]$_ }) }
+  return @()
+}
+function GetPS5HSToolchainPackRoot { return (Join-Path $script:Root 'toolchain-pack') }
+function GetPS5HSToolchainPackSdkArchive {
+  $pin = GetPS5HSSdkArtifactPin
+  if (!$pin) { return @{present=$false;verified=$false;path='';version='';sha256='';bytes=0} }
+  $candidate = Join-Path (GetPS5HSToolchainPackRoot) (Join-Path 'ps5-opengl-sdk' ([string]$pin.file))
+  $present = (Test-Path -LiteralPath $candidate -PathType Leaf)
+  $verified = $false
+  $bytes = 0
+  if ($present) {
+    try {
+      $bytes = (Get-Item -LiteralPath $candidate).Length
+      $verified = ((Get-FileHash -LiteralPath $candidate -Algorithm SHA256).Hash.ToLowerInvariant() -eq [string]$pin.archive.sha256)
+    } catch { $verified = $false }
+  }
+  return @{present=$present;verified=$verified;path=$candidate;version=[string]$pin.version;sha256=[string]$pin.archive.sha256;bytes=$bytes}
+}
+function SeedProjectOpenGlSdkCache([string]$ProjectRoot) {
+  $pin = GetPS5HSSdkArtifactPin
+  if (!$pin) { return @{seeded=$false;reason='no hay pin del artefacto ps5-opengl-sdk'} }
+  $pack = GetPS5HSToolchainPackSdkArchive
+  if (!$pack.present) { return @{seeded=$false;reason='el pack local no contiene el tarball del SDK'} }
+  if (!$pack.verified) { return @{seeded=$false;reason='el tarball del pack no coincide con el pin SHA-256; no se sembrara'} }
+  $cacheDir = Join-Path $ProjectRoot '.deps/ps5-opengl'
+  $target = Join-Path $cacheDir ([string]$pin.file)
+  if (Test-Path -LiteralPath $target -PathType Leaf) {
+    try {
+      $existingOk = ((Get-FileHash -LiteralPath $target -Algorithm SHA256).Hash.ToLowerInvariant() -eq [string]$pin.archive.sha256)
+      if ($existingOk) { return @{seeded=$false;alreadyPresent=$true;path=$target} }
+    } catch { }
+    Remove-Item -LiteralPath $target -Force
+  }
+  New-Item -ItemType Directory -Force -Path $cacheDir | Out-Null
+  Copy-Item -LiteralPath $pack.path -Destination $target -Force
+  $finalOk = ((Get-FileHash -LiteralPath $target -Algorithm SHA256).Hash.ToLowerInvariant() -eq [string]$pin.archive.sha256)
+  if (!$finalOk) { Remove-Item -LiteralPath $target -Force -ErrorAction SilentlyContinue; return @{seeded=$false;reason='la copia no supero la verificacion SHA-256'} }
+  return @{seeded=$true;path=$target}
+}
 $script:Catalog = @(
   @{id='sharp';name='SharpProspero';repo='SvenGDK/SharpProspero';branch='main';folder='SharpProspero';role='Aplicaciones nativas / payload C#';license='GPL-3.0-or-later';description='SDK C# y toolchain de aplicaciones nativas, interfaz, gráficos, audio, entrada, red y payloads.'},
   @{id='ps5sdk';name='PS5SDK';repo='PS5Dev/PS5SDK';branch='main';folder='PS5SDK';role='Payload ELF C/C++';license='GPL-2.0';description='SDK en desarrollo para ELF/payloads y homebrew sencillo; no construye títulos completos.'},
@@ -131,8 +194,10 @@ function GetStatus {
     @{name='Clang';ok=$clang.ok;version='';detail=$clang.path},
     @{name='Make';ok=$make.ok;version='';detail=$make.path}
   )
-  $sdks=@();foreach($e in $script:Catalog){$p=Join-Path $script:Toolchains $e.folder;$marker=Test-Path (Join-Path $p '.ps5hs-source.json');if($e.method -eq 'git'){$installed=((Test-Path (Join-Path $p '.git')) -and (Test-Path (Join-Path $p 'README.md')))}else{$installed=$marker -or (Test-Path (Join-Path $p 'README.md'))};$category='backend';if($e.category){$category=[string]$e.category};$sdks+=@{id=$e.id;name=$e.name;folder=$e.folder;role=$e.role;license=$e.license;description=$e.description;category=$category;method=$e.method;href=('https://github.com/'+$e.repo);installed=$installed;path=$p}}
-  return @{root=$script:Root;workspace=$script:Workspace;wslDistribution=$wslDist;sdks=$sdks;prerequisites=@{git=$git.ok;gitPath=$git.path;dotnet10=$dot10;wsl=$wslOk;wslDotnet10=$wslDot;wslGitPython=$wslGitPython;items=$items}}
+  $sdks=@();foreach($e in $script:Catalog){$p=Join-Path $script:Toolchains $e.folder;$marker=Test-Path (Join-Path $p '.ps5hs-source.json');if($e.method -eq 'git'){$installed=((Test-Path (Join-Path $p '.git')) -and (Test-Path (Join-Path $p 'README.md')))}else{$installed=$marker -or (Test-Path (Join-Path $p 'README.md'))};$category='backend';if($e.category){$category=[string]$e.category};$sdks+=@{id=$e.id;name=$e.name;folder=$e.folder;role=$e.role;license=$e.license;description=$e.description;category=$category;method=$e.method;href=('https://github.com/'+$e.repo);installed=$installed;path=$p;upstreamUnavailable=(GetPS5HSUpstreamUnavailable ([string]$e.repo));mirrorAlternatives=(GetPS5HSMirrorAlternatives ([string]$e.repo))}}
+  $sdkPackInfo=GetPS5HSToolchainPackSdkArchive
+  $toolchainHealth=@{pinsLoaded=($null -ne $script:ToolchainPins);pinsPath=$script:ToolchainPinsPath;sdkPack=@{present=$sdkPackInfo.present;verified=$sdkPackInfo.verified;version=$sdkPackInfo.version;sha256=$sdkPackInfo.sha256;bytes=$sdkPackInfo.bytes;path=$sdkPackInfo.path}}
+  return @{root=$script:Root;workspace=$script:Workspace;wslDistribution=$wslDist;sdks=$sdks;toolchainHealth=$toolchainHealth;prerequisites=@{git=$git.ok;gitPath=$git.path;dotnet10=$dot10;wsl=$wslOk;wslDotnet10=$wslDot;wslGitPython=$wslGitPython;items=$items}}
 }
 function Slug([string]$Text) { $s=([string]$Text).Normalize([Text.NormalizationForm]::FormD) -replace '\p{Mn}','';$s=$s -replace '[^a-zA-Z0-9_-]+','-';$s=$s.Trim('-');if(!$s){$s='MiHomebrew'};if($s.Length -gt 48){$s=$s.Substring(0,48)};return $s }
 function TestPS5HSTitleId([string]$Value) { $id = ([string]$Value).Trim().ToUpperInvariant(); return (($id -match '^PPSA\d{5}$') -and $id -ne 'PPSA00000') }
@@ -204,19 +269,34 @@ function InstallRepo($Entry) {
       $git=CmdInfo 'git.exe';if(!$git.ok){$git=CmdInfo 'git'}
       if(!$git.ok){throw 'Git no está instalado. Usa Configurar entorno para instalar Git y vuelve a intentarlo.'}
       $stage=Join-Path $temp 'checkout'
-      $cloneArgs=@('-c','core.longpaths=true','-c','core.autocrlf=false','clone','--recurse-submodules');if(!$Entry.fullHistory){$cloneArgs+=@('--depth','1','--shallow-submodules')};$cloneArgs+=@('--branch',[string]$Entry.branch,('https://github.com/'+$Entry.repo+'.git'),$stage)
-      $cloneOut=@(& $git.path @cloneArgs 2>&1);$cloneExit=$LASTEXITCODE
-      if($cloneExit -ne 0 -or !(Test-Path (Join-Path $stage 'README.md'))){$detail=($cloneOut|ForEach-Object{$_.ToString()}) -join "`r`n";throw "git clone falló para $($Entry.repo) (código $cloneExit).`r`n$detail"}
+      $candidateRepos=@([string]$Entry.repo)+(GetPS5HSMirrorAlternatives ([string]$Entry.repo))
+      $usedRepo='';$cloneErrors=@();$cloneOut=@()
+      foreach($repoAttempt in $candidateRepos){
+        $cloneArgs=@('-c','core.longpaths=true','-c','core.autocrlf=false','clone','--recurse-submodules');if(!$Entry.fullHistory){$cloneArgs+=@('--depth','1','--shallow-submodules')};$cloneArgs+=@('--branch',[string]$Entry.branch,('https://github.com/'+$repoAttempt+'.git'),$stage)
+        $cloneOut=@(& $git.path @cloneArgs 2>&1);$cloneExit=$LASTEXITCODE
+        if($cloneExit -eq 0 -and (Test-Path (Join-Path $stage 'README.md'))){$usedRepo=$repoAttempt;break}
+        $cloneErrors+=('('+$repoAttempt+') código '+$cloneExit)
+        if(Test-Path $stage){Remove-Item $stage -Recurse -Force -ErrorAction SilentlyContinue}
+      }
+      if(!$usedRepo){$detail=($cloneOut|ForEach-Object{$_.ToString()}) -join "`r`n";throw "git clone falló para $($Entry.repo) y sus mirrors: $($cloneErrors -join '; ').`r`n$detail"}
       $commit=((& $git.path -C $stage rev-parse HEAD 2>$null)|Out-String).Trim()
       if(Test-Path $dest){Remove-Item $dest -Recurse -Force}
       Move-Item -LiteralPath $stage -Destination $dest
-      WriteUtf8 (Join-Path $dest '.ps5hs-source.json') (ConvertTo-Json -InputObject @{repository=$Entry.repo;branch=$Entry.branch;commit=$commit;method='git clone --recurse-submodules';installedAt=(Get-Date).ToString('o')} -Depth 5)
-      return @{ok=$true;name=$Entry.name;message="Repositorio clonado con submódulos. Commit: $commit";path=$dest;commit=$commit}
+      $sourceRecord=@{repository=$Entry.repo;branch=$Entry.branch;commit=$commit;method='git clone --recurse-submodules';installedAt=(Get-Date).ToString('o')}
+      if($usedRepo -ne [string]$Entry.repo){$sourceRecord.mirrorRepository=$usedRepo}
+      WriteUtf8 (Join-Path $dest '.ps5hs-source.json') (ConvertTo-Json -InputObject $sourceRecord -Depth 5)
+      $mirrorNote=if($usedRepo -ne [string]$Entry.repo){' (mirror: '+$usedRepo+'; upstream original no disponible)'}else{''}
+      return @{ok=$true;name=$Entry.name;message="Repositorio clonado con submódulos$mirrorNote. Commit: $commit";path=$dest;commit=$commit;repository=$usedRepo;mirrorUsed=($usedRepo -ne [string]$Entry.repo)}
     }
-    $zip=Join-Path $temp 'repo.zip';$unpack=Join-Path $temp 'unpack';New-Item -ItemType Directory -Force -Path $unpack|Out-Null;$ok=$false;$why=''
-    foreach($branch in (@($Entry.branch,'main','master') | Select-Object -Unique)) { try {Invoke-WebRequest -Uri ('https://codeload.github.com/'+$Entry.repo+'/zip/refs/heads/'+$branch) -OutFile $zip -UseBasicParsing -TimeoutSec 240;if((Get-Item $zip).Length -lt 100){throw 'ZIP vacío'};$ok=$true;break}catch{$why=$_.Exception.Message;Remove-Item $zip -Force -ErrorAction SilentlyContinue } }
-    if(!$ok){throw "Descarga fallida de $($Entry.repo): $why"}
-    Expand-Archive -LiteralPath $zip -DestinationPath $unpack -Force;$top=Get-ChildItem $unpack -Directory|Select-Object -First 1;if(!$top){throw 'El ZIP no tiene raíz de proyecto.'};if(Test-Path $dest){Remove-Item $dest -Recurse -Force};Move-Item -LiteralPath $top.FullName -Destination $dest;WriteUtf8 (Join-Path $dest '.ps5hs-source.json') (ConvertTo-Json -InputObject @{repository=$Entry.repo;branch=$branch;installedAt=(Get-Date).ToString('o');method='source ZIP'} -Depth 5)
+    $zip=Join-Path $temp 'repo.zip';$unpack=Join-Path $temp 'unpack';New-Item -ItemType Directory -Force -Path $unpack|Out-Null;$ok=$false;$why='';$zipRepo=[string]$Entry.repo
+    foreach($repoAttempt in (@([string]$Entry.repo)+(GetPS5HSMirrorAlternatives ([string]$Entry.repo)))) {
+      foreach($branch in (@($Entry.branch,'main','master') | Select-Object -Unique)) { try {Invoke-WebRequest -Uri ('https://codeload.github.com/'+$repoAttempt+'/zip/refs/heads/'+$branch) -OutFile $zip -UseBasicParsing -TimeoutSec 240;if((Get-Item $zip).Length -lt 100){throw 'ZIP vacío'};$ok=$true;$zipRepo=$repoAttempt;break}catch{$why=$_.Exception.Message;Remove-Item $zip -Force -ErrorAction SilentlyContinue } }
+      if($ok){break}
+    }
+    if(!$ok){throw "Descarga fallida de $($Entry.repo) y sus mirrors: $why"}
+    $zipSourceRecord=@{repository=$Entry.repo;branch=$branch;installedAt=(Get-Date).ToString('o');method='source ZIP'}
+    if($zipRepo -ne [string]$Entry.repo){$zipSourceRecord.mirrorRepository=$zipRepo}
+    Expand-Archive -LiteralPath $zip -DestinationPath $unpack -Force;$top=Get-ChildItem $unpack -Directory|Select-Object -First 1;if(!$top){throw 'El ZIP no tiene raíz de proyecto.'};if(Test-Path $dest){Remove-Item $dest -Recurse -Force};Move-Item -LiteralPath $top.FullName -Destination $dest;WriteUtf8 (Join-Path $dest '.ps5hs-source.json') (ConvertTo-Json -InputObject $zipSourceRecord -Depth 5)
     if($Entry.id -eq 'etahen'){$nid=$script:Catalog|Where-Object id -eq 'nid'|Select-Object -First 1;$nidDir=Join-Path $script:Toolchains $nid.folder;if(!(Test-Path (Join-Path $nidDir 'README.md'))){InstallRepo $nid|Out-Null};$sub=Join-Path $dest 'libNidResolver';if(Test-Path $sub){Remove-Item $sub -Recurse -Force};if(Test-Path $nidDir){Copy-Item -LiteralPath $nidDir -Destination $sub -Recurse}}
     if($Entry.id -eq 'ps5-ultrapack') {
       $pythonCmd = CmdInfo 'python.exe'; if(!$pythonCmd.ok){$pythonCmd=CmdInfo 'python'}
@@ -1299,6 +1379,12 @@ function BuildNativeProject([string]$ProjectPath,[bool]$CleanBeforeBuild=$false,
       $null = InvokePS5HSNativeModificationWithAudit -ProjectRoot $projectRoot -Backend $template -Operation 'enable-opengl-european-font-atlas' -PermissionKey 'allowOpenGlEuropeanAtlas' -RelativePaths @('tools/bake-fonts.sh') -Policy $policy -SourceRepository ([string]$profile.repository) -Action { EnableEuropeanFontAtlas $projectRoot }
     } catch { return @{ok=$false;message=$_.Exception.Message;output=$_.Exception.Message;path=$projectRoot;templateId=$template} }
   } elseif ($template -eq 'hui-gl' -and $script:ActiveBuildLogPath) { WriteBuildJobLog $script:ActiveBuildLogPath 'Atlas tipográfico europeo omitido por política; se conserva la configuración upstream.' }
+  if ($template -eq 'hui-gl') {
+    $mirrorPatch = ApplyPS5HSSdkMirrorChainPatch -ProjectRoot $projectRoot -Policy $policy -Backend 'opengl-ui' -SourceRepository ([string]$profile.repository) -MirrorUrls (GetPS5HSSdkMirrorUrls)
+    if ($mirrorPatch.changed -and $script:ActiveBuildLogPath) { WriteBuildJobLog $script:ActiveBuildLogPath 'Cadena de mirrors del SDK OpenGL aplicada antes de compilar.' }
+    $sdkSeed = SeedProjectOpenGlSdkCache $projectRoot
+    if ($sdkSeed.seeded -and $script:ActiveBuildLogPath) { WriteBuildJobLog $script:ActiveBuildLogPath 'SDK ps5-opengl sembrado desde el pack local en .deps/ps5-opengl (SHA-256 verificado); el build no necesitará red para el SDK.' }
+  }
   try { $null = NormalizeNativeBuildFilesWithAudit -ProjectRoot $projectRoot -Policy $policy -Backend $template -SourceRepository ([string]$profile.repository) }
   catch { return @{ok=$false;message='No se pudieron normalizar los finales de línea de los archivos nativos con la política actual.';output=$_.Exception.Message;templateId=$template} }
   $scriptPath = ''
@@ -1941,6 +2027,13 @@ function BuildNativeVisualProject($Body) {
     $workspaceRoot = [IO.Path]::GetFullPath($script:Workspace) + [IO.Path]::DirectorySeparatorChar
     if (!$projectRoot.StartsWith($workspaceRoot,[StringComparison]::OrdinalIgnoreCase)) {
       throw 'El generador produjo una ruta fuera del workspace autorizado.'
+    }
+
+    if ($backend -eq 'opengl-ui') {
+      $mirrorPatch = ApplyPS5HSSdkMirrorChainPatch -ProjectRoot $projectRoot -Policy $policy -Backend $backend -SourceRepository 'blackbearreloaded/ps5-homebrew-ui' -MirrorUrls (GetPS5HSSdkMirrorUrls)
+      if ($mirrorPatch.changed -and $script:ActiveBuildLogPath) { WriteBuildJobLog $script:ActiveBuildLogPath 'Cadena de mirrors del SDK OpenGL aplicada al crear el proyecto.' }
+      $sdkSeed = SeedProjectOpenGlSdkCache $projectRoot
+      if ($sdkSeed.seeded -and $script:ActiveBuildLogPath) { WriteBuildJobLog $script:ActiveBuildLogPath 'SDK ps5-opengl sembrado desde el pack local en .deps/ps5-opengl (SHA-256 verificado); el build no necesitará red para el SDK.' }
     }
 
     if ($backend -eq 'opengl-ui') {

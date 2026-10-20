@@ -1,4 +1,8 @@
-# PS5 Homebrew Studio: explicit permission and audit of native source mutations.
+﻿# PS5 Homebrew Studio: explicit permission and audit of native source mutations.
+# Build-log sink: server.ps1 asigna la ruta del log activo al iniciar un job de build.
+# Los hosts que dot-sourcean este archivo sin server.ps1 (p. ej. la suite de tests con
+# Set-StrictMode) no la definen; se inicializa de forma defensiva para que quede asignada.
+if ($null -eq (Get-Variable -Name ActiveBuildLogPath -Scope Script -ErrorAction SilentlyContinue)) { $script:ActiveBuildLogPath = $null }
 $script:PS5HSNativeModificationKeys = @(
   'allowExecuteUpstreamGenerationTools',
   'allowExecuteUpstreamBuildTools',
@@ -8,6 +12,7 @@ $script:PS5HSNativeModificationKeys = @(
   'allowOpenGlRuntimeProfile',
   'allowOpenGlEuropeanAtlas',
   'allowWindowsBuildEntrypointPatch',
+  'allowUpstreamSdkMirrorPatch',
   'allowVulkanTemplateIntegration',
   'allowVulkanBuildHelperRestore',
   'normalizeBuildFiles',
@@ -339,6 +344,87 @@ function ApplyPS5HSWindowsBuildEntrypointPatch {
     $record = AddPS5HSNativeModificationRecord -ProjectRoot $ProjectRoot -Backend $Backend -Operation 'adapt-build-ps1-to-make-app' -PermissionKey 'allowWindowsBuildEntrypointPatch' -RelativePaths @('build.ps1') -BeforeHashes $before -Policy $approved -SourceRepository $SourceRepository -SourceCommit $SourceCommit
     if ($script:ActiveBuildLogPath) { WriteBuildJobLog $script:ActiveBuildLogPath 'Modificación autorizada y auditada: build.ps1 ahora invoca el target Makefile app.' }
     return @{ok=$true;changed=$true;files=@('build.ps1');audit=$record}
+  }
+  return @{ok=$true;changed=$false;files=@()}
+}
+
+function ApplyPS5HSSdkMirrorChainPatch {
+  param(
+    [Parameter(Mandatory=$true)][string]$ProjectRoot,
+    $Policy,
+    [string]$Backend='opengl-ui',
+    [string]$SourceRepository='',
+    [string[]]$MirrorUrls=@()
+  )
+  $approved = NormalizePS5HSNativeModificationPolicy $Policy
+  if (!$approved.allowUpstreamSdkMirrorPatch) {
+    if ($script:ActiveBuildLogPath) { WriteBuildJobLog $script:ActiveBuildLogPath 'Cadena de mirrors del SDK OpenGL omitida por política: si el upstream sigue caído, tools/fetch-opengl-sdk.sh devolvera 404 y el build se detendra sin modificar fuentes.' }
+    return @{ok=$true;changed=$false;skipped=$true;files=@()}
+  }
+  $path = Join-Path $ProjectRoot 'tools/fetch-opengl-sdk.sh'
+  if (!(Test-Path -LiteralPath $path -PathType Leaf)) {
+    if ($script:ActiveBuildLogPath) { WriteBuildJobLog $script:ActiveBuildLogPath 'Parche de mirrors del SDK omitido: el proyecto no contiene tools/fetch-opengl-sdk.sh.' }
+    return @{ok=$true;changed=$false;skipped=$true;reason='fetch-opengl-sdk.sh no existe';files=@()}
+  }
+  $urls = @($MirrorUrls | Where-Object { ![string]::IsNullOrWhiteSpace($_) })
+  if ($urls.Count -lt 2) {
+    $urls = @(
+      'https://github.com/blackbearreloaded/ps5-opengl/releases/download/v1.0.2/ps5-opengl-sdk-1.0.2.tar.gz',
+      'https://github.com/LedyBacer/ps5-opengl/releases/download/v1.0.2/ps5-opengl-sdk-1.0.2.tar.gz',
+      'https://github.com/darkxex/ps5-opengl/releases/download/v1.0.2/ps5-opengl-sdk-1.0.2.tar.gz'
+    )
+  }
+  $null = AssertPS5HSNativeModificationManifestWritable -ProjectRoot $ProjectRoot
+  $original = [IO.File]::ReadAllText($path)
+  if ($original.Contains('# PS5HS_MIRROR_CHAIN')) {
+    return @{ok=$true;changed=$false;alreadyPatched=$true;files=@()}
+  }
+  $updated = $original
+  $nl = "`n"
+  if ($original -match "`r`n") { $nl = "`r`n" }
+  $urlPattern = '(?m)^url="https://github\.com/[^/"]+/ps5-opengl/releases/download/v\$version/ps5-opengl-sdk-\$version\.tar\.gz"\s*$'
+  $chainLines = @('# PS5HS_MIRROR_CHAIN: upstream primero, mirrors verificados despues. Los pins de integridad no cambian.')
+  foreach ($u in $urls) { $chainLines += ('  "' + $u + '"') }
+  $chainBlock = 'urls=(' + $nl + (($chainLines) -join $nl) + $nl + ')'
+  if ([regex]::IsMatch($updated,$urlPattern)) {
+    $urlRegex = [regex]::new($urlPattern)
+    $updated = $urlRegex.Replace($updated,{ param($m) $chainBlock },1)
+  } elseif ($updated -notmatch '(?m)^urls=\(') {
+    throw 'No se reconoce la linea url= del pin del SDK en tools/fetch-opengl-sdk.sh. Se detiene sin modificar la plantilla.'
+  }
+  $curlPattern = '(?m)^([ \t]*)curl -fL --retry 3 -o "\$archive\.part" "\$url"[ \t]*$'
+  $curlTemplate = @(
+    '@@I@@ok=0',
+    '@@I@@for url in "${urls[@]}"; do',
+    '@@I@@    rm -f -- "$archive.part"',
+    '@@I@@    if curl -fL --retry 3 -o "$archive.part" "$url"; then ok=1; break; fi',
+    '@@I@@    printf ''==> [opengl] Mirror no disponible, probando el siguiente: %s\n'' "$url" >&2',
+    '@@I@@    rm -f -- "$archive.part"',
+    '@@I@@done',
+    '@@I@@if [[ $ok -ne 1 ]]; then',
+    '@@I@@    echo ''ps5-opengl SDK: todos los mirrors fijados fallaron'' >&2',
+    '@@I@@    exit 2',
+    '@@I@@fi'
+  )
+  $curlMatches = [regex]::Matches($updated,$curlPattern)
+  if ($curlMatches.Count -eq 1) {
+    $indent = $curlMatches[0].Groups[1].Value
+    $replacement = (($curlTemplate | ForEach-Object { $_.Replace('@@I@@',$indent) }) -join $nl)
+    $curlRegex = [regex]::new($curlPattern)
+    $updated = $curlRegex.Replace($updated,{ param($m) $replacement },1)
+  } elseif ($updated -notmatch '(?m)^[ \t]*for url in "\$\{urls\[@\]\}"') {
+    throw 'No se reconoce la invocacion curl de descarga del SDK en tools/fetch-opengl-sdk.sh. Se detiene sin modificar la plantilla.'
+  }
+  if ($updated -notmatch 'archive_sha256=' -or $updated -notmatch 'manifest_sha256=') {
+    throw 'El script del SDK ya no declara sus pins de integridad; no se aplica la cadena de mirrors sin poder verificar el archivo.'
+  }
+  if ($updated -cne $original) {
+    $relative = 'tools/fetch-opengl-sdk.sh'
+    $before = GetPS5HSNativeFileHashes -ProjectRoot $ProjectRoot -RelativePaths @($relative)
+    [IO.File]::WriteAllText($path,$updated,(New-Object System.Text.UTF8Encoding($false)))
+    $record = AddPS5HSNativeModificationRecord -ProjectRoot $ProjectRoot -Backend $Backend -Operation 'apply-sdk-mirror-chain' -PermissionKey 'allowUpstreamSdkMirrorPatch' -RelativePaths @($relative) -BeforeHashes $before -Policy $approved -SourceRepository $SourceRepository
+    if ($script:ActiveBuildLogPath) { WriteBuildJobLog $script:ActiveBuildLogPath ('Modificacion autorizada y auditada: tools/fetch-opengl-sdk.sh usa la cadena de mirrors verificada (' + $urls.Count + ' URLs; pins SHA-256 intactos).') }
+    return @{ok=$true;changed=$true;files=@($relative);audit=$record}
   }
   return @{ok=$true;changed=$false;files=@()}
 }

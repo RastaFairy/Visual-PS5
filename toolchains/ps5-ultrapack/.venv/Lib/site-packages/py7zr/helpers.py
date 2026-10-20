@@ -1,0 +1,474 @@
+#!/usr/bin/python -u
+#
+# p7zr library
+#
+# Copyright (c) 2019-2024 Hiroshi Miura <miurahr@linux.com>
+# Copyright (c) 2004-2015 by Joachim Bauch, mail@joachim-bauch.de
+#
+# This library is free software; you can redistribute it and/or
+# modify it under the terms of the GNU Lesser General Public
+# License as published by the Free Software Foundation; either
+# version 2.1 of the License, or (at your option) any later version.
+#
+# This library is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+# Lesser General Public License for more details.
+#
+# You should have received a copy of the GNU Lesser General Public
+# License along with this library; if not, write to the Free Software
+# Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+#
+#
+from __future__ import annotations
+
+import ctypes
+import hashlib
+import os
+import pathlib
+import platform
+import posixpath
+import re
+import sys
+import time as _time
+import zlib
+from datetime import datetime, timedelta, timezone, tzinfo
+from typing import TYPE_CHECKING
+
+from py7zr import Bad7zFile
+from py7zr.win32compat import is_windows_native_python, is_windows_unc_path
+
+if TYPE_CHECKING:
+    from typing_extensions import Self
+
+# String used at the beginning of relative paths
+RELATIVE_PATH_MARKER = "./"
+
+
+def calculate_crc32(data: bytes, value: int = 0, blocksize: int = 1024 * 1024) -> int:
+    """Calculate CRC32 of strings with arbitrary lengths."""
+    if len(data) <= blocksize:
+        value = zlib.crc32(data, value)
+    else:
+        length = len(data)
+        pos = blocksize
+        value = zlib.crc32(data[:pos], value)
+        while pos < length:
+            value = zlib.crc32(data[pos : pos + blocksize], value)
+            pos += blocksize
+    return value & 0xFFFFFFFF
+
+
+def _get_hash(digest: str):
+    if digest not in hashlib.algorithms_available:
+        raise ValueError("Unknown digest method for password protection.")
+    if digest == "sha256":
+        return hashlib.sha256()
+    return hashlib.new(digest)
+
+
+def _calculate_key1(password: bytes, cycles: int, salt: bytes, digest: str) -> bytes:
+    """Calculate 7zip AES encryption key. Base implementation."""
+    assert cycles <= 0x3F
+    if cycles == 0x3F:
+        ba = bytearray(salt + password + bytes(32))
+        key: bytes = bytes(ba[:32])
+    else:
+        rounds = 1 << cycles
+        m = _get_hash(digest)
+        for round in range(rounds):
+            m.update(salt + password + round.to_bytes(8, byteorder="little", signed=False))
+        key = m.digest()[:32]
+    return key
+
+
+def _calculate_key2(password: bytes, cycles: int, salt: bytes, digest: str):
+    """Calculate 7zip AES encryption key.
+    It uses ctypes and memoryview buffer and zero-copy technology on Python."""
+    assert cycles <= 0x3F
+    if cycles == 0x3F:
+        key: bytes = bytes(bytearray(salt + password + bytes(32))[:32])
+    else:
+        rounds = 1 << cycles
+        m = _get_hash(digest)
+        length = len(salt) + len(password)
+
+        class RoundBuf(ctypes.LittleEndianStructure):
+            _pack_ = 1
+            _fields_ = [
+                ("saltpassword", ctypes.c_ubyte * length),
+                ("round", ctypes.c_uint64),
+            ]
+
+        buf = RoundBuf()
+        for i, c in enumerate(salt + password):
+            buf.saltpassword[i] = c
+        buf.round = 0
+        mv = memoryview(buf)
+        while buf.round < rounds:
+            m.update(mv)
+            buf.round += 1
+        key = m.digest()[:32]
+    return key
+
+
+def calculate_key(password: bytes, cycles: int, salt: bytes, digest: str) -> bytes:
+    """Calculate 7zip AES encryption key.
+    Concat values in order to reduce number of calls of Hash.update()."""
+    assert cycles <= 0x3F
+    if cycles == 0x3F:
+        ba = bytearray(salt + password + bytes(32))
+        key: bytes = bytes(ba[:32])
+    else:
+        cat_cycle = 6
+        if cycles > cat_cycle:
+            rounds = 1 << cat_cycle
+            stages = 1 << (cycles - cat_cycle)
+        else:
+            rounds = 1 << cycles
+            stages = 1 << 0
+        m = _get_hash(digest)
+        saltpassword = salt + password
+        s = 0  # type: int  # (0..stages) * rounds
+        if platform.python_implementation() == "PyPy":
+            for _ in range(stages):
+                m.update(
+                    memoryview(
+                        b"".join(
+                            [saltpassword + (s + i).to_bytes(8, byteorder="little", signed=False) for i in range(rounds)]
+                        )
+                    )
+                )
+                s += rounds
+        else:
+            for _ in range(stages):
+                m.update(
+                    b"".join([saltpassword + (s + i).to_bytes(8, byteorder="little", signed=False) for i in range(rounds)])
+                )
+                s += rounds
+        key = m.digest()[:32]
+
+    return key
+
+
+def filetime_to_dt(ft):
+    """Convert Windows NTFS file time into python datetime object."""
+    EPOCH_AS_FILETIME = 116444736000000000
+    us = (ft - EPOCH_AS_FILETIME) // 10
+    return datetime(1970, 1, 1, tzinfo=timezone.utc) + timedelta(microseconds=us)
+
+
+ZERO = timedelta(0)
+HOUR = timedelta(hours=1)
+SECOND = timedelta(seconds=1)
+
+# A class capturing the platform's idea of local time.
+# (May result in wrong values on historical times in
+#  timezones where UTC offset and/or the DST rules had
+#  changed in the past.)
+
+STDOFFSET = timedelta(seconds=-_time.timezone)
+if _time.daylight:
+    DSTOFFSET = timedelta(seconds=-_time.altzone)
+else:
+    DSTOFFSET = STDOFFSET
+
+DSTDIFF = DSTOFFSET - STDOFFSET
+
+
+class LocalTimezone(tzinfo):
+    def fromutc(self, dt):
+        assert dt.tzinfo is self
+        stamp = (dt - datetime(1970, 1, 1, tzinfo=self)) // SECOND
+        args = _time.localtime(stamp)[:6]
+        # dst_diff = DSTDIFF // SECOND
+        # Detect fold
+        # fold = args == _time.localtime(stamp - dst_diff)
+        return datetime(*args, microsecond=dt.microsecond, tzinfo=self)
+
+    def utcoffset(self, dt):
+        if self._isdst(dt):
+            return DSTOFFSET
+        else:
+            return STDOFFSET
+
+    def dst(self, dt):
+        if self._isdst(dt):
+            return DSTDIFF
+        else:
+            return ZERO
+
+    def tzname(self, dt):
+        return _time.tzname[self._isdst(dt)]
+
+    def _isdst(self, dt):
+        tt = (
+            dt.year,
+            dt.month,
+            dt.day,
+            dt.hour,
+            dt.minute,
+            dt.second,
+            dt.weekday(),
+            0,
+            0,
+        )
+        stamp = _time.mktime(tt)
+        tt = _time.localtime(stamp)
+        return tt.tm_isdst > 0
+
+
+Local = LocalTimezone()
+TIMESTAMP_ADJUST = -11644473600
+
+
+class UTC(tzinfo):
+    """UTC"""
+
+    def utcoffset(self, dt):
+        return ZERO
+
+    def tzname(self, dt):
+        return "UTC"
+
+    def dst(self, dt):
+        return ZERO
+
+    def _call__(self):
+        return self
+
+
+class ArchiveTimestamp(int):
+    """Windows FILETIME timestamp."""
+
+    def __repr__(self):
+        return f"{type(self).__name__}({self})"
+
+    def __index__(self):
+        return self.__int__()
+
+    def totimestamp(self) -> float:
+        """Convert 7z FILETIME to Python timestamp."""
+        # FILETIME is 100-nanosecond intervals since 1601/01/01 (UTC)
+        return (self / 10000000.0) + TIMESTAMP_ADJUST
+
+    def as_datetime(self) -> datetime:
+        """Convert FILETIME to Python datetime object."""
+        return datetime.fromtimestamp(self.totimestamp(), UTC())
+
+    @classmethod
+    def from_datetime(cls, val: float) -> Self:
+        return cls((val - TIMESTAMP_ADJUST) * 10000000.0)
+
+    @classmethod
+    def from_now(cls) -> Self:
+        return cls((_time.time() - TIMESTAMP_ADJUST) * 10000000.0)
+
+
+def islink(path: str | pathlib.Path) -> bool:
+    """
+    Cross-platform islink implementation.
+    Support Windows NT symbolic links and reparse points.
+    """
+    return os.path.islink(path)
+
+
+def readlink(path: str | pathlib.Path, *, dir_fd=None) -> str | pathlib.Path:
+    """
+    Cross-platform compat implementation of os.readlink and Path.readlink().
+    Support Windows NT symbolic links and reparse points.
+    When called with path argument as pathlike(str), return result as a pathlike(str).
+    When called with Path object, return also Path object.
+    When called with path argument as bytes, return result as a bytes.
+    """
+    if not os.path.exists(str(path)):
+        raise OSError(22, "Invalid argument", path)
+
+    if isinstance(path, pathlib.Path):
+        if dir_fd is None:
+            return path.readlink()
+        return pathlib.Path(os.readlink(path, dir_fd=dir_fd))
+    return os.readlink(path, dir_fd=dir_fd)
+
+
+def remove_relative_path_marker(path: str) -> str:
+    """
+    Removes './' from the beginning of a path-like string
+    """
+    processed_path = path
+
+    if path.startswith(RELATIVE_PATH_MARKER):
+        processed_path = path[len(RELATIVE_PATH_MARKER) :]
+
+    return processed_path
+
+
+def remove_trailing_slash(path: str) -> str:
+    """
+    Removes '/' from the end of a path-like string
+    """
+    if path.endswith(posixpath.sep):
+        return path[:-1]
+    return path
+
+
+def canonical_path(target: pathlib.Path) -> pathlib.Path:
+    """Return a canonical path of target argument.
+
+    This is a purely lexical reduction: it never touches the filesystem.  Do NOT
+    use it to decide whether an archive-supplied path stays inside a directory.
+    'link/..' is the parent of the symlink *target*, not the directory holding
+    'link', so cancelling '..' lexically erases a symlink component before it can
+    be resolved.  Use is_path_valid()/_real_path() for containment decisions.
+    """
+    stack: list[str] = []
+    anchor = target.anchor  # preserves POSIX '/' and Windows 'C:\\' or UNC share
+    for p in target.parts:
+        if p != ".." or len(stack) == 0:
+            stack.append(p)
+            continue
+        # treat '..'
+        if stack[-1] == "..":
+            stack.append(p)  # '../' + '../' -> '../../'
+        elif anchor and stack[-1] == anchor:
+            pass  # don't walk above the anchor/drive/share
+        else:
+            stack.pop()  # 'foo/boo/' + '..' -> 'foo/'
+    return pathlib.Path(*stack)
+
+
+def clean_windows_extended_length_path_indicator(path: pathlib.Path) -> pathlib.Path:
+    if isinstance(path, pathlib.WindowsPath):
+        path_str = str(path)
+        if path_str.startswith("\\\\?\\UNC\\"):
+            #print(f"cleaning windows extended length path indicator from: {path}")
+            return pathlib.Path("\\\\" + path_str.removeprefix("\\\\?\\UNC\\"))
+        if path_str.startswith("\\\\?\\"):
+            #print(f"cleaning windows extended length path indicator from: {path}")
+            return pathlib.Path(path_str.removeprefix("\\\\?\\"))
+    return path
+
+
+def _real_path(target: pathlib.Path) -> pathlib.Path:
+    """Resolve a path the way the kernel will when it opens it.
+
+    Every symlink component is followed first, and only what is left is
+    normalized.  This is deliberately not canonical_path(): collapsing '..'
+    lexically before the symlinks are followed is wrong, because 'link/..' is the
+    parent of the symlink target rather than the directory holding 'link'.
+
+    os.path.realpath() never fails on a path that does not exist yet, a missing
+    component is simply normalized lexically, which is what is wanted for a
+    member that has not been extracted so far.
+    """
+    resolved = pathlib.Path(os.path.realpath(os.fspath(target)))
+    return clean_windows_extended_length_path_indicator(resolved)
+
+
+def is_relative_to(my: pathlib.Path, *other) -> bool:
+    """Return True when path is relative to other path, otherwise False."""
+    try:
+        # resolve symlinks to catch Zip-Slip style vulnerability
+        my_resolved = _real_path(my)
+        base_resolved = _real_path(pathlib.Path(*other))
+        if my_resolved == base_resolved:
+            # don't allow paths to be equal to base
+            return False
+        my_resolved.relative_to(base_resolved)
+    except (OSError, ValueError, RuntimeError):
+        return False
+    return True
+
+
+def _sanitize_member_name(fname: str) -> str:
+    """
+    Normalize an archive member name and reject names that can never be extracted
+    safely, whatever the destination directory is.
+    When condition is not satisfied, raise Bad7zFile
+    """
+    # Check for Windows drive letter (e.g., C:\, D:\)
+    # This is a security risk even on non-Windows systems
+    if re.match(r"^[A-Za-z]:", fname):
+        raise Bad7zFile(f"Specified path is bad: {fname}")
+
+    if fname.startswith("/"):
+        fname = fname.lstrip("/")
+
+    name = remove_relative_path_marker(fname)
+    pure = pathlib.PurePath(name)
+    parts = [p for p in pure.parts if p != "."]
+    # Never try to resolve '..' in a member name: 'sym/../x' is not 'x' when 'sym'
+    # is a symlink extracted from the same archive, so a name that reduces
+    # lexically to somewhere inside can still land outside.  Refuse it outright,
+    # as the 'data' filter of tarfile does.
+    if not parts or ".." in parts or pure.is_absolute() or re.match(r"^[A-Za-z]:", name):
+        raise Bad7zFile(f"Specified path is bad: {fname}")
+    return str(pathlib.PurePath(*parts))
+
+
+def get_sanitized_output_path(fname: str, path: pathlib.Path | None) -> pathlib.Path:
+    """
+    check f.filename has invalid directory traversals
+    When condition is not satisfied, raise Bad7zFile
+    """
+    name = _sanitize_member_name(fname)
+
+    if path is None:
+        # Keep it relative: callers use the result as a writer factory key.
+        # Containment is checked against the current working directory.
+        target_path = pathlib.Path(name)
+        if is_path_valid(target_path, None):
+            return target_path
+    else:
+        outfile = path.joinpath(name)
+        if is_path_valid(outfile, path):
+            return outfile
+    raise Bad7zFile(f"Specified path is bad: {fname}")
+
+
+def check_archive_path(arcname: str) -> bool:
+    """
+    Check arcname argument is valid for archive.
+    It should not be absolute, if so it returns False.
+    It should not be evil traversal attack path.
+    Otherwise, returns True.
+    """
+    if pathlib.Path(arcname).is_absolute():
+        return False
+    # test against dummy parent path
+    if sys.platform == "win32":
+        path = pathlib.Path("C:/foo/boo/fuga/hoge/a90sufoiasj09/dafj08sajfa/")
+    else:
+        path = pathlib.Path("/foo/boo/fuga/hoge/a90sufoiasj09/dafj08sajfa/")
+    return is_path_valid(path.joinpath(arcname), path)
+
+
+def is_path_valid(target: pathlib.Path, parent: pathlib.Path | None) -> bool:
+    """
+    Check if target path is valid against parent path.
+
+    Containment is decided on the real path: symlink components of ``target`` are
+    followed before the comparison and '..' is never collapsed lexically first.
+    It returns False when the resolved target escapes ``parent``, or is ``parent``
+    itself.  Otherwise, returns True.
+    """
+    if parent is None:
+        parent = pathlib.Path.cwd()
+    elif not parent.is_absolute():
+        parent = pathlib.Path.cwd().joinpath(parent)
+    return is_relative_to(target, parent)
+
+
+def check_win32_file_namespace(pathname: pathlib.Path) -> pathlib.Path:
+    # When python on Windows and not python on Cygwin,
+    # Add win32 file namespace to exceed Microsoft Windows
+    # path length limitation to 260 bytes
+    # ref.
+    # https://docs.microsoft.com/en-us/windows/win32/fileio/naming-a-file
+    # In editions of Windows before Windows 10 version 1607,
+    # the maximum length for a path is MAX_PATH, which is defined as
+    # 260 characters. In later versions of Windows, changing a registry key
+    # or select option when python installation is required to remove the limit.
+    if is_windows_native_python() and pathname.is_absolute() and not is_windows_unc_path(pathname):
+        pathname = pathlib.WindowsPath("\\\\?\\" + str(pathname))
+    return pathname

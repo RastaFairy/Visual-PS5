@@ -48,7 +48,7 @@ const bootEntries = JSON.parse(persisted.get('ps5hs:diagnostic-log:v1')||'[]');
 assert.ok(bootEntries.some(entry=>entry.level==='ERROR'&&entry.text.includes('Unexpected token')), 'startup JavaScript errors must persist before app.js initializes');
 assert.ok(bootEntries.some(entry=>entry.level==='ERROR'&&entry.text.includes('clic en Compilar')), 'a compile click must still leave a log if the main app never reaches event wiring');
 assert.ok(dockContent.children.length>=2, 'startup errors must also be visible in the output dock before normal rendering exists');
-assert.match(html, /application-version" content="1\.1\.18"/, 'visible app version must match the patched sources');
+assert.match(html, /application-version" content="1\.1\.19"/, 'visible app version must match the patched sources');
 assert.doesNotMatch(html, /(?:app\.js|styles\.css|runtime\/[^" ]+)\?v=1\.1\.17/, 'the browser cache must not be pinned to stale 1.1.17 assets');
 assert.doesNotMatch(app, /(?<!\$)\$\('#modalActions button'\)/, 'modal action buttons must be enumerated with the $$ array helper; a single-element $ lookup has no forEach (v1.1.17 regression)');
 assert.doesNotMatch(app, /(?<!\$)\$\('[^']+'\);[A-Za-z_$][\w$]*\.forEach\(/, 'a querySelector result is a single element or null and must never be used with forEach');
