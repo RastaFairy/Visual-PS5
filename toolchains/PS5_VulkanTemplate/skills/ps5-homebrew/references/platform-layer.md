@@ -1,0 +1,84 @@
+# The platform layer
+
+`libps5platform.a`, built from `PS5_PayloadSDK/platform/` and installed with the SDK
+fork (`target/lib/libps5platform.a`, `target/include/ps5platform/`). It is the one
+place where everything every title needs from the console, and cannot take from
+the released SDK, is written down and tested. Its statements about the console
+come from its own probes (`platform/docs/PROBE.md`, with `evidence/`), never from
+reading the system software.
+
+## What it gives a title
+
+| Header | What it is for |
+| --- | --- |
+| `heap.h` | malloc and its family in **direct memory** (dlmalloc mspaces, one per allocating thread, up to eight). libc's private heap runs out long before the title does. Titles get it through the link recipe's `--wrap=malloc` and its family, or call `ps5_heap_*` beside an allocator of their own. Its locks sleep rather than spin: a real-time thread spinning on a lock starved the preempted thread holding it. |
+| `exec.h` | executable code in direct memory, for JITs: mapped read-write, then given execute with `sceKernelMprotect`. Asking for execute at map time is refused, and every region is placed (an unplaced mapping lands in the GPU window). A protection change costs about 26 us. |
+| `shm.h` | one direct-memory object mapped at several addresses inside reserved virtual ranges: an emulator's guest memory with mirrors and a fastmem window. POSIX shared memory would charge every view to the small flexible budget. |
+| `libc.h` | the libc functions the console lacks, refuses or faults in, as `ps5_*`: `access` (refused for every path), `statvfs`, the directory and `*at` families, `getpwuid_r`, `posix_fallocate`, `utimensat`/`futimens`, `clock_nanosleep`, `getaddrinfo`, `memfd_create`, `open_memstream`, `nl_langinfo`, the `xlocale` family, `regex` (musl's TRE), `backtrace`, `dladdr`, `__cxa_thread_atexit_impl`, `localeconv` (the console's reports an empty decimal point, and nlohmann::json then reads 0.62 as 0), `iswctype_l` (libc++ passes FreeBSD's class masks, which the console's `iswctype` reads as a table index: `std::locale("C")` crashed EmulationStation)... The link recipe binds libc's names to them. |
+| `memory.h` | `ps5_memory_query`: direct memory's total, free and largest free range, and the flexible memory free, without allocating; a snapshot, so allocation can still fail. PS5_RetroArch's memory reports (`pool=`, `free=`, `largest=`, `flexible=`) are this call. |
+| `klog.h` | `ps5_klog_capture_stderr(prefix)`: standard error, line by line, into klog. A title may not `dup2` (EPERM), so the stream is moved, not the descriptor. |
+| `fp.h` | the IEEE floating-point state (a title starts with FTZ/DAZ on). |
+| `context.h` | the machine context as the console lays it out. The console's `ucontext_t` has 48 more bytes before `uc_mcontext` than FreeBSD's; the fork's `sys/_ucontext.h` carries them, so `uc->uc_mcontext.mc_rip` is the faulting instruction. Including `context.h` refuses to build against an upstream SDK. |
+| `offload.h`, `ftp.h` | writing files through the console's own FTP server on 127.0.0.1. Once a title's write burst (about 1.3 GiB) is spent, its writes drop to about 2 MiB/s, while the server, another process, writes at about 7 MiB/s a connection and 22 MiB/s in all. |
+| `kernel.h` | the exported kernel functions the layer and its consumers call, declared once. |
+| `fdv.h` | open files past the console's per-process limit: `open()` fails with EMFILE after about 249 successes whatever the rlimit says, while descriptors made by `dup`, `socket` and a received descriptor are not counted. Idle files are parked behind placeholder descriptors and reopened by path when used. Consumers (Wine's runtime, a Java VM) call it through `--wrap`. |
+| `elevation.h` | `/data` for a sandboxed title: `ps5_elevation_request(PS5_ELEVATION_FILESYSTEM)` is the title's half of the Lapy owned-root daemon's cooperative contract (the request file, then a real write and read under `/data` as the proof). It needs the daemon running, and only `PS5_ELEVATION_OK` permits using `/data`; there is no helper ELF and no fallback. Call it once in single-threaded startup. `platform/docs/ELEVATION.md` has the contract, the daemon's two modes and the firmware caveat. It exists from platform revision 611893f, which the template pins. No sample calls it: without a running daemon it waits ten seconds and fails, and the samples keep to `/app0`. A title that needs `/data` opts in (below). |
+| `agc.h`, `videoout.h` | the AGC and VideoOut functions the GPU drivers call. |
+| `probe.h` | the capability probe behind PROBE.md. |
+
+## `/data`, for a title that needs it
+
+A title sees `/app0` and `/download0` until it asks. It asks once, while it still has
+a single thread: in the template, at the top of `main`, before `platform_init`, whose
+klog capture starts a thread. Its `sce_sys/param.json` needs a positive
+`downloadDataSize`. Anything but `PS5_ELEVATION_OK` keeps the title in `/app0`:
+
+```c
+#include <ps5platform/elevation.h>
+
+int main()
+{
+	/* Blocks up to ten seconds when no Lapy daemon is waiting */
+	const enum ps5_elevation_status data = ps5_elevation_request(PS5_ELEVATION_FILESYSTEM);
+	platform_init(PS5_TITLE_NAME);
+	say("/data: %s", ps5_elevation_status_name(data));
+	const char *save_root = data == PS5_ELEVATION_OK ? "/data/my-title" : "/app0/save";
+	...
+```
+
+Never fall back on a helper ELF or any other way of elevating when it fails: the
+title goes on without `/data`, or stops and says why. `platform/docs/ELEVATION.md`
+has the rest (the daemon's modes, `daemon_held`).
+
+## Measured facts a title designs around
+
+From `PROBE.md`; read it for the numbers and the evidence:
+
+- **Two pools.** Direct memory is large: about 12 GiB, shared with the GPU. The
+  title's flexible memory is small: 448 MiB, a few hundred MiB free at start, and
+  at most 1 GiB through `param.json`, taken from direct memory
+  (`title-packaging.md`). Put big things (heaps, JIT caches, guest memory, loaded
+  code) in direct memory.
+- **Virtual space** has to be reserved and placed deliberately. Mappings without an
+  address land in the GPU driver's window.
+- **Thread-local storage** is emulated (`__emutls_*`), and costs a call per access.
+- **Writes are throttled** after the burst (above).
+- **FP state** starts as FTZ/DAZ.
+
+## Adding to it
+
+When a title meets something the console lacks:
+
+1. Check `libc.h` and the other headers first. It may already be there, waiting to
+   be bound.
+2. If not, add it to `platform/src/` with a host test (`make -C platform test`, against
+   the host model of the console's kernel). If it states something about the
+   console, add a probe and record the console's answer in `PROBE.md`.
+3. Bind it: for a libc name, add it to the `--defsym` list in
+   `PS5_Vulkan/tools/radv-link.sh`, so every title gets it.
+4. Commit and push the fork, then bump the pinned revision in each consumer
+   (`sdk_revision` in its `tools/setup-native-dependencies.sh`), reinstall, rebuild,
+   and run the consumers on the console.
+
+Rules the layer keeps: exported functions only, no raw system calls or internal
+entry points, and nothing taken from the console's firmware.
