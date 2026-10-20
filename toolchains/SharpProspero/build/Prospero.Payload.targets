@@ -1,0 +1,65 @@
+<Project>
+
+  <!--
+    Prospero.Payload.targets
+
+    Link step that turns an x86_64 object produced by the ahead-of-time compiler into a
+    position-independent ELF payload (.elf) ready for deployment via the socket loader.
+
+    The payload linker emits its own CRT (PayloadCrtEmitter) and statically links it with
+    the compiled managed object. Every payload gets the FULL CRT; there are no profile tiers.
+    Linker gc-sections strips unreachable functions.
+  -->
+
+  <PropertyGroup>
+    <ProsperoLinkTool Condition="'$(ProsperoLinkTool)' == ''">$(MSBuildThisFileDirectory)..\tools\SharpProspero.Bindings.Generator\SharpProspero.Bindings.Generator.csproj</ProsperoLinkTool>
+    <ProsperoEntrySymbol Condition="'$(ProsperoEntrySymbol)' == ''">_start</ProsperoEntrySymbol>
+    <ProsperoPayloadPath>$(OutputPath)$(ProsperoPayloadName)</ProsperoPayloadPath>
+  </PropertyGroup>
+
+  <Target Name="ProsperoPayloadCheckPrerequisites">
+    <PropertyGroup>
+      <ProsperoObjectFile Condition="'$(ProsperoObjectFile)' == ''">$(IntermediateOutputPath)native\$(TargetName).o</ProsperoObjectFile>
+    </PropertyGroup>
+    <Error Condition="!Exists('$(ProsperoObjectFile)')"
+           Text="The compiled object '$(ProsperoObjectFile)' does not exist. Run the AOT publish step first." />
+  </Target>
+
+  <Target Name="ProsperoPayloadResolveRuntime"
+          Condition="'$(ProsperoRuntimePack)' != '' Or '$(ProsperoRuntimeLibraries)' != ''">
+    <ItemGroup Condition="'$(ProsperoRuntimeLibraries)' == ''">
+      <ProsperoRuntimeLibrary Include="$(ProsperoRuntimePack)\*.a" />
+      <!-- The payload CRT supplies its own start sequence.  libbootstrapper.o is included because
+           it provides the NativeAOT runtime bootstrap (RhInitialize, RhRegisterOSModule,
+           InitializeModules) that must run before the managed entry point.  Its main() calls
+           __managed__Main, which the template's [UnmanagedCallersOnly(EntryPoint = "__managed__Main")]
+           exports.  libbootstrapperdll.o is the DLL-mode bootstrapper (PRX modules) and is excluded. -->
+      <ProsperoRuntimeObject Include="$(ProsperoRuntimePack)\*.o"
+                             Exclude="$(ProsperoRuntimePack)\libbootstrapperdll.o" />
+    </ItemGroup>
+    <ItemGroup Condition="'$(ProsperoRuntimeLibraries)' != ''">
+      <_ProsperoRuntimeInput Include="$(ProsperoRuntimeLibraries)" />
+      <ProsperoRuntimeObject Include="@(_ProsperoRuntimeInput)" Condition="'%(Extension)' == '.o'" />
+      <ProsperoRuntimeLibrary Include="@(_ProsperoRuntimeInput)" Condition="'%(Extension)' != '.o'" />
+    </ItemGroup>
+  </Target>
+
+  <Target Name="ProsperoPayloadLink"
+          DependsOnTargets="ProsperoPayloadCheckPrerequisites;ProsperoPayloadResolveRuntime">
+    <MakeDir Directories="$(OutputPath)" />
+
+    <PropertyGroup>
+      <_PayloadLinkArgs>link --kind payload --self-contained --obj &quot;$(ProsperoObjectFile)&quot;</_PayloadLinkArgs>
+      <_PayloadLinkArgs Condition="'@(ProsperoRuntimeObject)' != ''">$(_PayloadLinkArgs) @(ProsperoRuntimeObject->'--obj &quot;%(FullPath)&quot;', ' ')</_PayloadLinkArgs>
+      <_PayloadLinkArgs Condition="'@(ProsperoRuntimeLibrary)' != ''">$(_PayloadLinkArgs) @(ProsperoRuntimeLibrary->'--lib &quot;%(FullPath)&quot;', ' ')</_PayloadLinkArgs>
+      <_PayloadLinkArgs>$(_PayloadLinkArgs) --out &quot;$(ProsperoPayloadPath)&quot; --entry $(ProsperoEntrySymbol)</_PayloadLinkArgs>
+      <_PayloadLinkArgs Condition="'$(EmitDiagnosticBreadcrumbs)' == 'true'">$(_PayloadLinkArgs) --diagnostics</_PayloadLinkArgs>
+      <_PayloadLinkArgs Condition="'$(ProsperoReturnOnExit)' == 'true'">$(_PayloadLinkArgs) --return-on-exit</_PayloadLinkArgs>
+    </PropertyGroup>
+
+    <Message Importance="high" Text="Linking payload $(ProsperoPayloadName) from $(ProsperoObjectFile)" />
+    <Exec Command="dotnet run --project &quot;$(ProsperoLinkTool)&quot; -c $(Configuration) -- $(_PayloadLinkArgs)" />
+    <Message Importance="high" Text="Wrote $(ProsperoPayloadPath)" />
+  </Target>
+
+</Project>

@@ -1,0 +1,105 @@
+<Project>
+
+  <!--
+    Prospero.Payload.props
+
+    Import this file from a payload project to configure it for ahead-of-time compilation
+    into a position-independent ELF payload. A payload runs in a hijacked host process
+    via a socket loader; it statically links the SDK CRT and resolves external symbols
+    through the CRT runtime linker (rtld).
+
+    Usage:
+      <Import Project="..\..\build\Prospero.Payload.props" />
+      <PropertyGroup>
+        <ProsperoSprxImports>libSceNotification;libSceRandom</ProsperoSprxImports>
+      </PropertyGroup>
+      <Import Project="..\..\build\Prospero.Payload.targets" />
+  -->
+
+  <PropertyGroup>
+    <!-- Produce machine code ahead of time. Only affects `dotnet publish`; a plain build stays managed.
+         Publish with an x86_64 runtime identifier (`-r linux-x64`); the link step retargets the
+         emitted object to the device ABI. -->
+    <PublishAot>true</PublishAot>
+
+    <!-- Trim aggressively: the payload ships alone, so unused framework surface must not survive. -->
+    <TrimMode>full</TrimMode>
+    <OptimizationPreference>Size</OptimizationPreference>
+    <IlcOptimizationPreference>Size</IlcOptimizationPreference>
+    <IlcFoldIdenticalMethodBodies>true</IlcFoldIdenticalMethodBodies>
+
+    <!-- Drop framework features an on-device payload never uses. Each one removes code and data. -->
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <UseSystemResourceKeys>true</UseSystemResourceKeys>
+    <EventSourceSupport>false</EventSourceSupport>
+    <MetadataUpdaterSupport>false</MetadataUpdaterSupport>
+    <HttpActivityPropagationSupport>false</HttpActivityPropagationSupport>
+    <DebuggerSupport>false</DebuggerSupport>
+    <StackTraceSupport>false</StackTraceSupport>
+    <AutoreleasePoolSupport>false</AutoreleasePoolSupport>
+    <NullabilityInfoContextSupport>false</NullabilityInfoContextSupport>
+    <StartupHookSupport>false</StartupHookSupport>
+
+    <!-- Export any method marked [UnmanagedCallersOnly] as an unmanaged symbol, so a payload can
+         expose C-callable entry points.  Samples export their managed entry as __managed__Main;
+         the CRT _start calls main, which resolves to libbootstrapper.o's bootstrap that runs
+         RhInitialize / RhRegisterOSModule / InitializeModules before tail-calling __managed__Main. -->
+    <IlcExportUnmanagedEntryPoints>true</IlcExportUnmanagedEntryPoints>
+
+    <!-- Payloads use Library so the AOT compiler emits only [UnmanagedCallersOnly] reachable code
+         and produces a .a archive the payload linker statically links with the emitted CRT. -->
+    <OutputType>Library</OutputType>
+
+    <!-- Payloads ALWAYS use Static: the AOT compiler produces a .a archive that the payload
+         linker statically links with the emitted CRT into a single ELF. -->
+    <NativeLib>Static</NativeLib>
+
+    <!-- Keep the garbage collector small and predictable. Memory maps in the hijacked host
+         process are limited, so the workstation (non-concurrent) collector is the right default. -->
+    <ServerGarbageCollection>false</ServerGarbageCollection>
+    <ConcurrentGarbageCollection>false</ConcurrentGarbageCollection>
+    <TieredCompilation>false</TieredCompilation>
+
+    <!-- Payloads run in a hijacked host process with far less available memory than an
+         application module. The hard limit caps the GC heap so it fits inside the host's
+         remaining flexible-memory budget.
+
+         RegionRange is deliberately not set: when a hard limit is present the GC computes
+         5 * hard_limit (80 MB for a 16 MB ceiling), reserved as virtual address space with
+         no flexible-memory cost. The bookkeeping table for that range is ~7 KB.
+         TotalPhysicalMemory is also not set: the GC falls through to sysconf, which queries
+         the host process's actual configured budget via sceKernelConfiguredFlexibleMemorySize.
+
+         The GC parses HeapHardLimit as a HEXADECIMAL string (ReadConfigValue with ecx=0
+         maps to the shl-4 hex loop). A decimal string read as hex reads orders of magnitude
+         larger than intended: 16777216 (decimal 16 MB) would read as 0x16777216 = 377 MB.
+         The value below is hex: 0x1000000 = 16 MB. Thread stack size is parsed as decimal
+         by System.Threading, not by the GC, so it stays decimal. -->
+    <ProsperoHeapHardLimitBytes Condition="'$(ProsperoHeapHardLimitBytes)' == ''">1000000</ProsperoHeapHardLimitBytes>
+    <ProsperoThreadStackBytes Condition="'$(ProsperoThreadStackBytes)' == ''">262144</ProsperoThreadStackBytes>
+
+    <!-- The output ELF name. Payloads produce name.elf (not eboot.bin or name.prx). -->
+    <ProsperoPayloadName Condition="'$(ProsperoPayloadName)' == ''">$(AssemblyName).elf</ProsperoPayloadName>
+
+    <!-- When true the emitted CRT includes diagnostic breadcrumb call sites and their rodata
+         strings. Default false produces a clean ELF with zero breadcrumb bytes. -->
+    <EmitDiagnosticBreadcrumbs Condition="'$(EmitDiagnosticBreadcrumbs)' == ''">false</EmitDiagnosticBreadcrumbs>
+  </PropertyGroup>
+
+  <!-- Bake GC bounds into the image. -->
+  <ItemGroup>
+    <RuntimeHostConfigurationOption Include="System.GC.HeapHardLimit" Value="$(ProsperoHeapHardLimitBytes)" Trim="false" />
+    <RuntimeHostConfigurationOption Include="System.GC.RetainVM" Value="false" Trim="false" />
+    <RuntimeHostConfigurationOption Include="System.Threading.DefaultStackSize" Value="$(ProsperoThreadStackBytes)" Trim="false" />
+  </ItemGroup>
+
+  <!-- Base DirectPInvoke: only libkernel and libc. Payloads resolve symbols through the CRT
+       rtld at runtime; only the base set and per-sample additions are needed. Samples
+       add their own via <DirectPInvoke Include="libSceXxx" /> in their csproj. -->
+  <ItemGroup>
+    <DirectPInvoke Include="libkernel" />
+    <DirectPInvoke Include="libc" />
+    <DirectPInvoke Include="libScePosix" />
+  </ItemGroup>
+
+</Project>

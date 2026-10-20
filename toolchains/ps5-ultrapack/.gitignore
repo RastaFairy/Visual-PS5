@@ -1,0 +1,60 @@
+# Build output
+/build/
+/dist/
+
+# Native UnRAR extension build artifacts (rebuilt from _unrar.cpp + src/)
+backend/unrar/build/
+backend/unrar/*.egg-info/
+*.so
+*.pyd
+*.o
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv*/
+*venv/
+
+# App-generated / runtime
+/outputs/
+
+# Third-party release drops used to build the fPKG tool (not part of the program)
+/unzipped/
+
+# fPKG tool build outputs (lib/ — the LibProsperoPkg assembly — is tracked; the other
+# dependencies are NuGet packages pinned in PkgTool.csproj)
+backend/native/src/ffpfsc-pkg-tool/bin/
+backend/native/src/ffpfsc-pkg-tool/obj/
+backend/native/src/ffpfsc-pkg-tool/out/
+backend/native/src/ffpfsc-pkg-tool/patches/CecilPatch/bin/
+backend/native/src/ffpfsc-pkg-tool/patches/CecilPatch/obj/
+backend/native/src/LibOrbisPkg/bin/
+backend/native/src/LibOrbisPkg/obj/
+
+# macOS
+.DS_Store
+
+backend/native/src/ffpfsc-pkg-tool/publish.log
+/*.pkg
+
+# Local console-test builds
+/local-build/
+
+# The fPKG helper and its ImageMagick library are built by BUILD_PKG_TOOL.sh from
+# backend/native/src/ffpfsc-pkg-tool; they are release artefacts, not sources.
+/backend/native/ffpfsc-pkg-tool
+/backend/native/*.dylib
+/backend/native/ffpfsc-pkg-tool.exe
+/backend/native/*.dll
+
+# BPS patch fetched by the BPS reference test; regenerated on demand
+backend/tests/_backpork_*.bps
+
+# Firmware system libraries the user keeps locally for backports: never publish
+/backports/
+
+# 7-Zip console tools, fetched by FETCH_7ZIP.sh from 7-zip.org
+/backend/native/7zz
+/backend/native/7za.exe
+/backend/native/LICENSE.7-Zip.*

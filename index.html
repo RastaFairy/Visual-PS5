@@ -4,14 +4,14 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="color-scheme" content="dark" />
-  <meta name="application-version" content="1.1.10" />
+  <meta name="application-version" content="1.1.18" />
   <title>PS5 Homebrew Studio</title>
-  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="styles.css?v=1.1.18" />
 </head>
 <body>
   <div class="app-shell">
     <header class="topbar">
-      <div class="brand"><div class="brand-mark">P<span>5</span></div><div><strong>Homebrew Studio</strong><small>VISUAL IDE · VERSION 1.1.10</small></div></div>
+      <div class="brand"><div class="brand-mark">P<span>5</span></div><div><strong>Homebrew Studio</strong><small>VISUAL IDE · VERSION 1.1.18</small></div></div>
       <div class="project-head"><span class="live-dot"></span><input id="projectName" value="MiHomebrew" aria-label="Nombre del proyecto"/><span class="dirty-pill" id="dirtyPill">SIN GUARDAR</span></div>
       <div class="top-actions">
         <button id="newProjectBtn" class="btn ghost">Nuevo</button>
@@ -101,7 +101,7 @@
     </main>
 
     <footer class="bottom-dock">
-      <div class="dock-tabs"><button class="dock-tab active" data-dock="output">Salida</button><button class="dock-tab" data-dock="problems">Problemas <span id="problemCount">0</span></button><button class="dock-tab" data-dock="sdkstate">Entorno</button></div>
+      <div class="dock-tabs"><button class="dock-tab active" data-dock="output">Salida</button><button class="dock-tab" data-dock="problems">Problemas <span id="problemCount">0</span></button><button class="dock-tab" data-dock="sdkstate">Entorno</button><button class="dock-log-export" id="exportBuildLogBtn" type="button" title="Exportar el registro persistente de diagnóstico">Exportar log</button></div>
       <div class="dock-content" id="dockContent"><div class="output-line"><span class="output-time">--:--:--</span><span class="output-ok">INFO</span><span>Inicializando el espacio de trabajo visual.</span></div><div class="output-line"><span class="output-time">--:--:--</span><span class="output-ok">READY</span><span>El editor está listo. La compilación real se habilitará al configurar un backend compatible.</span></div></div>
       <button class="dock-toggle" id="dockToggle" title="Contraer panel">⌄</button>
     </footer>
@@ -111,9 +111,75 @@
   <div id="modalLayer" class="modal-layer hidden"></div>
   <input id="projectFileInput" type="file" accept=".ps5vproj,.json,application/json" hidden />
   <input id="assetFileInput" type="file" accept="image/*,.ttf,.wav,.ogg,.mp3,.json,.txt,.bin" hidden />
-  <script src="runtime/unicode-fonts.js?v=1.1.10"></script>
-  <script src="runtime/native-generator.js?v=1.1.10"></script>
-  <script src="runtime/layer-model.js?v=1.1.10"></script>
-  <script src="app.js?v=1.1.10"></script>
+  <!-- PS5HS early diagnostics: runs before external scripts so failed startup is still observable. -->
+  <script>
+  (() => {
+    const key = 'ps5hs:diagnostic-log:v1';
+    const maxEntries = 500;
+    let volatileEntries = [];
+    const time = () => new Date().toLocaleTimeString('es-ES', {hour12:false});
+    function record(level, message) {
+      try {
+        let entries = volatileEntries.slice();
+        try { const current = JSON.parse(localStorage.getItem(key) || '[]'); if (Array.isArray(current)) entries = current; } catch (storageReadError) { window.__PS5HS_BOOT_STORAGE_ERROR = String(storageReadError?.message || storageReadError); }
+        const entry = {time:time(), timestamp:new Date().toISOString(), level, text:String(message)};
+        entries.push(entry);
+        if (entries.length > maxEntries) entries = entries.slice(-maxEntries);
+        volatileEntries = entries.slice(-maxEntries);
+        try { localStorage.setItem(key, JSON.stringify(entries)); } catch (storageWriteError) { window.__PS5HS_BOOT_STORAGE_ERROR = String(storageWriteError?.message || storageWriteError); }
+        const root = document.getElementById('dockContent');
+        if (root) {
+          const line = document.createElement('div'); line.className = 'output-line';
+          const stamp = document.createElement('span'); stamp.className = 'output-time'; stamp.textContent = entry.time;
+          const severity = document.createElement('span'); severity.className = level === 'ERROR' ? 'output-error' : level === 'WARN' ? 'output-warn' : 'output-ok'; severity.textContent = level;
+          const content = document.createElement('span'); content.textContent = entry.text;
+          line.append(stamp, severity, content); root.append(line);
+          while (root.children.length > 90) root.firstElementChild.remove();
+          root.scrollTop = root.scrollHeight;
+        }
+      } catch (diagnosticError) { window.__PS5HS_BOOT_DIAGNOSTIC_ERROR = String(diagnosticError?.message || diagnosticError); }
+    }
+    window.__PS5HS_BOOT_READY = false;
+    window.addEventListener('error', event => {
+      if (event.target && event.target !== window) {
+        const target = event.target;
+        if (target.tagName === 'SCRIPT' || target.tagName === 'LINK') {
+          record('ERROR', `BOOT: no se pudo cargar ${target.src || target.href || target.tagName}.`);
+        }
+        return;
+      }
+      const where = event.filename ? ` (${event.filename}:${event.lineno || 0}:${event.colno || 0})` : '';
+      record('ERROR', `BOOT: excepción JavaScript${where}: ${event.message || event.error?.stack || 'error no especificado'}`);
+    }, true);
+    window.addEventListener('unhandledrejection', event => {
+      const reason = event.reason;
+      record('ERROR', `BOOT: promesa rechazada sin capturar: ${reason?.stack || reason?.message || String(reason)}`);
+    });
+    document.addEventListener('click', event => {
+      const target = event.target;
+      if (!(target instanceof Element) || !target.closest('#buildBtn') || window.__PS5HS_BOOT_READY) return;
+      record('ERROR', 'El clic en Compilar se recibió antes de que el IDE terminara de inicializarse. Comprueba los errores BOOT anteriores; el flujo de compilación no llegó a activarse.');
+    }, true);
+    document.addEventListener('click', event => {
+      const target = event.target;
+      if (!(target instanceof Element) || !target.closest('#exportBuildLogBtn') || window.__PS5HS_BOOT_READY) return;
+      record('INFO', 'Exportando log de arranque incompleto.');
+      try {
+        let entries = volatileEntries.slice();
+        try { const stored = JSON.parse(localStorage.getItem(key) || '[]'); if (Array.isArray(stored)) entries = stored; } catch (storageReadError) { window.__PS5HS_BOOT_STORAGE_ERROR = String(storageReadError?.message || storageReadError); }
+        const content = entries.map(entry => `${entry.timestamp || entry.time} [${entry.level}] ${entry.text}`).join('\r\n') + '\r\n';
+        const url = URL.createObjectURL(new Blob([content], {type:'text/plain;charset=utf-8'}));
+        const link = document.createElement('a'); link.href = url; link.download = `Visual-PS5-boot-log-${new Date().toISOString().replace(/[:.]/g, '-')}.log`;
+        document.body.append(link); link.click(); link.remove(); URL.revokeObjectURL(url);
+      } catch (error) { record('ERROR', `No se pudo exportar el log de arranque: ${error?.message || String(error)}`); }
+    });
+  })();
+  </script>
+  <script src="runtime/project-contracts.js?v=1.1.18"></script>
+  <script src="runtime/unicode-fonts.js?v=1.1.18"></script>
+  <script src="runtime/native-modification-policy.js?v=1.1.18"></script>
+  <script src="runtime/native-generator.js?v=1.1.18"></script>
+  <script src="runtime/layer-model.js?v=1.1.18"></script>
+  <script src="app.js?v=1.1.18"></script>
 </body>
 </html>

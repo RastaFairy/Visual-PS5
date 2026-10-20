@@ -36,11 +36,11 @@
     const ranks = ordered.map(component => LAYER_RANK[component.type] ?? 45);
     const followsDefaultOrder = ranks.every((value, index) => index === 0 || value >= ranks[index - 1]);
     if (!followsDefaultOrder) return ordered.reduce((max, component) => Math.max(max, Number(component.zIndex) || 0), 0) + 10;
-    const placeholder = { type };
+    const insertionMarker = { type };
     const insertionIndex = ordered.findIndex(component => (LAYER_RANK[component.type] ?? 45) > rank);
-    if (insertionIndex < 0) ordered.push(placeholder); else ordered.splice(insertionIndex, 0, placeholder);
-    ordered.forEach((component, index) => { if (component !== placeholder) component.zIndex = (index + 1) * 10; });
-    return (ordered.indexOf(placeholder) + 1) * 10;
+    if (insertionIndex < 0) ordered.push(insertionMarker); else ordered.splice(insertionIndex, 0, insertionMarker);
+    ordered.forEach((component, index) => { if (component !== insertionMarker) component.zIndex = (index + 1) * 10; });
+    return (ordered.indexOf(insertionMarker) + 1) * 10;
   }
 
   function isLegacyArrayOrder(rows) {

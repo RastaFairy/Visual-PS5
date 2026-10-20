@@ -14,7 +14,8 @@ assert.ok(html.includes(`runtime/unicode-fonts.js?v=${appVersion}`), 'Unicode fo
 assert.ok(html.includes(`runtime/layer-model.js?v=${appVersion}`), 'layer model must use the current app version');
 assert.match(html, /assetFileInput[^>]*\.ttf/, 'asset picker must accept TTF fonts');
 assert.match(app, /fontAssetId:''/, 'new projects must initialise the optional font selection');
-assert.match(app, /if\(!project\.assets\.length\)\{project\.fontAssetId='';/, 'removing the last font asset must clear its selection');
+assert.match(app, /if\(project\.fontAssetId===removedId\)project\.fontAssetId='';/, 'removing the selected font must clear that reference as an explicit project change');
+assert.doesNotMatch(app, /if\(project\.fontAssetId&&!fontAssets\.some\(a=>a\.id===project\.fontAssetId\)\)project\.fontAssetId='';/, 'rendering asset UI must not silently mutate the project model');
 assert.match(app, /function renderUnicodeFontPicker\(\)/);
 assert.match(app, /PS5HSUnicodeFonts\.prepareFontAsset\(selectedFont\)/);
 assert.match(app, /PS5HSUnicodeFonts\.collectCodepoints\(data\)/);

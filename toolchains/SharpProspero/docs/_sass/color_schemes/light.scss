@@ -1,0 +1,22 @@
+// Light scheme companion to dark.scss. Every variable custom.scss references is redefined here with
+// a light-appropriate value, so the site's light/dark toggle produces a coherent light rendering.
+
+$color-scheme:                light;
+
+$body-background-color:       #ffffff;
+$sidebar-color:               #f6f8fa;
+$code-background-color:       #f6f8fa;
+$search-background-color:     #ffffff;
+$table-background-color:      #ffffff;
+$feedback-color:              #f6f8fa;
+
+$body-text-color:             #1f2328;
+$body-heading-color:          #0d1117;
+$nav-child-link-color:        #656d76;
+$search-result-preview-color: #656d76;
+
+$link-color:                  #0969da;
+$btn-primary-color:           #0969da;
+$base-button-color:           #eaeef2;
+
+$border-color:                #d0d7de;

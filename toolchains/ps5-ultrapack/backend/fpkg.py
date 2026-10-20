@@ -1,0 +1,246 @@
+"""Thin Python wrapper around the bundled `ffpfsc-pkg-tool` native binary."""
+
+from __future__ import annotations
+
+import json
+import os
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+from typing import Iterable, Optional
+
+# Located in backend/native/ next to this module.
+_TOOL_NAME = "ffpfsc-pkg-tool.exe" if os.name == "nt" else "ffpfsc-pkg-tool"
+# A console program: started from the windowless app it would open a console of its own
+_NO_WINDOW = {"creationflags": subprocess.CREATE_NO_WINDOW} if os.name == "nt" else {}
+
+
+def _tool_search_paths() -> list[Path]:
+    """Where the CLI binary might live. Order matters: first hit wins."""
+    here = Path(__file__).resolve().parent
+    frozen_dir = getattr(sys, "_MEIPASS", None)
+    paths: list[Path] = []
+    # Regular dev / source-run layout (backend/native/ffpfsc-pkg-tool).
+    paths.append(here / "native" / _TOOL_NAME)
+    # PyInstaller-bundled layout (adjacent copy under the frozen backend folder).
+    if frozen_dir:
+        paths.append(Path(frozen_dir) / "backend" / "native" / _TOOL_NAME)
+        paths.append(Path(frozen_dir) / "native" / _TOOL_NAME)
+    # Allow an env-var override for developer overrides.
+    env = os.environ.get("FFPFSC_PKG_TOOL")
+    if env:
+        paths.insert(0, Path(env))
+    return paths
+
+
+def tool_path() -> Path:
+    """Locate the bundled ffpfsc-pkg-tool binary, or raise FileNotFoundError."""
+    for p in _tool_search_paths():
+        if p.is_file() and os.access(p, os.X_OK):
+            return p
+    tried = "\n  ".join(str(p) for p in _tool_search_paths())
+    raise FileNotFoundError(
+        f"ffpfsc-pkg-tool not found. Tried:\n  {tried}\n"
+        "In a source checkout, build it with ./BUILD_PKG_TOOL.sh (BUILD_PKG_TOOL.ps1 on Windows; "
+        "needs the .NET SDK 9+); "
+        "set FFPFSC_PKG_TOOL to override, or rebuild the app."
+    )
+
+
+def is_available() -> bool:
+    try:
+        tool_path()
+        return True
+    except FileNotFoundError:
+        return False
+
+
+def _run(argv: list[str], *, on_line=None, on_start=None) -> int:
+    """Run the CLI, streaming its combined output through *on_line* (or stdout).
+    *on_start(proc)* gets the running process (a progress meter reads its I/O)."""
+    proc = subprocess.Popen(
+        argv,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        bufsize=1,
+        text=True,
+        # The tool echoes file names from the package; a byte that is not valid UTF-8
+        # must not turn into a UnicodeDecodeError after the build has already run.
+        encoding="utf-8",
+        errors="replace",
+        **_NO_WINDOW,
+    )
+    assert proc.stdout is not None
+    if on_start is not None:
+        on_start(proc)
+    try:
+        for line in proc.stdout:
+            line = line.rstrip("\n")
+            if on_line is not None:
+                on_line(line)
+            else:
+                print(line, flush=True)
+    finally:
+        proc.wait()
+        proc.stdout.close()
+    return proc.returncode
+
+
+def version() -> str:
+    """Return the CLI version banner, or an error string."""
+    argv = [str(tool_path()), "version"]
+    try:
+        return subprocess.run(argv, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=10,
+                              **_NO_WINDOW).stdout
+    except Exception as e:
+        return f"[fpkg tool unavailable: {e}]"
+
+
+def inspect(pkg: Path, *, json_out: bool = False) -> int:
+    argv = [str(tool_path()), "inspect", str(pkg)]
+    if json_out:
+        argv.append("--json")
+    return _run(argv)
+
+
+def inspect_json(pkg: Path) -> dict:
+    """The tool's header summary of a PS5 package (content_id, content_type: 32 game, 33/34
+    additional content, entries ...). Reads the header and the entry table only."""
+    r = subprocess.run([str(tool_path()), "inspect", str(pkg), "--json"], capture_output=True, text=True,
+                       timeout=120, encoding="utf-8", errors="replace", **_NO_WINDOW)
+    if r.returncode != 0:
+        msg = (r.stderr or r.stdout or "").strip().splitlines()
+        raise RuntimeError(msg[-1] if msg else f"inspect failed (rc={r.returncode})")
+    return json.loads(r.stdout)
+
+
+def extract(pkg: Path, out_dir: Path,
+            *, passcode: str = "0" * 32,
+            outer: bool = False,
+            on_line=None,
+            on_start=None) -> int:
+    """
+    Extract a finalized fPKG (\\x7FFIH) or metadata CNT (\\x7FCNT).
+
+    outer=False (default) pulls the /app0-style inner-image content files.
+    outer=True dumps the outer-PFS entries (uroot, pfs_image.dat itself, naps).
+    """
+    out_dir = Path(out_dir); out_dir.mkdir(parents=True, exist_ok=True)
+    if not outer and is_ps4(pkg):
+        return _run([str(tool_path()), "ps4-extract", str(pkg), str(out_dir)], on_line=on_line, on_start=on_start)
+    cmd = "extract-outer" if outer else "extract-inner"
+    argv = [str(tool_path()), cmd, str(pkg), str(out_dir), "--passcode", passcode]
+    return _run(argv, on_line=on_line, on_start=on_start)
+
+
+def is_ps4(pkg: Path) -> bool:
+    """A PS4 package (CUSA title id): read with the tool's ps4-* commands, never as a PS5 fPKG."""
+    import ps4pkg
+    return ps4pkg.is_ps4_package(pkg)
+
+
+def list_inner(pkg: Path, *, passcode: str = "0" * 32) -> dict:
+    """Directory tree of a package's inner image - plus the sce_sys metadata the CNT carries - WITHOUT decoding the whole image (the tool reads only the blocks it touches; a 240 MB package lists in ~0.1 s reading ~1.5 MiB)."""
+    argv = ([str(tool_path()), "ps4-list", str(pkg)] if is_ps4(pkg)
+            else [str(tool_path()), "list-inner", str(pkg), "--passcode", passcode])
+    r = subprocess.run(argv, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=600,
+                       **_NO_WINDOW)
+    if r.returncode != 0:
+        msg = (r.stderr or r.stdout or "").strip().splitlines()
+        raise RuntimeError(msg[-1] if msg else f"list-inner failed (rc={r.returncode})")
+    return json.loads(r.stdout)
+
+
+def extract_members(pkg: Path, out_dir: Path, members_file: Path,
+                    *, passcode: str = "0" * 32, on_line=None) -> int:
+    """
+    Extract only the members listed in *members_file* (one inner path per line; a
+    directory means its whole subtree) - decoded block-wise, never the whole image.
+    Progress lines '[####] NN% extract (path)' stream through *on_line*.
+    """
+    out_dir = Path(out_dir); out_dir.mkdir(parents=True, exist_ok=True)
+    if is_ps4(pkg):
+        return _run([str(tool_path()), "ps4-extract", str(pkg), str(out_dir), "--members", str(members_file)],
+                    on_line=on_line)
+    argv = [str(tool_path()), "extract-inner", str(pkg), str(out_dir),
+            "--members", str(members_file), "--passcode", passcode]
+    return _run(argv, on_line=on_line)
+
+
+def build(src_dir: Path, out_dir: Path,
+          *,
+          content_id: str,
+          title_id: str,
+          title: str = "",
+          version: str = "01.000.000",
+          passcode: str = "0" * 32,
+          inner_mode: str = "kraken",           # "none" | "zlib" | "kraken"
+          kraken_backend: str = "builtin",      # "automatic" | "builtin" | "publishingtools" | "uncompressed"
+          publishing_tools_dll: Optional[str] = None,
+          deterministic: bool = False,
+          temp_dir: Optional[str] = None,
+          level: Optional[int] = None,
+          retail_normalize: bool = True,
+          hdr_flag: str = "auto",               # "auto" | "on" | "off" (bool accepted: True→on, False→off)
+          regen_playgo: bool = False,
+          fake_sign: bool = True,
+          ampr_index: bool = True,
+          stage_in_place: bool = False,
+          consume_source: bool = False,
+          parallelism: int = 0,
+          on_line=None) -> int:
+    """Build a debug fPKG from a prepared /app0-style source folder."""
+    src_dir = Path(src_dir); out_dir = Path(out_dir); out_dir.mkdir(parents=True, exist_ok=True)
+    argv = [
+        str(tool_path()), "build", str(src_dir), str(out_dir),
+        "--content-id", content_id,
+        "--title-id", title_id,
+        "--version", version,
+        "--passcode", passcode,
+        "--mode", inner_mode,
+        "--kraken-backend", kraken_backend,
+    ]
+    if title:
+        argv += ["--title", title]
+    if publishing_tools_dll:
+        argv += ["--pubtools-dll", publishing_tools_dll]
+    if deterministic:
+        argv += ["--deterministic"]
+    if temp_dir:
+        argv += ["--temp", str(temp_dir)]
+    if level is not None:
+        argv += ["--level", str(int(level))]
+    if not retail_normalize:
+        argv += ["--no-retail-normalize"]
+    if isinstance(hdr_flag, bool):
+        hdr_flag = "on" if hdr_flag else "off"
+    if hdr_flag in ("on", "off"):
+        argv += ["--hdr-flag", hdr_flag]
+    if regen_playgo:
+        argv += ["--regen-playgo"]
+    if not ampr_index:
+        argv += ["--no-ampr-index"]
+    if not fake_sign:
+        argv += ["--no-fake-sign"]
+    if stage_in_place:
+        # src_dir is this app's own working copy (an image unpacked into its scratch): the
+        # tool's pre-build changes go straight into it instead of into one more copy.
+        argv += ["--stage-in-place"]
+    if consume_source and stage_in_place:
+        # each source file is deleted the moment the inner image holds it, so the unpacked
+        # game shrinks while the image grows (only ever in our own working copy)
+        argv += ["--consume-source"]
+    if parallelism and int(parallelism) > 0:
+        argv += ["--parallelism", str(int(parallelism))]
+    return _run(argv, on_line=on_line)
+
+
+def validate(pkg: Path, *, json_out: bool = False, temp_dir: Optional[str] = None, on_line=None) -> int:
+    """Run the CLI's diagnostic checklist against a package."""
+    argv = [str(tool_path()), "validate", str(pkg)]
+    if json_out:
+        argv.append("--json")
+    if temp_dir:
+        argv += ["--temp", str(temp_dir)]
+    return _run(argv, on_line=on_line)

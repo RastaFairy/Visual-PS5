@@ -1,0 +1,132 @@
+<Project>
+
+  <!--
+    Prospero.App.targets
+
+    Link step that turns an x86_64 object produced by the ahead-of-time compiler into an ELF module
+    (eboot.bin) ready for the package builder. The step is an explicit target so a plain `dotnet
+    build` of the solution never touches it; it runs only when invoked directly or from an
+    application's build.ps1.
+
+    The link runs through the SDK's own linker. The linker supplies its own start object and its own
+    stubs for the modules the SDK imports from, so a build needs no start file, stub library, or
+    linker from elsewhere.
+
+    Inputs (all resolvable from environment variables; see Directory.Build.props):
+      ProsperoRuntimePack    Folder with the runtime archives compiled for the device ABI.
+      ProsperoObjectFile     The compiled object to link. The default assumes a runtime-identifier
+                             build context; a standalone invocation must pass it explicitly
+                             (/p:ProsperoObjectFile=<path>), which build.ps1 does after locating the
+                             emitted object.
+
+    Output:
+      $(OutputPath)$(ProsperoModuleName)   The linked ELF module.
+  -->
+
+  <PropertyGroup>
+    <!-- The SDK's linker project, resolved next to this targets file. -->
+    <ProsperoLinkTool Condition="'$(ProsperoLinkTool)' == ''">$(MSBuildThisFileDirectory)..\tools\SharpProspero.Bindings.Generator\SharpProspero.Bindings.Generator.csproj</ProsperoLinkTool>
+
+    <!-- The entry symbol the module starts at. The linker's start object provides it. -->
+    <ProsperoEntrySymbol Condition="'$(ProsperoEntrySymbol)' == ''">_start</ProsperoEntrySymbol>
+
+    <!-- The module file name follows the kind, which the project sets before importing this file:
+         <name>.prx for a library, eboot.bin for an application. -->
+    <ProsperoModuleName Condition="'$(ProsperoModuleName)' == '' and '$(ProsperoModuleKind)' == 'Prx'">$(AssemblyName).prx</ProsperoModuleName>
+    <ProsperoModuleName Condition="'$(ProsperoModuleName)' == ''">eboot.bin</ProsperoModuleName>
+
+    <ProsperoModulePath>$(OutputPath)$(ProsperoModuleName)</ProsperoModulePath>
+    <_ProsperoIsPrx Condition="'$(ProsperoModuleKind)' == 'Prx'">true</_ProsperoIsPrx>
+
+    <!-- A library module is compiled as a library, which decides which bring-up object the compiler
+         pairs with it: the application object defines main and reaches the run-time initialiser from
+         there, while the library object runs the initialiser from its own constructor list and hands
+         over an entry point the loader can call. A project that names the library kind but is written
+         as an application would otherwise get the application object and export functions that enter
+         a run time nothing has started. -->
+    <NativeLib Condition="'$(_ProsperoIsPrx)' == 'true' and '$(NativeLib)' == ''">Shared</NativeLib>
+  </PropertyGroup>
+
+  <!-- Stubs for a project's own modules, generated from a .prx by the stub tool. The core modules the
+       SDK imports from are supplied by the linker itself, so only a project's extra stubs go here. -->
+  <ItemGroup>
+    <ProsperoStubLibrary Include="@(ProsperoUserStubLibrary)" />
+  </ItemGroup>
+
+  <Target Name="ProsperoCheckPrerequisites">
+    <!-- The AOT compiler writes one object per application under the runtime-identifier intermediate
+         path (obj\<cfg>\<tfm>\<rid>\native). This is resolved here rather than alongside the other
+         properties because the intermediate path and the target name are only settled once the
+         project's own build files have been evaluated. -->
+    <PropertyGroup>
+      <ProsperoObjectFile Condition="'$(ProsperoObjectFile)' == ''">$(IntermediateOutputPath)native\$(TargetName).o</ProsperoObjectFile>
+    </PropertyGroup>
+
+    <!-- The runtime archives come either as an explicit list (build.ps1 gathers them from the .NET
+         NativeAOT runtime pack the publish restored) or from a folder for a manual link. One of the two
+         has to be present; there is no separate pack to install. -->
+    <Error Condition="'$(ProsperoRuntimeLibraries)' == '' And ('$(ProsperoRuntimePack)' == '' Or !Exists('$(ProsperoRuntimePack)'))"
+           Text="No runtime archives were given. Build through build.ps1 (it gathers them from the .NET NativeAOT runtime pack automatically), or set ProsperoRuntimeLibraries to the archive list. See docs/build-pipeline.md." />
+    <Error Condition="!Exists('$(ProsperoObjectFile)')"
+           Text="The compiled object '$(ProsperoObjectFile)' does not exist. Run the AOT publish step first, or set ProsperoObjectFile to the emitted object." />
+  </Target>
+
+  <!-- Runtime archives shipped by the pack. The pack lists them in the order the linker expects
+       through a semicolon-separated ProsperoRuntimeLibraries property, or the target falls back to
+       every archive in the pack folder. -->
+  <Target Name="ProsperoResolveRuntimePack">
+    <ItemGroup Condition="'$(ProsperoRuntimeLibraries)' == ''">
+      <ProsperoRuntimeLibrary Include="$(ProsperoRuntimePack)\*.a" />
+      <ProsperoRuntimeObject Include="$(ProsperoRuntimePack)\*.o" />
+    </ItemGroup>
+    <ItemGroup Condition="'$(ProsperoRuntimeLibraries)' != ''">
+      <_ProsperoRuntimeInput Include="$(ProsperoRuntimeLibraries)" />
+      <ProsperoRuntimeObject Include="@(_ProsperoRuntimeInput)" Condition="'%(Extension)' == '.o'" />
+      <ProsperoRuntimeLibrary Include="@(_ProsperoRuntimeInput)" Condition="'%(Extension)' != '.o'" />
+    </ItemGroup>
+    <!-- An existing but empty (or misnamed) pack folder would otherwise reach the linker as an empty
+         group and fail deep with unresolved runtime symbols. Stop here with a clear message. -->
+    <Error Condition="'@(ProsperoRuntimeLibrary)' == '' And '@(ProsperoRuntimeObject)' == ''"
+           Text="The runtime pack '$(ProsperoRuntimePack)' holds no runtime archives. Add the *.a archives compiled for the device ABI, or set ProsperoRuntimeLibraries to the ordered list." />
+  </Target>
+
+  <Target Name="ProsperoLink"
+          DependsOnTargets="ProsperoCheckPrerequisites;ProsperoResolveRuntimePack">
+
+    <!-- The AOT compiler writes one object per application under the runtime-identifier intermediate
+         path (obj\<cfg>\<tfm>\<rid>\native). This is resolved here rather than alongside the other
+         properties because the intermediate path and the target name are only settled once the
+         project's own build files have been evaluated. -->
+    <PropertyGroup>
+      <ProsperoObjectFile Condition="'$(ProsperoObjectFile)' == ''">$(IntermediateOutputPath)native\$(TargetName).o</ProsperoObjectFile>
+    </PropertyGroup>
+
+    <MakeDir Directories="$(OutputPath)" />
+
+    <!-- The compiled object and the runtime archives carry the code; the linker's own start object
+         and stubs resolve the entry point and the module imports, supplied by the self-contained
+         switch. -->
+    <PropertyGroup>
+      <_ProsperoLinkArgs>link --self-contained --obj &quot;$(ProsperoObjectFile)&quot;</_ProsperoLinkArgs>
+      <!-- An archive is drawn from only for the names still wanted, an object is always taken. The
+           run time's bring-up object has to be taken: it defines no name anyone asks for, so leaving
+           it to the archive rule drops it and the module starts nothing. -->
+      <_ProsperoLinkArgs Condition="'@(ProsperoRuntimeObject)' != ''">$(_ProsperoLinkArgs) @(ProsperoRuntimeObject->'--obj &quot;%(FullPath)&quot;', ' ')</_ProsperoLinkArgs>
+      <_ProsperoLinkArgs>$(_ProsperoLinkArgs) @(ProsperoRuntimeLibrary->'--lib &quot;%(FullPath)&quot;', ' ')</_ProsperoLinkArgs>
+      <_ProsperoLinkArgs Condition="'@(ProsperoStubLibrary)' != ''">$(_ProsperoLinkArgs) @(ProsperoStubLibrary->'--stub &quot;%(FullPath)&quot;', ' ')</_ProsperoLinkArgs>
+      <_ProsperoLinkArgs>$(_ProsperoLinkArgs) --out &quot;$(ProsperoModulePath)&quot; --entry $(ProsperoEntrySymbol)</_ProsperoLinkArgs>
+      <_ProsperoLinkArgs Condition="'$(_ProsperoIsPrx)' == 'true'">$(_ProsperoLinkArgs) --kind prx</_ProsperoLinkArgs>
+      <_ProsperoLinkArgs Condition="'$(_ProsperoIsPrx)' != 'true'">$(_ProsperoLinkArgs) --kind eboot</_ProsperoLinkArgs>
+      <!-- A library module exports the symbols named through ProsperoExportSymbol so another module
+           can import them; these are the unmanaged entry points the module means to expose. -->
+      <_ProsperoLinkArgs Condition="'@(ProsperoExportSymbol)' != ''">$(_ProsperoLinkArgs) @(ProsperoExportSymbol->'--export %(Identity)', ' ')</_ProsperoLinkArgs>
+    </PropertyGroup>
+
+    <Message Importance="high" Text="Linking $(ProsperoModuleName) from $(ProsperoObjectFile)" />
+    <Exec Command="dotnet run --project &quot;$(ProsperoLinkTool)&quot; -c $(Configuration) -- $(_ProsperoLinkArgs)" />
+
+    <Message Importance="high" Text="Wrote $(ProsperoModulePath)" />
+    <Message Importance="high" Text="Inspect it with: sharpprospero-bindgen elf --file &quot;$(ProsperoModulePath)&quot;" />
+  </Target>
+
+</Project>

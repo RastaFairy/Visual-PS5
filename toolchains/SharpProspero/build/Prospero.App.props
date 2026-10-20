@@ -1,0 +1,160 @@
+<Project>
+
+  <!--
+    Prospero.App.props
+
+    Import this file from an application project to configure it for ahead-of-time (AOT)
+    compilation into a standalone ELF module. It sets the compiler and trimmer options that keep
+    the produced image small and self-contained and declares the interop entry points as direct
+    imports so the compiler resolves them at link time.
+
+    Usage in an application project (before the SDK import is fine; MSBuild evaluates props early):
+
+      <Import Project="..\..\build\Prospero.App.props" />
+      ...
+      <Import Project="..\..\build\Prospero.App.targets" />
+
+    The link needs only the runtime pack; the linker supplies its own start object and stubs.
+  -->
+
+  <PropertyGroup>
+    <!-- Produce machine code ahead of time. Only affects `dotnet publish`; a plain build stays managed.
+         Publish with an x86_64 runtime identifier (`-r linux-x64`); the link step retargets the
+         emitted object to the device ABI. -->
+    <PublishAot>true</PublishAot>
+
+    <!-- Trim aggressively: the module ships alone, so unused framework surface must not survive. -->
+    <TrimMode>full</TrimMode>
+    <OptimizationPreference>Size</OptimizationPreference>
+    <IlcOptimizationPreference>Size</IlcOptimizationPreference>
+    <IlcFoldIdenticalMethodBodies>true</IlcFoldIdenticalMethodBodies>
+
+    <!-- Drop framework features an on-device module never uses. Each one removes code and data. -->
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <UseSystemResourceKeys>true</UseSystemResourceKeys>
+    <EventSourceSupport>false</EventSourceSupport>
+    <MetadataUpdaterSupport>false</MetadataUpdaterSupport>
+    <HttpActivityPropagationSupport>false</HttpActivityPropagationSupport>
+    <DebuggerSupport>false</DebuggerSupport>
+    <StackTraceSupport>false</StackTraceSupport>
+    <AutoreleasePoolSupport>false</AutoreleasePoolSupport>
+    <NullabilityInfoContextSupport>false</NullabilityInfoContextSupport>
+    <StartupHookSupport>false</StartupHookSupport>
+
+    <!-- Keep the garbage collector small and predictable. Memory maps on the device are limited,
+         so the workstation (non-concurrent) collector with a fixed ceiling is the right default. -->
+    <ServerGarbageCollection>false</ServerGarbageCollection>
+    <ConcurrentGarbageCollection>false</ConcurrentGarbageCollection>
+    <TieredCompilation>false</TieredCompilation>
+
+    <!-- Default heap ceiling for an application. Override ProsperoHeapHardLimitBytes per project. -->
+    <ProsperoHeapHardLimitBytes Condition="'$(ProsperoHeapHardLimitBytes)' == ''">268435456</ProsperoHeapHardLimitBytes>
+
+    <!-- How much address space the collector holds for its regions. Left unset it holds five times the
+         ceiling above, which for a 256 MB ceiling is 1.25 GB of one unbroken run - more than this
+         platform's pool will hand out, and the collector refuses to start when it cannot get it. The
+         figure is used exactly as given, so it has to be a whole number of pages; a whole number of
+         megabytes is easiest to read and satisfies that. -->
+    <ProsperoHeapRegionRangeBytes Condition="'$(ProsperoHeapRegionRangeBytes)' == ''">402653184</ProsperoHeapRegionRangeBytes>
+
+    <!-- The stack a runtime thread is created with. Left unset, the platform gives a thread 64 KB,
+         which the collector's own threads overrun. This is read as a decimal count of bytes: a value
+         written the other way round reads as zero and is discarded without a word. -->
+    <ProsperoThreadStackBytes Condition="'$(ProsperoThreadStackBytes)' == ''">1048576</ProsperoThreadStackBytes>
+
+    <!-- Export any method marked [UnmanagedCallersOnly] as an unmanaged symbol, so a module can
+         expose C-callable entry points beyond the standard program entry. -->
+    <IlcExportUnmanagedEntryPoints>true</IlcExportUnmanagedEntryPoints>
+
+    <!-- What the link step produces:
+           Executable  the application module (eboot.bin), started by the launcher.
+           Prx         a relocatable library module (.prx), loaded by another module at run time. -->
+    <ProsperoModuleKind Condition="'$(ProsperoModuleKind)' == ''">Executable</ProsperoModuleKind>
+
+    <!-- The module file name is derived from the kind in Prospero.App.targets, which a project imports
+         after it has set the kind (a project sets ProsperoModuleKind between the two imports). -->
+
+  </PropertyGroup>
+
+  <!-- Bound the managed heap through the runtime configuration so the ceiling is baked into the image. -->
+  <ItemGroup>
+    <RuntimeHostConfigurationOption Include="System.GC.HeapHardLimit"
+                                    Value="$(ProsperoHeapHardLimitBytes)"
+                                    Trim="false" />
+    <RuntimeHostConfigurationOption Include="System.GC.RetainVM" Value="false" Trim="false" />
+    <RuntimeHostConfigurationOption Include="System.GC.RegionRange"
+                                    Value="$(ProsperoHeapRegionRangeBytes)"
+                                    Trim="false" />
+    <RuntimeHostConfigurationOption Include="System.Threading.DefaultStackSize"
+                                    Value="$(ProsperoThreadStackBytes)"
+                                    Trim="false" />
+  </ItemGroup>
+
+  <!-- Resolve every interop module as a direct import. The names match the loadable modules on the
+       device; the link step supplies the matching stub archives. -->
+  <ItemGroup>
+    <DirectPInvoke Include="libkernel" />
+    <DirectPInvoke Include="libSceOpenPsId" />
+    <DirectPInvoke Include="libc" />
+    <DirectPInvoke Include="libSceVideoOut" />
+    <DirectPInvoke Include="libScePad" />
+    <DirectPInvoke Include="libSceUserService" />
+    <DirectPInvoke Include="libSceSystemService" />
+    <DirectPInvoke Include="libSceAudioOut" />
+    <DirectPInvoke Include="libSceAudiodec" />
+    <DirectPInvoke Include="libSceM4aacEnc" />
+    <DirectPInvoke Include="libSceAt9Enc" />
+    <DirectPInvoke Include="libSceNgs2" />
+    <DirectPInvoke Include="libSceAudio3d" />
+    <DirectPInvoke Include="libSceAjm" />
+    <DirectPInvoke Include="libSceVideoRecording" />
+    <DirectPInvoke Include="libSceCesCs" />
+    <DirectPInvoke Include="libSceDepth2" />
+    <DirectPInvoke Include="libSceMbus" />
+    <DirectPInvoke Include="libSceVideodec2" />
+    <DirectPInvoke Include="libSceSysmodule" />
+    <DirectPInvoke Include="libScePngDec" />
+    <DirectPInvoke Include="libScePngEnc" />
+    <DirectPInvoke Include="libSceFont" />
+    <DirectPInvoke Include="libSceFontFt" />
+    <DirectPInvoke Include="libSceJpegDec" />
+    <DirectPInvoke Include="libSceJpegEnc" />
+    <DirectPInvoke Include="libSceAudioIn" />
+    <DirectPInvoke Include="libSceShare" />
+    <DirectPInvoke Include="libSceRtc" />
+    <DirectPInvoke Include="libSceRandom" />
+    <DirectPInvoke Include="libSceZlib" />
+    <DirectPInvoke Include="libSceNet" />
+    <DirectPInvoke Include="libSceSsl" />
+    <DirectPInvoke Include="libSceHttp" />
+    <DirectPInvoke Include="libSceContentDelete" />
+    <DirectPInvoke Include="libSceContentSearch" />
+    <DirectPInvoke Include="libSceContentExport" />
+    <DirectPInvoke Include="libSceSaveDataDialog" />
+    <DirectPInvoke Include="libScePlayGo" />
+    <DirectPInvoke Include="libSceAppContent" />
+    <DirectPInvoke Include="libSceNetCtl" />
+    <DirectPInvoke Include="libSceSaveData" />
+    <DirectPInvoke Include="libSceKeyboard" />
+    <DirectPInvoke Include="libSceMouse" />
+    <DirectPInvoke Include="libSceCommonDialog" />
+    <DirectPInvoke Include="libSceImeDialog" />
+    <DirectPInvoke Include="libSceErrorDialog" />
+    <DirectPInvoke Include="libSceMsgDialog" />
+    <DirectPInvoke Include="libSceWebBrowserDialog" />
+    <DirectPInvoke Include="libSceAvPlayer" />
+    <DirectPInvoke Include="libSceNpTrophy2" />
+    <DirectPInvoke Include="libSceNpUniversalDataSystem" />
+    <DirectPInvoke Include="libSceNotification" />
+    <DirectPInvoke Include="libSceBluetoothHid" />
+    <DirectPInvoke Include="libSceCffMgr" />
+    <DirectPInvoke Include="libSceAgc" />
+    <DirectPInvoke Include="libSceAgcDriver" />
+    <DirectPInvoke Include="libScePosix" />
+    <!-- Placeholder library name for compat-emitted helpers linked into the app module itself
+         (see SharpProspero.Memory.CpuCache). Never sent to the runtime loader; the link step
+         resolves the entry points against the compat object statically linked with the module. -->
+    <DirectPInvoke Include="libSharpProsperoCompat" />
+  </ItemGroup>
+
+</Project>

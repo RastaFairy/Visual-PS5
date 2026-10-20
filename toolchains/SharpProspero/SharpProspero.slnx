@@ -1,0 +1,18 @@
+<Solution>
+  <Folder Name="/build/">
+    <File Path="build/Prospero.App.props" />
+    <File Path="build/Prospero.App.targets" />
+    <File Path="build/Prospero.Payload.props" />
+    <File Path="build/Prospero.Payload.targets" />
+    <File Path="Directory.Build.props" />
+  </Folder>
+  <Folder Name="/docs/">
+    <File Path="README.md" />
+  </Folder>
+  <Project Path="src/SharpProspero/SharpProspero.csproj" />
+  <Project Path="tools/SharpProspero.Prx/SharpProspero.Prx.csproj" />
+  <Project Path="tools/SharpProspero.Link/SharpProspero.Link.csproj" />
+  <Project Path="tools/SharpProspero.Bindings.Generator/SharpProspero.Bindings.Generator.csproj" />
+  <Project Path="tools/SharpProspero.Packager/SharpProspero.Packager.csproj" />
+  <Project Path="tools/SharpProspero.Texture/SharpProspero.Texture.csproj" />
+</Solution>

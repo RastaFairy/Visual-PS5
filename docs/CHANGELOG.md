@@ -1,5 +1,80 @@
 # Registro de cambios
 
+## 1.1.18 — 2026-10-19
+
+- Corrige el fallo `TypeError: buttons.forEach is not a function` que interrumpía la compilación justo después de confirmar el diálogo «Generar y compilar»: los flujos OpenGL/Vulkan (`buildNativeVisualProject`) y SharpProspero (`buildSharpWithConsent`) consultaban los botones del diálogo con `$` (un solo elemento) en lugar de `$$` (lista), por lo que `forEach` no existía y la promesa del control quedaba rechazada sin capturar antes de desactivar los botones.
+- Ambos flujos quedan alineados con el resto del código, que ya usaba `$$` para ese selector: los botones del diálogo se desactivan al iniciar el build y se reactivan en el `finally` como estaba previsto.
+- Añade a `test-build-flow.js` una regresión estática que rechaza consultar botones del diálogo con `$` (elemento único) y usar el resultado con `forEach`; esta clase de error ya se había visto en 1.1.5 con el selector del diálogo UltraPack.
+- Invalida la caché del frontend con `?v=1.1.18` y alinea `VERSION.txt`, la meta `application-version`, el número visible de la marca, el registro de arranque, los pins de versión de los tests y el nombre del ZIP de CI.
+- Verificación: `node --check` sobre `app.js` y los módulos del runtime, las diez suites JavaScript, y una prueba de navegador real del flujo completo (Compilar → diálogo nativo → confirmar) que reproduce el error en la 1.1.17 y comprueba en la 1.1.18 que los botones se desactivan durante el build, que el fallo del backend se registra sin promesas rechazadas y que el `finally` reactiva los controles. El parser de PowerShell y una compilación real de PS5 siguen requiriendo Windows/WSL; esta revisión no cambia `runtime/server.ps1`.
+
+## 1.1.17 — 2026-10-19
+
+- Restaura la compilación de proyectos que contienen botones explícitamente configurados como «Sin acción»: se mantienen como widgets reales sin callback vacío y dejan de bloquear el build completo. Los flujos y las notificaciones configurados siguen usando sus ejecutores reales.
+- Registra cada clic de compilación antes de cualquier prevalidación y anota el backend, el contexto del proyecto, los errores de análisis, las etapas del build, la salida del SDK y las excepciones.
+- Persiste hasta 500 entradas de diagnóstico en el navegador y añade «Exportar log» para guardar un fichero `.log` que se puede adjuntar al informar de fallos.
+- Añade pruebas de regresión para el orden de trazado, la persistencia/exportación del log y la compatibilidad con botones sin acción, sin introducir callbacks vacíos ni código placeholder.
+
+## 1.1.16 — 2026-10-19
+
+- Repara una regresión de compatibilidad al abrir proyectos antiguos: el contrato v2 estricto no se aplica retroactivamente a los nombres de proyectos v1.
+- Si el nombre interno de un proyecto legado es incompatible con el formato actual, se normaliza de forma determinista; cuando no puede recuperarse, se deriva del nombre real del archivo `.ps5vproj`, sin crear un nombre genérico ficticio.
+- Los proyectos v2 actuales siguen sujetos a la validación estricta; no se rebajan los controles de nombres ni los de seguridad de rutas.
+- Añade pruebas de regresión para nombres legados largos, caracteres Unicode, nombres ausentes y rechazo de nombres inválidos en proyectos v2.
+
+## 1.1.15 — 2026-10-19
+
+- Corrige una desincronización de backend: si el generador C++20 OpenGL/Vulkan no está cargado, el IDE falla con un diagnóstico y no cae por accidente en la generación C# de SharpProspero.
+- Rechaza botones interactivos sin notificación ni flujo de activación; los generadores ya no emiten botones clicables sin callback ni un método `run_flows` vacío cuando un proyecto no tiene flujos.
+- Valida los rangos de `setValue` antes de la generación y durante la vista previa; los índices de selector deben ser enteros que correspondan a opciones existentes y los steppers requieren enteros.
+- Corrige la normalización de `progress`/`gauge` para usar el mínimo y máximo reales del modelo, conserva precisión numérica en literales de C++/C# y elimina el recorte silencioso de valores de flujo.
+- Hace transaccional la edición del inspector para que números inválidos no se conviertan en cero ni la geometría salga del lienzo por un clamp oculto. La selección inicial de SharpProspero respeta `custom.selected` o el valor explícito del modelo.
+- Escapa controles en cadenas C++ con escapes octales fijos para evitar que caracteres hexadecimales contiguos se incorporen al escape. Detecta IDs que colisionan tras transformarse en nombres de campos C#.
+- Rechaza banderas `visible`/`checked` ausentes o ambiguas, un backend explícitamente vacío, selecciones no numéricas, nombres de recurso que no se puedan normalizar y flujos numéricos fuera de rango.
+- Se ejecutaron las nueve suites JavaScript y `node --check` sobre `app.js` y todos los módulos JavaScript del runtime. No se declara validada una compilación PowerShell, Windows/WSL, toolchain PS5 o consola física desde este entorno.
+
+## 1.1.14 — 2026-10-19
+
+- Endurece el contrato de importación: los componentes deben contener geometría explícita dentro del lienzo, colores válidos y propiedades numéricas requeridas; se rechazan dimensiones faltantes, intervalos invertidos, valores fuera de rango y colores inválidos.
+- Valida IDs de componentes, pantallas, recursos y flujos para que puedan usarse de forma segura y consistente en el DOM y en el código generado.
+- Normaliza `custom` ausente a un objeto vacío y rechaza estructuras de tipo incorrecto, selecciones que no apuntan a opciones existentes, indicadores booleanos ambiguos y nombres de pantalla duplicados.
+- El generador C# deja de sustituir silenciosamente un tema inválido por colores fallback; el tema debe pasar la validación antes de escribir código.
+- Añade regresiones para geometría ausente/fuera de lienzo, color inválido, IDs inseguros y normalización de campos opcionales.
+- Actualiza el esquema de proyecto a `formatVersion: 2`; la migración explícita de proyectos v1 conserva las pantallas que pueden inferirse de IDs reales y rechaza los casos multipantalla ambiguos en vez de escoger contexto arbitrario.
+- Valida nombres de recurso, MIME, data URL y tamaño (1 byte–20 MiB), normaliza nombres de archivo mediante un contrato compartido y genera IDs únicos; importar un recurso vacío o fuera de límite se rechaza antes de alterar el modelo.
+- El selector de fuentes deja de mutar el proyecto al renderizar; quitar la fuente seleccionada actualiza el modelo y su historial de forma explícita. Una recuperación local inválida se conserva para evitar borrar automáticamente el único respaldo del usuario.
+- Se ejecutaron las suites JavaScript localmente. PowerShell, build real de PS5 y empaquetado UltraPack deben verificarse en Windows/WSL.
+
+## 1.1.13 — 2026-10-19
+
+- Unifica la validación de nombre/TITLE_ID en el cliente; los proyectos nuevos no inventan un TITLE_ID y el servidor rechaza el valor reservado `PPSA00000` antes de descargar o modificar una plantilla.
+- Permite compilar código manual sin exigir componentes visuales ni bloquearlo por diagnósticos exclusivos del lienzo; el backend sigue validando el código y su compilación real.
+- Bloquea operaciones de proyecto mientras hay una compilación en curso para mantener sincronizados modelo, backend, identificador y resultado.
+- Protege los callbacks que terminan después de cerrar un diálogo y evita que el resultado de Configurar entorno se inserte en un modal ajeno.
+- Completa el historial con deshacer/rehacer de memoria acotada; elimina funciones y parámetros sin uso y conecta Configurar entorno desde Herramientas.
+- Corrige un fallo de contexto del runtime nativo: la pantalla de inicio procede del modelo activo, no del ID fijo `screen-main`.
+- Rechaza nombres de pantalla vacíos, temas/colores incompletos, acciones predeterminadas sin implementación o mensaje, valores booleanos ambiguos, navegación sin cambio de pantalla y colisiones de rutas de recursos.
+- Valida el límite de 16 texturas antes de generar C++ y evita omitirlas silenciosamente; no inventa backend, etiqueta, opción, acción ni recurso para que la generación parezca correcta.
+- Añade pruebas de regresión para los contextos de pantalla, la integridad de acciones/flujos, las colisiones de recursos, la capacidad de texturas y la coherencia API/servidor.
+- Pruebas JavaScript ejecutadas localmente; la compilación real de PS5, la sintaxis de PowerShell y UltraPack permanecen pendientes de Windows/WSL.
+
+
+## 1.1.12 — 2026-10-19
+
+- Corrige el preflight de compilación nativa para validar antes de iniciar el trabajador los permisos requeridos por herramientas de conversión de recursos de presentación y fuentes TTF personalizadas.
+- Añade al servidor local los módulos JavaScript de capas y fuentes que `index.html` ya carga; antes, la lista permitida de `ServeStatic` respondía 404 para esos dos recursos.
+- Añade una prueba de regresión que comprueba que todos los scripts locales referenciados por `index.html` existen y están permitidos por el servidor.
+- Invalida la caché de los scripts del frontend y alinea el número de versión mostrado al iniciar.
+- Las suites JavaScript se ejecutaron en el entorno de preparación. No se afirma una compilación real de PS5 ni una prueba en consola.
+
+## 1.1.11 — 2026-10-19
+
+- Añade permisos explícitos, independientes y denegados por defecto para inicializadores/generadores upstream, integración de pantallas OpenGL/Vulkan/SharpProspero, herramientas de compilación, conversión de recursos y fuentes Unicode personalizadas.
+- El backend vuelve a validar permisos antes de modificar proyectos o ejecutar herramientas; las operaciones denegadas se detienen antes de escribir archivos.
+- Registra los archivos cambiados y sus hashes SHA-256 en `.ps5hs-modifications.json`; rechaza manifiestos de auditoría corruptos y evita seguir enlaces/reparse points.
+- Extiende las pruebas JavaScript y PowerShell y la validación automática de Windows para el control de consentimiento y la auditoría.
+- La validación cubre sintaxis y regresiones automatizadas; no afirma una compilación de título PS5 ni una prueba en consola física.
+
 ## 1.1.10 — 2026-10-18
 
 - Añade un perfil de runtime nativo controlado por PS5 Homebrew Studio para los títulos visuales OpenGL.
@@ -113,6 +188,17 @@
 - Se conserva el mensaje de resultado, los diagnósticos, la ruta del proyecto y el artefacto verificable.
 
 # Registro de cambios
+
+## 1.1.15 — 2026-10-19
+
+- Corrige una desincronización de backend: si el generador C++20 OpenGL/Vulkan no está cargado, el IDE falla con un diagnóstico y no cae por accidente en la generación C# de SharpProspero.
+- Rechaza botones interactivos sin notificación ni flujo de activación; los generadores ya no emiten botones clicables sin callback ni un método `run_flows` vacío cuando un proyecto no tiene flujos.
+- Valida los rangos de `setValue` antes de la generación y durante la vista previa; los índices de selector deben ser enteros que correspondan a opciones existentes y los steppers requieren enteros.
+- Corrige la normalización de `progress`/`gauge` para usar el mínimo y máximo reales del modelo, conserva precisión numérica en literales de C++/C# y elimina el recorte silencioso de valores de flujo.
+- Hace transaccional la edición del inspector para que números inválidos no se conviertan en cero ni la geometría salga del lienzo por un clamp oculto. La selección inicial de SharpProspero respeta `custom.selected` o el valor explícito del modelo.
+- Escapa controles en cadenas C++ con escapes octales fijos para evitar que caracteres hexadecimales contiguos se incorporen al escape. Detecta IDs que colisionan tras transformarse en nombres de campos C#.
+- Rechaza banderas `visible`/`checked` ausentes o ambiguas, un backend explícitamente vacío, selecciones no numéricas, nombres de recurso que no se puedan normalizar y flujos numéricos fuera de rango.
+- Se ejecutaron las nueve suites JavaScript y `node --check` sobre `app.js` y todos los módulos JavaScript del runtime. No se declara validada una compilación PowerShell, Windows/WSL, toolchain PS5 o consola física desde este entorno.
 
 ## 1.0.4 — 16 de octubre de 2026
 

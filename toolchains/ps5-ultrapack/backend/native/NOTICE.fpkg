@@ -1,0 +1,30 @@
+ffpfsc-pkg-tool bundles the following third-party components:
+
+  LibProsperoPkg 1.2.0, build d7090eb6 (net9.0)  — GPL-3.0-or-later
+      Copyright (C) 2026 SvenGDK; the 1.2.0 line is drakmor's fork
+      (https://github.com/drakmor/LibProsperoPkg) of
+      https://github.com/SvenGDK/LibProsperoPKG. The assembly was taken
+      compiled from the author's fpkg-gui 0.6.11 release (2026-10-04); the
+      source of this particular build is not in a public repository we know
+      of (see src/ffpfsc-pkg-tool/lib/README.md).
+      THE BUNDLED COPY IS MODIFIED (2026-10-05): three IL patches applied
+      with the patcher in src/ffpfsc-pkg-tool/patches/CecilPatch —
+      FilterFakeLibraryDirectory made a no-op, the root exclusion of
+      ampr_emu.index disabled, and package reading forced single-threaded.
+      What and why: src/ffpfsc-pkg-tool/patches/README.md. Pristine and
+      patched assemblies with SHA-256 sums: src/ffpfsc-pkg-tool/lib/.
+
+  BCnEncoder.NET 2.3.0                          — MIT OR Unlicense (NuGet)
+  CommunityToolkit.HighPerformance 8.4.0        — MIT (NuGet)
+  Magick.NET-Q8-AnyCPU + Magick.NET.Core 14.15.0 — Apache-2.0 (NuGet); the
+      native ImageMagick library (Magick.Native-Q8-arm64.dll.dylib, shipped
+      next to the executable) is under the ImageMagick License
+  .NET 9 runtime (self-contained)               — MIT
+
+Because the packaged runtime includes GPL-3-licensed code (LibProsperoPkg),
+ffpfsc-pkg-tool as distributed is a GPL-3-or-later work. The compiled
+application bundle embeds this binary (and MkPFS, also GPL-3-or-later) and is
+therefore distributed as a GPL-3-or-later combined work; that statement, the
+full component list and the licensing of this project's own source are in
+NOTICES.md and LICENSE at the repository root.
+The wrapper's own source lives in backend/native/src/ffpfsc-pkg-tool/.

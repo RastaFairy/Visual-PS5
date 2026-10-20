@@ -1,0 +1,13 @@
+<Project>
+
+  <!--
+    Internal-visibility bridge that a project imports conditionally so its `internal` surface reaches
+    a companion assembly at build time. Off by default; a run that needs it sets EnableInternalTests=true
+    on the MSBuild command line, and the importing project pulls this file in.
+  -->
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="SharpProspero.Tests" />
+  </ItemGroup>
+
+</Project>

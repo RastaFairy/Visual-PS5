@@ -1,0 +1,31 @@
+// Refined dark scheme. Overrides the theme's built-in dark palette to raise contrast, sharpen the
+// separation between the sidebar and the content column, and give code blocks and callouts a
+// distinct surface. Every variable below is one the theme reads by name.
+
+$color-scheme:                dark;
+
+// Backgrounds. Two shades: a near-black page ground, and a slightly lighter surface for the sidebar
+// and the code blocks. Warm-neutral rather than the theme default's cool blue.
+$body-background-color:       #0d1117;
+$sidebar-color:               #161b22;
+$code-background-color:       #161b22;
+$search-background-color:     #0d1117;
+$table-background-color:      #0d1117;
+$feedback-color:              #161b22;
+
+// Text. High-contrast body, slightly brighter headings, muted grey for the meta text under headings
+// and inside labels.
+$body-text-color:             #e6edf3;
+$body-heading-color:          #f0f6fc;
+$nav-child-link-color:        #b1bac4;
+$search-result-preview-color: #8b949e;
+
+// Links and accents. A cool cyan-blue that reads as interactive against the near-black background
+// and stays legible on a text run.
+$link-color:                  #58a6ff;
+$btn-primary-color:           #58a6ff;
+$base-button-color:           #21262d;
+
+// Borders. Subtle enough not to draw the eye, firm enough to separate rows in a table and cells in
+// a nav.
+$border-color:                #30363d;

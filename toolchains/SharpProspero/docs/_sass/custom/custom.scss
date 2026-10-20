@@ -1,0 +1,200 @@
+// Site-specific style on top of the theme. Loaded after the theme, so these rules refine the compiled
+// output rather than the theme's own variables.
+
+// Give the content a wider, easier measure on larger screens. The theme's default column is narrow,
+// which makes prose feel cramped and forces wide code samples and multi-column tables to scroll. This
+// keeps a comfortable reading width while letting the page breathe. Small screens are untouched.
+@media (min-width: 46.25rem) {
+  .main {
+    max-width: 1000px;
+  }
+}
+
+@media (min-width: 66rem) {
+  .main {
+    max-width: 1100px;
+  }
+}
+
+// Roomier typography for long technical reading: a taller line, clearer spacing between paragraphs
+// and list items, and headings that stand apart from the text above them.
+.main-content {
+  line-height: 1.65;
+
+  p {
+    margin-bottom: 0.9em;
+  }
+
+  li {
+    margin-bottom: 0.35em;
+  }
+
+  h1 {
+    letter-spacing: -0.01em;
+  }
+
+  h2 {
+    margin-top: 2.4rem;
+    padding-bottom: 0.35rem;
+    border-bottom: 1px solid $border-color;
+    letter-spacing: -0.005em;
+  }
+
+  h3 {
+    margin-top: 1.8rem;
+  }
+
+  h4 {
+    margin-top: 1.4rem;
+  }
+
+  // A little more room inside code blocks so samples are easy to scan, plus a firmer border so they
+  // read as a discrete surface against the page ground.
+  pre.highlight,
+  figure.highlight {
+    padding: 0.9rem 1.05rem;
+    border: 1px solid $border-color;
+    border-radius: 0.35rem;
+    font-size: 0.9em;
+  }
+
+  // Inline code sits on the same surface as the block form but stays inline-sized.
+  code {
+    padding: 0.12rem 0.35rem;
+    border-radius: 0.25rem;
+    font-size: 0.92em;
+  }
+
+  // Tables read as data grids: firmer borders, alternating row background, a header row that stands
+  // apart.
+  table {
+    display: block;
+    max-width: 100%;
+    overflow-x: auto;
+    border: 1px solid $border-color;
+    border-radius: 0.35rem;
+    border-collapse: separate;
+
+    th {
+      background-color: $code-background-color;
+      font-weight: 600;
+      border-bottom: 1px solid $border-color;
+    }
+
+    td, th {
+      padding: 0.55rem 0.75rem;
+      border-bottom: 1px solid $border-color;
+    }
+
+    tr:last-child td {
+      border-bottom: 0;
+    }
+
+    tr:nth-child(2n) td {
+      background-color: rgba(255, 255, 255, 0.02);
+    }
+  }
+
+  // Blockquotes get a clear left rule so they read as an aside.
+  blockquote {
+    padding: 0.3rem 0 0.3rem 1rem;
+    border-left: 3px solid $link-color;
+    color: $nav-child-link-color;
+    margin: 1rem 0;
+  }
+
+  // Links stay coloured but pick up a subtle underline on hover so the interaction is unambiguous.
+  a {
+    text-decoration: none;
+
+    &:hover {
+      text-decoration: underline;
+      text-underline-offset: 0.15em;
+    }
+  }
+}
+
+// Light/dark toggle button in the header.
+.theme-toggle {
+  margin: 0 0.6rem 0 auto;
+  align-self: center;
+  padding: 0.3rem 0.75rem;
+  font-size: 0.72rem;
+  line-height: 1;
+  cursor: pointer;
+  color: $link-color;
+  background-color: transparent;
+  border: 1px solid $border-color;
+  border-radius: 0.3rem;
+  white-space: nowrap;
+  transition: background-color 0.15s ease, color 0.15s ease;
+
+  &:hover {
+    background-color: $code-background-color;
+    color: $body-heading-color;
+  }
+}
+
+// Centre mermaid diagrams and give them breathing room.
+.mermaid {
+  margin: 1.5rem auto;
+  text-align: center;
+  padding: 0.5rem;
+  background-color: $body-background-color;
+  border: 1px solid $border-color;
+  border-radius: 0.35rem;
+}
+
+// Slightly tighter callout bodies so single-line notes do not look oversized. Firmer left border so
+// the type reads clearly.
+.callout {
+  border-left-width: 4px;
+  border-radius: 0.35rem;
+  padding: 0.6rem 0.9rem;
+
+  p:last-child {
+    margin-bottom: 0;
+  }
+}
+
+// Sidebar polish: firmer separator between the site header and the nav, tighter nav items with a
+// subtle hover.
+.side-bar {
+  border-right: 1px solid $border-color;
+}
+
+.nav-list .nav-list-item .nav-list-link {
+  padding: 0.35rem 0.6rem;
+  border-radius: 0.25rem;
+
+  &:hover {
+    background-color: rgba(255, 255, 255, 0.04);
+  }
+
+  &.active {
+    background-color: rgba($link-color, 0.12);
+    color: $link-color;
+    font-weight: 600;
+  }
+}
+
+// Search box: distinct surface on the dark scheme so it does not blur into the sidebar.
+.search-input {
+  background-color: $code-background-color;
+  border: 1px solid $border-color;
+  border-radius: 0.3rem;
+  padding-left: 0.75rem;
+  color: $body-text-color;
+
+  &:focus {
+    outline: 2px solid $link-color;
+    outline-offset: 1px;
+  }
+}
+
+// Footer: subtle separator above the copyright line.
+.site-footer {
+  border-top: 1px solid $border-color;
+  padding-top: 0.75rem;
+  color: $nav-child-link-color;
+}

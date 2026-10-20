@@ -85,7 +85,7 @@ assert.throws(() => normalize({name:'Flujo valor fuera de rango',components:[com
 assert.throws(() => normalize({name:'Flujo indice sin opcion',components:[component({id:'component-1'}),component({id:'picker',type:'select',items:['A','B']})],flows:[{id:'f-index',componentId:'component-1',event:'activate',action:'setValue',targetId:'picker',value:'2'}]}), /índice entero que apunte a una opción real/);
 
 
-assert.match(html, /runtime\/project-contracts\.js\?v=1\.1\.16/);
+assert.match(html, /runtime\/project-contracts\.js\?v=1\.1\.18/);
 assert.match(server, /function TestPS5HSTitleId\(/);
 assert.match(server, /TestPS5HSTitleId \$titleId/);
 assert.match(server, /TestPS5HSTitleId \$TitleId/);
@@ -106,8 +106,8 @@ assert.match(app, /csharpFloat\(\(c\.value-c\.min\)\/\(c\.max-c\.min\)\)/, 'C# p
 assert.ok(app.includes("const selectedIndex=c=>{const items=requireItems(c);const raw=Object.hasOwn(c.custom||{},'selected')?c.custom.selected:c.value;"), 'the Sharp selector must respect the model value when no explicit custom selection overrides it');
 assert.match(app, /El valor debe respetar el rango del control/, 'static analysis must report values outside a flow target range');
 
-assert.match(app, /El botón \$\{c\.id\} no tiene una acción ejecutable/, 'Sharp generation must reject interactive buttons with no callback instead of generating an inert button');
-assert.doesNotMatch(app, /return action\?`new Button\(\$\{lab\}, \(\) => \{ \$\{action\} \}\)`:`new Button\(\$\{lab\}\)`/, 'Sharp codegen must not emit a button without a callback as a fallback');
+assert.doesNotMatch(app, /El botón \$\{c\.id\} no tiene una acción ejecutable/, 'an explicit no-action button is a valid passive control, not a preflight build error');
+assert.match(app, /return action\?`new Button\(\$\{lab\}, \(\) => \{ \$\{action\} \}\)`:`new Button\(\$\{lab\}\)`/, 'Sharp codegen must preserve a passive button without generating an empty callback');
 
 
 assert.doesNotMatch(app, /c\[key\]=Number\(val\)\|\|0/, 'blank or invalid inspector values must not mutate the model to zero');

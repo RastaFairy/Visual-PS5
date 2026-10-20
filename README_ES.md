@@ -1,14 +1,21 @@
 # PS5 Homebrew Studio
 
-**Release 1.1.10 · IDE visual local para Windows.** Integra un editor visual 1920×1080, análisis de flujos, generación de código C# para SharpProspero y conversión del modelo visual a pantallas C++20 para los kits nativos OpenGL/Vulkan. Incluye un catálogo verificado por función de boilerplates, UI kits, drivers, complementos gráficos y aplicaciones comunitarias de referencia.
+**Release 1.1.18 · IDE visual local para Windows.** Integra un editor visual 1920×1080, análisis de flujos, generación de código C# para SharpProspero y conversión del modelo visual a pantallas C++20 para los kits nativos OpenGL/Vulkan. Incluye un catálogo verificado por función de boilerplates, UI kits, drivers, complementos gráficos y aplicaciones comunitarias de referencia.
 
-## Runtime nativo autónomo · 1.1.10
+## Runtime nativo autónomo · 1.1.18
 
 - Los títulos visuales OpenGL aplican un perfil de runtime propio del IDE. El framework upstream aporta el renderer y los componentes gráficos, pero su shell de galería deja de controlar el título generado.
 - L1, R1 y Touchpad no se reservan para cambiar de diseño ni abrir un panel informativo. El InputFrame llega a la pantalla generada sin filtrado; si el código generado no implementa una acción, esos botones no hacen nada.
 - El perfil se registra en .ps5hs-native-runtime.json, es idempotente y falla de forma segura si la estructura upstream cambia.
 - Se aplica al generar un título y al compilar proyectos visuales OpenGL anteriores reconocibles; no altera proyectos de galería importados que no proceden del lienzo de Homebrew Studio.
 - Vulkan conserva su pantalla directa; mantener OPTIONS para salir sigue siendo el comportamiento documentado de la plantilla.
+
+## Control de modificaciones nativas · 1.1.11
+
+- Antes de generar o compilar títulos nativos, autoriza por separado el generador, la integración del código visual, las herramientas de build y cualquier conversión de recursos de presentación o fuente TTF.
+- Las casillas parten desactivadas en cada operación. Un permiso concedido en una operación anterior no autoriza la siguiente.
+- Los cambios controlados por el IDE se registran en `.ps5hs-modifications.json`, con hashes SHA-256 anteriores y posteriores cuando cambian archivos. Desmarcar un permiso no revierte cambios ya aplicados.
+- La operación visual comprueba los permisos necesarios para recursos de presentación y fuentes personalizadas antes de crear o modificar el proyecto.
 
 ## Capas y lienzo · 1.1.9
 
@@ -47,7 +54,9 @@ En **Recursos**, importa una fuente TrueType `.ttf` (máximo 20 MiB) y selecció
 
 El servicio escucha únicamente en `127.0.0.1`; no expone el sistema de archivos a la red local. Los proyectos del editor se guardan en `Documentos\PS5HomebrewStudio\Projects`. `Ctrl+S` guarda el modelo visual. El editor puede abrirse y usarse sin descargar ningún toolchain.
 
-## Documentación 1.1.10
+## Documentación 1.1.18
+
+- [Auditoría de estabilidad y límites de validación](docs/STABILITY-AUDIT.es-ES.md)
 
 - Manual español: [docs/MANUAL.es-ES.md](docs/MANUAL.es-ES.md)
 - English: [docs/USER-MANUAL.en-GB.md](docs/USER-MANUAL.en-GB.md)
@@ -58,7 +67,7 @@ El servicio escucha únicamente en `127.0.0.1`; no expone el sistema de archivos
 - Русский: [docs/USER-MANUAL.ru-RU.md](docs/USER-MANUAL.ru-RU.md)
 - [Solución de permisos WSL](docs/WSL_PERMISSIONS.md) · [Guía de recursos de presentación](docs/PRESENTATION_ASSETS.md) · [Créditos y atribuciones upstream](docs/CREDITS.md)
 - [Ecosistema de proyectos upstream](docs/PROJECT_ECOSYSTEM.md) · [Matriz de SDK](docs/SDK_MATRIX.md) · [Registro de cambios](docs/CHANGELOG.md)
-- [Problemas conocidos y estado de validación 1.1.9](docs/KNOWN-ISSUES.es-ES.md)
+- [Problemas conocidos y estado de validación 1.1.18](docs/KNOWN-ISSUES.es-ES.md)
 - Fuentes Unicode: [guía en español](docs/UNICODE-FONTS.es-ES.md) · [English guide](docs/UNICODE-FONTS.en-GB.md)
 
 La UI de esta versión todavía está en español; los manuales traducidos no representan una localización completa de la interfaz.
@@ -218,7 +227,7 @@ La etiqueta **IA declarada** está reservada a declaraciones explícitas. Por ej
 - `index.html`, `styles.css`, `app.js`: editor visual y catálogo.
 - `docs/SDK_MATRIX.md`, `docs/PROJECT_ECOSYSTEM.md`: investigación técnica.
 
-**Validación de esta release:** pasan `node --check app.js`, `node --check runtime/layer-model.js`, `runtime/test-layer-model.js`, `runtime/test-native-generator.js` y `runtime/test-structure-explorer.js`. No se pudo ejecutar el parser oficial de PowerShell, una compilación C++20 real de PPSA19918 ni un empaquetado UltraPack de extremo a extremo porque esas herramientas no están disponibles en el entorno de preparación. Consulta `docs/KNOWN-ISSUES.es-ES.md` para separar las pruebas locales de las validaciones pendientes en Windows/WSL.
+**Validación de esta release:** pasan `node --check` sobre `app.js` y los módulos del runtime, las diez suites JavaScript de `runtime/` (incluida la nueva regresión de selectores de `test-build-flow.js`) y una prueba de navegador real del flujo Compilar → diálogo nativo → confirmar: la 1.1.17 reproduce el `TypeError: buttons.forEach is not a function` y la 1.1.18 lo elimina, desactiva los botones del diálogo durante el build y los reactiva en el `finally`. No se pudo ejecutar el parser oficial de PowerShell, una compilación C++20 real de PPSA19918 ni un empaquetado UltraPack de extremo a extremo porque esas herramientas no están disponibles en el entorno de preparación. Consulta `docs/KNOWN-ISSUES.es-ES.md` para separar las pruebas locales de las validaciones pendientes en Windows/WSL.
 
 
 ## Corrección 1.0.1
