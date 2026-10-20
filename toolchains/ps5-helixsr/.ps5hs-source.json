@@ -8,13 +8,35 @@
   "vendoredSnapshot": true,
   "vendorRepository": "RastaFairy/Visual-PS5",
   "vendoredAt": "2026-10-20T15:57:08Z",
-  "submodulesMaterialized": false,
-  "sourceOnly": true,
+  "submodulesMaterialized": true,
+  "sourceOnly": false,
   "mirrorRepository": "manoma080/ps5-helixsr",
-  "unresolvedSubmodules": [
-    "external/ps5-vulkan@6875f21438b7e51a1377a30f2d7f77b3e0154cd6"
-  ],
-  "buildableWithoutExternalRepo": false,
+  "buildableWithoutExternalRepo": true,
   "originalMethod": "vendored-snapshot",
-  "sourceRevisionRecorded": true
+  "sourceRevisionRecorded": true,
+  "materializedSubmodules": [
+    {
+      "path": "external/ps5-vulkan",
+      "repository": "mpereiraesaa/ps5-vulkan",
+      "sourceUrl": "https://github.com/mpereiraesaa/ps5-vulkan",
+      "commit": "6875f21438b7e51a1377a30f2d7f77b3e0154cd6",
+      "tree": "de24817f1fb6d1afb0dd86e07301820fee4a9e9b",
+      "materializedAsFiles": true
+    }
+  ],
+  "submoduleRecovery": {
+    "status": "verified",
+    "method": "vendored-tree",
+    "completedAt": "2026-10-20T17:11:28Z",
+    "note": "The declared Vulkan Gitlink was replaced with the exact verified tree as ordinary files."
+  },
+  "historicalSnapshots": [
+    {
+      "archiveCapturedAt": "2026-10-09T03:12:58Z",
+      "waybackSnapshot": "https://web.archive.org/web/20261009031258/https://github.com/blackbearreloaded/ps5-helixsr",
+      "rootCommit": "028fcd7f737a95183cf688ee4bca8a9e48fe0c40",
+      "submoduleCommit": "6875f21438b7e51a1377a30f2d7f77b3e0154cd6",
+      "archivedPath": "toolchains/archive/ps5-helixsr-2026-10-09"
+    }
+  ]
 }

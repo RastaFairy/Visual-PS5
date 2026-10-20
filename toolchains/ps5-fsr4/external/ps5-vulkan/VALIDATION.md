@@ -1,0 +1,6741 @@
+# Runtime graphics validation
+
+## Current evidence policy (2026-09-24)
+
+This file preserves dated hardware receipts, including failed candidates; a
+historical requirement to run every selected CTS leaf twice is not the current
+delivery rule. For a new capability, require a public-API contract, positive
+and negative host tests, and **one** strict native run tied to the exact build
+artifact, with a deterministic GPU-visible oracle and clean lifecycle. Repeat a
+run when its result is ambiguous, flaky, or changed by a fix, not merely to
+produce a second identical receipt. Focused upstream CTS is valuable for
+regression and diagnosis but an absent or unmapped CTS case is not, by itself,
+a reason to withhold an otherwise measured bounded capability. A real failing
+applicable CTS result must remain visible and be investigated; this policy
+does not turn failures into passes. None of these project checks is a claim of
+Vulkan conformance or a complete core-version implementation. The ordinary
+device reports the experimental, non-conformant Vulkan 1.3 profile below.
+
+## Reading the current checkpoint (2026-09-26)
+
+The September 25 diagnostic DXVK render below remains evidence for its exact
+artifact and configuration, not a test of every later commit. Subsequent
+shipping promotions include transform feedback, compute subgroup BASIC,
+1024-descriptor capacity, synchronization2, imageless framebuffer,
+robustness2, memory/template routes, dynamic rendering and host-coherent
+memory, followed by extended dynamic state. Their bounded witnesses are
+separate from an end-to-end DXVK rerun. The clean Vulkan 1.3 workload below
+now uses the ordinary SDK, with no diagnostic switches, API-version bypass
+or external core-name/query translation.
+Do not rewrite older receipts to describe the newly promoted configuration.
+
+## Experimental Vulkan 1.3 native DXVK
+
+On 2026-09-26, pinned DXVK 2.6.2 (`9d6f54a1ade20d1d27dd421024717a636f3d8c68`)
+ran against the ordinary SDK from clean source
+`0e57778ac8c6062decd87b4153b7969e2fd35865`. The instance and physical-device
+profile report Vulkan 1.3; the native trace directly measured device API 1.3.0.
+Original DXVK version and feature-level checks were retained. No consumer
+source patches, SDK diagnostic switches or external core/KHR translation were
+used. Necessary PS5 static-link and platform/WSI overlays remain part of the
+native build; this is not an unmodified desktop binary.
+
+- Eboot SHA-256: `e044ffe26cc80026ae5b4beac8890e2d677e7c0ae5f682265126d68a640b8818`.
+- Run: `20260926T084924349Z_PPSA99994_ps5vk_0x80a5f39b798a`.
+- D3D11 feature level 11_0 device creation and offscreen rendering succeeded.
+- Readback: 4096 pixels, zero mismatches, checksum `6e17a4c5` matching the oracle.
+- Strict artifact identity and clean-source verification passed; finalized
+  execution and shutdown passed, with no recorded refusal, crash or GPU hang.
+- The strict Vulkan 1.3 consumer acceptance verifier returned `passed=true`.
+
+This proves the measured 64-by-64 offscreen workload, not arbitrary games,
+onscreen DXVK presentation, all Vulkan 1.3 contracts or conformance. General
+core coverage remains a separate audit. Implemented command/feature paths and
+remaining resource limits are listed in [API.md](API.md).
+
+## DXVK profile ledger on the Vulkan 1.3 probe (2026-09-26)
+
+The public capability probe was rebuilt from clean `main` (`aa7f36e8`) with
+no SDK switches and run once on PS5: eboot SHA-256
+`d43c14d7f5bbd0857b935e631ffb67c81d5a49be4d0b62e8933f8147dc2486d7`, run
+`20260926T093641794Z_PPSA99994_ps5vk_0x833a95f2c360`. `tools/verify_dxvk_probe.py`
+verified it strictly: device API **1.3.0**, 33 device extensions, 46/62
+requested values met, read through the Vulkan 1.1/1.2/1.3 aggregate
+structures. It is the current probe in `dxvk_v262_evidence.json`; every
+earlier Vulkan 1.0 probe is kept under `historical_capability_probes` and is
+not relabelled. `tools/check_dxvk_profile.py` now requires each recorded probe
+value to equal the public host query of the same row (`coreVersionQueries` in
+`tools/dump_device_reporting.c`), so a reporting change cannot leave a stale
+current score.
+
+The four-axis matrix is **45/62 ready with 17 blockers**. Four rows the query
+already met gained admitted execution evidence: `geometryShader` (the
+nineteen-case witness in [the geometry promotion](#geometry-promotion-2026-09-17-later-window)),
+`tessellationShader` (the 403/403 default-profile run in
+[the T04 validation](#merged-t04-tessellation-validation-2026-09-20)),
+`shaderDrawParameters` (its existing witness, now with an implementation
+review) and `maxBufferSize` ([the 1 GiB buffer witness](#dxvk-1-gib-buffer-witness-2026-09-25)).
+`maintenance4` stays blocked: compound `LocalSizeId` specialization
+expressions and wider producer output vectors are refused, and no witness
+executes its creation-description memory-requirement queries directly.
+`apiVersion` stays blocked: the profile requires 1.3.204 including the patch
+level, and the device reports 1.3.0. DXVK's own 1.3.0 device filter passes.
+The other 15 blockers are queried false or zero: two Vulkan 1.2 subgroup
+features, seven Vulkan 1.3 features and six inline uniform block limits
+(`inlineUniformBlock` is one of the seven).
+
+## DXVK 1 GiB buffer witness (2026-09-25)
+
+`examples/dxvk_heap_witness` (built by `tools/build_dxvk_heap_witness.py`, no SDK
+switches) creates a 1 GiB `VkBuffer` three times. Each time its requirements
+report exactly 2^30 bytes; it is bound to one 1 GiB allocation, and a compute
+dispatch writes 64 KiB windows at offsets 0, 512 MiB and 1 GiB - 64 KiB through
+storage-buffer descriptors. An allocation one granule above 1 GiB is refused.
+Eboot SHA-256 `922a30dc538e461a1b3c8f0f39f0878c0393d54ac5a6996c4bc1e44c5a67a6ca`, run
+`20260925T221655760Z_PPSA99994_ps5vk_0x5e227aaceb74`, log SHA-256
+`4da5d280149601c917a1707e379e2773039a59a5d95b921a5d1c0d09d138323f`:
+`tools/run_dxvk_heap_witness.py` verifies it strictly, with zero value and
+guard mismatches in every window, a bounded fence, and all resources retired.
+
+The compute BASIC promotion (#569) used the ordinary SDK, eboot SHA-256
+`367a0e166bbca1fa5c5da45b19f2781db8ca65d20a00310019db87d596fecc96`, run
+`20260926T005334401Z_PPSA99994_ps5vk_0x66aebd64c59f`: 896 outputs,
+zero mismatches, digest `6bd1999d`, strictly verified. It establishes the
+32/COMPUTE/BASIC subgroup report, not the extended subgroup feature bits.
+
+The experimental procedural graphics profile was tested on an owned PS5 with
+firmware 12.02 on 2026-09-12, using the packaged native SDK and PSBC/ACO gfx1013.
+
+## Merged T04 tessellation validation (2026-09-20)
+
+The merged default native runtime-graphics build passes 403/403 unchanged upstream
+CTS cases: 304 regression cases and 99 tessellation, clip/cull and resource
+cases. Strict artifact/report verification and clean application closure pass.
+The frozen acceptance selection has since grown to 306 cases with the two
+fragment `frag_side_effects` leaves (306/306, see
+[the fragment promotion](#fragment-stores-and-atomics-promotion-2026-09-20));
+the 99 tessellation cases stay outside that frozen selection, so 405 distinct
+original upstream cases have passed across the two receipts, not in one run.
+Experimental tessellation flags and shader/probe bypasses are off. A separately
+built public SDK consumer verifies feature advertisement and the intended limits.
+See [tessellation status](TESSELLATION_STATUS.md) for the scope and additional
+native witnesses. This is focused validation, not complete CTS or conformance;
+T04 was merged to `main` in PR #158. DXVK matrix admission of the 99 passing
+tessellation leaves remains separate evidence bookkeeping.
+
+The integrated receipt identifies:
+
+- SELF SHA-256: `2e0fc22b7de6401f7d12f2f6359efc14a223b4917100acad4c98edecf726d45c`.
+- QPA SHA-256: `4a81d0f27f374fa3dae7fd4be7ebb15237d08ffbb874325ca4df2b85a49a4218`.
+- Selection SHA-256: `6098db45ae68a487ea2fba5438b6d31e9b152217c2c3f6f8eb1eb985702c02e1`.
+- Upstream CTS commit: `a0270c1897597e6c77679870e10415398a13001c`.
+
+Dated sections below retain earlier measurements, including failed candidates.
+Their unadvertised-feature statements describe those historical artifacts, not
+the current runtime. No historical receipt has been relabelled as this run.
+
+## Clip-cull native acceptance
+
+The packed pre-raster distance export is implemented and measured, and
+`shaderClipDistance` and `shaderCullDistance` are deliberately **not
+advertised**. This section records what the profile does, what was measured on
+hardware, and the normative reason the two features stay false.
+
+### Implemented coverage
+
+The pre-raster stage may declare `gl_ClipDistance` and `gl_CullDistance` with
+static constant indices inside the ceilings of `src/graphics_stages.h`
+(8 clip, 8 cull, 8 combined), and `src/spirv_graphics_interface.c` validates the
+`gl_PerVertex` members, the array sizes and the combined ceiling before the
+program is compiled. The runtime adapter (`native/runtime_shader.c`) packages a
+distance export only when the compiled masks agree with the register state the
+pinned compiler emitted (`PA_CL_VS_OUT_CNTL`, `SPI_SHADER_POS_FORMAT`,
+`SPI_VS_OUT_CONFIG`), and the resulting unresolved `AGC_LINKAGE` slot is accepted
+only for that verified shape. A single-word mutation of any of those registers
+is refused.
+
+The private coverage witness (`src/clip_cull_witness.c`, enabled by
+`PS5VK_CLIP_CULL_PROBE`, judged by `tools/verify_clip_cull.py`) draws one
+bounded scene per case and reads the colour and depth footprint back. Two
+deployments of the exact package were run on the console and both verified
+strictly, with a clean `ps5log/1` receipt and a confirmed Close Game:
+
+* a single clip half-space produced exactly one cleared 2048-pixel half;
+* a two-distance quadrant case produced exactly 1024 cleared pixels;
+* a partially clipped primitive left the untouched half unchanged;
+* a primitive whose cull half-space was negative at every vertex was discarded,
+  and a mixed negative/non-negative primitive was not.
+
+Pulling the distances out of the shader, or corrupting the packed masks,
+fails the witness: the pixels are the oracle, so the measured result is the
+rasterizer, not the metadata.
+
+### Why the feature is not advertised
+
+The upstream module that owns these built-ins, `vktClippingTests.cpp`, gates
+**all** of its user-defined distance leaves on the same two features through
+`requireFeatures(FEATURE_SHADER_CLIP_DISTANCE)` and
+`requireFeatures(FEATURE_SHADER_CULL_DISTANCE)` in `testClipDistance`, and its
+factory registers two variants of every leaf:
+
+* `*_fragmentshader_read` declares the distance arrays as fragment-shader
+  inputs and reads them (`fragmentShaderReads`), and
+* `*_dynamic_index` writes them through a loop with a non-constant index
+  (`indexingMode`).
+
+The measured support is narrower than the family in exactly one place. Dynamic
+indexing is **not** refused: a pre-raster module that redeclares
+`out float gl_ClipDistance[2]` and writes both elements through a loop is
+compiled by the pinned compiler with the full-width mask
+(`clip_distance_mask=0x03`, the same value the equivalent static-index module
+reports) and is accepted by the native header builder
+(`tools/inspect_graphics_compiler.c`, which now prints the masks:
+`distances clip_mask=00000003 cull_mask=00000000`, `native_header_result=0`).
+That variant now has its own witness case: the probe writes both clip distances
+through a loop whose index is not a literal (the loop permutes it by the vertex
+index, so each element is written exactly once per vertex), and the verdict is
+that the rendered image must be **byte-identical** to the statically indexed
+quadrant - both at the oracle, which judges every pixel, and at the native
+digest relation, which refuses a run where the two differ. Writing the
+distances dynamically and getting the static image back is the whole content of
+the variant; the witness's own module is accepted by the host compiler with the
+full-width masks (`clip_mask=00000003 cull_mask=0000000c`,
+`native_header_result=0`), so the case is not refused before it can run. The
+native result is now taken: the nine-case witness run
+`20260917T072542029Z_PPSA99994_ps5vk_0x53eadab9451` (eboot
+`f02fcf3dadfbe2f19ef360af2964b7ca18060801912bc54d0477577230f69b04`) reports
+`cases=9 clip_mask=03 cull_mask=0c strict_verified=1` with every case
+`missing=0 foreign=0 wrong_color=0 verified=1`, and the dynamically indexed
+write hashes **exactly** like the statically indexed quadrant
+(`digest_dynamic_index = digest_clip_quadrant = 85679b0d4edbc725`). So the
+compile-time full-width mask the host measured is what the hardware executed,
+and the variant's whole content - writing the distances through a non-constant
+index and getting the static image back - holds on the console. None of the nine
+cases faulted.
+
+The same witness now also carries the **T03 cross-regression**: a tenth case
+draws the quadrant program through `vkCmdDrawIndirect`, and the run
+`20260917T083050864Z_PPSA99994_ps5vk_0x8ccc37d94b6` (eboot
+`27f43ae6ec047dad6823f0ce7ff68505f650034096c5ce590562867a283ebed4`) is
+`strict_verified` with `cases=10`. The evidence parser requires the split
+explicitly, so the run cannot earn the relation on the direct path: case 9 logs
+`indirect=1` and every other case logs `indirect=0`, and case 9's image is
+byte-identical to the direct quadrant's
+(`digest_indirect_quadrant = digest_clip_quadrant = 85679b0d4edbc725`,
+`expected=1024 covered=1024 missing=0 foreign=0 wrong_color=0 verified=1`). Every
+other case's digest is unchanged from the direct run, so the indirect path is the
+only variable. The packed distance export, the register state the adapter
+requires and the clipping result therefore hold through T03's indirect command
+path, not only through direct draws.
+### What promoted the two features (2026-09-17)
+
+The fragment read that used to be refused is now implemented, measured and part
+of the canonical acceptance selection, so `shaderClipDistance` and
+`shaderCullDistance` are reported true by the graphics build.
+
+**The compiler describes both ends of the interface.** The merged pre-raster
+stage publishes one semantic word per packed distance register it exports (low
+byte `PSBC_SEMANTIC_DISTANCE_REGISTER + register`, parameter index above it,
+emitted after the described varyings), and the pixel stage publishes the same
+key for the register it reads. The register a read lands in comes from the
+read's position in the packed builtin space - the linker already places a
+`gl_ClipDistance[4]` read in the second slot with component 0, and a cull array
+that starts after a one-component clip array in the second slot as well - so the
+compiler derives it from that slot and component, not from the attribute index,
+which the linker numbers densely. Measured on the pinned fixtures: the vertex
+exporting two clip components and one varying reports output semantics
+`[15 param0, 48 param1]`, the fragment reading `clip[0]` reports `[48 attr0,
+15 attr1]`, a fragment reading only `clip[4]` reports `[49]`, and a combined
+1-clip/7-cull pair reports `[48, 49]` - with `PSBC_UNRESOLVED_AGC_LINKAGE` gone
+in every case.
+
+**The driver delivers a described read.** `distances_valid` now requires one
+described word per exported register and counts the parameter exports from that
+description; `ps5vk_runtime_graphics_distance_reads_described()` checks the
+pixel stage's read report against the producer's packed masks (clip low bits,
+cull immediately after) and requires every register the pixel stage names to
+exist once on the export side; and the pipeline gate refuses a pair whose read
+is not described end to end. The profile delivers such a pair in the shipping
+build, not only in the diagnostic one.
+
+**The limits are reported at the Vulkan floor.** `maxClipDistances` and
+`maxCullDistances` are 8 and `maxCombinedClipAndCullDistances` is 8: the two
+packed position registers after POS0 hold eight float components, clip
+components first and cull continuing immediately after them, so either feature
+may use all eight and the combined budget is eight. The stage-interface policy
+bounds a declaration against exactly that width (a 4-clip/4-cull module is
+accepted, an 8-clip/8-cull module is refused), which is what makes the reported
+numbers executable rather than merely the floor.
+
+**Acceptance, frozen and run.** The canonical selection is now 275 acceptance
+leaves (211 + 64 clipping leaves: clip counts 1..8 for the combined family with
+one cull count each, both indexing modes and the fragment-stage read) with 14
+diagnostics. One strict run of
+`build/upstream-cts` passed **275/275** (selection hash
+`3067f94c99fcfb5047e2ac4f7fa009caa898fbe55c62829ea10ccf6d71cb463d`, eboot sha256
+`b58d88149e623adc5cd9d75dcb19d87bd4e6774c43f494093d0ea3c1d5bd3bc7`, run
+`20260917T114927552Z_PPSA99994_upstream-cts_0x13a34bfa824d`, Close Game verified and the title
+stopped). The clipping family is what validates the reported limits: the leaves
+step through every clip count up to eight and the combined clip+cull budget.
+
+**Two honest gaps remain inside the family.** The `complementarity.{1..8}` and
+`misc.negative_and_non_negative_cull_distance` leaves stay diagnostics
+(`expected_status` `NotSupported`): the pinned binary does not report them when
+they are filtered by the name the module's construction implies - they are
+absent from both the `ps5log/1` transcript and the QPA in two full runs, while
+every other clipping leaf reports - so they are not claimed as covered. The
+tessellation and geometry variants of the family are outside this profile's
+advertised features and stay unselected.
+
+The native witness behind the fragment read is the eleven-case clip/cull
+package: case 10 (the pixel stage reading `gl_ClipDistance[0]`) verifies with
+`expected=4096 covered=4096 missing=0 foreign=0 wrong_color=0`, digest
+`f50dd9368fee6cc9`, in the acceptance run
+`20260917T104552228Z_PPSA99994_ps5vk_0x102afbaa5b65` (eboot
+`e1cc2681…`), and the read digest differs from the control's as the verifier
+requires; an earlier run on a pre-promotion build measured the same digests,
+which is what makes the result reproducible rather than a single sample. The
+witness package is the diagnostic profile; the shipping profile is covered by
+the upstream run above, whose 16 fragment-read leaves execute the read through
+the ordinary pipeline gate.
+
+### What this does and does not establish
+
+It establishes the vertex-stage clip/cull contract, the packed register state
+the pinned compiler emits for it, the per-half-space culling rule and the
+hardware clipping result for the measured shapes, the compiler and adapter
+behaviour of a dynamically indexed declaration and the witness case that
+requires it to reproduce the static image, and - since the promotion above - the
+fragment stage's read of the interpolated distances, which is what the
+promotion section records: the compiler describes the distance registers on both
+sides, the driver requires that description before it delivers, and the 64
+selected upstream clipping leaves pass inside a 275/275 acceptance run on the
+shipping profile. It does not establish the tessellation or geometry variants of
+the family (their features are not advertised), the two `complementarity`/`misc`
+leaves the pinned binary does not enumerate under their implied names, any
+distance width beyond the reported eight components, or Vulkan conformance; it is
+not a conformance claim, and the features are advertised only for the graphics
+execution path this repository builds.
+
+## Historical optional stage blockers: geometry and tessellation (2026-09-17)
+
+At this historical checkpoint both stages were unadvertised, with the reason measured
+rather than inferred. These measurements were taken with the driver built
+against an isolated PSBC candidate (the merged-geometry identification plus the
+hull-packaging entry point, delivered as dependency pull requests that are
+**not** merged), so they are provisional in that sense; only derived facts and
+identities are published here, and the raw captures stay private.
+
+**Geometry.** The compiler emits a self-consistent merged program for the
+witness's vertex+geometry pair - one ACO program
+(`SW (VS+GS+), HW (NEXT_GEN_GEOMETRY_SHADER)`) - and the two halves agree on the
+exchange layout it uses: the vertex half stores each vertex's 9-dword (36-byte)
+ring item to shared memory and the geometry half reads the same dwords back
+(position in dwords 0-3, the varying in 4-6, bookkeeping in 7-8), with the same
+per-item stride the package publishes as the ES item size and programs into
+`VGT_ESGS_RING_ITEMSIZE`. Positions therefore arrive: the passthrough case covers
+exactly the pixels the control covers. **That sentence is withdrawn** - see the
+measurement below: it came from reading the oracle's expected-coverage count
+(4096, a property of the predicate) as if it were the image's coverage, and the
+image is in fact empty. What the varying does is not the only failure either: in
+a single diagnostic run the same read path produced the empty image for some
+cases and a drawn image for others, and the same case has produced both in
+different runs. Concretely, the SUPPRESS case emits nothing by construction and
+its own verdict certifies its image as the cleared target (`6927fac75e74a325`);
+in the same run PASSTHROUGH and the SENTINEL carry exactly that digest (they drew
+nothing) while SHRINK, RECOLOR and AMPLIFY drew something - and in an earlier run
+RECOLOR carried the cleared digest. A handoff that sometimes sees the vertex data
+and sometimes reads zeros is a *race*, not a constant offset, which is what a
+missing visibility or ordering guarantee between the two halves of the merged
+program looks like; the host-side A/B already ruled out a fixed wrong base, item
+size or stride. The candidate's merged identification and ES-half sizes are
+bookkeeping for the driver, not the fix. The
+exchange is an LDS ring rather than an SPI parameter-export stream, so the export
+configuration is not the path under question. What remains open is the item-index
+mapping (the vertex half indexes by its lane id, the geometry half by the
+per-vertex offsets the hardware hands it) and whether the ring's LDS region is
+allocated and visible between the two phases. The same path also faults: a
+geometry program that reads `gl_in[i]` in a loop over the input array loses the
+device (the submission never completes) whether it runs before or after the
+other modes, so the fault follows that program rather than its surroundings, and
+the loss was reproduced again in the table run below. `geometryShader` therefore
+stays false.
+
+The table run in question
+(`20260917T075403021Z_PPSA99994_ps5vk_0x6cab7462e29`, eboot
+`ae239b852a70e0a68516e0fb4e0e947ebd430a51bbf036148e5d88370844ca07`) reports every
+case in one log: control and constant emission verify, SUPPRESS verifies once its
+input-less fragment stage is present, the sentinel, passthrough and shrink
+fail, recolor and amplify draw something other than the cleared target, and
+POSITIONS then loses the device (`vkQueueWaitIdle` `rc=-4`). The first attempt at
+this run died entering SUPPRESS with `vkCreateGraphicsPipelines` `rc=-8`
+(`VK_ERROR_FEATURE_NOT_PRESENT`): this branch never carried the synthetic
+input-less fragment stage, so a geometry program that emits nothing was refused
+for an input its pre-raster stage cannot export. That is why the witness now has
+a table mode (`PS5VK_GEOMETRY_ORDER_PROBE`) as well: the shipping build is
+fail-fast and stopped at the sentinel, so it never reached the case that was
+broken on this tree.
+
+That reading is not an inference from mixed builds. The same payload
+(`ae239b852a70e0a68516e0fb4e0e947ebd430a51bbf036148e5d88370844ca07`, verified by
+hash on the console before the pair of runs) was run twice through the table
+mode, and the two logs differ exactly on the cases that read the ring:
+control (`aa3cf584`), constant emission (`aa7d3f82`) and suppression
+(`6927fac7`) are bit-identical between the runs and verified both times, while
+the sentinel (`6927fac7` then `38d61b94`), passthrough (`6927fac7` then
+`0a4ac999`), shrink (`93df309c` then `02ad379e`), recolor (`38bcd39e` then
+`e0e55980`) and amplify (`fc3e50b7` then `45abe76c`) each produce a different
+image, and the loop case loses the device in both (`vkQueueWaitIdle` `rc=-4`).
+Runs `20260917T075403021Z_PPSA99994_ps5vk_0x6cab7462e29` and
+`20260917T080954327Z_PPSA99994_ps5vk_0x7a8352a45b2`. The register state for the
+ring is published by the merged program and programmed by the driver
+(`VGT_GS_ONCHIP_CNTL`, `VGT_GS_OUT_PRIM_TYPE`, `VGT_ESGS_RING_ITEMSIZE`,
+`VGT_GS_MAX_VERT_OUT`, `GE_NGG_SUBGRP_CNTL`), so what remains open is whether the
+values describe the launch the hardware performs - not whether the registers are
+there.
+
+The witness also carries an observable sentinel for exactly that question: the
+input triangle emitted unchanged with the colour computed from the position the
+geometry half read (`x*0.5+0.5`, `y*0.5+0.5`, `0.25`), so the verdict asserts the
+value the read produced instead of only the coverage. A zero read collapses the
+triangle and a shifted item moves or reshapes it, while the control's own image
+is refused because the sentinel's blue differs. Its stated limit is that
+exchanging the two structurally identical input triangles wholesale maps the
+image onto itself, so it separates correct, zero, garbage and shifted reads, not
+that exchange. The first run to use it
+(`20260917T072649435Z_PPSA99994_ps5vk_0x54e5f74a004`, eboot
+`7f1523a9157bec7eeed7ceeaaf8bf25646ef9364cb52d2a4124ed7c9df0f9ed3`) reports
+control `verified=1`, constant emission `verified=1`, and the sentinel
+`verified=0` with `expected=4096 covered=0 wrong_color=4096` - the image carries
+none of the expected per-pixel colour, the first value-level judgement of this
+path rather than another coverage check. What image it produced instead is not
+stable: that run hashed `436f0a07`, the first table run hashed the cleared target
+`6927fac7`, and the second hashed `38d61b94` - three different images for the
+same case, which is the non-determinism measured below and not a constant zero.
+The shape's own limit is that the render pass clears to opaque black, so a log
+alone does not separate "the read returned zero for the colour computation" from
+"the read returned zero everywhere and the triangle collapsed"; comparing the
+digest against the suppression case's does, and the constant-emission case
+passing in the same run shows the stage draws and the fragment path works.
+The harness is fail-fast in the shipping profile, so the POSITIONS case did not
+execute after the failing verdict in that run and the device did not fault
+there - it faults whenever it is reached, as the table runs show.
+
+**Tessellation.** The isolated compiler candidate does produce a two-program
+hull buffer for a real vertex+control pair - the control half and the vertex half
+in one buffer, with the vertex half's program and resource registers published -
+but the same metadata declares the package unresolved because the hull/domain
+pipeline state is not part of it. At that checkpoint the driver had no executable
+tessellation path: pipeline creation refused it before any
+compile. `tessellationShader` therefore stayed false, and the remaining work was
+driver-side assembly plus the hull pipeline state - the same class of
+vendor-side question as geometry.
+
+## Geometry promotion (2026-09-17, later window)
+
+The two defects the section above was opened for are fixed and measured, and the
+feature is advertised on the graphics path.
+
+**The ES->GS read.** Every NGG pre-raster program now has
+`VGT_ESGS_RING_ITEMSIZE` programmed to **1** instead of the compiler's legacy
+**5**: the hardware scales the per-vertex offsets it hands the geometry half by
+that value, so the stage read item `5k` where it had to read item `k` and only
+the first vertex of each primitive came back right. The regression in
+`tests/test_runtime_shader.c` fails before the change and passes after it. The
+device loss in the POSITIONS case was the witness's own loop missing `++i`, so it
+emitted past `max_vertices` forever; with the loop fixed the case runs.
+
+**Determinism.** The same payload run twice now produces byte-identical images
+for **all nineteen** cases - control `aa3cf584`, constant `aa7d3f82`,
+suppression `6927fac7`, sentinel, the three readbacks, the envelope, the
+invocations, the components and both input families - where the pre-fix table
+above showed the ring-reading cases drifting between runs. Runs
+`20260917T180918672Z_PPSA99994_ps5vk_0x285db17d6406` and
+`20260917T180931272Z_PPSA99994_ps5vk_0x2860a07ed6b2`, eboot
+`14478e545d4ab6cc2bc815f4c0d4987d358f2be211434f263669c5bd607284c8`.
+
+**What the stage is measured to do.** The nineteen-case witness verifies
+strictly in both its table and its shipping fail-fast payload
+(`20260917T180945535Z_PPSA99994_ps5vk_0x2863f2ad4767`, eboot
+`ae9e32761215bb845a81d991033b84d86742a001973958153d92c92929493663`): the two
+triangle tiles, the shrink, the suppression, the varying rewrite, the
+amplification, the sentinel value, the raw readback of an indexed vertex, the
+per-primitive id, the **point** and **line** input families under their own input
+assemblies (218/218 with digest `ebb18b9b90df07ca` and 467/467 with
+`deab7726a7ac7625`), 32 invocations, 256 emitted vertices, 64 input components
+and 64 output components that the pixel half consumes and folds into the colour
+(`expected=1024 covered=1024`, centre `808024ff`). The five mandatory limits are
+therefore reported at the Vulkan floor they exercised - 256, 32, 64, 64 and
+1024 - and `geometryShader` is reported true by the graphics build
+(`core_feature_bits` in `src/vk_device.c`, the platform mask in
+`native/platform_ps5.c`, the limits in `src/graphics_limits.h`).
+
+**Conformance.** The promotion run measured the pinned geometry module's leaves
+with the feature advertised: 294 selected leaves, **286 Pass and 8 Fail**. The
+eleven leaves whose own upstream oracles passed are now acceptance cases
+(`dEQP-VK.geometry.input.basic_primitive.triangles` and its two conversions, the
+six `output_<n>` leaves, `output_vary_by_attribute`, and its instancing variant).
+Four of the eight failures were the geometry stage's uniform-buffer, sampled-image
+and instancing descriptor variants, and they are now acceptance too: the pinned
+module binds those resources to the GEOMETRY stage alone, which the compiler
+profile now admits when - and only when - the pipeline carries that stage, and
+which the draw path's descriptor plan now carries for the merged pre-raster
+program once the native create records the geometry pair on it (a host regression
+checks both directions). The four strip-topology leaves that remained were
+blocked on one measured fact: the pinned geometry builder enables primitive
+restart for strips (`vktGeometryTestsUtil.cpp:153-172`), they are the only leaves
+built with `TRIANGLE_STRIP`, and the profile refused that input-assembly state
+before the adapter was asked. It now carries it: pipeline creation accepts the
+state for `LINE_STRIP`/`TRIANGLE_STRIP` and refuses it for lists, and the draw
+path programs the pair RADV programs on gfx10 - the enable in the user-config
+`VGT_MULTI_PRIM_IB_RESET_EN` (0x3092c), the index in the context
+`VGT_MULTI_PRIM_IB_RESET_INDX` (0x2840c, 0xffff / 0xffffffff by index width) and
+the `SQ_NON_EVENT` workaround the GFX10 synchronisation bug needs. The witness
+measures it end to end: the indexed strip with a restart index between two quads
+draws **foreign=0** with the cut, and 72 foreign pixels without it - the bridging
+primitive a missing cut threads across. The frozen
+selection re-run is **304/304 Pass, zero Fail, no NotSupported, title closed**
+(selection
+`7406de91ef883de7c1dd8522926773b72c846834fde37b45f686ff5994c8601b`, eboot
+`afe1755291ef231f6f7c3e730abcd062f3a57618e879c758a1f0a89a42c207aa`), with all
+twenty-nine geometry leaves the module produces for a device that advertises the
+feature passing their own upstream oracles - the input families, the conversions,
+the output-count and varying families, the descriptor variants, the strip
+restart family and both per-primitive-id leaves. A geometry stage that reads
+nothing per-vertex declares no gl_in array at all, so the policy binds it to the
+pipeline's topology through the input primitive its execution mode states and
+drops a declared attribute no shader input consumes, which Vulkan permits.
+
+**Probe.** The DXVK 2.6.2 capability probe was re-measured against the advertised
+profile and verifies strictly: `geometryShader` observed **1**, 10 of 62
+requirements satisfied, 52 blockers. The matrix keeps that row as a blocker
+because the probe executes capability queries, not geometry draws.
+
+Tessellation was still unadvertised in this geometry-promotion receipt because
+that compiler pin had no loadable hull package. The later tessellation candidate
+and its separate evidence are documented at the top of this page.
+
+## Fragment stores and atomics promotion (2026-09-20)
+
+`fragmentStoresAndAtomics` is now advertised by the shipping graphics profile.
+The promotion rests on two independent hardware oracles rather than on the
+feature query itself.
+
+The bounded native witness used one control draw and one candidate draw over a
+64x64 target. Its exact SELF SHA-256 was
+`e83cac3dad67b48880409a4ba6874954e325881d71cc8ff835b06ca4a1b4b295`;
+run `20260920T181405989Z_PPSA99994_ps5vk_0x1145d7afedfdc` reported
+`control_counter=0`, `candidate_counter=4096`, all 30 trailing guard words
+intact, fence success, zero tracked allocations after teardown and a complete
+`ps5log/1` BYE. This distinguishes a real fragment-stage SSBO write from a
+CPU-side initialization or a merely negotiated feature.
+
+The two unchanged upstream
+`dEQP-VK.rasterization.frag_side_effects.{color_at_beginning,color_at_end}.kill`
+oracles then ran with the frozen regression selection. The canonical shipping
+run `20260920T213224464Z_PPSA99994_upstream-cts_0x11f2fc5c6a394` passed
+**306/306**, with zero `Fail`, zero `NotSupported`, no missing or unexpected
+cases, selection SHA-256
+`b456e3ca1a93119db27fd58bbf7659932d3d25cbc2e7c7336cf0bfdd58683f06`,
+SELF SHA-256
+`03b52352f2ae3d073775a88b9734b8effca9538c991ce5335715bf809e79d356`
+and QPA SHA-256
+`44a0077b1a3c8ed3fa2b104ae406a6a7d2ac4f2ee141a9f01914a58dd2b04e82`.
+The supervised invocation confirmed `PPSA99994 stopped=True`; a missing local
+output directory prevented only the first QPA copy, so the same finalized log
+was reassembled and verified offline without rerunning the console.
+
+Finally, the public-ABI capability probe artifact
+`1df87adfa07d0fabe702a685f71b0f2f9ad444f441e06d7d789ef3c55e69fd55`
+strictly observed `fragmentStoresAndAtomics=1` in run
+`20260920T212913672Z_PPSA99994_ps5vk_0x11f0359d4019e`. It reported 12 of 62
+target values and 50 blockers; the DXVK matrix counts 10/62 requirements ready
+because every ready row still needs API, implementation, CTS and native
+execution evidence, not merely a true query bit.
+
+## Multiview native acceptance
+
+On 2026-09-16 the original 48 multiview leaves (masks, rectangular clears,
+vertex ViewIndex and fragment ViewIndex) passed unchanged upstream pixel oracles.
+The subsequent combined selection passed **165/165**, with no failures,
+NotSupported cases, missing results or transport gaps. Five unrelated diagnostic
+cases remain outside acceptance. This is focused execution, not full CTS or
+Vulkan conformance.
+
+The combined run `20260916T203823854Z_PPSA99994_upstream-cts_0x145ddaffc8494`
+used:
+
+- SELF SHA-256: `deaabb648bf288ab7cd1ec4c8788378785206e62957adab5fbb7e3019d080dd8`.
+- Selection SHA-256: `984ab83f7c7586eea2243847f494e4db20784b4590d2772332912ab653aaad8c`.
+- QPA SHA-256: `11cef34a5320ec66eac1fc3de5884efb44c7db31b1e35363ccd4f2e1b347648d`
+  (11,080,881 bytes; 28,857 reassembled chunks).
+- Process exit 0, strict identity/result verification and verified Close Game.
+- PSBC commit `c96cb63ba2c3b65b22ae76457e726dde7aeb2ace`, including a real
+  fragment user-SGPR for ViewIndex and the full 0–31 compiler range.
+
+The prerequisite input-attachment oracle is separate:
+`20260916T192041030Z_PPSA99994_ps5vk_0x141a00db047f9`, SELF
+`fccbe810989ec007c490a7f99ab56e9dda306a801e7b930a6fccb0d6c614e7c6`.
+It measured an actual fragment subpassLoad across a colour-write/input-read
+dependency: 4096/4096 pixels matched the CPU reference (hash `e5c69f45`),
+with 1024 guard words intact. Image creation alone is not that evidence.
+
+A fresh public-SDK capability run,
+`20260916T204935601Z_PPSA99994_ps5vk_0x1467a16affe93`, SELF
+`d5d0e1d9946a7e1deaa0c8ac72e6c9e274614264d9b94b1d5d0d43a52cf6ca82`,
+measured `multiview=true`, `maxMultiviewViewCount=6` and
+`maxMultiviewInstanceIndex=134217727` using the explicitly recorded
+`VK_KHR_multiview` feature/property query route. Strict TCP ps5log/1 verification
+and Close Game both passed. The historical six-view and instance-floor
+execution witnesses below remain intact and supply the dedicated boundary
+evidence; the selected CTS leaves alone do not test the maximum instance index.
+
+The three corresponding profile rows were satisfied by that run; the matrix
+was **4/62 ready, 58 blockers** at the time (see
+[the DXVK v2.6.2 profile section](#dxvk-262-public-abi-capability-probe) for the current
+17/62). This does not advertise the Vulkan 1.2 aggregate query
+structures or raise `apiVersion` above 1.0. The equivalent KHR fields and the
+separate unmet API-1.3 requirement remain explicit. Raw QPA and transport logs
+remain private; sanitized identities are recorded here and in the manifest.
+
+## Indirect and indexed draw native acceptance (2026-09-16)
+
+DXVK262-T03 promotes the three Vulkan 1.0 core features
+`drawIndirectFirstInstance`, `multiDrawIndirect` and `fullDrawIndexUint32`,
+with `maxDrawIndirectCount = 65535` and `maxDrawIndexedIndexValue = 2^32-1`
+reported through the public `VkPhysicalDeviceFeatures` / limits queries. The
+executable contract is described in [API.md](API.md#indirect-commands); the
+evidence below is one candidate build, strict at every step, and the promotion
+carries no `apiVersion` change, no conformance statement and no
+`VK_KHR_draw_indirect_count`.
+
+**Upstream CTS 211/211 Pass**, run
+`20260916T235354084Z_PPSA99994_upstream-cts_0x15088ceacb458`:
+
+- SELF SHA-256: `fb8836a18de9c2900cf842a88eef6c72e0537bc87e4e57471cb3d8b36865f2d6`.
+- Selection SHA-256: `266c95632eb658fa9178d3019b9ff57e4da3e785a5bfc54ff1b36b98298984eb`
+  (the previous 165 acceptance leaves plus 46 original indirect leaves: the six
+  `shader_draw_parameters` first-instance and `draw_index` leaves, and forty
+  `indirect_draw` sequential/indexed leaves with multi-command, first-instance
+  and four-instance shapes, including the 16-byte index bind and allocation
+  offsets).
+- QPA SHA-256: `de55e1c79828b06a9e50ccff5628c546c61e3daf16c518b57576548411c98b17`
+  (28,417,868 bytes; 74,005 reassembled chunks); process exit 0; no
+  NotSupported, Fail, missing, duplicate or unexpected case; verified Close
+  Game. Five unrelated diagnostics remain outside acceptance.
+
+A first candidate run (`20260916T234945696Z_PPSA99994_upstream-cts_0x1504ef9d20ea0`)
+had every graphics leaf, the 46 new ones included, pass, while all 57 compute
+leaves failed at `vkCreateComputePipelines`: the compute compiler adapter fails
+closed on any enabled device feature it does not list and the CTS enables the
+three newly reported core features. The adapter now lists the three
+graphics-only bits, a real-compiler regression test pins a full graphics
+device mask, and the run above is the clean repeat.
+
+## Integrated acceptance on the synced tree (2026-09-17)
+
+After `main` (with T03 and its two review fixes) was merged into `t04-final`,
+the same frozen selection was run again on the tree this pull request proposes:
+**211/211 `Pass`**, zero `Fail`, zero `NotSupported`, no missing, unexpected or
+duplicate case, exit status 0, and the title closed and confirmed stopped.
+Deployed SELF SHA-256
+`8c3a4a5614703cb4f9bb0abda6cbc923ef797edad227e876b15aead972701983` (read back
+through FTP before launch), selection SHA-256
+`266c95632eb658fa9178d3019b9ff57e4da3e785a5bfc54ff1b36b98298984eb`, run
+`20260917T073014110Z_PPSA99994_upstream-cts_0x57e06d347b9`, reassembled report
+28,417,865 bytes with SHA-256
+`24af364c39c204f97bd3f5e1a6dd77b044c0be00d2a940c92d9f83153ed80a6f`. This is
+the T02 + T03 regression on the integrated tree; nothing optional runs inside
+that selection, and no feature is advertised by it.
+
+**Public-SDK indirect witness**, run
+`20260916T235643977Z_PPSA99994_ps5vk_0x150b05cf0227a`, SELF
+`779e882aac0f4eec5276e3b5149cc2e2633a204ee739ddb7eb558f8a2e906b3a`, log
+SHA-256 `932f2237de1887e7e2b1157f5a68cbd03c5109280d8e4c542c7ffb80a5880b47`,
+`strict_verified=1`, verified Close Game. A 256x256 grid target receives one
+triangle per draw or instance in the cell it selects, coloured with the
+delivered built-ins or its 16-bit cell index, and every cell is judged from
+the linear staging readback (no wrong cell, no stray coverage):
+
+- indirect `firstInstance = 5` over three instances and indexed indirect
+  `firstInstance = 200` over two instances (BaseVertex 0xff from
+  `vertexOffset = -1`): instance cells 0..2 / 0..1 carry `gl_InstanceIndex`
+  5..7 / 200..201;
+- strided (32-byte, junk between) and packed multi-draw of four commands with
+  one zero-primitive command: cells 0, 2, 3 carry DrawIndex 0, 2, 3 and their
+  own `firstInstance`; cell 1 stays clear
+  (`PS5VK_MULTI_DRAW_EXPANDED commands=4 drawing=3 draws=3`);
+- GPU-generated arguments: host-written zero-vertex commands overwritten by a
+  compute dispatch behind a compute -> indirect barrier, consumed by the next
+  submission (`firstInstance` 20..23 observed);
+- **65535 packed commands in one call**: 65535 distinct pixels, each carrying
+  its own 16-bit DrawIndex, pixel 65535 clear
+  (`commands=65535 drawing=65535 draws=65535 arenas=66`,
+  `PS5VK_GRAPHICS_BATCHES arenas=66 words=2098325`, 65 chained launches);
+- 32-bit indices: `0x80000000..0x8000000b` with `vertexOffset = INT32_MIN`
+  (direct and through an indexed indirect command), `0x01000000..0x0100000b`
+  with `vertexOffset = -16777216`, and a uint16 control, each landing in cells
+  0..3 by `gl_VertexIndex / 3`. This is a bounded legal witness of the fetched
+  32-bit index and the signed BaseVertex add at bit 31 and at the 2^24
+  boundary; it does not touch out-of-range vertices and does not by itself
+  cover primitive restart, which the pipeline path still refuses.
+
+**Public-ABI capability probe**, run
+`20260916T235800636Z_PPSA99994_ps5vk_0x150c2361e8369`, SELF
+`da7c036e93720a514d377e9911760f333041546bf66a6c975e87472adfad6ca9`, log
+SHA-256 `5f3e685c15a2e1613dd451e25a88fc1ddb9602342599d2e6938004bb24cb33d8`:
+strict verification derived 7 satisfied / 55 blockers from the pinned profile,
+device API 1.0.0, five device extensions, the three core features reported
+true and the multiview KHR route unchanged; verified Close Game.
+
+All three runs came from the same source state (t03 promotion candidate; the
+committed executable sources equal the tested ones). Raw QPA, transport logs
+and receipts stay private under `private-captures/t03/`.
+
+## Layer-addressed target measurement (2026-09-15, DXVK262-T02 slice A)
+
+Multiview's normative core is per-view broadcast into one framebuffer layer per
+view, so the first question is whether the pinned GFX1013 AGC/DCB target path
+can be pointed at a chosen layer at all. Slice A measures exactly that, and
+nothing else: no capability is advertised, no feature or property is flipped.
+
+The public path cannot express the shape - `vkCreateImage` refuses
+`COLOR_ATTACHMENT` with `arrayLayers != 1` (`native/image_ps5.c:26`) and
+`ps5vk_native_target` refuses a non-zero `baseArrayLayer` - so the probe binds
+the ordinary single-layer attachment to the **second of two aligned slots** in
+one allocation, seeds the slot no attachment is bound to with a sentinel
+(`0x5a5a5a5a`), renders normally, and reads both slots back. A layer-addressed
+target is expressible only if the render lands in the bound slot and the
+neighbouring slot stays untouched.
+
+Built with `PS5VK_LAYER_PROBE=1` and the audited graphics control
+(`build/graphics/control-i83c3zcj`, LLPC control from
+`experiments/graphics/scene3d.pipe`, `native_input_version=3`) on top of the
+audited compute bootstrap (`build/compute/control-frxdmh8o/first.elf`), the
+probe artifact `dist-graphics-api/PPSA99994/eboot.bin` sha256
+`733928103cc03780e1d9f23ab502efe590318e0d5b7cca35ae92d114e3f8df57` ran once on
+the owned console and reported, in a run that ended with
+`BYE reason=graphics-api-end`:
+
+```
+PS5VK_LAYER_TARGET_PROBE role=color slot_bytes=8912896 bind_offset=8912896 sentinel=5a5a5a5a untouched_mismatches=0 rendered_changed=295611 rendered_oracle=0 valid=1
+PS5VK_LAYER_TARGET_PROBE role=depth slot_bytes=8847360 bind_offset=8847360 sentinel=5a5a5a5a untouched_mismatches=0 rendered_changed=2211840 valid=1
+```
+
+* **Colour:** the attachment bound to the second slot rendered there (295611
+  words changed) and the first slot is byte-for-byte the seeded sentinel
+  (0 mismatches). `rendered_oracle=0` is the probe's triangle oracle, which does
+  not apply to the `scene3d` control program: the measured question is *where*
+  the render landed, not what was drawn.
+* **Depth:** the depth attachment bound to its second slot was written across
+  the whole slot (2211840 of 2211840 words changed) and its neighbour is
+  untouched, so depth selects by address through the same mechanism.
+* Both roles therefore need no distinct routing; the host test in
+  `tests/test_targets_ps5.c` pins the arithmetic behind that answer - one
+  address-carrying register per layer, advanced by exactly one layer footprint,
+  with the depth role requiring 64 KiB alignment and the colour role 128 KiB.
+
+Supporting runs: the triangle-program variant (runtime compiler, no depth
+attachment) reported `role=color ... rendered_oracle=1 valid=1` on all three
+pipeline iterations, and the offline variant that carries the depth attachment
+reported both roles valid. Raw runs are in `projects/logging_server/runs`:
+`20260915T232549250Z_PPSA99994_ps5vk_0x1006c3bf20055` (sha256
+`08bac6623f255ed886dd4d4c3aa67abce55a3bbadb01d95273e325f52330c19f`),
+`20260915T232924537Z_PPSA99994_ps5vk_0x1009e5be3c2e8` (sha256
+`a711367b11900af3a77aa61a78f8178583f1359cc99d6e0111dbf1043e889e00`) and the
+quoted strict run `20260915T233257773Z_PPSA99994_ps5vk_0x100d0018b47fa` (sha256
+`53590a744240319f23ea4adb8ba73e9307f09feb6de742819e46444bb3a05b59`). The
+console was released with `running=none` confirmed.
+
+What this does *not* claim: anything about view masks, `ViewIndex` lowering,
+per-view query results or the CTS leaf set. It answers the address-selection
+question that every later slice depends on; the view-mask and `ViewIndex` work
+that followed is recorded below.
+
+## DXVK 262 multiview six-view witness
+
+Slice A above established that a layer is addressable. The slices that followed
+landed the pieces that address selection needs and then measured them once, end
+to end, on the console. The canonical run is
+`20260916T050841017Z_PPSA99994_ps5vk_0x11321e8ad91f2` (log SHA-256
+`e49e80220af638b69f20f7b8c7503a05316e518a411f64a1df772a50c64070fe`), from the
+native artifact `eboot.bin` SHA-256
+`92a4073e227f28028e6a57a4a8d14f8e829bdc25c21e7e3ceb5a3c42f33c3c01`, built with
+the private diagnostic gate (`PS5VK_MULTIVIEW_DIAGNOSTIC=1`) and the witness knob
+(`PS5VK_MULTIVIEW_VIEW_PROBE=1`), deployed with exact FTP readback and
+ShadowMountPlus refreshed and verified before the launch.
+
+```text
+PS5VK_MULTIVIEW_VIEW_GATE mask=0000003f views=6 view_index_slot=1 vertex_count=3 color_first=02000200 color_step=00000200 depth_first=02001000 depth_step=00000100
+PS5VK_MULTIVIEW_VIEW_SUBMITTED draws=1 views=6 mask=0000003f
+PS5VK_MULTIVIEW_VIEW_LAYER layer=0..5 view=0..5 pixels=4096 color_expected=4096 color_other_view=0 color_other=0 depth_expected=4096 depth_other=0 depth_remainder_clear=0 depth_remainder_unknown=12288 color_first_foreign=00000000 color_foreign_views=00 depth_foreign_views=00
+PS5VK_MULTIVIEW_VIEW_PROBE views=6 mask=0000003f framebuffer_layers=1 extent=64 layers_per_image=7 color=detiled depth=footprint_count load_op=dont_care depth_words_per_layer=16384 guard_layer=6 guard_words=49152 guard_mismatches=0 strict_verified=1
+PS5VK_GRAPHICS_API_CLEANUP_COMPLETE
+PS5VK_READY_FOR_SHELL_CLOSE resources_retired=1
+BYE seq=36 reason=graphics-api-end
+```
+
+One native draw with a real `0x3f` view mask rendered into six 64x64 array layers
+of one seven-layer image, the seventh layer being a guard. The compiled runtime
+vertex stage declared the `ViewIndex` slot in its metadata (slot 1 of 3), the
+draw ABI delivered each view's index to it, and the backend emitted one draw per
+view in ascending order into ordered, distinct colour and depth targets. Every
+layer's DETILED colour is exactly its own view's colour (4096 of 4096 pixels, no
+pixel of another view anywhere) and every layer's depth footprint holds exactly
+its own view's 4096 words with none of another view's; the remaining 12288 words
+per layer still hold the sentinel the probe seeded, and the complete trailing
+seventh layer of both attachments is untouched (49152 guard words, 0 mismatches).
+Close Game then reported a verified close and the console returned to
+`running=none`.
+
+Two earlier runs of this work are **invalidated, not evidence**: the first one
+(`20260916T042417717Z_PPSA99994_ps5vk_0x110b5d18f767e`) failed before any
+submission because the probe's command-buffer allocation named no command pool -
+a harness error, and its pre-submit gate is the only thing it shows; the second
+(`20260916T044546978Z_PPSA99994_ps5vk_0x111e1ff6ec7c9`) failed the verdict on the
+oracle's UNORM8 expectation for view 5 (green is `5/8*255 = 159.375`, which
+rounds to 159, not 160). Neither run says anything about GPU behaviour beyond
+what is written here, and the canonical run above supersedes both.
+
+Historical scope: this witness by itself did not justify advertising multiview.
+It measured the floors privately without changing public queries or CTS.
+The later [native acceptance](#multiview-native-acceptance) adds original CTS
+execution and a fresh public KHR query; it does not rewrite this run's identity.
+
+## DXVK 262 multiview instance floor
+
+The same private scene then measured the other multiview built-in's floor:
+`firstInstance = 0x07ffffff` (2^27-1, the lowest value Vulkan 1.1 allows as
+`maxMultiviewInstanceIndex`), with exactly one instance. The canonical run is
+`20260916T061619722Z_PPSA99994_ps5vk_0x116d2e36312a6` (log SHA-256
+`b76940fa824c7a991e7b0d9077185002f8d2ff6e631410b1bc356e2d1ae655b2`), from
+artifact `eboot.bin` SHA-256
+`0d2654c10fd727a2a63b5e3ae23e42a94b83529d4abc6ffe3dde7653411cc1da`, built with
+`PS5VK_MULTIVIEW_VIEW_PROBE=1 PS5VK_MULTIVIEW_INSTANCE_PROBE=1
+PS5VK_MULTIVIEW_DIAGNOSTIC=1`, deployed with exact FTP readback and
+ShadowMountPlus refreshed and verified.
+
+```text
+PS5VK_MULTIVIEW_VIEW_GATE mask=0000003f views=6 view_index_slot=2 start_instance_slot=1 vertex_count=4 color_first=02000200 color_step=00000200 depth_first=02001000 depth_step=00000100
+PS5VK_MULTIVIEW_VIEW_DRAW vertices=3 instance_count=1 first_instance=07ffffff
+PS5VK_MULTIVIEW_VIEW_LAYER layer=0..5 view=0..5 pixels=4096 color_expected=4096 color_other_view=0 color_other=0 depth_expected=4096 depth_other=0 depth_remainder_clear=0 depth_remainder_unknown=12288 color_first_foreign=00000000 color_foreign_views=00 depth_foreign_views=00 instance_failed=0
+PS5VK_MULTIVIEW_VIEW_PROBE views=6 mask=0000003f framebuffer_layers=1 extent=64 layers_per_image=7 color=detiled depth=footprint_count load_op=dont_care depth_words_per_layer=16384 guard_layer=6 guard_words=49152 guard_mismatches=0 instance=07ffffff instance_count=1 instance_witness=1 strict_verified=1
+PS5VK_GRAPHICS_API_CLEANUP_COMPLETE
+PS5VK_READY_FOR_SHELL_CLOSE resources_retired=1
+BYE seq=37 reason=graphics-api-end
+```
+
+The gate proves that the compiled vertex stage declared BOTH built-in slots
+(`view_index_slot=2`, `start_instance_slot=1` of four user-SGPRs) - the instance
+index is the compiler's instance id plus the start-instance slot, so a metadata
+regression dropping either one fails before anything is recorded. The vertex
+stage tests the instance value as an INTEGER, never through a float (2^27-1 is not
+representable and would round to 2^27): when the bit test fails it writes a fixed
+colour no view can produce, which the oracle counts as an instance failure rather
+than as a foreign view. All six layers report `instance_failed=0` with their own
+detiled colour and their own counted depth footprint, the trailing guard layer is
+untouched, `strict_verified=1`, and the lifecycle closed cleanly with Close Game
+verified and the console back at `running=none`.
+
+This historical run measures the instance floor `0x07ffffff`; it did not itself
+change public queries or the CTS selection. The later
+[native acceptance](#multiview-native-acceptance) supplies the separate public
+query and execution evidence used for promotion. The original floor measurement
+and its artifact remain unchanged.
+
+## Shader draw parameters promotion (2026-09-15)
+
+`VK_KHR_shader_draw_parameters` is advertised on the still-apiVersion-1.0
+device and the extension's feature is reported through the Vulkan 1.1 features
+chain. The promoted contract is the direct and single-indirect
+BaseVertex/BaseInstance/DrawIndex=0 shape PSBC exports a slot for;
+`multiDrawIndirect` and `drawIndirectFirstInstance` stay false, so the four
+`draw_index` leaves and the two `*_first_instance` leaves are excluded rather
+than reported as NotSupported.
+
+One strict artifact-bound session produced all of the evidence below.
+
+* **Upstream CTS 117/117 Pass** from payload eboot sha256
+  `0d797edebf83c783bda7d2cb073ca7392a7751dd8f760c9c8d94154f5cfa41ec` with
+  selection hash `656c2d6e31820084385f8948b952673704930d2882d2417b030e84fab3b3b070`
+  (`build/cts-run7.json`): `strict_verified=true`, `fail_count=0`,
+  `not_supported_count=0`, `missing=[]`. All eight selected leaves Pass -
+  `base_vertex.{draw,draw_indexed,draw_indirect,draw_indexed_indirect}` and
+  `base_instance.{draw,draw_indexed,draw_indirect,draw_indexed_indirect}`.
+* **Public-SDK/native witness** from consumer eboot sha256
+  `69ef5b3fa83641febbaad2edd477664135c108cd336c895cf335d1c4dbe77fab`
+  (`build/consumer-run6.json`): `strict_verified=true`, `lifecycle_ok=true`.
+  Six draw cases reported the exact pinned triples
+  (`list_direct` 7/9/0, `list_indexed` 5/3/0, `strip_indexed_negative`
+  254/11/0, `list_indirect` 11/0/0, `strip_indexed_indirect` 17/0/0,
+  `strip_direct` 21/23/0), each with 1352 covered pixels and `uniform=1`. The
+  same six frames were then copied into the linear staging image and read back
+  through `vkGetImageSubresourceLayout` with the same encoded words
+  (`ff000907`, `ff000305`, `ff000bfe`, `ff00000b`, `ff000011`, `ff001715`),
+  `row_pitch=256` and `staged_bytes=16384`. The transfer-destination witness
+  reported `clear_word=ff604020 clear_matched=4032 upload_word=ff1e140a
+  upload_matched=64 valid=1`.
+* **Refreshed public capability probe** from artifact eboot sha256
+  `7ddc91102c3bada3111417937abc1af6668864da3649234bd1ee8731e4b7a593`: two
+  runs, both `strict_verified`, reporting `device_extensions=4`,
+  `satisfied=1`, `blockers=61`, `total=62` (run ids and log hashes are recorded
+  in `conformance_inventory/dxvk_v262_evidence.json`).
+
+The prerequisites that made the leaves runnable are bounded and separately
+recorded: the R8G8B8A8_UNORM colour attachment that also declares a transfer
+destination (`CAP_DST` with real clear and buffer-to-image execution), the
+GENERAL layout shape that role uses (`UNDEFINED` to `GENERAL` for a transfer
+write, the clear in `GENERAL`, `GENERAL` render-pass attachments, and the
+resource-less barrier into the colour-attachment stages), and the linear
+transfer-destination staging image the draw module reads back through (real
+`vkGetImageSubresourceLayout`, a real `GENERAL`-to-`GENERAL` colour copy
+executed as the existing GPU-completion detile, and the matching capability
+queries). `tests/test_cts_draw_case_trace.c` walks the pinned sequence on the
+host and executes the readback; every neighbouring shape stays fail-closed in
+`tests/test_image_copy_clear.c`, `tests/test_texture_format.c`,
+`tests/test_vk_device.c`, `tests/test_upload_commands.c` and the consumer
+verifier's fail-closed suite.
+
+The DXVK v2.6.2 row for this feature therefore records `cts-pass` and
+`native-evidence` while its `api` axis stays a blocker: the profile still
+reports Vulkan 1.0 and the DXVK target is API 1.3.204, so the row is not
+`profile_satisfied`.
+
+## Independent texture-upload submissions
+
+On 2026-09-14, the original upstream binding-model cases
+`primary_cmd_buf.bind.combined_image_sampler_mutable.{vertex,fragment,vertex_fragment}.single_descriptor.2d`
+exposed a backend restriction: an upload submission was rejected unless it
+also contained a render pass. These cases upload a two-layer RGBA8 image, use
+a single 2D view with a linear/repeat sampler, and eventually compare four
+rendered quadrants with the unchanged CTS image reference.
+
+Uploads now use the same DMA/cache emitter in an independent submission or a
+render prelude. Staging-buffer ranges are flushed, commands remain job-owned,
+and tentative image layouts commit only after the exact GPU completion serial.
+The standalone path does not create a color target or perform a CPU pixel copy.
+Host tests cover multi-layer DMA encoding, no pixel/layout mutation during
+preparation, rollback on span/planner/capacity failures and unsupported commands;
+the focused test also passes ASan/UBSan.
+
+At the upload-only revision, the three upstream cases completed their uploads
+on GFX1013 but next encountered an initial color-attachment barrier: its
+write-only access scope was rejected. The follow-up below resolves that
+restriction; the later readback and flat-interface fixes let all three cases
+pass their full oracles (see below). They are not yet added to the canonical
+106-case selection. No sampler limits or conformance claim change.
+Upload completion alone is not verification of the uploaded texture pixels.
+
+Regression validation: two runs of the existing **106-case** upstream selection
+passed all original oracles, with complete TCP QPA reconstruction, identity
+checks, zero tracked allocations and independently confirmed Close Game.
+The exact signed SELF, verified by FTP readback before remount/launch, is
+`5446ca4b8ff55d6f66444f13c81ff5fd7c9ffc71fa8739876448527f60c0ec55`;
+the selection SHA-256 is
+`344a278e325846f6918903e48b3262e2551178aab2caa022c67e8dd3539f5b62`.
+Runtime identity fields echo the deployed manifest and do not independently
+hash the running SELF. Temporary rejection-location instrumentation was removed
+before this regression build.
+
+### Initial color-attachment transitions
+
+The frontend and native emitter now share the initial discard-transition
+contract. Empty, read-only, write-only, combined color-access scopes and generic
+memory-access aliases are accepted; stage/access compatibility, image usage,
+ownership and full-subresource checks still apply. A standalone transition
+uses the existing job completion and tentative-layout machinery, without
+requiring a render pass. Host regressions check scope preservation, invalid
+stage/access/usage rejection, real cache-packet emission and deferred layout
+commit; the focused tests also pass ASan/UBSan.
+
+The same three original sampler cases were executed again on 2026-09-14:
+all complete the separate color-transition submission. The vertex case also
+completes its draw, then fails the independent image-readback submission.
+The fragment and combined-stage cases instead fail graphics-pipeline creation.
+Those were the remaining implementation gaps at this revision, not CTS passes;
+the next section records the readback fix. Upstream sources, oracles and the
+strict selection remain unchanged.
+
+The existing 106-case selection above passed with signed SELF SHA-256
+`7b74ade0920b1c77d42d867f0d3339c71307c6b84c291dd4b17bd1fd7ccc0b67`,
+verified by exact FTP readback before remount. Two independent runs passed
+all original oracles, strict TCP QPA/identity checks, zero tracked allocations
+and confirmed Close Game. A decoded post-close image showed the home menu
+without an error dialog; the automated stream was stopped afterward.
+The integrated host and sanitizer gates also passed. As above, runtime
+identity is a manifest echo, not an independent running-SELF measurement.
+
+### Independent color readback
+
+The bounded full-image RGBA8 readback can now run separately from the render
+pass. Both routes use a shared validator for the color-to-transfer transition,
+copy region, destination span and host-read barrier. Preparation records only
+tentative layout state. The native job emits a cache-flushing GPU completion
+packet and waits for its exact serial before the existing CPU detile publishes
+the readback bytes; only then can the submission retire. This is not a GPU
+detile implementation or support for arbitrary formats/regions.
+
+On 2026-09-14, two identical-artifact runs of the original three-case sampler
+diagnostic each returned **one Pass and two Fail**. The vertex-only case now
+passes the unchanged upstream bilinear image comparison, covering its separate
+upload, color transition, textured draw and image readback. Fragment and
+combined-stage cases still failed graphics-pipeline creation at this revision.
+Full diagnostic acceptance was false; no failing case was skipped or counted as supported.
+Transport reassembly and expected package identity were checked independently
+of that failing acceptance verdict, and both runs confirmed Close Game.
+
+The signed SELF SHA-256 is
+`596b34c2c484d4c5930608a3c8615431ef1f71cd5105d720a93d4fd70b922b0f`.
+Host tests exercise both submission shapes, deferred layout/pixel mutation,
+invalid commands, stages/access scopes, spans and regions, and rollback of an
+existing render-layout transaction. They pass ASan/UBSan; the integrated host
+and sanitizer gates also pass. Two identical-SELF runs of the unchanged strict
+106-case regression selection passed every original oracle, identity/QPA
+verification, zero tracked allocations and confirmed Close Game. This bounded
+result does not promote advertised sampler counts or establish Vulkan conformance.
+
+### Flat fragment interfaces and independent input bases
+
+The sampler pipeline failures had two separate causes. The frontend rejected
+the `Flat` decoration outright. After admitting valid flat interfaces, PSBC
+still rejected their linkage metadata: standalone SPIR-V input variables had
+no assigned driver locations, so different inputs lowered to attribute base
+zero. The compiler now uses Mesa's `nir_recompute_io_bases` for fragment inputs
+after IO lowering and before RADV shader-info/ACO processing. Vertex descriptor
+locations remain unchanged. PSBC is pinned to
+`b30c2e380850adc1d76063d4d5498f2c6305cc39`.
+
+The frontend records `Flat`, checks its instruction shape and requires it for
+integer fragment inputs. It preserves location/type matching without requiring
+VS and FS interpolation decorations to match. A paired owned shader fixture
+tests smooth values and flat float, signed integer and unsigned vector values.
+Real PSBC compilation, semantic flags, native-header preservation and VS/FS
+linkage are checked; malformed decorations and integer inputs lacking `Flat`
+are rejected. The compiler's own test additionally checks sparse locations and
+both provoking-vertex modes. These host tests do not prove provoking-vertex
+selection on hardware.
+
+On 2026-09-14, two identical-SELF executions of the original three-case sampler
+selection each passed **3/3**, including the unchanged bilinear image oracle
+for vertex-only, fragment-only and shared-stage sampling. Exact deployment
+readback preceded remount; TCP QPA/selection/identity verification and Close Game
+passed on both runs. Signed SELF SHA-256:
+`ea441cb1b82199ee54e0a0ec65892f3ed24dc46f08fa8c0eedc73d39dde91dcd`.
+The diagnostic selection SHA-256 is
+`b3355e976a932437d98ec69b49705302ed0e3b1c498065b08eb15262f5e9d882`.
+This is genuine upstream pixel evidence for these specific cases, not a
+general sampler-limit promotion or complete interpolation qualification.
+Two further identical-SELF runs passed the unchanged canonical 106-case
+selection, strict QPA/identity verification and Close Game. All four runs
+ended with zero tracked allocations and successful TCP BYE. A decoded
+post-close image showed Home without an error dialog, and the CLI stream was
+stopped. The integrated host gate and sanitizer gate passed with this pinned
+compiler. Runtime SELF identity remains a manifest echo, separate from the
+exact deployment readback check.
+
+## Shared-stage sampler hardware qualification
+
+On PS5 GFX1013 / firmware 12.02, 2026-09-14, the independent public-SDK
+consumer passed two identical-artifact shared-stage runs. Build this finite
+diagnostic with `python3 tools/build_consumer.py --shared-stage-samplers`;
+without that flag the earlier fragment-only diagnostic remains the default.
+
+- Consumer source: `04c7bb36b6229f6857643db8e29f9542c8ec0c7b`.
+- SELF SHA-256:
+  `35e0d62f82b90938ead0e6feb012b083ea3912d465e6fd836f28fb592d11790c`.
+- Complete TCP log SHA-256:
+  `903e7b4b91219bc323b61a35ecccc7722876a89423b34f607348d4392ef5575e`
+  and `4e3130e2d86e1a7af29d2efc0a1e5bf5e457feb7a97d47cdc8c03048b70551c7`.
+- Four sets, binding 7, 24 combined-sampler references per set, using four
+  palette textures. The vertex shader sums reverse weights 96–1; the fragment
+  shader sums forward weights 1–96 and combines both stage contributions.
+  Upload barriers explicitly target vertex and fragment shader reads.
+- Four descriptor-update rounds require independent BGRA references
+  `6d3a3b2f`, `6d373d35`, `6d42392a`, `6d2e4135`. Each run matched exactly
+  471,744 non-background pixels per round with zero bad pixels, 40 paired GPU
+  submissions/completions, earlier compute/synchronization witnesses and
+  fixed-function presentation, zero tracked allocations and complete TCP BYE.
+- Both runs passed independently confirmed Close Game. A decoded Remote Play
+  frame after the shared runs showed the home menu without an error dialog.
+- The default fragment-only consumer was freshly rebuilt at the same source
+  revision and passed its original pixel references and lifecycle checks:
+  SELF `edfa661b4e282b06a346beeda2f9235a86861663a74d638780aafa04d10009b3`.
+
+Package identity was checked by exact signed-file FTP readback, followed by a
+verified remount and fresh launch. The verifier's `deployment_self_sha256` is
+manifest-supplied, not an independent measurement of the running SELF. Both
+shared SPIR-V hashes are additionally emitted by the running consumer and
+matched to the manifest. Nine focused verifier tests cover actual C-oracle
+compilation in both modes and rejection of mismatched profiles/hashes,
+missing/duplicate evidence and wrong pixels. The integrated host gate passed.
+
+**Qualification boundary:** 96 descriptors exceed the still-advertised sampler
+counts of one. This is backend qualification through public SDK headers, not
+a portable consumer, upstream CTS execution or a general limit promotion.
+The witness uses procedural vertices, a nearest sampler and four level-zero
+RGBA8 textures. Bindings visible exclusively to nonexecuting stages,
+statically unused resources, mixed graphics buffer/image resources and
+applicable upstream CTS remain pending. No capability is promoted here.
+
+### Wider core visibility masks
+
+The same shared-stage workload additionally passed two identical-artifact runs
+per mask on 2026-09-14, using the native backend at
+`529d6b139b567309961d65efdf02a10ff1a21b78` and the public consumer's explicit
+visibility option. Only VS and FS execute; wider layout visibility does not
+instantiate geometry, tessellation or compute shader stages.
+
+```sh
+python3 tools/build_consumer.py --shared-stage-samplers --sampler-visibility all
+python3 tools/build_consumer.py --shared-stage-samplers --sampler-visibility all-graphics
+```
+
+- `ALL` (`0x7fffffff`), SELF SHA-256:
+  `65e560ea1df2a42d20f0ff9f809d040063c5aa5f3365a0a30a8963739da75974`.
+  TCP log SHA-256:
+  `da9395c3a3ff5dfebf5b6b92b61b8309513086deb1e2c8d732249263125b5707`,
+  `13687c02f97330ad10634ed25d5440e36f15145e0ee4e8c0d15f199a4c56ba6c`.
+- `ALL_GRAPHICS` (`0x1f`), SELF SHA-256:
+  `39dd0c374039e2286deabdb282d0816784c6694935d67ea89d3b780df63f7581`.
+  TCP log SHA-256:
+  `bf61e44356537519db6d5ff5939abaf9fca68e0366dac3fe79a64cfe0ebd929e`,
+  `53ea0e5f78e49043e18e4d5ec3344f23290bbf0bac58d4a95e9a292b2a5b28c6`.
+
+Each run matched the four BGRA references above, 471,744 colored pixels per
+round with zero mismatches, matched GPU completion, preceding compute/sync
+checks, fixed-function presentation, resource retirement and TCP BYE. All
+four runs independently confirmed Close Game; a decoded post-close image
+showed the home menu without an error dialog. Deployment and runtime identity
+use the same distinct mechanisms described above. The verifier binds the
+exact visibility mask in the manifest to the runtime record; it rejects
+unknown masks, mismatches, omitted fields in new logs and attempts to relabel
+legacy evidence. Eleven focused consumer tests pass. The core implementation
+also passed real compiler and native-preparation tests with ASan/UBSan:
+wider masks preserve machine code, argument ABI, table offsets and contents.
+
+This remains a 96-descriptor backend diagnostic beyond advertised limits, not
+upstream CTS or a general sampler-limit promotion. Static-use elimination and
+bindings visible only to nonexecuting stages remain incomplete.
+
+## Shared-stage sampler compilation (host evidence)
+
+The compiler now admits combined-image sampler bindings visible to vertex,
+fragment or both stages. Real PSBC/NIR/ACO GFX1013 tests compile owned vertex
+and fragment shaders that each read 24 elements from four shared sets, using
+different weighted sums. Native shader headers and both user-SGPR banks are
+checked: each stage receives its compiler-selected slot, while a shared set
+uses the same canonical table address. A vertex-only sampling variant requires
+four vertex pointers and no fragment pointers. The pinned PSBC compiler conservatively
+ORs option-provided sets into its used-set mask: visibility can reserve a
+vertex pointer even without an actual vertex shader access. Eliminating
+statically unused resources is not implemented by this change. Invalid
+stage masks and unsupported resource types remain rejected.
+
+Compiler/ABI tests alone are **not vertex-sampling hardware evidence**.
+The separate shared-stage runs above provide bounded GPU output evidence.
+No advertised feature or limit is promoted, and the earlier fragment-only
+GPU results do not validate vertex use.
+
+## Shared-stage sampler delivery (host evidence)
+
+Native preparation now builds the union of vertex and fragment descriptor
+sets. It allocates each table once, even when both stages use it, and preserves
+canonical offsets when a table mixes vertex-only and fragment-only bindings.
+The queue's predicted-layout checks cover vertex-only sets as well. The
+existing emitter supplies the shared address to each stage's compiler-selected
+argument slot; draw-owned backing remains retained until retirement.
+
+The allocation/encoding regression checks the exact table footprint and all
+96 descriptor records across shared, vertex-only and fragment-only sets.
+Missing or stale vertex sets, undefined array elements and unsupported stage
+masks fail before allocation. An injected vertex-descriptor encoding failure
+releases the allocation without publishing a prepared draw. The focused
+ASan/UBSan test passes. Synthetic inactive-set metadata is tested separately;
+it does not prove PSBC eliminates statically unused sets.
+
+These host tests cover delivery and rollback; the independent shared-stage
+readback runs above establish the bounded GPU result. Applicable upstream CTS
+is still pending. Published sampler limits remain unchanged.
+
+## Multi-set fragment samplers: connected backend and hardware diagnostic
+
+The first shared-stage consumer run stopped at descriptor layout creation,
+before graphics submission: combined samplers still had a fragment-only
+visibility check. The frontend now applies the same legal core visibility-mask
+validation as buffer descriptors and retains the exact mask in the signature.
+The regression covers vertex, fragment, both, all graphics, all stages and
+compute visibility, plus invalid masks and unchanged immutable-sampler/device
+guards. Visibility alone does not enable execution in those stages: pipeline
+compiler/backend restrictions remain, and GPU qualification is separate.
+
+Vertex texture barrier recording now accepts transfer-write to shader-read
+dependencies scoped to vertex, fragment or both shader stages. The host
+regression checks preservation of the recorded stage/access masks and rejects
+shader-read access scoped only to vertex input, top/bottom of pipe or color
+output. This removes a frontend blocker for vertex texture uploads; it does
+not itself prove GPU visibility, vertex sampling or broader synchronization.
+
+The canonical descriptor-table layout is shared by compiler options and
+job-owned native table encoding. It preserves offsets across stage filtering,
+sparse binding numbers, arrays, 16-byte buffer and 48-byte combined sampler
+records. Host compiler tests cover mixed layouts; executable graphics resource
+tables accept combined image/samplers; the hardware results in this section
+cover fragment use only.
+
+The connected runtime carries up to four fragment-table pointers from PSBC
+metadata through command recording, per-set generation/signature validation,
+pending ownership, predicted image layouts, native descriptor encoding,
+flush and register emission. Draw-owned tables survive until retirement.
+Missing pointers, incomplete descriptors, generation mismatch, register
+collisions and encoding failures are covered by host rejection/rollback tests.
+Procedural vertices do not require a dummy vertex buffer.
+
+On PS5 GFX1013 / firmware 12.02, 2026-09-14, the independently compiled
+public-SDK consumer passed two identical-artifact runs:
+
+- SELF SHA-256:
+  `be0ad0727d920fbdcf12afa8b4be72b259376bef0fb8b199bbd030e683380dc4`.
+- Complete TCP log SHA-256:
+  `171fd417f4b90ca66ce85272cf980220bb20682599fdee2fd263556e6d3c48bf`
+  and `d04d10c9a70562f936056213139e7b95ca623b04cfef6012f2c326c912101145`.
+- Four sets, binding 7, 24 sampler-array elements each, bound in descending
+  set order. All 96 elements select from four uploaded RGBA8 textures using
+  a different deterministic pattern in each of four rounds.
+- An owned fragment shader sums samples with distinct weights 1–96.
+  Independent CPU references and strict verifier literals require BGRA words
+  `914c503b`, `914b4d4f`, `914a4643`, `913a5449`.
+  Each round checked 471,744 non-background pixels with zero mismatches.
+- Each run also passed the earlier public consumer's compute/storage-width,
+  synchronization, 18-frame fixed-function and VideoOut checks: 40 graphics
+  submissions total, clean TCP finalization, zero tracked allocations at
+  teardown, and independently confirmed exact-title Close Game.
+
+**Qualification boundary:** this new stress fixture deliberately exceeds the
+currently advertised sampler limits. It exercises the backend through public
+headers, not a portable application obeying the published limits, and is not
+upstream CTS or conformance evidence. The advertised sampler counts remain
+one. Broader vertex-stage combinations, non-sampler graphics resources, statically unused
+individual bindings, broader sampler/state combinations and applicable CTS
+must be addressed before a general limit promotion. The diagnostic uses
+procedural vertices, one nearest sampler and four level-0 RGBA8 source images;
+it does not validate every format, filter, image dimensionality or vertex path
+in combination with these arrays.
+
+The first candidate stopped before GPU work because its old physical-format
+assertion still treated newly supported roles as absent. The corrected
+consumer uses `VK_FORMAT_UNDEFINED` as the unsupported witness. Its identical
+physical-query contract now runs in the host device test against the public
+entry points and native reporting configuration; an injected lost format role
+must fail. This prevents a second independent copy of those assertions from
+drifting. The rejected run is not counted as hardware success.
+
+## Observed results
+
+### Packed sampled images and filtering
+
+On PS5 GFX1013 / firmware 12.02, 2026-09-14, four diagnostic binaries each
+passed two consecutive identical-artifact runs. The promotion adds sampled
+image/transfer-destination support for `A8B8G8R8_UNORM_PACK32`,
+`A8B8G8R8_SNORM_PACK32`, `A8B8G8R8_SRGB_PACK32`, `A8B8G8R8_UINT_PACK32` and
+`A8B8G8R8_SINT_PACK32`; only the first three expose linear filtering.
+
+| Diagnostic | Cases per run | SELF SHA-256 |
+| --- | ---: | --- |
+| normalized/sRGB sampling | 23 | `dbad7e701b4203f7ea19080e8f8e0ca1b316c9a954b56a8347ce12d2f6c46607` |
+| nearest/linear discriminator | 46 | `cb7b50aea118b015ef8f83e25ca47b4d0e0b6b7e4a320d2ec6747b387e8e4233` |
+| typed unsigned sampling | 10 | `854b60687f3a4754cbeb33ea882776963e2d93c64ac9c1d5b3377e3f9a30bac4` |
+| typed signed sampling | 10 | `8cdf6ceaea24a72d5291075c1692d00e4e8f93a8253274b39deb395b64ae00b3` |
+
+Complete TCP log SHA-256 pairs, in the same order:
+
+- Sampling: `ebba816ee063d8a0bf68b6783e2af5cd20a5805840242ea91dfc0cb1538f7bd7`,
+  `3e36477c514bd364677d03ff58635e0b7089f6f12747c97185359f188f95589b`.
+- Filtering: `810fa91c663c89a9d4297c7975a4969221baab3cb770dd925716163f019dbaa3`,
+  `c7eb3e0ff7636add9c0befbf65492cbb789bcab4aa91ac8e7cc3264ac3c4fca7`.
+- UINT: `d35793639a624ed5ed0c2d61f8307577b3cc60100e1cada86bf6310f3975c313`,
+  `995a17d818c7d968fe7ec809772c0565257d7a624af6500f43e79140bdc34831`.
+- SINT: `a3a7091c0f41ce651db18d278d340fdca79414987ece48db0289479832233c9e`,
+  `5f139f54dd0700a11b67552da37863a7946b13af7d1493a898740fb329bcad96`.
+
+The 178 GPU trials include the earlier formats as regressions. Each float/filter
+trial verified 373,248 interior pixels; each integer trial verified 1,036,800
+pixels, with zero unexpected pixels. Asymmetric source bytes distinguish
+component order, SNORM/sRGB conversion and signed/unsigned shader interfaces.
+All three packed filter pairs produce opaque black with nearest and
+`0xff808080` with linear. The UNORM readback word is `0xff4080c0` in this
+BGRA8 target, not the byte-reversed word from an RGBA8 target.
+
+Every run has complete `ps5log/1` sequence/identity/hash verification and BYE,
+six checked compute rounds before and after each graphics trial, matching
+submission/completion serials, VideoOut retirement and zero retained allocation
+bytes. `run_format_diagnostic.py` separately confirmed exact-title Close Game
+after all eight runs. Exact FTP SELF readback and mount refresh were checked
+before each diagnostic pair; those deployment checks are separate from the
+log verifier. The final Remote Play capture shows the home screen without an
+error dialog. Raw captures, telemetry, deployment receipts and binaries remain
+private.
+
+These diagnostics use owned, precompiled scene shaders. They validate texture
+roles, not runtime shader compilation, every mip level, all sampling precision,
+storage images, new color attachments, blits, or upstream CTS conformance.
+Runtime compiler/SDK witnesses are listed separately below. In the scoped
+format inventory, eight of the 287 baseline deficit cells are now satisfied;
+279 require further backend work. The whole reporting matrix still has 620
+documented deficit rows, which is neither a CTS score nor a conformance result.
+
+### Sixteen and sparse runtime vertex bindings
+
+Two consecutive PS5 GFX1013 / firmware 12.02 runs on 2026-09-14 used identical
+SELF SHA-256
+`c48f75fad391c0072130e23953a4386e290769d5de1bd99cb62f66c831102376`.
+Their complete TCP log digests are:
+
+- `f1dd3b7408eaf5665ac6eb9b731835857e7aa982f8bb6627b750946dce69b4cb`
+- `204ed9c6245b5e687c7f20b32d2242339bab605811c8283ba9ca1193f8c920cd`
+
+Each 1,784-record run reported 16 available bindings and passed four draws:
+all 16 buffers, binding 15 alone, bindings 3/15, and the full layout again from
+the runtime cache. The observed optimized masks were `ffff/8000/8008/ffff`.
+All buffers had distinct values, reversed location-to-binding order, varying
+strides/attribute offsets and odd binding addresses. Exact aligned-copy byte
+counts were `7552/457/938/7552`. Unused buffers were not allocated or bound.
+Each draw produced exactly 471,744 white pixels and zero unexpected pixels.
+Three cold compiled pairs and one warm hit were observed.
+
+Both runs also passed compute controls before and after each draw, GPU completion,
+VideoOut presentation, BYE and zero retained allocation accounting. The deployed
+SELF was read back byte-for-byte; independent Close Game/status checks confirmed
+process termination. These are bounded native diagnostic witnesses, not upstream
+vertex-input CTS or a public-header-only consumer claim.
+
+An intermediate reporting-only build aborted before device/GPU initialization:
+the diagnostic still required `maxVertexInputBindings == 1`. It is classified
+as a stale diagnostic invariant, not a GPU failure. The consumer now checks
+whether the workload fits the reported capacity; host regression tests cover
+both old one-binding and expanded sixteen-binding reports. The final two runs
+above include this correction.
+
+The vertex-layout cache correction and multiple-binding preparation described
+in [VERTEX_INPUT.md](VERTEX_INPUT.md) have host contract/compiler tests and the
+bounded hardware witnesses documented below.
+The cache tests use real PSBC compilation and distinguish stride, offset and
+format changes while retaining warm reuse for an unchanged layout. Preparation
+tests cover 16 binding spans, sparse compiler masks, optimized-away inputs,
+alignment copies and allocation failure. PSBC metadata version 11 connects the
+optimized binding-use mask to native descriptor preparation. Older runs do not
+establish support for this path; only the explicit multi-binding witnesses do.
+
+Two consecutive launches of the same executable each completed:
+
+- Runtime compilation of owned vertex and fragment SPIR-V absent from the
+  diagnostic's offline graphics library.
+- One compiled pair followed by two cache hits, with one retained cache entry
+  using 9,316 bytes.
+- Eighteen GPU-completed and presented frames across three viewport sizes,
+  checked for triangle coverage, alpha and interpolated color invariants.
+- Cache destruction and zero tracked GPU allocations after retirement.
+- System Close Game returning success, confirmed title termination and a
+  subsequent Home view without an error dialog.
+
+Remote Play confirmed the triangle visually. Structured TCP telemetry provided
+the GPU/VideoOut completion and ownership evidence; the screenshot alone did
+not establish correctness.
+
+## Reproduce and interpret
+
+See [BUILDING.md](BUILDING.md) for the SDK-linked diagnostic and the
+`verify_graphics_runtime.py` receipt verifier. Local validation includes
+`make check`, `make check-sanitize` and the runtime graphics compiler/cache
+test with ASan/UBSan enabled. The PSBC static archive itself is not instrumented.
+
+### Runtime sampled images and explicit mip LOD
+
+The GPL-compatible `ps5-opengl` reference informed the earlier runtime-graphics
+adapter for exactly one fragment-stage combined image sampler at set 0,
+binding 0. The compiler metadata, user-SGPR slot, 48-byte descriptor table,
+descending mip layout and cache identity were validated on the host; that
+revision rejected other descriptor shapes. The multi-set extension above is
+separately qualified. The public `ps5-opengl` mipmap test was also compiled
+and run unchanged on the same console; its explicit LOD and generated-mipmap
+oracles passed. A temporary PSBC diagnostic then showed that both projects
+lower the fragment operation to the same GFX1013 `image_sample_l` instruction.
+
+The first ps5-vulkan diagnostic run
+(`20260914T050039610Z_PPSA99994_ps5vk_0x75893aacacda`) was correctly rejected:
+it returned only level 0. Comparing its runtime input to the working GPL test
+identified the actual harness defects, not a driver defect: all three probe
+vertices had zero UVs, and the scissor covered only half the intended domain.
+The fixture now assigns the explicit `(0,0), (1,0), (0.5,1)` domain and uses the
+full 1920x1080 scissor. Unit tests prevent either input from silently drifting.
+
+The corrected **public-SDK-linked** payload produced run
+`20260914T055702207Z_PPSA99994_ps5vk_0x789cca84a41b`, executable SELF SHA-256
+`99844fe54a3a7c6b510fdeb870e13d46a34be098e17100131daca47e89c8c1c9`
+and transcript SHA-256
+`d4706a2930e0a798123e40e27f5ed84143840ffda16c1f647f8fc1221680a8b6`.
+It compiled the owned vertex and fragment SPIR-V at runtime, uploaded three
+solid RGBA8 levels, verified their descending backing offsets and read back
+red/green/blue counts `103680/62208/20736`, with zero unexpected pixels and
+`PS5VK_MIPMAP_READBACK valid=1`. The pre/post compute regression passed,
+VideoOut presented the matching completion event, all native allocations were
+released, BYE was complete, and exact-title Close Game completed in 100 ms.
+`tools/verify_mipmaps.py` binds those claims to the transcript, artifact profile
+and SELF identity and fails closed on missing colors, storage drift, partial
+descriptor traces, transport gaps or false success.
+
+This establishes the bounded shared mip-chain layout, descriptor and explicit
+LOD path. It is not broad shader coverage, generated-mipmap support in Vulkan,
+anisotropy, or a claim of Khronos conformance.
+
+The next public-SDK-linked pair qualifies the Vulkan 1.0 sampler LOD-bias
+floor at both ends of the advertised interval. It reused the exact three-level
+red/green/blue resource and runtime `textureLod` shader, changing only
+`VkSamplerCreateInfo::mipLodBias`:
+
+- `+2`: run `20260914T061907811Z_PPSA99994_ps5vk_0x79d16d7ca240`, SELF
+  SHA-256 `12e7012d0bd51c9af8ad8967416c43391c4243b68e617a14b55313b5a33cc6d1`,
+  transcript SHA-256
+  `77d4f0b82fdf64089fc6aea481cc54d7ca06aedde2eba2d0e09920437cfb2443`;
+  all 186,624 covered pixels selected the blue level.
+- `-2`: run `20260914T062019027Z_PPSA99994_ps5vk_0x79e201f1c3c8`, SELF
+  SHA-256 `79f249cdf73fdfe20c784bfca3c3e12b71741f737f10c602b7c2f1697bdea559`,
+  transcript SHA-256
+  `3fcb376fd9224ddfbe14ff0ac86d24651b23fb1dfab2f988db596512435c5241`;
+  all 186,624 covered pixels selected the red level.
+
+Both 256-record streams had zero unexpected pixels, passed the pre/post
+compute regression, matched VideoOut completion, ended with BYE and zero live
+native allocation bytes, and completed exact-title Close Game. The same strict
+verifier accepts the unbiased and both boundary profiles and checks the signed
+descriptor word when private descriptor telemetry is present. Values outside
+`[-2, 2]` and NaN are rejected at sampler creation. This closes one mandatory
+graphics-profile limit blocker without claiming the wider native field range.
+
+## Vulkan API contract suite validation (CTS-modeled)
+
+A suite of 26 synthetic Vulkan API contract tests modeled after the Khronos `VK-GL-CTS`
+mustpass selection (`vulkan-cts-1.3.8.4`, commit `a0270c1897597e6c77679870e10415398a13001c`,
+Apache-2.0) was evaluated on both the host mock harness and real hardware. Full upstream
+Khronos VK-GL-CTS coverage remains incomplete; the separate focused upstream
+execution is described below.
+
+- **Host mock suite:** `make check` builds `build/tests/test_cts_host` against `dist-sdk/lib/libps5vk_host.a`.
+  Observed result: `total=26 pass=22 not_supported=4 fail=0 skip=0`. The 4 `NotSupported` cases
+  faithfully reflect the host mock environment's lack of native PSBC shader compilation and AGC hardware queues.
+- **PS5 hardware execution (FW 12.02, GFX1013):** The native package executes the 26 contract cases
+  in a single session using the statically linked driver and runtime compiler.
+  Observed result: **26 / 26 PASS** within the single session device context, 0 failures.
+  Structured `ps5log/1` telemetry confirmed:
+  - Core API build, platform and device introspection matching driver caps.
+  - Device initialization within session context (a restriction of the current
+    backend/harness; independent reinitialization is not validated).
+  - Device limits, non-coherent atom size (64B) and storage alignment (256B).
+  - Memory allocation, suballocated memory mapping (257 bytes), cache flush and invalidate ranges.
+  - Sampler and shader module creation and destruction.
+  - Runtime triangle graphics pipeline compilation and cache insertion (9,316 bytes; pipeline creation only, draw/rasterization verified in native consumer below).
+  - Runtime SSBO compute dispatch (`vkCmdDispatch` 16 workgroups x 64 threads = 1,024 elements) with exact arithmetic verification.
+  - Empty compute pipeline compilation and retirement.
+  - Signaled and unsignaled fence status polling, reset, and queue empty submission.
+  - Clean graphics cache destruction and zero tracked GPU memory allocations at retirement.
+
+See [`cts/gap_matrix.md`](cts/gap_matrix.md) for the complete case list, Vulkan API mapping and rationales.
+
+## Genuine upstream VK-GL-CTS (separate from the synthetic contracts)
+
+The `contract.*` suite above is local and modelled on the Khronos *mustpass*
+selection; it is **not** upstream CTS code. A separate integration compiles a
+focused selection of real upstream VK-GL-CTS tests, the upstream framework and
+their original verification oracles into a native payload. Its build inputs,
+selection manifest, strict acceptance policy and evidence rules are documented
+in [UPSTREAM_CTS.md](UPSTREAM_CTS.md). Results from that integration are
+reported separately and are not merged into the counts above.
+
+On 2026-09-13, two independent native launches completed **all 29 selected
+upstream cases with Pass**. The prior API, synchronization, memory, compute,
+resource, push-constant and specialization cases remain present. Nine original
+SPIR-V assembly oracles now additionally cover storage-buffer-only 8/16-bit
+scalar/vector conversions under extension-negotiated feature bits. Both runs
+matched executable and selection identity, reconstructed complete QPA reports,
+returned exit code zero and passed system Close Game checks.
+
+The 29-case executable and selection hashes are respectively
+`ee09394647c9bb728f2725f3f3c087fa93fe61840e18c2f1299567576f1d069c`
+and `5a1448c6d7ea05acf1b1d6e0b8e38881df8fefeb7813386fafb151550377e302`.
+The QPA hashes are
+`dfaec984b71b5d2eae3c168e4be27b7420d83de4b1f9473ba66d2163b11ba6eb`
+and `2c717f5d59c23e121664b64a036e99965d5ed0c5ea4a7d2ae35d1f874c77b862`.
+One separate upstream stress case remains diagnostic because it requires a
+`HOST_COHERENT` memory type that ps5vk does not advertise; it is not counted as
+acceptance. Details and remaining limits are recorded in
+[UPSTREAM_CTS.md](UPSTREAM_CTS.md).
+The four nearby specialization cases that demand SPIR-V 1.3 and every
+`LocalSizeId` workgroup-size case remain outside the selection; no advertised
+API or SPIR-V version was widened to bypass their upstream support checks.
+
+### Physical-device reporting foundation
+
+The current selection subsequently grew from 29 to **31 acceptance cases** by
+adding the original upstream `dEQP-VK.info.physical_devices` and
+`dEQP-VK.info.device_queue_family_properties` cases. Two independent launches
+of the identical final payload passed all 31 cases with zero failures or
+unsupported results, complete QPA reconstruction, exit code zero and clean
+system Close Game:
+
+- Executable SHA-256:
+  `3cf502e0855f2d556b56c3284e440eaf85f3fb0ce1a378aadc696fe6792fba80`
+- Selection SHA-256:
+  `cb59facb407b8c9af78e540edb8dde3f6f6961b43afe9f15260c9f54c9f64d9c`
+- QPA A SHA-256:
+  `27fc8bbe1cba945158523a17af3a2b7951b279b71ba1f9b64cabb8f4f42d5ba3`
+- QPA B SHA-256:
+  `a6a12c61eff27ddb203f3ea56283be0873f6f034b0daa7322e57d3a93b5c833e`
+
+The standalone public-SDK consumer independently queried enumeration,
+properties, limits, memory, queue families, format properties and image-format
+support twice. Both runs used executable SHA-256
+`89849de59f76e97be574323c617e88d01f086482010c0cdcea790dfefaea5a54`,
+produced the same canonical physical-report FNV-1a value `be169e1b`, verified
+the 256 MiB graphics heap and non-coherent host-visible memory contract, and
+closed cleanly. Their `ps5log/1` receipt hashes were
+`06cadb6dab4cd63bf9fba5d21d4f40a175fe3f889b44720d58af0dbba9be6d8e`
+and
+`44321d1d8c11363a4760d61d800d14364666a57496d606d3d353e2d2053fcff6`.
+
+This evidence validates the implemented reporting slice, not every mandatory
+Vulkan 1.0 limit or format. The original upstream `device_properties` and
+`device_memory_properties` cases remain diagnostics: the first exposes known
+minimum-limit gaps and the second requires a host-coherent type that this
+backend truthfully does not report. See
+[PHYSICAL_DEVICE_REPORTING.md](PHYSICAL_DEVICE_REPORTING.md).
+
+### Vulkan 1.0 synchronization and non-coherent visibility slice
+
+The synchronization milestone acceptance selection contained **41 original upstream cases**.
+Ten additions exercise two compute command-buffer barrier cases, three further
+fence states, four non-coherent mapping ranges and
+`dEQP-VK.spirv_assembly.instruction.compute.workgroup_memory.uint32`. The last
+case uses `LocalSize 16x4x2` (128 invocations, four wave32 waves) and its original
+exact reverse-copy oracle.
+
+Two independent launches of the identical payload passed **41/41** with zero
+failures or unsupported results, complete QPA reconstruction, exit code zero
+and clean system Close Game:
+
+- Executable SHA-256:
+  `be494b38483e5a174f40dfe063d967a722267daa4a78affb26143fd0b93335f9`
+- Selection SHA-256:
+  `c2a630cba690c471bad479425d47d79754cbb82d63133c3a4d5d956c5dbdeca2`
+- QPA SHA-256 values:
+  `e613c39592b107d7e915693d3197ff7972ce21e685beafacdd4da53931e4d613`
+  and `e9106bf707866a9ecf33a4a8384b28b6abcbf129317d9f1d3a52cdaf79c887f7`
+
+The consumer that includes only public SDK headers independently passed twice
+with executable SHA-256
+`18feb46fc7e4a8972949541ece619270b891c77711f9d172aadef4f72036b9d6`.
+It verifies a host-write/compute-read-write/host-read chain, an explicit
+shader-write to shader-read buffer barrier, non-coherent flush/invalidate,
+64 exact output words and guards, and a 128-lane LDS atomic permutation with a
+final counter of 128. Its ps5log/1 receipt hashes are
+`ff4094fed0ab44d70c49e08d5f16d63cc9cce511c4b3518ba215a4301b28ac98`
+and `f0ec40048f397a3425b7b3a87ff454b1ad67752b4e69d8d1bff9242ed2c00d19`.
+
+The native queue implements a conservative dependency stronger than the
+recorded buffer range: every compute dispatch reaches completion and performs
+release/writeback before the next dispatch. Later binary-semaphore and event
+validation below covers ordered single-queue execution, but does not establish
+range-scoped asynchronous execution, mixed compute/graphics barriers,
+queue-family transfers, timeline semaphores, the Vulkan memory model or
+`synchronization2`.
+
+### Fixed-function and original upstream pixel oracle
+
+The next bounded graphics slice adds one static or dynamic viewport/scissor
+pair, compatible one-subpass render-pass/framebuffer ownership, bounded color
+and depth attachment load/store/clear behavior, and RGBA8 off-screen readback.
+The selection now contains **43 original upstream cases** (the 42 below plus the
+pipeline-cache compute case described afterwards). The added
+`dEQP-VK.api.smoke.triangle` body records a real draw, copies the rendered image
+to a buffer and compares its pixels with the unchanged upstream reference
+renderer.
+
+Two launches of the identical payload passed **42/42** with zero failures,
+unsupported or skipped cases, complete QPA reconstruction, zero live platform
+allocations at teardown and clean system Close Game:
+
+- Executable SHA-256:
+  `2b8ff02a5a0906c4496f8795d9c7eabd8a0af20199b05d9d2261ad1393eb6d2d`
+- Selection SHA-256:
+  `b2b74ed43427d2fb0feeab07ab3ad4527643dbc125d41aadc8cee92f7200a515`
+- QPA SHA-256 values:
+  `757efc735d3d77b0b6019535dd8760016ca1f935c02bfa5c34f7579fa486eba5`
+  and `88d5d6aff8d7e7fcfd2f4f2ef28acff70914f6d5f0477957ef65c28deb8c85ad`
+
+The public-header-only consumer independently passed twice with executable
+SHA-256
+`7209dd80a3a3431dd6f26d54420d3f91bba15b5d98773050916f91f13395c500`.
+Each run verified 18 fixed-function frames and 36 graphics submissions,
+including exact color/depth results, dynamic viewport/scissor state,
+attachment `LOAD` preservation, negative depth controls, strict `ps5log/1`
+validation and clean Close Game. Transcript SHA-256 values were
+`5fba873ebe85d478ab8caf279c2e15b156771a43062a3054da8d965b2750dfbf`
+and `dc638572e4785c9c2dad9a4654f2bfb6e0a959f7c0a1be6f1e2a438023cb7528`.
+
+This evidence covers only the enumerated profile. It does not establish general
+rasterization, blending, multisampling, stencil, secondary command buffers,
+WSI or Vulkan conformance.
+
+### Pipeline cache (2026-09-13)
+
+The pipeline-cache slice makes the four mandatory Vulkan 1.0 cache commands part
+of the public surface again: `vkCreatePipelineCache`,
+`vkDestroyPipelineCache`, `vkGetPipelineCacheData` and `vkMergePipelineCaches`.
+Both pipeline-creation entry points now accept a live same-device cache again;
+an invalid or foreign handle still fails closed. The exported blob is exactly
+the normative 32-byte `VkPipelineCacheHeaderVersionOne`, externally supplied
+data is treated as untrusted (short, corrupt, mismatched or oversized blobs are
+ignored and creation still succeeds), and merge is a validated no-op.
+`pipelineCacheUUID` is derived deterministically from public compatibility
+inputs instead of being zero.
+
+The selection gained `dEQP-VK.pipeline.cache.compute_tests.compute_stage`. Two
+launches of the identical payload passed **43/43** with zero failures,
+unsupported or skipped cases, complete QPA reconstruction, zero live platform
+allocations at teardown and clean system Close Game:
+
+- Executable SHA-256:
+  `9fda99f15ea604987d3124ec40a11d6e8f0dc24310b0163ccf50da1f80f24bd1`
+- Selection SHA-256:
+  `00e9eb1902905886e36bfdbe2b288ec4775c6147c9f69026c9f178cf25ca8210`
+- QPA SHA-256 values:
+  `6c5d95aa2dd2b9e8179e759e7fa6e01618e8ff2380ef01c1ca5ffcfaf019528c`
+  and `39233c916cba5a72bb36c7e78eac1f8988d72a89f841264c38919ec92644f256`
+
+This establishes the cache object, header, import and merge contract only. No
+compiled-code record is serialized and no restored cache hit is claimed; the
+graphics-derived pipeline-cache cases remain blocked by the pinned bodies'
+`D16_UNORM` depth-attachment prerequisite and are covered by host tests that
+reproduce their oracles.
+### Vulkan 1.0 binary semaphores and events
+
+The public runtime now separates binary semaphore wait/signal/consumption,
+host event state, recorded device event transitions, execution dependencies and
+the memory barriers carried by `vkCmdWaitEvents`. Queue submissions are expanded
+transactionally into ordered frontend/GPU segments; event operations never
+reach the AGC backend, signals publish only on retirement, and the fence belongs
+only to the final segment.
+
+Two independent launches of the identical upstream payload passed **48/48**
+original cases in the synchronization validation selection, including
+`binary_semaphore.one_queue`, the 32,768-link
+`binary_semaphore.chain`, all four selected event cases and the previous
+42-case selection. Both reconstructed complete QPA reports, reported exit zero
+and zero live platform allocations, and passed system Close Game.
+
+- Executable SHA-256:
+  `098087bc16b4363dbf622365b93695acee8697f74e9daeb776a1b297751312d4`
+- Selection SHA-256:
+  `c40bce192599fa734b00c8c670dccee43638d01efeb8eb042cc4c037fe2fda88`
+- QPA SHA-256 values:
+  `c8ac547bd58b28d20c65558bbdaae29046aef883543ca91f7d472de875c24c31`
+  and `685714b9a80d6fd289ee0cfff206d7e2d04d968b63cd9f9170d9d7ca687a2fe2`
+
+The isolated public-SDK consumer independently passed twice with executable
+SHA-256
+`71940c2a5d4a2d219d56eedf15569818e1be3d2c925576a432e9bec4db3831a9`.
+It performs RESET→SET→RESET host event transitions, a device
+set→wait→reset chain, a two-record binary signal/wait/consume submission and
+the existing deterministic compute/graphics readbacks. Run IDs
+`20260913T073253015Z_PPSA99994_ps5vk_0x2f437088c857` and
+`20260913T073307544Z_PPSA99994_ps5vk_0x2f46d27bd3a1` passed the strict verifier
+and independent Close Game checks. The 48-case receipt predates the separately
+validated pipeline-cache case; the combined 49-case manifest has not yet been
+run as one hardware selection. This is focused native evidence, not a full
+synchronization or Vulkan conformance claim.
+
+## Independent native SDK consumer validation
+
+The independent native application in `examples/native_consumer/` consumes strictly
+public headers (`<ps5vk/ps5vk.h>`, `<ps5vk/ps5vk_present.h>`) and links against the staged
+`dist-sdk/lib/libps5vk.a` and `dist-sdk/lib/libpsbc.a`. Zero private project headers or symbols
+are included or referenced (enforced by `tests/test_consumer_isolation.py`).
+
+Observed hardware results on PS5 (FW 12.02):
+
+- **Finite verification mode:**
+  - Runtime compute pipeline compilation and execution with three simultaneously
+    bound resource sets: two storage buffers, one std140 uniform buffer and one
+    `VK_FORMAT_R32_UINT` uniform texel buffer.
+  - Exact verification of 64 output words and 128 front/tail guard words.
+  - Runtime procedural graphics pipeline compilation with 1 cold compile (9,316 bytes cache entry) and 1 warm cache hit.
+  - 18 frames presented to 1080p VideoOut across 3 distinct viewports (1920x1080, 1280x720, 640x480).
+  - Deterministic GPU framebuffer readbacks on all 18 frames: valid pixel coverage, alpha channel = 255, and color gradient invariants verified.
+  - Clean presentation retirement and zero leaked memory allocations upon completion.
+  - OS-level clean termination via system Close Game in ~100 ms.
+- **Continuous rendering mode:**
+  - Sustained continuous rendering executed for over 5 minutes (>17,850 consecutive frames at 60 FPS) without degradation, memory growth, or queue faults.
+  - 1080p visual output confirmed via Remote Play stream.
+- **Clean recovery and relaunch cycling:**
+  - 3 consecutive launch, run, and system Close Game cycles completed successfully, proving prompt resource reclamation and zero driver or GPU lockups.
+
+Raw console logs, captures, deployment details and internal planning are kept out of
+the public repository. No proprietary shader or module data is required by the consumer fixture.
+
+The expanded resource ABI was accepted in two independent launches on 2026-09-12
+using the same deployed SELF (`c1433cc564eb4035aba391c89d6c4d0d03b78ffd8c2510c09a95fbd708d9b6fc`).
+Run IDs `20260912T204550691Z_PPSA99994_ps5vk_0xbf48764b48e` and
+`20260912T204616652Z_PPSA99994_ps5vk_0xbfa92d1a5c7` passed the strict
+`verify_consumer_resource_abi.py` oracle and independent Close Game checks.
+Their TCP transcript hashes were respectively
+`72d545af3092b6b6d828e813cd0b3b27dd0c6b0a14543d6f2f6f473906a8407b`
+and `c58300ed0cbaa4170ef7c27cf42fa890a49ff98d0084b728166f88ebb7bfecee`.
+These results establish only the exact bounded resource configuration above;
+they are not a Vulkan conformance claim.
+
+## Push and specialization constants
+
+On 2026-09-13, two independent launches of the same public-consumer SELF
+(`387555789fdcfdee19b35985128211eeefb6a30c8e6298c10d58130494682741`)
+passed an expanded compute oracle. The shader was compiled at runtime with two
+non-default scalar specialization values (`multiplier=5`, `extra_bias=11`) and
+consumed one four-byte push constant (`addend=19`). Each launch verified all 64
+output words and 128 guards, completed the existing 18-frame graphics/readback
+sequence, emitted a complete `ps5log/1` BYE and was then closed through the
+system in about 100 ms with the title confirmed absent.
+
+Run IDs were
+`20260912T221917075Z_PPSA99994_ps5vk_0x110dd9b55e3c` and
+`20260912T221948593Z_PPSA99994_ps5vk_0x11153046507d`; their TCP transcript
+hashes were respectively
+`43085eb90866eb55aedfaa02c03c946cc52c4f691fb79a3e35c6a5fd67e97b17`
+and `ba1f956cca47ab6feca758d53ddf5c7cf8531e46b0dd13c530429e3d60ff0ed0`.
+This validates the exact compute path. Runtime vertex/fragment compilation with
+push and specialization metadata has host/compiler regression coverage but no
+separate native draw oracle yet. `LocalSizeId` specialization remains outside
+the supported profile.
+
+## Extension-negotiated 8/16-bit storage
+
+The public SDK consumer was expanded on 2026-09-13 without including private
+driver headers or symbols. It enables the four Vulkan 1.0 extension contracts
+listed in [API.md](API.md), requests only `storageBuffer8BitAccess` and
+`storageBuffer16BitAccess`, and runs two storage-buffer dispatches in one
+command buffer. Each launch checks 64 byte results, 64 16-bit results and 8,000
+surrounding guard bytes. FNV-1a checksums were stable at `9575e8c5` and
+`603ddade`. Both owned modules use SPIR-V 1.0 extension forms; the 8-bit module
+declares `SPV_KHR_storage_buffer_storage_class` rather than relying on the
+Vulkan 1.1 SPIR-V environment.
+
+Two independent runs used the identical deployed SELF
+`e6c267c44e757ffe2a4f4fd72a49f853273d5f2eeb8c84fe4a809012c65ffc7d`:
+
+- `20260913T013455340Z_PPSA99994_ps5vk_0x1bbad7796637`, transcript
+  `8e54ea92d9fdaac875e0bfacdf484a077eaeea4b875db748370c66b71fb8d99c`;
+- `20260913T013501565Z_PPSA99994_ps5vk_0x1bbc4a86b154`, transcript
+  `da3574aa6cad0a702965cf1fbe84de1c3bf3ce456fcf0b092244c19fb97f2047`.
+
+Both passed `verify_consumer_resource_abi.py`, emitted complete `ps5log/1`
+streams and were confirmed absent after Close Game. This evidence covers only
+the two advertised storage-buffer feature bits. It does not establish
+`shaderInt8`, `shaderInt16`, float16, uniform/push/input-output narrow storage,
+general Vulkan 1.1 support or Vulkan conformance.
+
+## Core Vulkan 1.0 command surface parity gate
+
+To prevent regressions and enforce parity with the Khronos Vulkan 1.0 core specification,
+`tools/check_command_surface.py` validates the public driver surface against the pinned
+Khronos registry (`third_party/vulkan-headers/registry/vk.xml`):
+
+- Derives the 137 mandatory Vulkan 1.0 core commands.
+- Audits 1:1 symmetry across public headers (`include/ps5vk/ps5vk.h`), static dispatch
+  tables (`src/vk_dispatch.c`), and implementation symbols (`src/*.c`).
+- Fails closed on any unexpected drift, asymmetry (e.g. declared in public header but un-dispatched),
+  or regression from the 137/137 structurally wired commands. This is symbol and
+  dispatch parity, not a semantic-support or Vulkan-conformance count; explicitly
+  unsupported commands remain present as tested fail-closed entry points.
+- Enforced on host test runs via `make check` and verified by unit tests in
+  `tests/test_command_surface.py` (which includes negative test fixtures asserting failure on
+  missing dispatch entries, omitted declarations, or bookkeeping regressions).
+
+The seven Vulkan 1.0 dynamic-state setters added after the indirect-command
+slice have host evidence for public/proc-address identity, strict parameter
+gates, retained per-command-buffer values, per-face stencil updates, reset and
+zero operation-slot consumption. Two byte-identical native runs also passed all
+32 selected original upstream monolithic compute/transfer non-interference
+cases, as part of an 89/89 focused run, with exact QPA reconstruction and clean
+Close Game. Pipeline creation tests independently prove that none of those
+seven states can yet be enabled for drawing, so this establishes structural
+recording and compute/transfer non-interference, not dynamic blending, stencil,
+depth-bounds or depth-bias effects on rendered pixels.
+
+The following structural slice added all six query commands plus
+`vkCmdNextSubpass`, `vkCmdExecuteCommands` and `vkQueueBindSparse`. Host tests
+prove ordered query reset, the reset-but-unavailable 32/64-bit availability
+layout, preservation of result sentinels, query-pool command lifetime, function
+identity, and no queue/fence mutation on rejected sparse calls. Real occlusion,
+query-result copying, GPU timestamps and sparse binding remain fail-closed. No
+new CTS or hardware claim was attached to the original structural slice.
+Secondary command buffers and one bounded two-subpass profile left that list
+later through the native evidence recorded below.
+
+## Current capability gap ledger (bounded or unsupported)
+
+The 137/137 figure above is structural. This ledger is the current list of
+exported boundaries that do not execute the general Vulkan operation their name
+implies, so a reader never has to infer support from an entry point merely
+being present. Every entry is recorded as unsupported or as explicitly bounded;
+none of them is a planned success.
+
+`tests/test_documentation_facts.py` cross-checks this ledger against the
+`REQUIRED_FAIL_CLOSED_COMMANDS` set that `tools/check_command_surface.py`
+itself defines, so a bounded boundary command cannot silently drop out of it,
+and against the parity audit itself, so the reported command counts cannot
+drift away from the documents again.
+
+<!-- capability-gap-ledger:begin -->
+
+- `vkCmdBlitImage` — bounded. The T07 BC-to-RGBA8 path accepts selected
+  compressed source shapes, mip/layer ranges and nearest/linear filtering;
+  general format, scaling and blit combinations remain unsupported.
+- `vkCmdResolveImage` — unsupported as a standalone command. The separately
+  measured 2x/4x colour-attachment resolve path does not make this entry point
+  a general image resolve.
+- `vkCmdClearAttachments` — bounded. One BGRA8/RGBA8 colour attachment or a
+  D16 depth attachment may be cleared over validated in-pass rectangles;
+  other aspects, formats, attachment combinations and scopes are unsupported.
+- `vkCmdClearDepthStencilImage` — bounded, not general. The whole subresource of
+  a one-sample `VK_FORMAT_D32_SFLOAT` 2D target clears to a depth value in
+  `[0,1]`, and that single shape is qualified on hardware. Stencil aspects,
+  combined depth/stencil formats, partial mip or array ranges, rectangles and
+  multisample images remain unsupported.
+- `vkCmdNextSubpass` — supported in a bounded profile. Exactly two subpasses
+  may execute when both use the same colour and optional D32 attachment with
+  identical layouts, with either no dependency or one forward `0` to `1`
+  dependency. The boundary emits a full graphics acquire. More subpasses,
+  attachment/layout changes, input/resolve/preserve attachments and wider
+  dependency graphs remain fail-closed.
+- `vkCmdExecuteCommands` — supported in a bounded profile. A primary executes
+  the secondaries it names, in call order, outside a render pass and inside a
+  render pass begun with `VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS`. The
+  children are never flattened into the primary: outside a pass each is
+  expanded into its own submission segment, and inside one the pass and the
+  children it names are submitted as a single segment because a render pass is
+  a single scope. Both paths are qualified on hardware: execution outside
+  a render pass by the consumer's bounded transfer oracle, and execution inside
+  one by the in-pass draw oracle recorded at the end of this document.
+  Nesting, cross-device children, a child that is neither pending nor
+  executable, a repeated child without simultaneous use and every render-pass
+  scope mismatch stay fail-closed.
+- `vkQueueBindSparse` — unsupported. No queue advertises
+  `VK_QUEUE_SPARSE_BINDING_BIT`, and the call fails closed without mutating
+  queue, fence or semaphore state.
+- Real query results — bounded. Occlusion begin/end, result retrieval and
+  `vkCmdCopyQueryPoolResults` publish measured counts; the precise path has a
+  public-SDK witness. Timestamp and pipeline-statistics pools remain
+  unsupported, and `vkCmdWriteTimestamp` stays fail-closed because
+  `timestampValidBits` is reported as zero.
+
+<!-- capability-gap-ledger:end -->
+
+## Ordered buffer-transfer slice (2026-09-13)
+
+`vkCmdCopyBuffer`, `vkCmdUpdateBuffer` and `vkCmdFillBuffer` are validated
+transactionally, recorded through the owned command-operation model and
+executed as ordered frontend segments. Host tests cover byte-granular copies,
+record-time update ownership, repeated fills, `VK_WHOLE_SIZE`, aliasing and
+overlap rejection, cache ranges, and GPU/transfer/GPU ordering.
+
+The standalone consumer links only the staged public SDK. Two identical native
+runs used SELF SHA-256
+`8d44d9c9b5d70967b397a63cf1fcda4a7c776a489c5a4cf08aadd064ff9d9312`
+and verified the same 67-byte result (`FNV-1a32 9a158222`) with intact guards,
+complete `ps5log/1` and clean Close Game:
+
+- `20260913T090542583Z_PPSA99994_ps5vk_0x3454301a9571`
+- `20260913T090553746Z_PPSA99994_ps5vk_0x3456c96c63e4`
+
+This closes the three named buffer commands at the bounded profile. It does
+not establish the full Vulkan transfer family or conformance.
+
+## Deferred indirect execution (2026-09-13)
+
+The three Vulkan 1.0 indirect entry points are structurally present, and host
+tests cover recording valid usage, zero-draw behavior, queue-head resolution,
+exact invalidation, compute-producer ordering, resource lifetime and the
+device-lost failure path. The public-SDK consumer records its existing
+deterministic 64-element compute workload with `vkCmdDispatchIndirect`; its
+strict verifier requires the exact recording marker and unchanged result and
+guard oracles.
+
+Two independent consumer launches used the identical SELF
+`c17bb2f7c389be6bc889401936dc8e8ae86cfc96c1cc705dab8799960ee8eb2a`
+and passed the hardened verifier plus independent Close Game checks:
+
+- `20260913T101540775Z_PPSA99994_ps5vk_0x3825a44d1f8c`
+- `20260913T101550407Z_PPSA99994_ps5vk_0x3827e255bc2d`
+
+The genuine upstream payload passed 57/57 twice, including both original
+indirect compute cases. This is native evidence for indirect dispatch and its
+compute-write visibility dependency. It is not indirect-draw pixel evidence,
+multi-draw support, or a conformance claim.
+
+## Final Vulkan 1.0 structural command slice (2026-09-13)
+
+The command-surface gate now derives all 137 mandatory Vulkan 1.0 core commands
+from the pinned registry and reports 137/137 public, dispatched and implemented
+symbols with zero asymmetries. That is a structural symbol and dispatch result,
+not a semantic or conformance claim. Unsupported semantics are not counted as
+supported: blit, resolve, attachment clear, real query results and sparse
+binding retain explicit host-tested fail-closed behavior. Multi-subpass
+execution later gained the bounded native profile documented below; wider
+forms still fail closed. `vkCmdClearDepthStencilImage` left that list
+for one bounded shape only, recorded in the section below.
+
+The final image slice adds bounded RGBA8 transfer-role image copy and colour
+clear, pitched buffer/image copies, conservative backing-alias rejection,
+transactional payload validation and explicit cache maintenance. Queue tests
+prove that every backend segment after a frontend transfer is prepared only
+when it reaches queue head; preparation failure device-loses without launching
+or signaling. `make check`, the ASan/UBSan gate and the regenerated conformance
+inventory pass on commit `002743f`.
+
+Two independent native runs used the same SELF SHA-256
+`310c662777e6b4ab31a68fd8ae0ad6bb666b09471c2654bd1d909d72fb2754a8`
+and selection SHA-256
+`4181af6a7032b15fd27d42fcb6eb8aa178d717d3cd66e03607d85e6aecf9c272`:
+
+- `20260913T133316202Z_PPSA99994_upstream-cts_0x42ede9683184`
+- `20260913T133335878Z_PPSA99994_upstream-cts_0x42f27e4c8467`
+
+Both passed 93/93 selected genuine upstream cases, reconstructed a complete QPA
+with matching identity, and returned through verified Close Game. The four new
+image leaves independently judge bounded `vkCmdCopyImage`. Their clear variant
+uses the same red value as the destination initializer, so `vkCmdClearColorImage`
+still has deterministic host evidence rather than an independent native pixel
+oracle. The 137/137 result remains structural coverage, not Vulkan conformance.
+
+## Whole-subresource depth-only clear (2026-09-14)
+
+`vkCmdClearDepthStencilImage` left the fail-closed list for one exact shape: the
+whole subresource of a one-sample `VK_FORMAT_D32_SFLOAT` 2D target, cleared to
+a depth value in `[0,1]` through the same uniform-DWORD GPU DMA fill the render
+pass already uses for its depth load-op clear. A constant depth value is the
+same 32-bit word in every texel, so filling the surface is tiling-invariant and
+needs none of the pipe XOR pixel equations `src/depth_layout.h` still refuses to
+claim. `VK_FORMAT_D32_SFLOAT` advertises `VK_FORMAT_FEATURE_TRANSFER_DST_BIT`
+for that clear and for no other D32 role: no transfer-source, sampled or blit
+role is claimed, and stencil aspects, partial mip or array ranges, rectangles,
+combined depth/stencil formats and multisample images stay fail-closed and
+record nothing.
+
+The witness is built so that only a real clear can satisfy it. The render pass
+loads depth, so it contributes nothing to the buffer; the explicit clear runs as
+its own submission and must retire before the render pass records, which makes
+the committed attachment layout the driver's own proof that the operation
+reached its GPU completion label. Geometry at z=0.4 and z=0.8 under
+`VK_COMPARE_OP_LESS` means two frames differing in nothing but the clear value
+must produce opposite results, and the oracle is the existing GPU colour
+readback rather than a host packet check.
+
+Two independent native runs deployed the identical `eboot.bin` SHA-256
+`570d711ec90ab604eac8eebb68b1b90c7fcd347ea2da168427629c83bafe1320`, re-read
+with FTP SELF conversion disabled and matched exactly before each launch:
+
+- `20260914T213105426Z_PPSA99994_ps5vk_0xab95315aa185`
+- `20260914T213136782Z_PPSA99994_ps5vk_0xab9c7e582127`
+
+Both are identical in every witness value: frame 0, cleared to `3f800000`,
+reported `changed=139968` of `2228224`; frame 1, cleared to `00000000`, reported
+`changed=0`; both with `valid=1` and a deliberately nonzero, ignored stencil
+member. `PS5VK_PLATFORM_CLOSE rc=0 allocations_bytes=0` and a clean
+`BYE reason=graphics-api-end` preceded verified Close Game in both runs. This
+qualifies that one bounded depth shape; it is not general image-clear, blit,
+resolve or stencil support.
+
+## Mandatory core feature reporting
+
+The Vulkan 1.0 profile now reports and accepts its mandatory
+`robustBufferAccess` bit while rejecting all other unreported core feature
+requests. The exact 94-case upstream payload used SELF SHA-256
+`b7c485340e03fe66cbba572cdf678c7b7ac2f61643721f63d3eade411298429b`
+and selection SHA-256
+`5f853eb7d53226b7eda4f758aecaa70be857a80270f213d546d7bcae28015e41`.
+Two independent native runs were captured:
+
+- `20260913T181536286Z_PPSA99994_upstream-cts_0x52560710bc64`, QPA SHA-256
+  `a6f94c96dc62537558c970e48d97009bd3c5fca60159bd67769e933156a18b24`
+- `20260913T181557404Z_PPSA99994_upstream-cts_0x525af1f50de2`, QPA SHA-256
+  `9febc48ffd1618ac5b356ab97cb4a02d14eca4aeddb8a61fb1fac97dc93dad08`
+
+Each passed 94/94 genuine upstream cases with zero failures, unsupported cases
+or skips, complete QPA reconstruction, exit code zero and verified Close Game.
+That earlier case proves mandatory feature reporting and negotiation. It did
+not by itself establish executable semantics; the next subsection records the
+selected executable buffer coverage added afterward.
+
+### Executable buffer robustness
+
+The next exact payload added 12 original upstream compute scalar `R32_UINT`
+robust-buffer cases, covering UBO/SSBO OOB reads and SSBO OOB writes at 1-, 3-,
+4- and 32-byte descriptor ranges. The unchanged upstream tests initially found
+two pre-execution defects: only one native logical device could join the AGC
+session, and descriptor layouts rejected `VK_SHADER_STAGE_ALL`. Both defects
+are now covered by host regressions and native CTS execution.
+
+The corrected candidate used SELF SHA-256
+`43dd8803a47028ac5086434771d668e119aa662b4483581e72bc3e7ce571a175`
+and selection SHA-256
+`344a278e325846f6918903e48b3262e2551178aab2caa022c67e8dd3539f5b62`:
+
+- `20260913T183926998Z_PPSA99994_upstream-cts_0x53a3233107e6`, QPA SHA-256
+  `8137f2254731850c9b70d59119875df82c12db16815a8b544fe2f1f5847161da`
+- `20260913T183952333Z_PPSA99994_upstream-cts_0x53a909315ae1`, QPA SHA-256
+  `046002260dfa35dd7bf3db02349368eac110a253f44ef8c7a2f587712220b4f0`
+
+Each reconstructed a complete report and passed 106/106 with zero failures,
+unsupported cases or skips, exit code zero and verified Close Game. This closes
+the selected scalar compute buffer semantics only; vector, other-format and
+vertex-access permutations remain unclaimed until selected and measured.
+
+## Vulkan 1.0 device-reporting audit (2026-09-13)
+
+The reported device surface was audited against the pinned Khronos core tables
+and the pinned CTS consumer rules, with the reported values taken from the real
+public query paths rather than from a copied table:
+
+- `tools/dump_device_reporting.c` builds its platform with the same initializer
+  as the console platform and prints every `VkPhysicalDeviceLimits` member, all
+  1.0 feature bits, the extension feature structs, the format matrix and the
+  image-format query results.
+- `tools/check_reporting_matrix.py` joins that dump with
+  `conformance_inventory/core_target.json`, the pinned registry header and
+  `vktApiFeatureInfo.cpp`, and writes
+  `conformance_inventory/reporting_matrix.json`. An undocumented below-floor
+  report fails the gate; only documented blockers are accepted.
+
+Result on the shipped profiles: 138 mandatory limits satisfied, 60 documented
+blockers (real frontend restrictions, not inflated), 656 limits not applicable
+to a Vulkan 1.0 `VkPhysicalDeviceLimits`, all 118 feature rows consistent with
+the code path that enforces them, 151 mandatory format-feature cells satisfied
+with 511 documented per-format blockers, 60 format-query consistency
+checks, and eighteen shader-capability rows satisfied with two precision rows
+recorded as not-audited because the compiler's per-mode behaviour is not
+measured.
+
+The dump inventory is also checked against every public image and vertex format
+named by the implementation. This exposed five supported sampled formats that
+the hand-written dump list had omitted; adding those queries removed eight
+false blockers without changing runtime capabilities. A future public format
+that is absent from the dumper now fails the host gate instead of silently
+appearing unsupported in the generated matrix.
+
+Seven unset values that were below the mandatory floor were corrected to the
+minimum the specification allows (`subTexelPrecisionBits`, `mipmapPrecisionBits`,
+`maxVertexOutputComponents`, `maxFragmentInputComponents`,
+`maxSampleMaskWords`, `pointSizeRange`, `lineWidthRange`); the shared validator
+now rejects a profile that drops any of them, and `tests/test_vk_device.c`
+checks both the values and the rejections.
+
+This is host-only evidence about the report itself. It does not establish
+hardware behaviour behind those limits and it does not make the profile
+conformant: the documented blockers include the mandatory image-type, attachment
+count, descriptor-count, multisample and format-family gaps. No console run was
+performed for this increment, so no new hardware claim is made.
+
+## DXVK 2.6.2 public-ABI capability probe
+
+The pinned `VP_DXVK_d3d11_level_11_0_baseline` profile declares Vulkan 1.3.204
+and resolves to 62 unique requirements. `tools/derive_dxvk_profile.py --check`
+proves that the checked derivative and generated C header retain the immutable
+DXVK v2.6.2 source identity. `tools/check_dxvk_profile.py --check` joins each
+leaf to public API reporting, reviewed implementation, exact CTS and exact
+native evidence with an AND rule across all four axes.
+
+For the current checked result, see
+[the Vulkan 1.3 probe ledger](#dxvk-profile-ledger-on-the-vulkan-13-probe-2026-09-26).
+The rest of this section is the 2026-09-15 record. It then read **20/62
+satisfied and 42 blockers**. Core
+`robustBufferAccess`, the three multiview requirements, the three indirect and
+indexed draw features (`drawIndirectFirstInstance`, `multiDrawIndirect`,
+`fullDrawIndexUint32`), the clip/cull pair, `fragmentStoresAndAtomics`,
+`dualSrcBlend`, `independentBlend`, `sampleRateShading`,
+`uniformBufferStandardLayout` (via `VK_KHR_uniform_buffer_standard_layout`),
+base `vulkanMemoryModel` (via `VK_KHR_vulkan_memory_model`), bounded
+`bufferDeviceAddress` (via `VK_KHR_buffer_device_address`) and the four
+rasterization and viewport features (`depthClamp`,
+`depthBiasClamp`, `fillModeNonSolid`, `multiViewport`) have all four axes. See
+[their indirect acceptance](#indirect-and-indexed-draw-native-acceptance-2026-09-16),
+[the fragment promotion](#fragment-stores-and-atomics-promotion-2026-09-20),
+[the dual-source promotion](#dual-source-blend-promotion-2026-09-21) and
+[the rasterization and viewport promotion](#rasterization-and-viewport-promotion-2026-09-21).
+The multiview probe uses explicitly tagged equivalent KHR queries, not the
+unimplemented Vulkan 1.2 aggregate structs. The API 1.3.204 floor remains
+blocked. See [multiview native acceptance](#multiview-native-acceptance) for the
+fresh query artifact and the independent execution evidence. A successful
+query alone is never enough to satisfy a row.
+
+The optional native consumer is built with:
+
+```sh
+python3 tools/build_consumer.py --dxvk-v262-probe
+```
+
+It consumes only staged public headers/libraries, creates no logical device and
+submits no GPU work. It emits exactly one `DXVK262_REQUIREMENT` record per leaf;
+`tools/verify_dxvk_probe.py` derives every expected value, status and aggregate
+from the pinned profile and rejects transport gaps, incomplete termination,
+wrong artifact identity, missing/duplicate/reordered rows or payload-reported
+false greens. Host isolation, link and mutation tests pass.
+
+Two native runs on PS5 firmware 12.02 used the same exact SELF SHA-256
+`379b979aee2341a1926c6fc477ee4cb7a0f4758a73e9ba5728be065e85e8899a`:
+
+- `20260915T142012757Z_PPSA99994_ps5vk_0xe2a6477d4bc5`, log SHA-256
+  `fa9c2318b38ae2d5c23b3ffcdacdf4a4d0efd54f7a81ad3ece4aa6c1d874236a`
+- `20260915T142026363Z_PPSA99994_ps5vk_0xe2a97268c1b8`, log SHA-256
+  `78f5349429318a47b33830ccd555427de355957ffcf733257f17b1daac87600f`
+
+Both strict verifications reconstructed all 62 unique rows, observed device API
+1.0.0 and three enumerated device extensions, and independently derived the
+same 1 satisfied / 61 blocker result. Both streams ended with a complete BYE
+and the title was confirmed absent immediately afterward. This is native
+evidence of the current report and its blockers, not execution evidence for the
+61 missing capabilities and not a DXVK compatibility claim.
+
+## Core sampler addressing, fixed borders and linear filtering (2026-09-13)
+
+The sampler implementation now encodes core repeat, mirrored-repeat,
+clamp-to-edge and clamp-to-border modes independently for U/V/W. Its native
+GFX10.3 encodings are adapted under GPL-3.0-or-later from the pinned
+`blackbearreloaded/ps5-opengl` revision recorded in `LICENSING.md`.
+
+Two runs used the byte-identical SELF SHA-256
+`6e33efe473cf7d150d7fe21132413496203348261d83b95159ad5a95f60b234d`:
+
+- `20260913T195835833Z_PPSA99994_ps5vk_0x57f4cbddf1f2`, log SHA-256
+  `4fed9e38cbc37dcf582af1da45ba3754a2d2d911a7829fb43a856062ddcdba25`
+- `20260913T195933454Z_PPSA99994_ps5vk_0x5802365bfd81`, log SHA-256
+  `333a80f2bea6e81ed18397ec2bf72686d11ff89d04f756fdf1486a0ef1e0d804`
+
+Each ps5log/1 stream contained 1,840 ordered records and cleanly ended after
+API teardown with native allocation accounting at zero. Four ordered GPU draws
+and detiled readbacks each produced exactly 373,248 expected pixels and zero
+other pixels: mirrored repeat at UV -0.25, then transparent black, opaque black
+and opaque white with clamp-to-border at UV -2.0. The compute regression also
+completed before and after every draw. Close Game was confirmed after each run,
+with `PPSA99994` absent from the running-title query.
+
+The follow-up linear-filter payload had exact SELF SHA-256
+`cb59949794ab13fefb2381c01faaa8b6188d93e2e9c4b7628d9e2214fabe000c`.
+Two byte-identical executions produced complete 3,668-record ps5log/1 streams:
+
+- `20260913T202952199Z_PPSA99994_ps5vk_0x59a9aaa3c9de`, log SHA-256
+  `69425e45dbca66a347d782969bad3622e5598aed58d21c9ec302833a654b69d3`
+- `20260913T203035331Z_PPSA99994_ps5vk_0x59b3b575cbf6`, log SHA-256
+  `48b8040c94ed2561cb7afeddd699827184d3a78bacb6c7ee39306691444d977f`
+
+Each repeated the four addressing/border oracles and added four checkerboard
+oracles. At UV 0.5, nearest magnification produced opaque black while linear
+magnification produced exact 50% gray (`0xff808080`) across 373,248 pixels.
+A one-pixel high-derivative witness then used opposite `magFilter`/`minFilter`
+pairs: nearest minification produced opaque black and linear minification
+produced the same exact gray, proving that the minification selector—not the
+magnification selector—controlled the result. Every case had zero unexpected
+pixels, the compute regression completed before and after each draw, both
+streams ended cleanly with zero native allocation bytes, and Close Game was
+verified after each run.
+
+At that stage this established nearest and linear magnification/minification
+for the single-level RGBA8 UNORM sampled-image path. That pair of runs did not
+establish mip chains, anisotropy, custom border colors, mirror-clamp extension
+support, filtering for the additional formats below or Vulkan conformance; the
+later explicit-LOD witness above independently closes only the mip-chain item.
+
+### GPL texture formats promoted by hardware evidence
+
+The sampled-format table derived from the exact GPLv3 `ps5-opengl` revision
+pinned in `LICENSING.md` now publicly supports twenty additional formats spanning UNORM,
+SNORM, sRGB, packed/shared-exponent and 16/32-bit float texels. Texture layout and
+buffer-upload planning use each format's 1/2/4/8/16-byte texel width rather
+than assuming four bytes.
+
+Two runs used byte-identical SELF SHA-256
+`666e441796ae90c1cb06b3dcbacac121f246356235f1525a77c9ffef99dc7e32`:
+
+- `20260913T212518327Z_PPSA99994_ps5vk_0x5cb014618428`, log SHA-256
+  `f7b427cc393add2b802d4d85f15e12484d7fa6e97532a5b2f1ed5c900ce970ce`
+- `20260913T212630352Z_PPSA99994_ps5vk_0x5cc0d96c574c`, log SHA-256
+  `063be2d9a994e36a92be3823088d181d0796ff8c16fbe3672896dd31db53e2c1`
+
+Each complete 1,029-record ps5log/1 stream performed creation, GPU upload,
+layout transitions, descriptor sampling and exact detiled readback for the
+three newly enabled formats. Every case produced exactly 373,248 expected
+pixels and zero others. R8 yielded `(R,0,0,1)`, RG8 yielded `(R,G,0,1)`, and
+the sRGB input `0x80,0x40,0x20` decoded to linear UNORM8 `0x37,0x0d,0x04`.
+Thirty-six compute rounds surrounded the three graphics cases, resource
+accounting returned to zero, both streams ended with BYE and Close Game stopped
+the title in 100 ms. At this tranche the new formats were validated with nearest
+sampling only; the later filter matrix below supersedes that boundary. This is bounded format
+evidence, not general format coverage or Vulkan conformance.
+
+A second GPL-derived tranche added `R8_SNORM`, `R8G8_SNORM`,
+`R8G8B8A8_SNORM`, `E5B9G9R9_UFLOAT_PACK32`, `R16G16B16A16_SFLOAT` and
+`R32G32B32A32_SFLOAT`. Two independent launches used byte-identical SELF
+SHA-256 `de459dfffebcb6a03337d5054e0e6a8263500364e2252b45bb08b460b497d9e9`:
+
+- `20260914T010455716Z_PPSA99994_ps5vk_0x68ac24913444`, log SHA-256
+  `6f4e550061b1432c7b51fb1fd3eadc2e8f4c69587f153dbc086896cddc4d6836`
+- `20260914T010520787Z_PPSA99994_ps5vk_0x68b1faf20fa6`, log SHA-256
+  `6ccd000fec1bf0041c666bba28fbfbedd736dc45788885ae140350ffb12f0f96`
+
+Each complete 3,063-record ps5log/1 stream executed all nine sampled-format
+cases, with 373,248 exact pixels and zero others per case, pre/post compute
+regressions, BYE and zero retained allocations. The shared-exponent case also
+caught and corrected a Vulkan-specific semantic difference from the source
+OpenGL table: a format without alpha must select constant one rather than a
+nonexistent W component. Close Game stopped the exact title in 100 ms after
+each run. At this tranche linear filtering remained advertised only for RGBA8
+UNORM; the later filter matrix below supersedes that boundary.
+
+A third GPL-derived tranche promoted eleven further rows from the pinned Mesa
+GFX10 format table: `R16_UNORM`, `R16_SNORM`, `R16_SFLOAT`, `R16G16_UNORM`,
+`R16G16_SNORM`, `R16G16_SFLOAT`, `R16G16B16A16_UNORM`,
+`R16G16B16A16_SNORM`, `R32_SFLOAT`, `R32G32_SFLOAT` and
+`B10G11R11_UFLOAT_PACK32`. Together with the previous nine cases this forms
+the twenty-format executable probe. Two launches used byte-identical SELF
+SHA-256 `db6983e64ee8a5d016641e8e5d227fbab39421699f7377debd519fd905298b9b`:
+
+- `20260914T013155992Z_PPSA99994_ps5vk_0x6a25639cbe9a`, log SHA-256
+  `7299f83bed5adde02dc0c34cfda99f803a32c32ebf0717c3f82fb0540be013aa`
+- `20260914T013250320Z_PPSA99994_ps5vk_0x6a3209ca7d20`, log SHA-256
+  `a0c7564384c20616b14cc6748ee3d1752a7de007914a7864dad2d79796f1a47d`
+
+Each complete 6,792-record `ps5log/1` stream executed all twenty cases with
+exact format identity and texel width, 373,248 expected pixels and zero other
+pixels per case, plus pre/post compute regressions. Both runs ended with BYE,
+zero retained native allocations and exact-title Close Game in 100 ms. The
+new reporting removes four mandatory sampled-image blockers; normalized and
+floating-point rows whose sampled-image bit is not independently mandatory do
+not inflate that count. The later filter matrix below adds per-format filtering
+evidence. Those per-format runs did not exercise mip selection; the later
+explicit-LOD section above establishes the shared mip path with RGBA8 only.
+
+### Per-format nearest and linear filtering
+
+The twenty GPL-derived sampled formats were exercised with explicit opaque
+black/white checkerboards under both `VK_FILTER_NEAREST` and
+`VK_FILTER_LINEAR`; the previously established RGBA8 UNORM discriminator
+completes the twenty-one-format public table. The probe uses a gray clear
+sentinel distinct from both nearest and linear outputs, and accounts for the
+four-wide R8 fixture required to keep one-byte rows DWORD aligned.
+
+Two launches used byte-identical SELF SHA-256
+`43bd3115d9896b9708a7d33f4dde6403144718d3d1ab204cb8e89c5f53246be6`:
+
+- `20260914T020040371Z_PPSA99994_ps5vk_0x6bb6ddd97c9d`, log SHA-256
+  `482eee7766d80c60963d65fe4d2d6a75aee3e8bf40554add67f97424f9bd9136`
+- `20260914T020126402Z_PPSA99994_ps5vk_0x6bc195846c29`, log SHA-256
+  `beb82e742fc200c48849833f6c468d0309156cc38cd276f460258835e3f85e95`
+
+Each complete 13,572-record `ps5log/1` stream passed all forty trials with
+373,248 exact triangle pixels and zero unexpected pixels per trial. Both runs
+also preserved pre/post compute regressions, emitted BYE with zero retained
+native allocations and stopped the exact title through Close Game in 100 ms.
+The reporting matrix therefore promotes the linear-filter bit on every
+validated filterable sampled-image row and removes eight mandatory format
+blockers. It does not establish mip filtering, anisotropy, arrays or general
+image-format coverage.
+
+### Typed integer sampled images
+
+Eighteen GPL-derived GFX1013 format mappings were promoted only after dedicated
+Vulkan integer-shader evidence: R/RG/RGBA signed and unsigned formats at 8, 16
+and 32 bits. The two payloads use distinct `isampler2D` and `usampler2D`
+fragment interfaces, exact typed texels and a gray clear sentinel. Every case
+produced exactly 1,036,800 expected pixels—the owned triangle covers half of a
+1920x1080 target—with no other non-background pixels.
+
+The unsigned payload had SELF SHA-256
+`6b7af00e6fd80558141e83d71c69ee2bd6ec401e046daf96f4318d92f0b2e4bd`:
+
+- `20260914T023601661Z_PPSA99994_ps5vk_0x6da4c30c934c`, log SHA-256
+  `c4a8edd59f9a1e523290ed576d071aa728e7e88541826ed5d4d86c25989724d0`
+- `20260914T023630716Z_PPSA99994_ps5vk_0x6dab86bfd458`, log SHA-256
+  `229e8540cfbc99bb5c532d4a39aeacbfd9a9b1b75bb20b062afd9b6e1c8a18c1`
+
+The signed payload had SELF SHA-256
+`aa7951e029010a7d5b64d4a1c8c9a5374666d78ec253a3d350a346e15ea69297`:
+
+- `20260914T023733094Z_PPSA99994_ps5vk_0x6dba0cb7278c`, log SHA-256
+  `0be72bc28270f8dc293ba94255570d21cbd0e11ecd05719522ffe393f9218aff`
+- `20260914T023754064Z_PPSA99994_ps5vk_0x6dbeee9493c0`, log SHA-256
+  `7e8d3b743f722a64d82e982de6d7ef84475a6165379a0b7a96a05ef84e74cde8`
+
+Each run contained 4,152 ordered `ps5log/1` records, pre/post compute
+regressions for all nine cases, BYE, zero retained native allocations and an
+exact-title Close Game confirmed in 100 ms. The public table consequently
+advertises sampled-image and transfer-destination support for these rows plus
+single-sample integer sampling. It deliberately does not advertise linear
+filtering, which Vulkan does not define for integer sampled formats. This is
+bounded single-level 2D evidence, not general image-format conformance.
+
+### GPL integer and packed UNORM vertex formats promoted by hardware evidence
+
+The vertex-format table adapted from the pinned GPLv3 `ps5-opengl` revision
+now exposes the `R32`, `R32G32`, `R32G32B32` and `R32G32B32A32` signed- and
+unsigned-integer rows as vertex buffers. Two runs used byte-identical SELF
+SHA-256 `2d0ad4667084f3127b38ca0d0e6cf4f9fab1339b6e34f0e2af496f86aa2ffba6`:
+
+- `20260913T225439880Z_PPSA99994_ps5vk_0x619065cfab35`, log SHA-256
+  `fb9582f5b10926ce0edb18538698d4568e355805d84b43061b22de2b4506d76c`
+- `20260913T225542599Z_PPSA99994_ps5vk_0x619f001c2d7a`, log SHA-256
+  `e1e42287e1d169eb93f392222496dde13a609641763ebeb608f53546230b237b`
+
+Each complete 1,534-record `ps5log/1` stream compiled the signed and unsigned
+vertex shaders at runtime, created eight independent pipelines, fetched three
+vertices per case and verified exactly 471,744 white pixels with zero other
+pixels. The scalar, vec2 and vec3 cases additionally prove Vulkan's missing
+component completion (`0,0,1`) without conflating the integer input category
+with the smooth float output passed to the fragment stage. Ninety-six compute
+rounds surrounded the graphics cases, resource accounting returned to zero,
+both streams ended with BYE and exact-title Close Game completed in 100 ms.
+
+The probe deliberately uses `vkCmdDraw`: it predates the runtime shader
+emitter's indexed support (the combination is emitted now but still has no
+native witness), while the separate offline-program path retains the validated
+indexed support this document records elsewhere. This evidence therefore
+promotes eight vertex-format bits, not general runtime indexed rendering or
+broad format conformance.
+
+Two subsequent runs promoted the packed `R8G8B8A8_UNORM` and
+`B8G8R8A8_UNORM` vertex rows using byte-identical SELF SHA-256
+`f76e366d5d96d9eb5234235764216f7a18df197d9b74cdba2f28a450b9bf9029`:
+
+- `20260913T232331033Z_PPSA99994_ps5vk_0x63237537f92a`, log SHA-256
+  `cebb92f009c7b1586cebf36f0cc39108735dcec2fab4d39624001ab0cd628755`
+- `20260913T232410710Z_PPSA99994_ps5vk_0x632cb2222841`, log SHA-256
+  `408613181e9b90de6c45bcda3d4e645daf1367a0db48334e5396eb080b4d8419`
+
+Each complete 3,104-record `ps5log/1` stream executed all ten vertex cases.
+The packed cases used raw word `0xffaa5511`; the RGBA shader expected logical
+components `(17,85,170,255)/255`, while the BGRA shader expected
+`(170,85,17,255)/255`. Both produced exactly 471,744 white pixels and zero
+others, proving normalized conversion and the R/B permutation independently of
+the framebuffer result. Resource accounting returned to zero, both streams
+ended with BYE and exact-title Close Game completed in 100 ms. This adds two
+specific packed rows; it does not imply other normalized vertex formats.
+
+The mandatory 10-bit `A2B10G10R10_UNORM_PACK32` vertex row was then added with
+byte-identical SELF SHA-256
+`87b30f8dd5026ce5c37a830ae5c514208d9fe5dc000f363647d99184ab38802b`:
+
+- `20260913T234617293Z_PPSA99994_ps5vk_0x64618f4c3bad`, log SHA-256
+  `85144d4c84a3745999cca8115fb80b662e64aca48a9170687d528be85b4c2dd0`
+- `20260913T234715734Z_PPSA99994_ps5vk_0x646f2aae85da`, log SHA-256
+  `e6fa278609b91995e55aca5f8cda91efb2eceb640e76498a87d2ccf00acfa92a`
+
+Each complete 3,413-record stream executed all eleven vertex cases. The new
+case used raw word `0xbffaa955` and checked logical RGBA values
+`(341/1023,682/1023,1,2/3)`, including the distinct two-bit alpha conversion.
+It again produced exactly 471,744 white pixels and zero others; both runs had
+zero retained allocations, BYE and exact-title Close Game in 100 ms.
+
+### Core 8/16-bit vertex families and unaligned bindings
+
+The runtime compiler dependency was advanced to the reviewed PSBC merge commit
+`75f4066fd98ecc0cd0c6aa394ec8e1cdb6de8a88`. It adds the exact Mesa
+`PIPE_FORMAT` mappings needed by the Vulkan 1.0 `R8`/`R8G8`, packed RGBA8 and
+`R16`/`R16G16`/`R16G16B16A16` vertex families. Two runs then used the
+byte-identical SELF SHA-256
+`16f96c2e112044d1689de23bb856b3bb303ed196a0bd829f7228d4e763405e96`:
+
+- `20260914T003253606Z_PPSA99994_ps5vk_0x66ec9e7ca947`, log SHA-256
+  `ab3f1da00c2f2db5e596625bcb756f5eb5aa899c44b50945fa8035a70591560f`
+- `20260914T003415349Z_PPSA99994_ps5vk_0x66ffa6a47149`, log SHA-256
+  `98f6db04d6df59354e3ea6c9e91630356ac4f81ea22fc293d5a66050826f19a3`
+
+Each complete 12,724-record `ps5log/1` stream passed all 41 typed vertex
+conversion cases. Every case produced exactly 471,744 white pixels and zero
+other pixels, with exact component values supplied independently through
+specialization constants. Coverage includes UNORM, SNORM, UINT, SINT and
+half-float conversion; missing-component defaults; `A8B8G8R8` packed order;
+1- and 2-byte strides; and a deliberately unaligned binding offset of 25.
+
+The first diagnostic run showed that a raw GFX1013 structured SRD discards the
+two low base-address bits (`ff03ffff` output instead of the expected white
+triangle). The accepted implementation therefore stages an unaligned
+accessible buffer span into aligned storage owned by the prepared draw. Every
+accepted run recorded one bounded 359-byte bounce per case, preserved compute
+regressions before and after each draw, ended with BYE and zero retained native
+allocations, and returned to the PS5 menu after exact-title Close Game. This is
+evidence for these vertex input combinations, not general format or Vulkan
+conformance.
+
+The earlier dynamic-buffer descriptor increment removes four of those
+limit blockers across the compute and graphics profiles. It implements distinct
+dynamic UBO/SSBO pool accounting, Vulkan-order bind-time offset capture,
+alignment validation and native descriptor-address adjustment with checked
+ranges. Queue priority reporting subsequently removed two more blockers: both
+profiles report the required two discrete priority classes, and device creation
+maps every valid normalized priority deterministically to low or high. The
+signed sampler-LOD-bias implementation removes another graphics limit blocker.
+The reporting matrix now records 133 satisfied mandatory limit rows, 65 limit
+blockers and 629 blockers overall.
+
+Two byte-identical public-SDK consumer runs then exercised that path on the
+owned PS5. Runs
+`20260913T192239874Z_PPSA99994_ps5vk_0x55fed4aef4a8` and
+`20260913T192252217Z_PPSA99994_ps5vk_0x5601b45b2478` used executable SELF
+SHA-256 `2f90929ff30eb069cc66bfdb86d991b0ebaf08c07d1878be2ee522e02c95e0d7`.
+Each strictly verified three descriptor sets, two dynamic storage buffers, one
+dynamic uniform buffer, offsets `256,256,256`, an independently non-zero
+update-time base plus dynamic offset, 64 deterministic compute results and 192
+intact guard words. The existing graphics/readback tail also completed, the
+`ps5log/1` transcript was complete, and Close Game was verified after both
+runs. Transcript SHA-256 values are
+`05296089284398c4377224943904a26e3c466808352a441fd5b8cbd9788be77a` and
+`cf7f31e5815b9e03a9bebca3627fc578231130e38ce66bdf5ccd29ec0fe29f3a`.
+This evidence validates that exact bounded path; it is not blanket coverage of
+every descriptor array, pipeline layout or shader combination.
+
+The core-feature reporting audit also distinguishes feature negotiation from
+object validation. For every `VkPhysicalDeviceFeatures` member reported false,
+`vkCreateDevice` walks the complete structure and rejects a true request before
+opening the backend. `tests/test_vk_device.c` exhaustively sets each member in
+turn, proving that only the advertised `robustBufferAccess` bit can enable.
+This closes the previous 26 `not-audited` rows (13 features in each profile):
+the matrix now has 110/110 satisfied feature-reporting rows. It does not claim
+that those optional features are implemented; it proves precisely that they
+are reported unavailable and cannot be negotiated accidentally.
+
+## Layered sampled images derived from ps5-opengl (2026-09-14)
+
+The GPL-compatible integration of the pinned `ps5-opengl` GFX1013 texture
+descriptor contract now covers distinct single-level 1D, 1D-array, 2D-array,
+cube and 3D resource types. The Vulkan frontend adds bounded image creation,
+view ranges, multi-slice layout and buffer-upload planning; it does not link
+Mesa/Gallium or expose an OpenGL API.
+
+Three independently built RGBA8 payloads exercised the exact paths on firmware
+12.02. Each used a 64x64 source with one solid color per layer, face or volume
+slice, selected three different coordinates in the fragment shader, preserved
+the compute regression before and after the draw, emitted BYE, released all
+native allocations and returned cleanly through exact-title Close Game:
+
+- 2D array: run `20260914T033255434Z_PPSA99994_ps5vk_0x70bf955a1933`,
+  SELF SHA-256 `46c2aa6de518a7f5642c1631273d073ee6193e0174907f816649cae6dbb7591c`,
+  log SHA-256 `448fbab89293fde9ef330114159895a1dfdf9f5e8720cf8963e238315296039a`;
+  readback was red/green/blue `82944/207360/82944`.
+- Cube: run `20260914T033409959Z_PPSA99994_ps5vk_0x70d0ef5f31b1`,
+  SELF SHA-256 `c7715a4555326fcb2e8a846bae0acf06d8fd8259a44c63c09efbcb088536855c`,
+  log SHA-256 `d201d846a7fce4ada5e6b9b8e9fd4ffa92103737379e94253d4cb338a12d0c6a`;
+  readback was `82944/82944/207360`.
+- 3D: run `20260914T033459547Z_PPSA99994_ps5vk_0x70dc7af14826`,
+  SELF SHA-256 `f54b6cef2328bdc98f5b11e1d371383344baa1863be8739352f7e390cd781955`,
+  log SHA-256 `767a86a15d38d6bb7bb6201c3741679b5ff4f7358d131983fdfd92725c3e4325`;
+  readback was `82944/207360/82944`.
+
+All three reported zero unexpected pixels. The reporting matrix can therefore
+expose the Vulkan 1.0 floors of 256 array layers, 4096 cube dimension and 512
+3D dimension without retaining the previous false “unsupported image type”
+blockers. Those values are bounds of the implemented descriptor and allocation
+contract; these small witnesses do not claim exhaustive execution at the
+maximum dimensions, cube arrays or general descriptor arrays. The later 2D
+RGBA8 mip witness is documented above and must not be generalized into layered
+mipmap coverage.
+
+Two later independent payloads validated the remaining Vulkan 1D image type
+rather than inferring it from the 2D layout. Both emitted 407 ordered records,
+preserved the pre/post compute regression, reported zero unexpected pixels,
+released all allocations and returned through exact-title Close Game:
+
+- 1D: run `20260914T035618318Z_PPSA99994_ps5vk_0x720636c8b4ca`, SELF
+  SHA-256 `3f931e503cf55dee3d5a6efad6fb6353801cb797862f12febe52b383140a2f2f`,
+  log SHA-256 `8f0782095b4c8ca7277ab88c379a43eadceb3e9efbb043480ce4965caec30aad`;
+  three independently colored regions produced red/green/blue
+  `82944/207360/82944`.
+- 1D array: run `20260914T035708018Z_PPSA99994_ps5vk_0x7211c91f6e55`, SELF
+  SHA-256 `80525965827292498f2ab0c882c5ad701c385ddfe8b34d98cd727c8cc45b301c`,
+  log SHA-256 `18c8c8b6a0331dd4eb953462cba83894adb0d10fa03b4184a8225cd909716441`;
+  three independently colored layers produced the same exact histogram.
+
+The graphics profile consequently reports `maxImageDimension1D=4096` and
+removes that real blocker. This is still a bounded contract, not an exhaustive
+maximum-sized allocation test.
+
+## Mandatory uniform buffers beside sampled sets (2026-09-14)
+
+A legal Vulkan graphics layout may carry mandatory uniform buffers next to its
+combined image samplers. The runtime graphics profile previously rejected every
+non-sampler descriptor type, so such a pipeline failed to create
+(`vkCreateGraphicsPipelines -> VK_ERROR_FEATURE_NOT_PRESENT` with the runtime
+graphics cache reporting `rc=-8`). The profile now admits
+`VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER` and `UNIFORM_BUFFER_DYNAMIC` bindings and the
+`Uniform` storage class, delivers both descriptor kinds from one canonical table
+and validates them per element; storage buffers remain outside this bounded
+profile.
+
+The public SDK consumer's mixed-resource workload exercises that path: four sets,
+each with one uniform buffer at the sparse binding 5 and a 24-element combined
+image sampler array at binding 7, 96 sampled descriptors plus 4 uniform buffers
+in total. The uniform record is rewritten and re-published as a descriptor write
+between the four rounds, and the shader scales each set's whole contribution by
+it, so a missing, stale or cross-wired record changes the pixel.
+
+One signed artifact, `dist-consumer/artifact.json` profile `mixed-resources`,
+SELF SHA-256
+`592ac57858b7da62792ad2638523d59a0d9c986f86f00b3cc49951af3041f2b7`,
+fragment shader SHA-256
+`44b88cb20c7c11baff96ca4f3b82a8faa3b6449bdaca810e6fbd8a9166d6866a`,
+was deployed through exact FTP readback and ShadowMountPlus refresh. Two
+identical-artifact runs on the owned PS5:
+
+- `20260914T141642731Z_PPSA99994_ps5vk_0x93e114d27a53`, log SHA-256
+  `87377f8cbe9fa7b8653f5d9d57ba5a1dfb04c88cfd3c9be731b9e8b1c009f2e8`
+- `20260914T141725539Z_PPSA99994_ps5vk_0x93eb0c34f770`, log SHA-256
+  `6a7685224e7c63a5b3774d18c6194fc9afa46a9989fc442b8795917770132226`
+
+Each round reported `changed=471744` with `bad=0` against the in-run model, and
+the four expected words `381e1f17`, `4b29272a`, `5d2d2c2c` and `6f2c4038` match a
+separately computed reference exactly (the verifier rejected an earlier,
+incorrectly mapped attempt at those literals). Both runs ended with
+`PS5VK_CONSUMER_RESOURCES_RETIRED zero_tracked_allocations=1`, a complete
+`ps5log/1` transport (`BYE reason=consumer-finite-end`) and a verified
+exact-title Close Game.
+
+This qualifies the mixed delivery path for that bounded workload only. No
+descriptor or sampler limit is advertised here, storage buffers and other
+descriptor types stay rejected, and the reported sampler and sampled-image
+limits are unchanged; the limit derivation remains a separate change.
+
+## Per-set descriptor capacity: 96 sampled descriptors in one set (2026-09-14)
+
+The Vulkan 1.0 floors `maxDescriptorSetSamplers = 96` and
+`maxDescriptorSetSampledImages = 96` apply to a **single** descriptor set. The
+existing 96-descriptor witness spreads its elements over four sets (24 per set),
+which bounds the per-stage count but not the per-set one, so it could not support
+those two floors on its own.
+
+The public SDK consumer's single-set profile puts all ninety-six combined image
+samplers in set 0, binding 7. Element `i` keeps the weight `1+i` and the palettes
+of the globally `i`-th element of the four-set workload, so the exact aggregate is
+identical and the frozen reference words are the same as for the four-set shape;
+matching them shows the per-set capacity rather than a different workload.
+
+One signed artifact, `dist-consumer/artifact.json` profile `single-set`, SELF
+SHA-256
+`e4857dd69b6545ebfd7ac82b66551140edcab280655b7e2ed5af7f439535fdcd`,
+fragment shader SHA-256
+`76225631c9e39e2e64be851ebd78e2ceed3cc0da6af610a963075ab4f8cc05b0`,
+was deployed through exact FTP readback and ShadowMountPlus refresh. Two
+identical-artifact runs:
+
+- `20260914T145418819Z_PPSA99994_ps5vk_0x95ee5c423c68`, log SHA-256
+  `6b16e9bd33748af9da12edb1bdd8907440d9e0d3bd7c7ecc202152122a2d7506`
+- `20260914T145426305Z_PPSA99994_ps5vk_0x95f01a62fd68`, log SHA-256
+  `7d999a4a850c111b523e77e4f4f530995044e4fb7e76880268f144f1c1f2cb11`
+
+Each round reported `changed=471744` with `bad=0` for the expected words
+`914c503b`, `914b4d4f`, `914a4643` and `913a5449`, and both runs ended with
+`PS5VK_CONSUMER_RESOURCES_RETIRED zero_tracked_allocations=1`, a complete
+`ps5log/1` transport and a verified exact-title Close Game.
+
+This is bounded evidence for one set of 96 combined image samplers in a
+fragment-only pipeline with four update rounds. It does not advertise a limit by
+itself, says nothing about other descriptor types or about other stages, and is
+not a conformance claim; the reported limits remain unchanged in this change.
+
+## RGBA8 uniform texel buffer promotion (2026-09-15)
+
+`VK_FORMAT_R8G8B8A8_UNORM`, `VK_FORMAT_R8G8B8A8_SNORM`,
+`VK_FORMAT_R8G8B8A8_UINT` and `VK_FORMAT_R8G8B8A8_SINT` now publish
+`VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT` in the graphics profile, and
+`vkCreateBufferView` accepts them for
+`VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT`. This is the enablement half of the
+role implemented on `main` by the four-byte-RGBA8 slice; creation and reporting
+move together, so the reported set and the creatable set stay identical.
+
+The encoding is not new: a GFX10 buffer descriptor carries the combined
+DATA_FORMAT/NUM_FORMAT value that the sampled-image descriptor already stores
+(8_8_8_8 UNORM/SNORM/UINT/SINT are 56/57/60/61), and the completion word is the
+row's own selector meaning, `(X,Y,Z,W) = 0xfac` for a four-component row
+against `(X,0,0,1) = 0x204` for the one-component R32 rows.
+
+### The witness
+
+A new owned compute shader fetches one texel per invocation with
+`texelFetch(samplerBuffer)` from an RGBA8 buffer view, rounds every fetched
+channel back to its 8-bit value, packs the result as `R | G<<8 | B<<16 | A<<24`
+and XORs it with the integer input buffer. The CPU oracle predicts every output
+word from the bytes written into the texel buffer, so a wrong element word, a
+wrong channel completion, a scalar-replicated `(X,X,X,X)` mapping or an
+off-by-one record count each change the expected word. The existing
+`R32_UINT`/`R32_SINT`/`R32_SFLOAT` resource-ABI path is unchanged and keeps its
+recorded evidence; the new variant is selected by
+`tools/build_consumer.py --texel-rgba8` and
+`tools/run_consumer.py --texel-rgba8`, whose strict verifier also requires the
+device to report the bit it is about to use.
+
+The first attempt at this witness failed at indices 37..63 and the defect was
+in the C oracle, not in the driver: the per-channel expressions were not masked
+to eight bits, so `i*7+3` spilled from the blue byte into alpha while the GPU
+returned exactly the bytes written. The oracle now masks each channel, and the
+runs below are the corrected artifact.
+
+### Two identical runs
+
+Deployed `eboot.bin` SHA-256
+`848dae57ea7e6e19d1ef608bfea219606e9e7821b8952c1324674b4fd55b8596`, re-read
+with FTP SELF conversion disabled and matched exactly before each launch, with
+ShadowMountPlus restarted and verified before each launch. The RGBA8
+`texelFetch` SPIR-V SHA-256 is
+`e14a6bb98ef0a9abf725b1c30bb132cff22b5b2eb149eb7625201561b2e713a4`.
+
+- `20260914T234125783Z_PPSA99994_ps5vk_0xb2b1fcb0ecca`, log SHA-256
+  `18cf44694da9a1a52bb69027ed39e26e878bc6156b6facadacebfc968789238c`
+- `20260914T234134074Z_PPSA99994_ps5vk_0xb2b3eae2b6ae`, log SHA-256
+  `58b85c385daef9b95ece359faad8e43406c027791c1d41fe01634f9c4a8f930a`
+
+Both runs are byte-identical in every witness line and both passed the strict
+verifier (`strict_verified=true`, `lifecycle_ok=true`):
+
+- `PS5VK_CONSUMER_TEXEL_RGBA8_FORMAT format=r8g8b8a8_unorm
+  buffer_features=0x00000048 uniform_texel_reported=1` — the device reports
+  `VERTEX_BUFFER|UNIFORM_TEXEL_BUFFER` for the format being used;
+- `PS5VK_CONSUMER_TEXEL_RGBA8_SUCCESS format=r8g8b8a8_unorm texels=64
+  channels=4 packed_rgba_order=1 mismatches=0 guard_words=192
+  guard_mismatches=0`;
+- `PS5VK_CONSUMER_RESOURCE_ABI_SUCCESS ... elements=64 mismatches=0`;
+- `PS5VK_CONSUMER_RESOURCES_RETIRED zero_tracked_allocations=1` and
+  `PS5VK_READY_FOR_SHELL_CLOSE resources_retired=1`;
+- `BYE seq=484 reason=consumer-finite-end` in both.
+
+The title was closed and `running=none` was confirmed independently by
+`tools/control.py status` and by `tools/night_supervisor.py status`.
+
+This directly qualifies the shared four-component uniform-texel-buffer path
+with UNORM. The SNORM/UINT/SINT rows compose that result with their earlier
+format-specific conversion and shader-interface witnesses because all four
+rows use the same bounded descriptor path and four-component completion. The
+new payload did not fetch each of those three formats independently. This is
+not a CTS result or conformance claim, and it does not extend to storage texel
+buffers, blit, resolve, attachment clears or any other format family.
+
+## GFX10 occlusion-counter measurement (2026-09-15)
+
+The query family could not start honestly without device facts that the desk
+research explicitly left NOT MEASURED: how far the render-backend geometry
+actually extends, which backends are enabled, and whether a real occlusion
+counter can be produced at all. This section records the bounded native
+measurement that answered all three for this console and produced a real
+counter. It adds **no public query behaviour**:
+`vkGetQueryPoolResults` still reports `VK_NOT_READY`, `vkCmdBeginQuery` and
+`vkCmdEndQuery` still fail closed, and nothing is advertised.
+
+### The probe
+
+Payload scenario `PS5VK_GRAPHICS_SCISSOR_PROBE=15` runs the existing bounded
+scene and, around its draws, emits the GFX10 occlusion event pair through
+`ps5vk_graphics_occlusion_event` (`src/graphics_sync.c`, host-asserted in
+`tests/test_graphics_sync.c`):
+
+```text
+PKT3_EVENT_WRITE (header 0xC0024600)
+EVENT_TYPE(ZPASS_DONE=21) | EVENT_INDEX(1)   -> 0x0115
+address: slot base for the begin write, slot base + 8 for the end write
+```
+
+Each enabled render backend writes a 64-bit start at `16*i` and a 64-bit end at
+`16*i + 8`, and sets bit 63 of both words when the dump lands, so the set of
+written pairs IS the enabled mask and the result is the sum of the per-backend
+deltas. The slot is a separate zeroed, 64 KiB-aligned direct-memory arena sized
+for 64 pairs, so a pair no backend owns stays zero and is reported as
+unavailable instead of being read as a fabricated result.
+
+Two coherence and evidence rules matter here and are enforced in the payload,
+not just asserted in prose. The slot arena is CPU-zeroed and the memory is
+non-coherent, so the zeroed lines are flushed before submission and the slot is
+invalidated again only after the exact completion label; otherwise a dirty CPU
+line could obscure or overwrite what the hardware wrote. And the per-pair and
+summary rows are emitted **after** `PS5VK_GRAPHICS_COMPLETED` for the same
+serial, so the log itself shows the readout happened after the producing
+submission retired.
+
+The evidence is verified by `tools/verify_occlusion_probe.py`, which is bound
+to the build manifest and the artifact it names (stage, `submit_enabled`,
+`scissor_probe=15`, `termination=shell-close-after-cleanup`, and the
+`files/eboot.bin` digest), checks the HELLO identity fields, requires one
+serial across begin/end/pairs/slot with its completion row in the right place,
+requires exactly one clean `PS5VK_PLATFORM_CLOSE`, and derives validity from
+the slot invariants (unique contiguous indices from `first_pair`, mask and
+`highest_pair` consistency, availability bit 63 in both words, and the deltas
+summing to the reported counter). `tests/test_verify_occlusion_probe.py` holds
+19 mutation fixtures that make each of those checks fail, and `make check` runs
+them.
+
+### Measured result, two identical runs
+
+Deployed `eboot.bin` SHA-256
+`45c096097b9837f786d6d619db4dcd9548de8f89b82ca1c80c097063d37391fd`, re-read
+with FTP SELF conversion disabled and matched exactly before each launch, with
+ShadowMountPlus restarted and verified before each launch:
+
+- `20260915T061712316Z_PPSA99994_ps5vk_0xc84ad5eb323d`, log SHA-256
+  `efc86b5b54aa7639f6664e430cc38cdc86fdfdf6d17e038031150b5936efe7ff`
+- `20260915T061721229Z_PPSA99994_ps5vk_0xc84ce9235302`, log SHA-256
+  `de93570bf2dc230ecebdad0f14346cdfa35fef952219b7d6cf2379eaf3810d9f`
+
+Both runs report the identical result, and `tools/verify_occlusion_probe.py`
+validated each run and required the two to agree exactly:
+
+- `PS5VK_OCCLUSION_PROBE_SLOT serial=7 pairs=64 available=16 first_pair=0
+  highest_pair=15 mask_lo=0000ffff mask_hi=00000000 counter=139968`, which
+  reports measured facts only; there is no self-certifying validity flag, and
+  the verifier derives validity from the invariants it checks itself;
+- sixteen `PS5VK_OCCLUSION_PROBE_PAIR` rows, indices 0..15, each with
+  `begin=8000000000000000` (start 0 with availability bit 63 set) and end
+  values whose deltas sum exactly to 139968;
+- `PS5VK_PLATFORM_CLOSE rc=0 allocations_bytes=0` and
+  `BYE seq=263 reason=graphics-api-end`.
+
+So, on this console: the enabled render-backend mask is the contiguous low pair
+range 0..15 (`mask 0x0000ffff`, highest written index 15), which makes
+`enabled_render_backends = 16` and `max_render_backends` **at least 16**; the
+measurement bounds it from below and does not establish the architectural
+maximum. A real GPU occlusion counter of 139968 was produced for the bounded
+draw at default (non-precise) precision, and this is one bounded measurement
+rather than a general claim about counters. The title was closed and
+`running=none` was confirmed independently by `tools/control.py status` and
+`tools/night_supervisor.py status`.
+
+### What this does and does not establish
+
+It establishes the begin/end packet form, the 16-byte-per-render-backend slot
+layout, the bit-63 availability rule and the device geometry: the contract a
+real occlusion query has to be built on. It does not implement query results,
+does not cover timestamps or pipeline statistics, does not cover the
+`WAIT`/`PARTIAL`/64-bit result flags, and is not a CTS result or a conformance
+claim. `DB_COUNT_CONTROL` precise counting is not exercised here; the measured
+counter is the default-precision form.
+
+Two defects found on the way are worth recording. First, the initial packet
+header placed the opcode in the low bits instead of bits 15:8, which is a
+different packet entirely: the completion label never arrived and the payload
+stalled after `PS5VK_GRAPHICS_SUSPEND_POINT` with no BYE. That is the same
+symptom earlier diagnostics attributed to a register-read probe, and it is why
+the builder now lives in the host-tested packet helper where `make check`
+asserts its exact words. Second, the register-probe block is skipped for this
+scenario, because its `COPY_DATA` register reads are unrelated noise for an
+occlusion measurement and previously cost a console round trip on their own.
+
+## Secondary execution inside a render pass (2026-09-15)
+
+### The oracle
+
+The consumer renders the SAME triangle twice into the SAME
+`VK_FORMAT_B8G8R8A8_UNORM` 1920x1080 attachment, with the same pipeline and the
+same dynamic viewport and scissor. The only difference is how the draw reaches
+the pass. The first pass is begun with
+`VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS` and the primary records **no
+draw of its own**: it names one inherited continuation secondary. The second
+records the same draw **inline**. The two readbacks must be identical.
+
+A second continuation secondary is recorded against the same scope with a
+half-height viewport and **never named**. Equality therefore fails in every
+wrong direction: if the named secondary did not execute, the first readback
+keeps only its clear; if the driver also executed the unnamed one, its squashed
+triangle paints pixels the inline result does not have; if either drew
+something else, the images differ. The verifier additionally pins the image, so
+two wrong-but-equal results cannot pass either. Each pass is preceded by a
+sentinel pre-fill that neither the clear nor the draw produces, so a surface
+nothing wrote cannot read as a cleared one, and the second measurement cannot
+be the first one's leftovers.
+
+### Measured result, two identical runs
+
+Artifact `dist-consumer/PPSA99994/eboot.bin` sha256
+`383484e752f2e511d08ebd0e3326683c13c28018c6a69b274ef9d640c577dc8a`, deployed by
+FTP and re-read with SELF conversion disabled with an exact match,
+ShadowMountPlus restarted and verified before each launch.
+
+- `20260915T090900132Z_PPSA99994_ps5vk_0xd1aac7365e07`, log sha256
+  `00ba815d938a5f377798a614168d2fae851d1ae36ef3f3f9d88c1ebfd531fd36`
+- `20260915T090927164Z_PPSA99994_ps5vk_0xd1b112905834`, log sha256
+  `a87e4fc27c2671ba1cf269d043081cc294ea3a5fee1c2c2353c06ba9834a1eee`
+
+Both runs are byte-identical in the witness line:
+
+```
+PS5VK_CONSUMER_INPASS_SECONDARY_SUCCESS named=1 unnamed_recorded=1
+executed_changed=471744 control_changed=471744 bad_alpha=0 bad_sum=0
+executed_hash=77abc830 control_hash=77abc830
+```
+
+Both ended with `BYE seq=506 reason=consumer-finite-end`,
+`zero_tracked_allocations=1` and `resources_retired=1`, and the title was
+confirmed stopped independently. 471744 is exactly the triangle area the
+eighteen-frame readback contract already pins, `1920 * 1080 * 91 / 400`,
+measured independently here.
+
+The log also shows the composition directly: the secondary-executed pass
+records `PS5VK_GRAPHICS_PREPARED serial=55 draws=1` for a primary that recorded
+no draw at all, so that draw reached the backend through the composed segment.
+
+### What this does and does not establish
+
+It establishes that a secondary recorded for render-pass continuation executes
+inside a primary's render pass and produces exactly the image the same draw
+produces inline, on the already qualified one-colour-plus-D32 profile. It does
+not by itself establish multiple subpasses, `vkCmdNextSubpass`, input or
+resolve attachments, multisampling, query inheritance, or any conformance
+claim. The separate two-subpass oracle below establishes only its own bounded
+profile.
+
+A zero-body render pass cannot be smuggled in through this path either: a pass
+whose only content names empty secondaries executes nothing, and recording,
+submission and the backend each derive the work that will actually execute
+rather than counting commands. Naming an empty secondary beside one that draws
+stays legal and keeps its place in the order.
+
+One defect is worth recording, because only the console could find it. The
+first version of this scenario rendered the control into the second
+presentation image, and `vkQueueSubmit` refused it with `VK_ERROR_UNKNOWN`
+because that image was still display-busy from the last presented frame. The
+driver was right and the scenario was wrong; both passes now use the same
+attachment, which also makes inline versus secondary the only difference
+between the two measurements.
+
+## Native two-subpass execution (2026-09-15)
+
+The finite public-SDK consumer records a render pass with two subpasses over
+the same `VK_FORMAT_B8G8R8A8_UNORM` colour attachment and layout. Subpass `0`
+draws a full-size procedural triangle, `vkCmdNextSubpass` crosses one explicit
+forward `0` to `1` dependency, and subpass `1` draws a centred half-size
+triangle. A one-subpass control records the same two draws in the same order;
+their complete 1920x1080 readbacks must have the same pinned FNV-1a hash.
+
+Three additional controls execute the first draw only, the second draw only,
+and the two draws in reverse order. Every incorrect sequence must differ from
+the ordered result. The reversed result intentionally equals first-only: its
+final full-size draw completely overwrites the smaller draw. The verifier pins
+all five hashes independently, requires exactly one boundary marker for
+subpass `1` carrying the measured 10-word acquire, requires all 47 graphics
+submissions in order, and rejects missing, duplicated or reordered evidence.
+
+Two independent launches used the identical SELF SHA-256
+`374e9e59dc23c981f61dbdc62f71eecd5db28090d9eea97b384ee5f2785743ed`:
+
+- `20260915T124637265Z_PPSA99994_ps5vk_0xdd8ad6960977`, log SHA-256
+  `806bb9e9086a224bb0b4b8dc0efe752a0159ef9c853ee4770f8c41db26505046`
+- `20260915T124759988Z_PPSA99994_ps5vk_0xdd9e18e67fef`, log SHA-256
+  `48a45f271e17d62762b51d71db0866f85dbb372d388b7416339e5dc1bec6d5c0`
+
+Both produced the same witness:
+
+```text
+PS5VK_SUBPASS_BOUNDARY serial=57 subpass=1 words=10
+PS5VK_CONSUMER_TWO_SUBPASS_SUCCESS multi=84cc0cb3 ordered=84cc0cb3
+first=77abc830 second=fa6b3a7a reversed=77abc830 changed=471744
+negative_distinct=1 bad_alpha=0 bad_sum=0
+```
+
+Both retired the two render passes, three pipelines and two framebuffers before
+the presentation surface; both then reported
+`zero_tracked_allocations=1`, ended with
+`BYE seq=560 reason=consumer-finite-end`, and were independently confirmed
+stopped. This establishes real GFX1013 execution and attachment ordering for
+the exact shared-role two-subpass profile. It does not establish input,
+resolve or preserve attachments, attachment/layout changes between subpasses,
+more than two subpasses, arbitrary dependency graphs, multisampling or Vulkan
+conformance.
+
+## Direct uniform-texel format matrix (2026-09-15)
+
+A finite native consumer directly fetched every enabled uniform-texel-buffer
+format through `samplerBuffer`, `usamplerBuffer` or `isamplerBuffer`. The 41
+cases span normalized, integer, half/float and packed-float conversions with
+1-, 2-, 4-, 8- and 16-byte elements. Each case compared all four returned
+components with an exact CPU oracle, including Vulkan component completion;
+the packed `VK_FORMAT_B10G11R11_UFLOAT_PACK32` case additionally pins its
+hardware decode and alpha completion.
+
+Both runs used the same SELF:
+`ef196ce8fbb22ef33f0c15f60dbd9a801d7d7624c0bb87407a1e1e79cfa7e8b1`.
+
+- `20260915T114720138Z_PPSA99994_ps5vk_0xda4ea3a518eb`, log sha256
+  `94a07bde50440227191ec5a44f4e47c76a74a5bfa0b985a077ab1bd436174646`
+- `20260915T114908594Z_PPSA99994_ps5vk_0xda67e478833a`, log sha256
+  `c309d5db753fe0b25b6491f336eb700281ed16fa71af51313f782583f6b709f1`
+
+Each run reported 41/41 exact cases, 164/164 component words, zero guard
+mismatches and one submitted/suspended/completed dispatch per case. Both
+streams ended with the finite consumer's complete `BYE`, and exact-title Close
+Game independently confirmed the process stopped. The qualification applies
+only to uniform texel buffers; it does not imply storage-texel-buffer support.
+
+## Rasterization and viewport promotion (2026-09-21)
+
+The four DXVK262-T05 requirements - `depthClamp`, `depthBiasClamp`,
+`fillModeNonSolid` and `multiViewport` - are advertised by the shipping profile.
+The measurement switch the earlier witnesses needed is gone; `native/platform_ps5.c`
+reports the four bits itself.
+
+The frozen acceptance selection grew from 304 to 362 cases with the 58 leaves
+these features own, and the shipping build passes all of them:
+
+- run `20260921T165514411Z_PPSA99994_upstream-cts_0x15ea42202ec6c`,
+  **362/362 Pass**, zero Fail, zero NotSupported, no missing, unexpected or
+  duplicate results, `strict_verified` and `lifecycle_ok` both true, title
+  closed and confirmed stopped.
+- deployed SELF SHA-256
+  `449782bb258a51dc2f72b376c6e88e4b1122efeec8a0a214f532de390c7b0caa`, read back
+  exactly through FTP before launch.
+- selection SHA-256
+  `26862d1a5eb9ca93121797e1e9649b45ad753c319e3ee75624bbec3f0d995cba`;
+  reassembled report SHA-256
+  `ccfd626cac68cba95a6322408257c17c789fba4972274c4cc425b5c5283a66e7`.
+
+The public-ABI capability probe was rebuilt against the promoted profile and
+re-run, so the device's own query route confirms the advertisement rather than
+the driver's source doing it: run
+`20260921T163032548Z_PPSA99994_ps5vk_0x15d4b1d4b89b8`, artifact
+`6c49df2e42461249b9bbfd65530d17381428bdb5f1bdeb1d1b895b7aa68d28c5`,
+**15 of the 62 profile requirements satisfied** and 47 blockers, up from 11.
+On `main` alone the DXVK matrix therefore reads 13/62 ready with 49 blockers;
+this branch also carries T06's `fragmentStoresAndAtomics` and `dualSrcBlend`
+promotions, so the merged tree reads **15/62 ready with 47 blockers** and a
+frozen acceptance selection of 462 cases (the 362 measured here plus T06's 98
+dual-source leaves and its two fragment side-effect leaves).
+
+Per requirement the applicable upstream leaves are: `depthClamp` all eight,
+`depthBiasClamp` its only two, `multiViewport` all twenty-two,
+`fillModeNonSolid` all twenty-eight it can run. Its twenty-ninth,
+`rasterization.line_continuity.polygon-mode-lines`, stays a diagnostic and is
+not a defect in the feature: Amber's backend allocates its host-accessible
+buffer demanding `HOST_VISIBLE|HOST_COHERENT` with force_flags, this profile
+advertises one memory type without `HOST_COHERENT` and deliberately reports
+non-coherent memory, so the leaf fails at memory selection before any
+rasterization. Advertising that bit would be a false claim; host-coherent
+memory is a separate capability question.
+
+This is focused validation of four requirements, not Vulkan conformance, and
+release review remains pending.
+
+## Rasterization and viewport witnesses (2026-09-18)
+
+First hardware execution of the DXVK262-T05 rasterization/viewport witnesses,
+one bounded console window, two deploys of two payloads built from
+`t05-final` `ca70b5b`. Nothing is advertised by this run: it is the evidence the
+advertisement would have to rest on, and it is partial, so the platform mask is
+untouched.
+
+| | Shipping merge regression | Raster measurement |
+|---|---|---|
+| package | `consumer-shipping-ca70b5b` | `consumer-diagnostic-ca70b5b` (`PS5VK_RASTER_DIAGNOSTIC=1`) |
+| eboot sha256 | `8c6fee5f48a8e31e5a95516dab92704285bc674d1489c895551d33942f60baed` | `9a0056a564567baf9d5aa519e06b80697de2c089af95838e65c962a41286ee8c` |
+| run | `20260918T124926937Z_PPSA99994_ps5vk_0x657da0cca63c` | `20260918T125021109Z_PPSA99994_ps5vk_0x658a3dafb094` |
+
+**Shipping regression.** `strict_verified`, `lifecycle_ok`, `clean_tcp`, 63
+`PS5VK_GRAPHICS_SUBMIT`, 18 fixed-function frames, 10 indirect draw cases, 6
+draw-parameter cases, 4 sampled-graphics rounds and the depth-reject oracle. The
+reconciled draw path emits the base registers, the T05 raster block, the
+viewport banks and T04's primitive-restart pair on every draw, and the whole
+consumer table ran on it without a change. The raster witnesses reported
+`depthBiasClamp=0 depthClamp=0 fillModeNonSolid=0 multiViewport=0 maxViewports=1`
+and skipped with `reason=features_not_reported` - the required shipping
+behaviour while nothing is advertised.
+
+**Raster measurement.** The device reports
+`depthBiasClamp=1 depthClamp=1 fillModeNonSolid=1 multiViewport=1 maxViewports=16`
+under the measurement build, so the feature and its mandatory limit now come
+from the same mask and the witness runs for the first time. Of the 31 cases,
+**25 report `valid=1` and 6 do not**: `polygon_fill`,
+`polygon_line_cull_front`, `polygon_point_cull_back_cw`,
+`polygon_line_cull_back_ccw`, `clamp_disabled_narrow_probe` and
+`clamp_enabled_narrow_probe`. The 25 cover all twelve depth-bias cases, six of
+eight depth-clamp cases and seven of eight polygon-mode cases, including the
+three viewport-bank cases. The six are recorded as measured mismatches and were
+**not** reconciled by adjusting the oracle; deciding whether each is a driver
+defect or a witness-oracle defect is the next slice.
+
+Two defects of the harness itself were found while reading the transcript and
+are recorded rather than quietly fixed: `PS5VK_CONSUMER_RASTER_RESULT` prints
+`valid=0` while 25 of its own per-case lines say `valid=1`, so that summary
+counter does not accumulate; and `PS5VK_CONSUMER_RASTER_GS_*` counts a skipped
+witness as a case in `witnessed=25`.
+
+**The geometry witness first failed here and now passes.** In the run above,
+`viewport_index_routing` ended in `vkCreateGraphicsPipelines -> -8`: the pinned
+compiler left `PSBC_UNRESOLVED_AGC_LINKAGE` set for a merged vertex+geometry
+program that exports `gl_ViewportIndex` (measured `unresolved=0x7`,
+`PA_CL_VS_OUT_CNTL=0x01280000`), because RADV counts that export in
+`param_exports` while the semantic list only walked user locations.
+`ps5vk_runtime_shader_build` refuses an unresolved linkage instead of guessing a
+parameter mapping, and the control was exact - the same geometry module with
+only the `gl_ViewportIndex = gl_PrimitiveIDIn;` line removed compiled clean
+through the identical key.
+
+That gap is closed. The compiler now names the export
+(`PSBC_SEMANTIC_VIEWPORT_INDEX`, mpereiraesaa/opengnm-psbc#17, pinned in
+`tools/prepare_compiler_deps.py`), and the same window was repeated on
+`t05-final` `a888290` with eboot
+`436a5c2856eec1b67dca27f6e46475f8c3b206fc73f5b6dc0bfc566940a813a7`, run
+`20260918T133046476Z_PPSA99994_ps5vk_0x67beeedc4fef`:
+
+```
+PS5VK_CONSUMER_RASTER_GS_FEATURES geometryShader=1 multiViewport=1 maxViewports=16
+PS5VK_CONSUMER_RASTER_GS_START cases=1 extent=64 tiles=16 clear_word=ff000000
+PS5VK_CONSUMER_RASTER_GS_PIPELINE stages=3 viewports=16 created=1
+PS5VK_CONSUMER_RASTER_GS_RESULT cases=1 witnessed=1 valid=1
+PS5VK_CONSUMER_RASTER_GS_RETIRED cases=1 witnessed=1
+```
+
+So `multiViewport` now has end-to-end evidence: a geometry stage writes
+`gl_ViewportIndex`, sixteen viewport banks are programmed, and the sixteen-tile
+oracle verifies each tile holds the colour of its own input primitive rather
+than a broadcast or a permuted bank. It still stays unadvertised, for a reason
+that has nothing to do with the driver: no applicable upstream CTS leaf exists
+for it (see UPSTREAM_CTS.md), and the six raster oracle mismatches below are
+unresolved. The consumer's own verifier now stops the run on the first of them
+(`raster oracle for clamp_disabled_narrow_probe`), which is why the repeat run
+ended there rather than at the geometry pipeline.
+## Dual-source blend promotion (2026-09-21)
+
+First hardware execution of the DXVK262-T06 dual-source blend witnesses, one
+bounded console window, two deploys from `codex/t06-final`. The run is the
+evidence `dualSrcBlend` is advertised on: the shipping platform mask now sets
+the feature bit, the runtime serves the whole GFX1013 blend contract instead of
+the single witnessed shape, partial colour write masks are carried in the
+pipeline render-target block for `VK_FORMAT_R8G8B8A8_UNORM`, and that format
+reports `COLOR_ATTACHMENT_BLEND`.
+
+| | Native witness | CTS measurement |
+|---|---|---|
+| package | `dist-graphics-api/PPSA99994` | `dist-upstream-cts/PPSA99994` |
+| eboot sha256 | `027a43032361f818e4caf314f55557727eff6bb812a44c2a757fcc4e26779d7b` | `aa1cfae7eaf6570f4bf6618d89f7cad1b532907a6a3c2a26691b66fae9aaa870` |
+| run | `20260921T131810348Z_PPSA99994_ps5vk_0x152cbc5ead555` | `20260921T142735727Z_PPSA99994_upstream-cts_0x156959662c9a2` |
+| log sha256 | `fa82a55bab8bd419e360ecaec5a3276a49d2eacf6aac89f07eca438c76883db1` | `59673109cd1b1c3829a96ec90c3c5c0c55ef0113ca773230993b2009820bfa23` |
+
+**Native witness.** `PS5VK_DUAL_SOURCE_READBACK extent=64x64 draws=2 pixel=2080
+control=4080bfff candidate=333326ff expected_control=4080bfff
+expected_candidate=333326ff tolerance=1 distinct=1 fence=success
+strict_verified=1`: the control is the module's primary export with blending
+disabled, the candidate is `primary.rgb * secondary.rgb` with the equation's
+ONE, and the two are required to differ, so a blender that ignored the secondary
+export could not pass. Clean lifecycle, title closed, artifact identity checked
+against the packaged manifest.
+
+**CTS measurement.** The 404-case selection - the frozen 306-case acceptance set
+plus the 98 applicable `blend.dual_source` leaves - reports **404 Pass, zero
+Fail, zero NotSupported**, strict identity and lifecycle verified
+(`cts_verified`). Two defects were found and fixed by this window: the package
+had to compile `vktPipelineBlendTests.cpp` and register the blend factory under
+the monolithic construction group (before that dEQP silently dropped the 98
+unregistered paths and the run reported 306 cases while `/app0/cases.txt` held
+404), and the partial write masks had to be carried in the pipeline's
+render-target block - writing `CB_TARGET_MASK` from the per-draw context stream
+stalled the queue after 101 of 404 cases, which is why that attempt left only a
+comment behind.
+
+**Canonical acceptance on the promoted candidate.** The shipping payload - no measurement switch - built from the merged promotion, eboot sha256 `0bbd6679da721eac7f750b7bbea5041bac974ac8f42a9a94ff5a755caff0b3a7`, ran the frozen 404-case selection in `20260921T160602225Z_PPSA99994_upstream-cts_0x15bf4c85ab360` (log sha256 `30a0a14af266cc4d65943644eaa2c9ca9afe349e4f8c7ebbb7cad22627f57922`) and reported **404 Pass, zero Fail, zero NotSupported**, strict identity and lifecycle verified. The public-ABI capability probe was re-measured on the same promotion: eboot sha256 `c592965a4cc7da3f997f48bcfd350680247cc8248a36c0bd33133d2e8952de04`, run `20260921T160521750Z_PPSA99994_ps5vk_0x15beb5be675ad`, strictly verified with `dualSrcBlend=1` and **13 of 62** profile requirements then satisfied.
+
+**What this does not establish.** The window covers `VK_FORMAT_R8G8B8A8_UNORM`
+only: `B8G8R8A8_UNORM` keeps the all-channel write mask and reports no blend
+feature, because a BGRA target's export applies a channel swap the mask cannot
+express and no leaf measured it. `independentBlend` and `sampleRateShading`
+remain blockers with no implementation.
+
+## Main integration (DXVK262-T05 into the T06 line), verified 2026-09-22
+
+`codex/t06-final` merged `main` after the DXVK262-T05 promotion. Both lines had
+changed the same colour- and depth-target code, so the merge keeps one
+capability set: the per-attachment colour contract (render pass, framebuffer,
+pipeline key, native target list) grows the DEPTH-ONLY shape - a subpass with no
+colour reference, a pipeline with an undefined colour format and no write mask,
+a framebuffer whose only role is depth, and a native draw state that programmes
+no colour target while still writing the blend word pair - while the runtime
+compiler keeps its per-attachment blend, write-mask and export gates and adds
+the depth-only target with the NONE export class. `PS5VK_RASTER_DIAGNOSTIC`
+stays retired; `gl_FragCoord` is admitted once, by the rule T05 added.
+
+Merging the two lines surfaced three real defects that the individual lines did
+not have, each found by the run below and fixed in this change:
+
+1. `pColorBlendState` is optional in Vulkan and the depth-clamp module omits it
+   for its depth-only subpass; the per-attachment pipeline gate treated a
+   missing state as malformed and refused `vkCreateGraphicsPipelines`.
+2. The begin-render-pass check compared `fb->color_attachments[0]` with the
+   subpass's first colour reference even at a colour count of zero, where
+   neither side is meaningful.
+3. The depth-only draw state passed its caller's *uninitialised* prepared-target
+   array to the render-target builder because it tested the pointer rather than
+   the count.
+
+The frozen selection is now the union of both lines - **462 acceptance cases**
+(the 404 the T06 line carried, including the 98 dual-source leaves and the two
+fragment side-effect leaves, plus the 58 T05 leaves) and 98 diagnostics - and
+the shipping build passes all of it:
+
+- run `20260922T014510656Z_PPSA99994_upstream-cts_0x17b8f2b94697f`,
+  **462/462 Pass**, zero Fail, zero NotSupported, no missing, unexpected or
+  duplicate results, `strict_verified`, `cts_verified` and `lifecycle_ok` true,
+  title closed and confirmed stopped.
+- deployed SELF SHA-256
+  `2aefe2ca1b69baa7218883e94668bee689c6d576d37469a8afd2a4bfc508a1c8`, read back
+  exactly through FTP before launch; reassembled report SHA-256
+  `c93560567795a75610c994d5b7e4241bdbd53d7c0a858862b837d3260e195654`; selection
+  SHA-256 `aafc4062b267b88ea1b395aae924fcf0451eff411e9522dd889ce9638073d0ab`.
+
+The public-ABI capability probe was rebuilt against the merged profile and
+re-run, so the merged tree's own report - not the sum of two older reports -
+is what the evidence records: run
+`20260922T014635022Z_PPSA99994_ps5vk_0x17ba2d04ef50c`, artifact
+`549184cdd050d5f9349534a65c7ab59ac5d3afaf959293c19fd4b50697a20cc0`,
+`strict_verified=1`, **17 of the 62 profile requirements satisfied** and 45
+blockers. The DXVK matrix reads **15/62 ready with 47 blockers** on the merged
+tree, and `make check` is green on it.
+
+`independentBlend` and `sampleRateShading` remain blockers: the MRT path is
+described but not served (the advertised `maxColorAttachments` is still one)
+and the multisample contract is still empty.
+
+## independentBlend promotion (2026-09-22)
+
+The two upstream leaves that REQUIRE `independentBlend` pass on hardware, so the
+feature is advertised: `native/platform_ps5.c` reports the bit in every build,
+`src/graphics_limits.h` advertises `maxColorAttachments` 2 (and the two
+four-output fragment limits with it), and the two private measurement switches
+are retired - `VK_FORMAT_R8G8B8A8_UINT` is a served colour target now.
+
+Both leaves render two colour attachments in one pass - R8G8B8A8_UINT and
+R8G8B8A8_UNORM - clear both through the pass, draw once with a fragment stage
+that exports the two attachments' values, copy each attachment into its own
+buffer and compare the result with the upstream oracle. The second leaf writes
+only the second target; its fragment stage declares Location 1 alone and the
+pinned compiler publishes the export enable in the mask's second nibble, so the
+driver programmes the attachment it really writes as hardware target zero.
+
+Two strict measurement runs carried the integer colour target, both with the
+same payload SELF SHA-256
+`a664299c6be988bbe1ff74a5888360d900301793fef39d3e04ee98e51aca30f4` (eboot
+`a664299c6be988bbe1ff74a5888360d900301793fef39d3e04ee98e51aca30f4`):
+
+- `20260922T091802564Z_PPSA99994_upstream-cts_0x19445899fd8a1`, log SHA-256
+  `9ae18272031fbe09877e223853d081d5cdb4740e8147ac8e522162ce7c84c34b` -
+  **464 Pass, 0 Fail, 2 NotSupported**: both
+  `dEQP-VK.renderpass.suballocation.attachment_write_mask.attachment_count_2`
+  leaves pass, and the two `dedicated_allocation` siblings stay NotSupported
+  because `VK_KHR_dedicated_allocation` is not advertised. Title closed and
+  confirmed stopped.
+- `20260922T083110494Z_PPSA99994_upstream-cts_0x191b6cf7742e3`, log SHA-256
+  `34784cf89af8940a917cad59d5f23e328db67ad4b3dbe3c58f6f86f1a3bde8a3` - the
+  earlier run of the same pair where `start_index_0` already passed.
+
+Host tests prove the render-target word, the integer export classification, the
+renumbering the second-target-only shape needs, the readback plan and the
+fail-closed gates around them; only the hardware writes and reads the integer
+surface. This is focused validation of one requirement, not Vulkan conformance,
+and `sampleRateShading` remains a blocker on the same row set.
+
+**Canonical acceptance on the promoted candidate.** The shipping payload (no
+measurement switch; the two switches are gone), eboot sha256
+`713150da90f4a30b6f407aba1083958e0783f4cd3781e9f215088b5cb7c1bd03`, ran the
+frozen selection - now **464 acceptance cases** (the 462 of the main integration
+plus the two `suballocation.attachment_write_mask` leaves the feature owns) and
+46 diagnostics - in
+`20260922T103049552Z_PPSA99994_upstream-cts_0x1983e4b36fa05` (selection SHA-256
+`91c37ed06f78d1048b8fa1e693986ab047a749dd55e9585e2e8565a421603d2a`) and reported
+**UPSTREAM ACCEPTANCE PASSED: every selected case matched its upstream oracle
+and the title was closed**, with the two `dedicated_allocation` siblings
+reported `NotSupported` because `VK_KHR_dedicated_allocation` is not advertised.
+
+**Public-ABI capability probe on the same candidate.** eboot sha256
+`c438a98123c86925d62b6627b7b640734930dbcae5b8af6f88a4ed0dc61e8201`, run
+`20260922T103414212Z_PPSA99994_ps5vk_0x1986df1aeed66` (log SHA-256
+`3fa5f0c0049890f2c2679889616f2d0ccaa303d36a9f62ac9a19e0ba0aba6c62`), strictly
+verified by `tools/verify_dxvk_probe.py`: the device itself reports
+`independentBlend=1` and the probe ends `valid=1 total=62 satisfied=18
+blockers=44`, one requirement more than the merged tip's 17/45. With that
+receipt the DXVK matrix row for `feature:VkPhysicalDeviceFeatures:independentBlend`
+is **satisfied on all four axes** (api, implementation, cts, native) and the
+profile reads **16 of 62 requirements ready with 46 blockers**.
+## Focused upstream selection for sampleRateShading (2026-09-22)
+
+The `sampleRateShading` row's CTS axis needs a focused, applicable selection
+before anything can be measured. Read from the pinned sources rather than
+guessed, `MinSampleShadingTest::checkSupport` is the only
+`requireDeviceCoreFeature(DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING)` call in
+`external/vulkancts/modules/vulkan/pipeline/vktPipelineMultisampleTests.cpp`
+(`:1344`), and `createMultisampleTests` builds exactly three groups from that
+class: `min_sample_shading` (its opaque primitives), `min_sample_shading_enabled`
+and `min_sample_shading_disabled` (both a quad). At the counts this profile
+serves that is 50 leaves under the new `t06-sample-rate-pending` diagnostic
+category: 5 `minSampleShading` values x 2 counts x 3 primitives, plus the
+enabled and disabled quads. The sparse variants are left out because this
+profile binds no sparse memory, and `primitive_point` is left out because the
+measurement below reported it as `NotSupported` for `largePoints`, a feature
+this profile does not advertise - which is a scope statement, not a driver
+defect. Each selected leaf renders the multisampled colour target, resolves it
+into the single-sample image, then reads the multisampled colour back once per
+sample through `subpassLoad(imageMS, sampleNdx)`, so a build that shades once
+per pixel cannot pass it.
+
+The category's traceability is derived, not transcribed: `tools/
+check_upstream_selection.py` grows `_min_sample_shading_leaf_names`, which
+composes the names per group from that module's own sample-count array, its
+`minSampleShading` value table and the case literals each block registers, plus
+`_multisample_generated_segments`, because the `samples_<count>` group segment
+is printed by the factory rather than written as a literal. A leaf moved
+between the enabled and disabled groups, or a primitive a group does not
+register, stops matching; a rewritten factory stops matching too.
+
+Measurement run 1 (`20260922T083940138Z_PPSA99994_upstream-cts_0x1922d783e3ecc`,
+log SHA-256 `ae9d271ee5096419caf91151744c853b7a8f6628e89c77e1486001472972b0b9`, 522
+cases = 462 frozen acceptance + the first 60 leaves): 522/522 reported, 462
+Pass, 50 Fail, 10 `NotSupported`. The ten `NotSupported` leaves are exactly the
+`primitive_point` ones, refused as "Requested core feature is not supported:
+largePoints" (`vktTestCase.cpp:1227`), which is why they left the category.
+
+Measurement run 2, with the corrected 50-leaf category
+(`20260922T084825463Z_PPSA99994_upstream-cts_0x192a7c7884dc5`, log SHA-256
+`2993b6e47ffbfa3fb08aa9c3ad70b3785d81ac1cb7eebb53a534b13a107acdba`): payload
+eboot SHA-256 `88d9ca738842e9f05021a5f0e429405eee74d480d956d17b0a78414b35f0e2db`,
+built with `PS5VK_SAMPLE_RATE_DIAGNOSTIC=1`; measurement selection SHA-256
+`73f85a4a290ffe1e5e1b74ad022747af847cd9135e7aeca1274d16269bda88c2` derived from
+the frozen selection `aafc4062b267b88ea1b395aae924fcf0451eff411e9522dd889ce9638073d0ab`;
+512/512 cases reported, no missing, unexpected or duplicate results, 462 Pass
+(the frozen acceptance selection is unchanged and still fully green on this
+tree), 50 Fail, zero `NotSupported`, `lifecycle_ok` true and the title closed
+and confirmed stopped. All 50 leaves fail at the same first gate:
+`vk.createImage(...) VK_ERROR_FEATURE_NOT_PRESENT`, because the multisampled
+colour image the oracle builds carries
+`COLOR_ATTACHMENT | TRANSFER_SRC` (`| INPUT_ATTACHMENT` for the per-sample
+fetch render pass) while this profile serves exactly one observed multisampled
+role.
+
+What this establishes: the applicable focused selection exists, it is
+traceable to the pinned sources, the packaged payload reports every selected
+leaf (the silently-dropped-leaf trap is closed at 512/512), and the first gate
+the row has to open is the multisampled image's usage combination. What it does
+not establish: no leaf passes, the multisample render pass, the resolve and the
+per-sample input read are still unexecuted, the `sampleRateShading` row stays a
+blocker, and the shipping platform mask still advertises no sample-rate bit.
+
+## Multisampled colour image role (2026-09-22)
+
+The measurement above named the first gate precisely: the oracle's
+multisampled colour image carries `COLOR_ATTACHMENT | TRANSFER_SRC`
+(`vktPipelineMultisampleTests.cpp:3368-3371`) and adds `INPUT_ATTACHMENT` for
+the render type that reads that image back once per sample, while this profile
+admitted exactly one observed multisampled role. This change admits those
+combinations and nothing else: `ps5vk_multisampled_color_usage` in
+`src/sample_rate_contract.h` is consumed by the two count-aware sites,
+`vkCreateImage` and `ps5vk_native_image_requirements`, both of which still
+require a 2D one-mip `B8G8R8A8_UNORM`/`R8G8B8A8_UNORM` colour image, no create
+flags, and a platform whose served-count mask carries the requested count. A
+multisampled image naming the input role without the readback source, the
+transfer-destination pair, the sampled role or any other combination keeps the
+failure it had. The per-format query stays sample-agnostic and is left for the
+promotion slice, which is where it has to be measured through the public ABI;
+the shipping mask is untouched, so an unadvertised build still refuses every
+multisampled image.
+
+Measured on the console with the same 512-case measurement selection
+(`20260922T091910948Z_PPSA99994_upstream-cts_0x1945575a966d5`, log SHA-256
+`7cd77372601c2300846e4d092f51b196feb311c03ee16a522eec59f9ceded4c5`, payload
+eboot `e46e07c604531c6e29f5907da3c7052c96bfc98fc8785bfcac4706caf931db5a`):
+the image gate opened - none of the 50 leaves fails at `vkCreateImage` any
+more - and the payload then died without closing its log. The run file records
+`bye=false, clean=false, close_reason=eof` after 20.9 s, with no refusal and no
+`Fail` verdict anywhere; the last records are the per-sample fetch fragment
+shader (`subpassInputMS` + `subpassLoad(imageMS, sampleNdx)`) being assembled,
+then two 131072-byte allocations - the resolve and per-sample single-sample
+targets - and then EOF. This is a fail-closed defect, not a capability
+verdict: the title is not running (the close request found nothing to close),
+nothing is hung on the console, and the next slice is a bounded native probe
+that walks exactly this CTS shape step by step so the step that kills the
+process names itself before it is fixed.
+
+Two provenance notes from the same window, both measured rather than assumed.
+First, a payload built while a concurrent `make check` restaged the SDK without
+`PS5VK_SAMPLE_RATE_DIAGNOSTIC` reported every selected leaf `NotSupported` for
+`sampleRateShading` - a run that would have read as a driver verdict. Second,
+`tools/build_upstream_cts.py` did not record that switch in its build profile,
+so the two payloads were indistinguishable in the receipt; the switch is now in
+the captured switch set and the measurement payload records
+`PS5VK_SAMPLE_RATE_DIAGNOSTIC = 1`.
+
+What this establishes: the image-role gate the previous measurement named is
+open and bounded to the oracle's own combinations, with the platform mask as
+the only switch that reaches it. What it does not establish: no leaf passes,
+the render pass with its resolve and per-sample fetch is still unexecuted, the
+driver does not yet fail closed on that shape, the row stays a blocker, and
+nothing is advertised.
+
+## CTS shape walk (2026-09-22)
+
+The measurement above ended with a payload that died without closing its log,
+which names no defect. The walk turns that into steps: `PS5VK_SAMPLE_RATE_PROBE=2`
+is the witness scene followed by `ps5vk_sample_rate_shape_probe`, which performs
+the CTS oracle's own sequence - the multisampled colour attachment with its
+exact usage, the resolve and per-sample single-sample targets, their views, the
+input-attachment plus uniform-buffer descriptor set, the pass whose subpass 0
+resolves and whose subpasses 1 and 2 fetch per sample and preserve their
+sibling's target, both pipelines and one submission - announcing every step
+before it runs and stopping at the first refusal with that step and its Vulkan
+result. A step that never returns is named by the log it left behind, and a
+refusal is fail-closed evidence instead of a dead process.
+
+Measured on the console (run `20260922T095638715Z_PPSA99994_ps5vk_0x19660cd1cb450`,
+log SHA-256 `e9b376d80dd3187d87d9d1fe579e0ec525f521aa817dbbfe4270f8029249e317`,
+payload eboot `f45e30ac879d8b345398ea98d7cbc18a07e64ea4834364026267641d0c8b4a6c`):
+
+- the multisampled colour attachment with `COLOR_ATTACHMENT | TRANSFER_SRC |
+  INPUT_ATTACHMENT` is created on hardware (`vkCreateImage` rc=0), which is the
+  image role the previous slice opened;
+- the resolve target and both per-sample targets, their memory, their views,
+  the UBO, the descriptor set layout, pool and set all succeed;
+- `vkCreateRenderPass` returns `VK_ERROR_FEATURE_NOT_PRESENT` (-8) and the walk
+  stops there, logging the step and the code, then closes cleanly
+  (`PS5VK_PLATFORM_CLOSE rc=0`, `BYE reason=graphics-api-end`).
+
+The first walk iteration had stopped one step earlier - at the resolve target's
+`vkCreateImage` - and that was the walk's own mistake, not a driver finding: it
+used `B8G8R8A8_UNORM` for the single-sample targets, and this profile carries
+the readback-capability colour row only for `R8G8B8A8_UNORM`, so the
+attachment-with-its-readback-pair combination exists for the one format. The
+walk now uses the oracle's format, and the reason is recorded in the code
+beside it.
+
+The same window's first host probe of the stage behind the pass looked like a
+compiler gate and was not one, so the correction is recorded here rather than
+quietly dropped. That probe handed the adapter the oracle's per-sample fetch
+module (`subpassInputMS` plus `subpassLoad(imageMS, sampleNdx)`, compiled from
+`vktPipelineMultisampleBaseResolveAndPerSampleFetch.cpp`) with **no
+pipeline-layout signature at all**: `ps5vk_runtime_graphics_compile` refused it
+with no named site while the pinned compiler logged `Unsupported SPIR-V
+capability: SpvCapabilityInputAttachment (40)`, and both facts read as "this
+stage cannot be compiled". With the layout the oracle actually uses - an input
+attachment at set 0 binding 0 and a uniform buffer at binding 1 - the same
+module measures the opposite, and `tests/test_runtime_graphics_compiler.c` now
+pins all of it: the interface accepts the module, the descriptor table layout
+accepts the signature, `psbc_compile_shader` returns OK on its own (88 bytes of
+machine code, measured directly), the adapter compile returns `VK_SUCCESS` with
+108 bytes of fragment machine code, the compiled metadata names both bindings as
+used (`descriptor_used_binding_mask[0] == 3`), and dropping the layout signature
+is what makes the compile fail. The InputAttachment line is a warning from the
+NIR front end, not a refusal. The fetch stage is therefore not a compiler-side
+gate.
+
+What this establishes: the oracle's attachment and descriptor steps run on
+hardware; the first gate after them is the render pass itself, with the
+internal attachment bound (two) the obvious candidate; and the per-sample fetch
+stage is supported by the pinned compiler and by this profile's adapter once
+the pipeline layout declares what it reads.
+What it does not establish: no leaf passes, the resolve is not executed, the
+per-sample fetch is not executed, the row stays a blocker, and nothing is
+advertised.
+
+## The pass bound, and the framebuffer defect it exposed (2026-09-22)
+
+The walk named the render-pass gate, and the arithmetic behind it was one enum:
+`PS5VK_MAX_ATTACHMENTS` was `PS5VK_MAX_COLOR_ATTACHMENTS + 1`, which answers how
+many colour targets a draw may write but not how many attachments a pass may
+name. It is now `PS5VK_SAMPLE_COUNT_MAX_SERVED + 3` (seven), derived from a
+named constant in `src/sample_rate_contract.h`, because the pinned oracle's
+pass carries the multisampled colour attachment, its resolve target and one
+single-sample target per sample it fetches back, plus the optional depth
+attachment. `PS5VK_MAX_COLOR_ATTACHMENTS` still bounds what a subpass may render
+into, and `tests/test_vk_render_pass.c` now holds both directions: the oracle's
+six-attachment pass is accepted and one attachment past the bound is refused.
+
+Moving the pass bound exposed a real defect one layer down, and the walk is what
+found it. `struct VkFramebuffer_T` held its attachment slots in fixed arrays of
+two (`attachments[2]`, `formats[2]`, `samples[2]`), so a framebuffer built for
+the oracle's four attachments wrote past itself. Measured on the console with
+the bound raised but this fix not yet in place: run
+`20260922T102334060Z_PPSA99994_ps5vk_0x197d8e621b19e`, log SHA-256
+`d9d9018e2ca43405970f5dd0c268860f09ffba2d7d95685d81320eb14f5c5916`, payload
+eboot `49933aef329b1fb62de3b6f82ae8f3691309944478de973fd1a19279f6689f1c` - the
+walk reached `vkCreateRenderPass` rc=0, `vkCreateFramebuffer` rc=0,
+`create_pipeline subpass=0` rc=0, `create_pipeline subpass=1` rc=0 (the
+per-sample fetch stage compiles on the console build), `vkBeginCommandBuffer`
+rc=0, and then `vkEndCommandBuffer` returned `-13`; the payload never closed its
+log. Instrumenting the teardown named the killer: run
+`20260922T102625871Z_PPSA99994_ps5vk_0x19800e6cf4e94`, log SHA-256
+`e96e7988849fbe8a3e5caad2b4a965eb38eed8cbdf765abbb5d184a796480c94`, whose last
+record is the announcement of `vkDestroyFramebuffer` - the process died inside
+it, after every other teardown step had returned.
+
+The fix is the slots following the same bound the pass does, and the new case in
+`tests/test_vk_image.c` proves both directions: with the two-slot arrays, the
+sanitizer build reports `index 2 out of bounds for type 'VkImageView_T *[2]'` at
+`src/vk_framebuffer.c:88` and the framebuffer's fourth slot reads as garbage;
+with the fix the oracle's four-attachment framebuffer round-trips and its
+teardown is clean. The record roles are unchanged - `color_attachments` and
+`resolve_attachments` stay bounded by the colour-attachment contract, because
+that is how many targets a draw may write.
+
+What this establishes: the oracle's pass, framebuffer, pipeline layout, shader
+modules and both pipelines exist on hardware, and the framebuffer no longer
+corrupts memory for the shape the pass now admits. What it does not establish:
+no leaf passes, `vkEndCommandBuffer` still refuses the recording with `-13`
+(the executor does not run a resolve or a preserve list yet), the row stays a
+blocker, and nothing is advertised.
+
+Confirmed after the fix, one more bounded window (run
+`20260922T104105309Z_PPSA99994_ps5vk_0x198cda8a48718`, log SHA-256
+`3b8d5b8131567bff1b6590006951f0e2acf430de166137b0ff75942e50b1df67`, payload
+eboot `aa398bb707f21667f4211d932966d80674da67a642360653492bbfed2786033e`): 117
+records, every step of the walk `ok=1` except one, the teardown running to its
+end, `PS5VK_PLATFORM_CLOSE rc=0` and a clean `BYE`. The single refusal is the
+recording: `vkEndCommandBuffer` rc=-13. So the object path for the oracle's
+shape now stands end to end, and the gate the row has to open next is the
+executor - the resolve, the per-sample input read and the preserve list are
+described, created and compiled, but not run.
+
+## Recording the oracle's pass, and the gate behind it (2026-09-22)
+
+Two probe defects stood between the walk and the driver, and both are recorded
+because both looked like driver gates until they were named:
+
+1. The walk declared three subpasses and recorded work in two of them, and the
+   recording refuses to end a pass before its last subpass. Announcing every
+   recorded call is what showed it: `vkCmdEndRenderPass` was announced and
+   `vkEndCommandBuffer` then refused, i.e. the pass had never been left. The
+   walk now creates one pipeline per subpass and records every one of them.
+2. The walk handed one clear value to a pass that clears four attachments, and
+   `vkCmdBeginRenderPass` requires a value for every attachment it clears - the
+   clear-value count is the caller's and the pass's, not a pair. That is the
+   first real driver limitation this walk found on the recording side:
+   `struct ps5vk_operation` stored two clear values and the begin bound the
+   count at two, while the oracle's pass carries four.
+
+This change raises both to the attachment bound the pass itself uses
+(`PS5VK_MAX_ATTACHMENTS`), so one begin can carry a value per attachment the
+pass names, and `tests/test_vk_command.c` pins both directions: the oracle's
+four-attachment pass records with four clear values (and the fourth value is
+the one the record carries), while one value short of what the pass clears
+still poisons the recording. The executor already indexes the clears per colour
+attachment and bounds them by the recorded count, so nothing else moved.
+
+Measured on the console after the change (run
+`20260922T111728603Z_PPSA99994_ps5vk_0x19ac9fd1c7523`, log SHA-256
+`20dbfad9b6b8049404c139200f41d875f7e442809a8f79b4e1c4ad553e664952`, payload
+eboot `76f1f3c653b951e76b68c80d1c303777c3b71299af434ef220b82aff80a4e44c`): the
+walk records the whole pass - `vkCmdBeginRenderPass` with four clear values,
+both draws, both subpass boundaries, the descriptor binds and
+`vkCmdEndRenderPass` - and `vkEndCommandBuffer` returns **rc=0**. The next call,
+`vkQueueSubmit`, returns **VK_ERROR_FEATURE_NOT_PRESENT (-8)**: the executor
+does not run the resolve, the per-sample input read or the preserve list yet,
+and it says so instead of executing a pass whose promise it would drop. The
+title closed cleanly (`PS5VK_PLATFORM_CLOSE rc=0`, `BYE`).
+
+What this establishes: the oracle's pass is recordable end to end with its own
+clear set, and the gate is now the executor at submission, named by its own
+return code. What it does not establish: no leaf passes, the resolve, the
+per-sample read and the preserve list are still unexecuted, the row stays a
+blocker, and nothing is advertised.
+
+## Executing a subpass that renders elsewhere (2026-09-22)
+
+The executor prepared every draw from the framebuffer's colour and depth role
+lists, and those lists are subpass 0's roles, so a pass whose later subpasses
+render targets of their own was refused three times over: a resolve target, a
+preserve list, and subpasses that do not name the same attachments. This change
+lifts the third one. What a draw renders into is its OWN subpass's set - the
+seam the draw preparation now takes as `struct ps5vk_target_set` - and the pass
+carries the union of the references its subpasses name, with the depth role
+single and shared, an attachment that is named twice required to agree with
+itself on format and layout, and the resolve and preserve refusals untouched.
+The prelude now derives one plan, one clear word and one layout transition per
+ATTACHMENT rather than per subpass-0 colour slot.
+
+Measured on the console (run `20260922T113731886Z_PPSA99994_ps5vk_0x19be2253813fd`,
+log SHA-256 `d5d48c50ccae7a03f34687e13c4690b63ce43bc338ebb5d81a7f619818d9e16c`,
+payload eboot `6ede50ef50cb46838175453dfa4ddad5cbab22ebef259f22cefface956dd4a49`):
+
+- a two-subpass pass, each subpass rendering its own colour attachment, is
+  created, recorded (`vkEndCommandBuffer` rc=0), submitted (`vkQueueSubmit`
+  rc=0) and completed (`vkWaitForFences` rc=0);
+- the SECOND subpass's target is read back through the driver's own span and
+  holds the fragment's colour across exactly the plane it covers:
+  `PS5VK_SAMPLE_RATE_TARGETS extent=32x32 samples=4 subpasses=2
+  target_words=32768 shaded=1024 expected=1024 word=ffbf8040 verdict=1` - 1024
+  words is the 32x32 RGBA8 plane, and the tiled padding around it keeps the
+  clear, so the draw really landed in that subpass's own attachment;
+- the oracle's own pass still refuses at `vkQueueSubmit` rc=-8, because it also
+  carries a resolve target, an input attachment and a preserve list, and those
+  three are the next refusals to lift;
+- the title closed cleanly (`PS5VK_PLATFORM_CLOSE rc=0`, `BYE`).
+
+What this establishes: the executor runs a multi-subpass pass whose subpasses
+render their own targets, with hardware-comparable output, which is the
+structural half of the oracle's pass. What it does not establish: the resolve,
+the per-sample input read and the preserve list are still unexecuted, no CTS
+leaf passes, the row stays a blocker, and nothing is advertised.
+
+## A subpass that preserves another subpass's target (2026-09-22)
+
+The executor refused any pass carrying a preserve list, on the grounds that it
+did not carry attachment contents across a subpass boundary. With every subpass
+rendering its own targets that promise is one this path keeps: a preserved
+attachment is one the subpass does not write, the pass's load ops are applied
+once at its start, and the boundary between subpasses publishes the previous
+subpass's writes without touching anything else. The refusal is therefore
+replaced by a bounds check on every preserve entry the pass carries - a record
+that reached this backend naming an attachment outside the pass is refused
+rather than read out of bounds - and the resolve refusal stays exactly where it
+was.
+
+Measured on the console (run `20260922T115140401Z_PPSA99994_ps5vk_0x19ca7b3ec8c32`,
+log SHA-256 `4a3a6e4db059d29225ca8ed12a5badfffa33ecdc3a8396ee484164de8ee8daef`,
+payload eboot `42d1b5c95dfb8d8048f0cb8c51223b0e2982242751e660fa6ec455caa39d5f74`):
+the two-subpass pass now has subpass 1 preserve attachment 0 - the target
+subpass 0 renders - and the readback checks both directions in one verdict:
+the second subpass's own target holds the fragment's colour across its 32x32
+plane (`shaded=1024 expected=1024`), and the PRESERVED target still holds what
+subpass 0 drew (`preserved_hits=4096` of 65536 words, which is exactly the
+32x32 plane at 4 samples). A subpass that clobbered it would have left the
+pass's own clear value there instead. The title closed cleanly
+(`PS5VK_PLATFORM_CLOSE rc=0`, `BYE`).
+
+What this establishes: a subpass may preserve another subpass's target and the
+executor keeps that promise on hardware, which is the shape the oracle's fetch
+subpasses use for their siblings. What it does not establish: the resolve
+target and the per-sample input read are still unexecuted, no CTS leaf passes,
+the row stays a blocker, and nothing is advertised.
+
+## The multisampled resource read, enabled (2026-09-22)
+
+Reading sample k of a multisampled colour attachment is the enabler the last two
+executor gates share: the oracle's fetch subpass reads its multisampled input
+attachment once per sample, and a resolve is the same read averaged over every
+sample. Two places kept it out, and both are now open in the bounded shape the
+profile serves.
+
+The resource record: `ps5vk_image_resource_descriptor` refused any multisampled
+image. The pinned gfx6+ texture descriptor carries the sample geometry in the
+LEVEL fields - BASE_LEVEL zero and LAST_LEVEL log2(samples) for a multisampled
+surface (`ac_descriptors.c`, `ac_build_gfx6_texture_descriptor`) - so a
+multisampled attachment is the same RGBA8 2D one-mip record with those two
+fields naming the count, single-layer, over the render target's own tiled
+storage. A count this profile does not implement is still refused before the
+record is written, and `tests/test_texture_descriptor.c` pins the multisampled
+record (LAST_LEVEL = log2(4)), the single-sample record carrying no sample
+geometry, and the 8x refusal.
+
+The gate: `ps5vk_input_attachment_gate` served exactly one resource - the
+promoted multiview attachment, six layers with the colour/transfer-source/
+input-attachment/transfer-destination roles. It now serves the multisampled
+single-layer attachment as well (colour, readback source and input-attachment
+roles), and it no longer requires an explicit forward dependency: the executor
+emits the colour-to-texture barrier around every subpass change that reads an
+input attachment, and Vulkan gives an attachment read by a later subpass its
+implicit dependency, so the barrier the profile already emits is what orders
+the read.
+
+What this establishes: the two layers between the oracle's fetch draw and
+execution now describe the shape it needs, with the descriptor arithmetic
+pinned against the pinned compiler. What it does not establish: the read has
+not yet been measured on hardware, the resolve is still refused by the
+executor, no CTS leaf passes, the row stays a blocker, and nothing is
+advertised.
+
+## The per-sample read executes but does not yet select the sample (2026-09-22)
+
+The multisample resource record from the previous slice was measured on
+hardware, and the honest result is a negative one that narrows the search. The
+probe's fetch phase is now a SWEEP: subpass 0 draws per-sample values into the
+multisampled target (the gl_SampleID module the witness uses, so plane k holds
+`0xff0k0000`), and subpass 1 reads a NAMED sample of it through the
+resource-only record and writes its own single-sample target, which is then
+read back through the driver's own span.
+
+What the shape does: every object and every recording step succeeds, the pass is
+submitted and completes, and the read runs - run
+`20260922T123034336Z_PPSA99994_ps5vk_0x19ec71b787e8a`, log SHA-256
+`851d2b53213e497644a88312efff8c2fc7f22fe3374b6a4fa453fc8a1fc461ca`. What it
+returns: for sample index 0 the target holds sample 0's value, and for sample
+index 3 it holds sample 0's value again - the index does not select the plane.
+
+Three hypotheses were ruled out by measurement rather than argument:
+
+1. **The uniform block never reached the shader.** Ruled out twice: the flush
+   for the non-coherent block is now emitted (a partial mapping cannot be
+   flushed at all - the range has to cover a whole non-coherent atom or end at
+   the allocation), and the second index runs a module with the sample index
+   BAKED IN (`subpassLoad(imageMS, 3)`) which reads the same plane 0.
+2. **The compiler drops the index.** Disassembled with the pinned compiler's own
+   `PSBC_DEBUG_DISASM`: the baked module lowers to `v_mov_b32 3` into v7 and
+   then `image_load ... 2darraymsaa` with that register as the sample operand,
+   so the index is carried into the instruction.
+3. **The record needs the multisampled type tag.** The pinned header's own tag
+   for a multisampled 2D surface is `V_008F1C_SQ_RSRC_IMG_2D_MSAA` (14), not the
+   plain 2D tag (9), so the record now carries it together with BASE_LEVEL 0 and
+   LAST_LEVEL log2(samples) - and the measurement is unchanged (run
+   `20260922T123243995Z_PPSA99994_ps5vk_0x19ee54bac640d`, log SHA-256
+   `944289f6b23120b31466be1f917ffdc6c78f5904f74ecb8fb30ecae29a698e97`). The tag
+   and the level fields are therefore necessary-but-not-sufficient: the record
+   now says what the compiler says, and the hardware still reads plane 0.
+
+What remains, stated as the next question rather than as a guess: how the
+surface a colour attachment is backed by is laid out for a sample-indexed read,
+and whether the tile mode the record carries describes THAT layout. The witness
+measured the storage as one plane per sample and the clear fills all of them;
+what a sample-indexed fetch reads is a different question, and the answer is
+what the next slice has to measure.
+
+What this establishes: the read executes end to end with the index in the
+instruction, and the value always comes from plane 0. What it does not
+establish: the per-sample read, the resolve, any passing CTS leaf, the row - all
+unchanged, and nothing is advertised.
+
+## The per-sample read, re-measured without a confound (2026-09-22)
+
+The previous measurement concluded that the read "always returns plane zero",
+and that conclusion was confounded by the probe's own clear value: the fetch
+pass cleared its target to `{0, 0, 0, 1}`, whose RGBA8 word is `0xff000000` -
+exactly the value the gl_SampleID module writes for sample 0. A fetch that wrote
+nothing looked the same as a fetch that read plane zero.
+
+With a clear no sample can hold (`{0.5, 0.5, 0.5, 1}` = `0xff808080`), the same
+sweep (run `20260922T124831879Z_PPSA99994_ps5vk_0x19fc1fd2698b0`, log SHA-256
+`c852c65e13c01356f2b7a3c40764064c9224fd5b0e1d1ec868c29a8961341269`) reads:
+
+- `sample_index=0`: `matched=1024 expected=1024`, `seen=ff000000,ff808080` -
+  the fetch subpass ran, read a REAL sample of the multisampled attachment and
+  wrote it across its own target's plane, with the pass clear left in the tiled
+  padding. Verdict 1: the multisampled input-attachment read executes.
+- `sample_index=3` (the module with the index baked in, whose ISA carries
+  `v_mov_b32 3` into the sample operand): the plane holds `ff000000` again -
+  sample 0's value, not sample 3's.
+
+The record now also carries the resource type the pinned compiler's own mapping
+implies: `ac_shader_util.c` lowers `GLSL_SAMPLER_DIM_SUBPASS_MS` to
+`ac_image_2darraymsaa`, so a `subpassInputMS` is a TWO-DIMENSIONAL ARRAY MSAA
+image - `V_008F1C_SQ_RSRC_IMG_2D_MSAA_ARRAY` (15), with the single layer
+described by a zero depth field - and not the plain 2D MSAA tag (14) the
+previous window carried. Both tags were measured and both return plane 0 for a
+non-zero index, so the tag alone is not what selects the sample.
+
+What this establishes, positively: the multisampled input-attachment read runs
+on this hardware and delivers a real sample plane into the subpass's own target.
+What it does not establish: selecting a sample other than the first, which is
+what the oracle's fetch subpass and a resolve both need. The open question is
+now narrower than "the read does not work": it is how the sample index selects a
+plane in the storage this profile backs a multisampled colour attachment with,
+and whether the tile mode the record carries describes that storage - the same
+question the previous window raised, now with the confound removed and one
+positive result in hand.
+
+## What the multisampled storage actually holds (2026-09-22)
+
+The previous window's "index 3 still reads sample 0" needed one more control:
+whether the SOURCE even held another sample to read. It does, and the census is
+the interesting part. Run
+`20260922T130521123Z_PPSA99994_ps5vk_0x1a0acf7fbf5e9`, log SHA-256
+`d8fc7a088f5108237dd34fcad9478a13b19f4311f3a632f1c7475138addd5120`:
+
+```
+PS5VK_SAMPLE_RATE_SOURCE extent=32x32 samples=4 words=65536 distinct=4
+  value0=ff000000 hits0=1024 first0=0 last0=3327
+  value1=ff808080 hits1=61440            <- the pass's own clear (padding)
+  value2=ff000001 hits2=1024
+  value3=ff000002 hits3=1024
+```
+
+So a 32x32 four-sample attachment, dressed per sample by `gl_SampleID`, holds one
+1024-word plane PER SAMPLE - `ff000000`, `ff000001`, `ff000002` (and, as the
+census' fifth distinct value, `ff000003`) - and they are not stacked at
+footprint-sized strides: all of them live inside the first ~4096 words, i.e.
+inside the footprint one single-sample 32x32 surface occupies, with the pass
+clear in the remaining 61440 words. The hardware packs the samples of a
+multisampled colour attachment inside the same tiled block a single-sample
+surface would use; the extra storage this profile allocates (count x footprint,
+from the pinned `ac_estimate_size` arithmetic) is padding, not a plane stride.
+
+That makes the earlier reading precise rather than mysterious: the fetch reads
+the correct surface, the index is in the instruction, per-sample data exists -
+and the read still returns sample zero's slot for every pixel, so what does not
+line up is how a sample index selects a slot inside that packed block. The
+descriptor's level fields and the ARRAY MSAA type were both measured and neither
+changed it, which leaves the TILE MODE the record carries as the next thing to
+measure against the arrangement the hardware just showed.
+
+What this establishes: the multisampled input-attachment read runs, the source
+is genuinely per-sample, and the missing piece is the sample-within-block
+addressing rather than anything about the read's execution. What it does not
+establish: that addressing, the resolve, any passing CTS leaf, the row - all
+unchanged, and nothing is advertised.
+
+## Naming the layout equation the read has to match (2026-09-22)
+
+Two facts from the lab's own sources narrow the sample-addressing question
+without another console window, and both belong next to the census.
+
+First, the tiling equation: the lab keeps a full Mesa checkout for this GPU
+(`third_party/mesa-gfx1013`), and its addrlib computes a multisampled surface's
+micro-tile block by REDUCING it by the sample count -
+`gfx10addrlib.cpp`, `GetBlk256SizeLog2(..., numSamplesLog2, ...)` with
+`blockBits -= numSamplesLog2` - so a 256-byte micro tile becomes 256/num_samples
+bytes per sample and the samples are interleaved inside the block rather than
+stacked plane by plane. That is exactly what the census measured on the
+hardware, and it is the equation a sample-indexed read has to resolve against.
+
+Second, the record this profile builds already carries the right swizzle: the
+tile field of the resource word holds `0x1b` in bits 20..24, which is
+`ADDR_SW_64KB_R_X` (27) in the lab Mesa's `addrtypes.h` - the same render-target
+swizzle a colour attachment is backed by. So the record is not obviously
+describing the wrong surface; what has not been shown yet is that the sample
+count reaches the hardware's ADDRESS equation through the fields the record
+carries (`BASE_LEVEL` 0 / `LAST_LEVEL` log2(samples) with the ARRAY MSAA type),
+which is what the next experiment has to compare against what addrlib implies
+for this exact surface.
+
+Also ruled out on the way: the `NUM_SAMPLES` fields the pinned compiler writes
+in `ac_descriptors.c` belong to `DB_Z_INFO` (depth/stencil state), not to the
+image resource descriptor, so they are not the field a colour-attachment read
+would need. The image descriptor's sample geometry really is the level-field
+encoding this profile already emits.
+
+## The per-sample read works: MAX_MIP was the missing field (2026-09-22)
+
+The sample-addressing question is answered, and the answer is a field the
+pinned compiler writes for exactly this case. A multisampled resource record
+needs the sample geometry in **three** places, not two: the ARRAY MSAA type tag
+(15), the level fields (BASE_LEVEL 0, LAST_LEVEL log2(samples)) - and
+**MAX_MIP = log2(samples)**, the field `ac_descriptors.c`'s
+`ac_build_gfx6_texture_descriptor` writes for a multisampled surface on its GFX9
+path (`desc[5] MAX_MIP(log2(num_samples))`) and which the GFX10 path of that
+same function leaves out. This profile reaches the hardware through AGC rather
+than through that builder, and its descriptor does consume it.
+
+Measured on the console (run `20260922T133537885Z_PPSA99994_ps5vk_0x1a253f5f849fd`,
+log SHA-256 `449aaac4288736465bdb7886d4344c7a796c245ecbd24aaff34d34d654779154`,
+payload eboot `d90ca072307571ea240fdfa92503bd6cccc4d304cb9f820779c524d7d96497ae`):
+
+```
+PS5VK_SAMPLE_RATE_FETCH sample_index=0 matched=1024 expected=1024 value=ff000000 verdict=1
+PS5VK_SAMPLE_RATE_FETCH sample_index=3 matched=1024 expected=1024 value=ff000003 verdict=1
+```
+
+Both indices read the sample they ask for: sample 3's plane holds sample 3's
+value and sample 0's holds sample 0's, each across exactly the plane it covers,
+with the pass clear left in the tiled padding. The sweep is a sweep over the
+uniform-driven pipeline; the baked-index module reads the same planes with the
+same values.
+
+Note on the oracle's constant: the previous windows compared against
+`0xff030000`, the encoding the 64x64 witness measured, while the 32x32 source
+census writes the sample id in the FIRST byte (`ff000001`, `ff000002`,
+`ff000003`). With the constant taken from the census the verdict is 1; the
+earlier "verdict 0" lines were the wrong expectation, not the wrong read - and
+that is why the census mattered.
+
+What this establishes: the multisampled input-attachment read selects and
+delivers an arbitrary sample on this hardware, which is the enabler the oracle's
+fetch subpass needs and the same read a resolve is built from. What it does not
+establish: the resolve itself, the CTS leaves, the row - all unchanged, and
+nothing is advertised.
+
+## The resolve arithmetic, measured (2026-09-22)
+
+With the per-sample read working, the arithmetic a resolve is made of is one
+more submit of the same pass: subpass 0 dresses every sample of the
+multisampled attachment, and subpass 1 runs a stage that reads EVERY sample and
+writes their average into its own single-sample target. Two probe defects were
+paid for on the way and both are ordinary ones: the resolve pipeline was first
+created with the multisampled state of the attachment it READS rather than the
+single-sample state of the target it renders into (the front end refuses a
+pipeline whose sample count does not match its subpass), and the oracle
+compared against the 64x64 witness's encoding instead of the 32x32 census'.
+
+Measured on the console (run `20260922T135608051Z_PPSA99994_ps5vk_0x1a37260b0a121`,
+log SHA-256 `8cdd8405708b1170e09010f1ee316967d062ecc079c90fe7be1062be31bd4425`,
+payload eboot `72470aa67baa609ef691b7f98410c951710fe0c36e2e9ea26f254286f5b6afb6`):
+
+```
+PS5VK_SAMPLE_RATE_FETCH   sample_index=0 matched=1024 expected=1024 value=ff000000 verdict=1
+PS5VK_SAMPLE_RATE_FETCH   sample_index=3 matched=1024 expected=1024 value=ff000003 verdict=1
+PS5VK_SAMPLE_RATE_RESOLVE samples=4 words=32768 distinct=2 value=ff000002 second=ff808080 averaged=1
+```
+
+The four samples hold R = 0, 1, 2 and 3; their average is 1.5, and the target
+holds R = 2 - a value NO sample had, with the pass clear in the tiled padding.
+So the resolve result is computed by reading the samples this profile can now
+address, and the value it produces is the average rather than any one plane.
+Both facts come from one run, in one pass, on the same attachment.
+
+What this establishes: the two mechanisms the oracle's pass needs - selecting a
+sample of a multisampled colour attachment, and averaging them into a
+single-sample target - are measured on hardware, with the exact fields the
+resource record has to carry (ARRAY MSAA type, BASE_LEVEL 0 / LAST_LEVEL log2,
+MAX_MIP log2). What it does not establish: the executor does not yet EMIT that
+resolve for a subpass that declares a resolve target - it still refuses such a
+pass - and no CTS leaf passes, the row stays a blocker, and nothing is
+advertised.
+
+## The driver's own resolve program (2026-09-22)
+
+A resolve cannot be produced by a probe's payload: the draw that averages the
+samples has to be emitted by the DRIVER, so its stages have to live in the
+driver. `tools/build_resolve_shaders.py` compiles one averaging fragment per
+served sample count (2x and 4x; the reads are written out rather than looped,
+because this profile's fragment interface has only been measured on
+straight-line subpass reads) plus the oversized-triangle vertex stage they pair
+with, into a header the SDK build compiles in, and `native/resolve_program.c`
+pairs each with the descriptor contract an averaging stage needs - set 0 binding
+0 is the input attachment, fragment-visible, and nothing else - before compiling
+the pair through the same runtime compiler the pipeline objects use.
+
+`tests/test_runtime_graphics_compiler.c` pins it: both served counts compile into
+a program whose fragment has machine code, whose descriptor set is valid and
+whose used-binding mask names exactly the input attachment; a count with no
+generated stage (8x, and 1x, which has no samples to average) is refused rather
+than averaged by a stage that reads the wrong samples.
+
+What this establishes: the driver can build the resolve draw's program with the
+descriptor contract the measured read used. What it does not establish: the
+executor still refuses a subpass that declares a resolve target, so the program
+is not yet emitted; that wiring - the target, the barrier and the draw at the
+subpass boundary - is the next slice. The row stays a blocker and nothing is
+advertised.
+
+## The executor emits the resolve, and the next gate is a layout (2026-09-22)
+
+The resolve draw is now emitted by the driver. `native/graphics_queue_ps5.c`
+gained `resolve_draw_emit`, which builds the draw on the stack: a one-subpass
+synthetic pass whose colour reference is the resolve attachment, a framebuffer
+carrying both views, a descriptor set whose single element is the multisampled
+attachment as an input attachment, and a pipeline carrying a compiled-then-
+LOADED resolve program (`ps5vk_native_resolve_program_acquire` plus
+`ps5vk_native_runtime_graphics_create`, the same loader every app pipeline
+uses). It is called where a subpass that declares a resolve target ENDS - at the
+next subpass boundary and, for the last subpass, before the postlude. The stale
+blanket refusal of resolve subpasses is gone; the per-subpass validation admits
+exactly the shape the emission describes and keeps the refusal for everything
+else.
+
+The path was named step by step on hardware, and each step is now reported
+rather than guessed (run `20260922T145043495Z`, log
+`830121e53f979d4fe17436f04bf8d0e2c3f66412a69b843cbf12f6251c2c54ee`, payload
+eboot `d00844385e55341b0ab0e9adeda8d6e90650c2b14166eacc60fb9a6a2dc9bb12`):
+`PS5VK_RESOLVE_STEP target_set/native_target/descriptor` (0 for all three), the
+produced draw (`PS5VK_RESOLVE_DRAW serial=7 subpass=0 samples=4 colour=0
+resolve=1 targets=1 words=8`), and then the refusal that is left -
+`PS5VK_INPUT_ATTACHMENT_REFUSED serial=7 subpass=1 inner=123 rc=-8 defined=1
+layout=5 view_is_fb=1 ref=0`. In that same run the walk's own phases still pass
+- `PS5VK_SAMPLE_RATE_FETCH ... sample_index=3 ... value=ff000003 ... verdict=1`,
+`PS5VK_SAMPLE_RATE_RESOLVE ... value=ff000002 ... averaged=1` and
+`PS5VK_SAMPLE_RATE_TARGETS ... subpasses=2 ... preserved_hits=4096 ... verdict=1`
+- so the emission did not trade away any measured phase. Layout 5 is
+`VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL`,
+which is the layout the pinned CTS gives its fetch subpass's input attachment,
+while this profile's input-attachment gate and its boundary transition assume
+`GENERAL` (the layout the multiview witness declared). That is the next gate,
+and it is a real one: the boundary barrier has to leave the attachment in the
+layout the SUBPASS declares, and the gate has to accept `SHADER_READ_ONLY_OPTIMAL`
+for an input read.
+
+Two probe defects and one driver defect were paid for on the way to the
+emission, all recorded rather than hidden: the stale blanket refusal above, a
+synthetic descriptor set with no pool (refused at `descriptor_plan`), a
+synthetic pipeline state that had never been through the native loader, and a
+legacy prepare entry that passes a zero shader address (the descriptor table's
+high-address check needs the loaded pair's aperture, so the runtime entry is
+used). Both host tests and the console runs remain green before this window's
+last refusal: the walk's own phases - per-sample fetch, resolve arithmetic,
+two-subpass targets with a preserve list - all still pass.
+
+## The layout equation, and the resolve that lands (2026-09-22)
+
+The last window left two things open: the layout the pinned oracle reads its
+colour attachment in, and whether the resolve draw the executor emits actually
+reaches its target. Both are closed here. The second one cost five console runs,
+because each run removed exactly one layer and named the next.
+
+What changed:
+
+- The input-attachment gate accepts the two READ layouts the render-pass
+  frontend (`src/vk_render_pass.c`) already admits: `GENERAL`, which the
+  multiview witness declares, and `SHADER_READ_ONLY_OPTIMAL`, which the pinned
+  multisample oracle declares for its fetch subpasses
+  (`external/vulkancts/modules/vulkan/pipeline/vktPipelineMultisampleTests.cpp`:
+  `pInputAttachments[0].layout` and the descriptor's `imageLayout` are both
+  `SHADER_READ_ONLY_OPTIMAL`). Each side is admitted by its own pinned rule -
+  the reference by the layouts an input reference may name, the record by the
+  input-attachment layout list - and a layout that is not a read layout is still
+  refused on either side.
+- The prelude walks each attachment's LAYOUT SEQUENCE in subpass order, through
+  the new `ps5vk_render_pass_attachment_layout`: the attachment's initial
+  layout, then the layout each subpass declares for it as the pass reaches that
+  subpass, then the attachment's final layout. The boundary transition therefore
+  leaves the attachment in the layout the READING subpass declares instead of
+  assuming `GENERAL`, which is what the gate then checks the recorded descriptor
+  against.
+- A resolve target now honours the pass's `LOAD_OP_CLEAR`: the whole surface is
+  filled before the pass begins (`PS5VK_RESOLVE_CLEAR_PREPARED`), as Vulkan
+  requires for an attachment whose load operation is clear. The driver used to
+  leave the target holding whatever its allocation contained, which is why a
+  readback of a resolve target could show an earlier phase's pattern.
+- Three defects in the emission itself, each measured:
+  the synthetic operation carried no vertex or instance count, and a zero count
+  is Vulkan's "no rasterization side effects" draw - the emitter returned
+  success without writing a word (`words=8`, i.e. only the barrier);
+  the synthetic pipeline set `color_write_mask` but not the blend block
+  `CB_TARGET_MASK` is actually carried from, so the hardware mask was zero;
+  and the prepared draw's AGC context block and the loaded shader pair were
+  released INSIDE the walk, while the command stream references both by address
+  and the GPU reads them at submit. The last one is the defect that kept the
+  target untouched: the draw went out, ran, and read freed memory.
+- The probe's resolve oracle draws a SPREAD pattern now
+  (`experiments/graphics/runtime_subpass_write_spread.frag`, R = 4*(gl_SampleID+1)/255
+  with per-sample shading enabled), so the samples hold 4, 8, 12 and 16 and
+  their average is 10: a value NO sample holds, and one no 0..3 pattern an
+  earlier phase of the same payload leaves in reused memory can counterfeit. It
+  also censuses all four targets of the oracle's pass, not just the resolve one.
+
+Measured, the decisive run (`20260922T160651821Z`, log
+`1737a9bb1f187ec2c3f7d381be33469e7f166872541f39bab4bf3bac159e6d9`, payload eboot
+`fb7c519df9339de207f5b9605c1cfa69cb4edb639d3788c8d579670f55dd0f4e`):
+
+```text
+PS5VK_RESOLVE_CLEAR_PREPARED serial=7 target=1 word=ffbf8040 bytes=131072
+PS5VK_RESOLVE_DRAW serial=7 subpass=0 samples=4 colour=0 resolve=1 targets=1 words=37
+PS5VK_GRAPHICS_PREPARED serial=7 draws=3 words=228
+PS5VK_SAMPLE_RATE_TARGET_CENSUS marker=source_target_map words=65536 distinct=5 clear_hits=61440 sample_hits=4096 average_hits=0 verdict=0 value0=ff000004 hits0=1024 first0=0 last0=3327 value1=ffbf8040 hits1=61440 value2=ff000008 hits2=1024 value3=ff00000c hits3=1024 value4=ff000010 hits4=1024
+PS5VK_SAMPLE_RATE_RESOLVED extent=32x32 words=32768 distinct=2 clear_hits=31744 sample_hits=0 average_hits=1024 verdict=1 value0=ff00000a hits0=1024 first0=0 last0=3327 value1=ffbf8040 hits1=31744
+```
+
+The resolve target holds the AVERAGE (`ff00000a`, R = 10) across exactly its
+32x32 plane and no sample's value anywhere in its span, with the pass clear in
+the tiled padding; the source holds the four distinct sample planes the SPREAD
+pattern wrote (4, 8, 12, 16). Every other phase of the walk passes in the same
+run: `PS5VK_SAMPLE_RATE_SHADED ... verdict=1`, `PS5VK_SAMPLE_RATE_FETCH ...
+sample_index=0 ... verdict=1` and `sample_index=3 ... value=ff000003 ... verdict=1`,
+`PS5VK_SAMPLE_RATE_TARGETS ... subpasses=2 ... preserved_hits=4096 verdict=1`, and
+the lifecycle closes clean (`PS5VK_PLATFORM_CLOSE rc=0 allocations_bytes=0`,
+`PS5VK_GRAPHICS_API_CLEANUP_COMPLETE`, `BYE seq=367`).
+
+The runs that named each layer, every one of them a clean lifecycle (each entry
+is run id, log sha256 prefix, payload eboot sha256 prefix, and what it showed):
+
+- `20260922T155027168Z` / `7b8c12468891fd39` / `d0084438` - the oracle's pass
+  executes end to end for the first time (submit `rc=0`, `draws=3`), and the
+  resolve target reads back as four sample-looking values.
+- `20260922T155421552Z` / `a7dae8bd647c5349` / `63dcc5a8` - the sharpened oracle
+  is in place, and the TWO-SUBPASS verdict collapses to 0: the two phases of the
+  walk had been sharing one subpass-0 module, so the spread pattern had replaced
+  the flat one the two-subpass variant measures. Separated into their own
+  modules.
+- `20260922T155629250Z` / `3e8f8a3b352e0008` / `c1c37579` - modules separated,
+  two-subpass verdict back to 1, all four targets censused. The resolve target's
+  content is byte-for-byte the 0..3 pattern and clear of the witness phase
+  earlier in the same payload: it is STALE MEMORY, not a resolve result.
+- `20260922T155759226Z` / `a0ba629adae5d43f` / `23380172` - per-sample shading
+  enabled, so the source shows four distinct planes (4, 8, 12, 16) and the
+  resolve's expected average (10) is distinguishable from every sample. The
+  target is still stale, and the target registers differ from the source's in
+  their address word only.
+- `20260922T155923914Z` / `78fbeaff61953ce2` / `f004d02b` - the missing vertex
+  and instance counts: the emission grows from 8 words to 37 and the submission
+  from 199 to 228, and the target is STILL untouched.
+- `20260922T160123400Z` / `6f80a485a1a7b47b` / `0cb256b2` - the resolve target's
+  own `LOAD_OP_CLEAR` is honoured, so the target reads back as one value across
+  the whole span (`clear_hits=32768`): the draw writes nothing into it, rather
+  than writing something that looked like stale data. The image spans logged in
+  the same run (`200020000` for the resolve target) match the target register's
+  address word exactly, so the draw IS aimed at the right memory.
+- `20260922T160301551Z` / `e1b4bcbd732d0d7f` / `752b67de` - the pipeline's blend
+  block carries `CB_TARGET_MASK`; a synthetic pipeline that sets only
+  `color_write_mask` hands the hardware a zero mask. Set both, as
+  `vkCreateGraphicsPipelines` does. The target is still untouched.
+- `20260922T160423999Z` / `72a8f71398b587bd` / `400a7339` - the emitted words are
+  logged: the barrier, the AGC context and link packets, and a
+  `PKT3_DRAW_INDEX_AUTO` of three vertices are all there, so the draw leaves the
+  queue as a draw. The context address it references is the one the procedure
+  prepared.
+- `20260922T160651821Z` / `1737a9bb1f187ec2` / `fb7c519d` - the last change:
+  the prepared draw and the loaded shader pair are handed to the JOB instead of
+  being released inside the walk. `PS5VK_SAMPLE_RATE_RESOLVED ... verdict=1`.
+
+What this establishes: the pinned oracle's pass runs end to end through this
+driver, its per-sample reads deliver the plane each index names, and its resolve
+attachment receives the AVERAGE of the samples - written by a draw the driver
+owns, on hardware, with no sample's value anywhere in the target. What it does
+not establish yet: no upstream CTS leaf has been run against this path, the row
+stays a blocker, and nothing is advertised. `make check` is green; the console
+window that produced this run left the acceptance payload restored and
+`running=none`.
+
+## The focused CTS selection, and the compiler assertion behind it (2026-09-22)
+
+The row's last axis is CTS, and this window both measured it and named the
+blocker - in the compiler, not in the driver's execution path.
+
+Two runs of the same measurement selection (512 cases: the frozen 462-case
+acceptance set plus the 50 `t06-sample-rate-pending` leaves moved into `cases`)
+say the whole story:
+
+- **Without the feature advertised** (`PS5VK_SAMPLE_RATE_DIAGNOSTIC` unset, so
+  the shipping platform does not set the bit): run `20260922T173812017Z`, log
+  `77ff13e863d48a86fdf9c889502ce4d4a8e9abe75cbd8349c6db80f3a2ae4cf8`, payload
+  eboot `bea19ce65db1c2dc328e6134d211c3e1acc6e3c9f9b9d0b1c678cacec5f9c99c` -
+  `Test execution complete: pass=462 fail=0 notSupported=50 total=512`,
+  `UPSTREAM_CTS_COMPLETE status=0`, clean `BYE`. dEQP skips the leaves at
+  feature-query time, so no leaf is judged at all.
+- **With it advertised** (the measurement switch on; the shipping bit is still
+  off): run `20260922T175103500Z`, log
+  `d4ca09dbce54431b3b863a887ed84122e4e50f83124f941da23f3da791cbd631`, payload
+  eboot `9735d96702e8ab94e159972660e8660c0896cab80ddec68ea4e779f4b62af31f` - the
+  process dies inside the first sample-rate leaf that actually runs,
+  `dEQP-VK.pipeline.monolithic.multisample.min_sample_shading.min_0_0.samples_2.primitive_triangle`,
+  and the log ends without `BYE` (`clean=false`).
+
+The payload now logs the case each run is in (`UPSTREAM_CTS_CASE`, added here
+because an unclean close leaves no result to name), the queue preparation phase
+(`PS5VK_GRAPHICS_PHASE`), and the front-end calls that build a case
+(`PS5VK_IMAGE_CREATE`, `PS5VK_IMAGE_BIND`, `PS5VK_IMAGE_VIEW`,
+`PS5VK_RENDER_PASS_CREATE`, `PS5VK_FRAMEBUFFER_CREATE`, `PS5VK_PIPELINE_CREATE`,
+`PS5VK_NATIVE_PIPELINE_CREATE`). The last records of the failing run are:
+
+```text
+UPSTREAM_CTS_CASE name=dEQP-VK.pipeline.monolithic.multisample.min_sample_shading.min_0_0.samples_2.primitive_triangle
+PS5VK_IMAGE_CREATE format=37 samples=2 usage=00000011 extent=32x32
+PS5VK_IMAGE_BIND samples=2 usage=00000011 extent=32x32
+PS5VK_IMAGE_CREATE format=37 samples=1 usage=00000013 extent=32x32
+PS5VK_IMAGE_BIND samples=1 usage=00000013 extent=32x32
+PS5VK_IMAGE_VIEW format=37 type=1
+PS5VK_IMAGE_VIEW format=37 type=1
+PS5VK_RENDER_PASS_CREATE attachments=2 subpasses=1 dependencies=0
+PS5VK_FRAMEBUFFER_CREATE attachments=2 extent=32x32 layers=1
+PS5VK_PIPELINE_CREATE subpass=0 samples=2 stages=2 topology=3 vb=1 va=2 colors=1 dyn=0 ds=1 rp=1
+```
+
+and then nothing: the native pipeline entry is never reached, so the death is
+inside `vkCreateGraphicsPipelines`' own front-end/compile phase for that one
+call.
+
+The cause was then reproduced on the host, outside the console, with the
+sources the run itself logged: the case's vertex and fragment GLSL were
+extracted from the reassembled QPA, compiled with `glslangValidator -V
+--target-env vulkan1.0`, and handed to the same runtime compiler the console
+uses (`ps5vk_runtime_graphics_compile`), under AddressSanitizer. The pair
+aborts:
+
+```text
+SPIR-V WARNING: Unsupported SPIR-V capability: SpvCapabilitySampleRateShading (35)
+src/amd/common/nir/ac_nir.c:185: ac_nir_load_arg_at_offset: Assertion `arg.used' failed.
+  #0 ac_nir_load_arg_at_offset
+  #7 ac_nir_unpack_arg (rshift=24, bitwidth=1)
+  #9 lower_abi_instr            src/amd/vulkan/nir/radv_nir_lower_abi.c:455
+  #13 radv_nir_lower_abi
+  #14 radv_postprocess_nir      src/amd/vulkan/radv_postprocess_nir_standalone.c:283
+  #15 psbc_compile_impl         libpsbc/psbc_compile.c:3623
+  #17 ps5vk_runtime_graphics_compile
+```
+
+`radv_nir_lower_abi.c:455` is the `load_ps_iter_mask_amd` case, which unpacks the
+`PS_STATE_PS_ITER_MASK` bit out of the `ps_state` argument - and that argument is
+not marked used for this compile.
+
+Bisected by hand with the same harness, one shader at a time:
+
+| fragment stage | result |
+| -------------- | ------ |
+| reads `gl_SampleID`, never `gl_FragCoord` (the sample-rate probe's spread module) | compiles |
+| reads `gl_FragCoord`, never `gl_SampleID` | compiles |
+| reads `gl_FragCoord` and declares `gl_SampleID` (the CTS leaf's own module - its `sampleId` is even dead code) | aborts with the assertion above |
+
+The compiler skips its fragment-coordinate lowering whenever the shader
+declares sample shading (`libpsbc/psbc_compile.c`: the
+`radv_nir_lower_opt_fs_frag_pos` call is guarded by
+`!gfx_state.ms.sample_shading_enable && !nir->info.fs.uses_sample_shading`), and
+`gfx_state.ms.sample_shading_enable` is never set from the compile options at
+all, so the two facts cannot agree: the shader keeps a built-in whose argument
+the ABI never marks used. A driver-side attempt was measured and REJECTED:
+compiling the pixel stage with `rasterization_samples=1` whenever the pipeline
+does not enable sample shading does not avoid the abort, so the fix belongs in
+the compiler's fragment-coordinate/sample-shading path. That change was
+reverted; no rendering behaviour changed in this window.
+
+What this establishes: the CTS blocker is a pinned-compiler abort on one shape
+(a fragment stage that reads `gl_FragCoord` and declares `gl_SampleID`), with a
+host reproduction that needs no console. What it does not establish: the
+remaining 49 leaves have not been reached, the row stays a blocker, and nothing
+is advertised.
+
+## The compiler abort fixed, and the leaves judged at last (2026-09-22)
+
+The abort above was fixed where it lives - in the pinned compiler - and with it
+the focused selection stopped dying and started judging the leaves.
+
+The compiler is a PINNED dependency: `tools/build_sdk.py` validates its archive
+against the identity stamp `tools/build_psbc.py` writes (source commit +
+archive sha256), so a loose edit is not shippable. The fix is therefore a commit
+in the compiler's own repository:
+
+- `opengnm-psbc` branch `codex/fragment-coord-sample-shading`, commit
+  `992ba13385a77fbc49683da2124f5a9a12f09fd8`, PR
+  https://github.com/mpereiraesaa/opengnm-psbc/pull/23. It runs
+  `radv_nir_lower_opt_fs_frag_pos` unconditionally for fragment stages in
+  standalone compiles, as `radv_pipeline_graphics.c` already does, instead of
+  skipping it whenever the pipeline or the shader asks for sample shading. The
+  skip is what let the pass run later, inside `radv_postprocess_nir`, after
+  `radv_nir_shader_info_pass` had decided the stage arguments - so the shader
+  kept `load_use_float_frag_coord_xy_amd` with no `ps_state` argument, and the
+  compiler aborted on `assert(arg.used)`.
+- `build/libpsbc.ps5.a` rebuilt with that identity (`source_commit
+  992ba13385a77fbc49683da2124f5a9a12f09fd8`).
+
+Measured, run `20260922T183509764Z`, log
+`6cb7d0d655e2c20c20cc35bed9f4a7bc5901eddc817a5f7b94a4bd7d0098824d`, payload
+eboot `33b84bc0da289e726ef5c006c8fb993ecbb2b15ddc1ae0651c8c0db203b1fea5`: 512
+expected, 512 reported, **462 pass, 50 fail, 0 notSupported**, clean lifecycle.
+No case dies any more, and every sample-rate leaf is judged for the first time.
+
+Two driver-side refusals then had to agree with what recording had let through,
+both of them measured on the console in the same window:
+
+1. The prelude refused the pinned leaves' own first-use barrier
+   (`UNDEFINED -> COLOR_ATTACHMENT_OPTIMAL`, no source access, the
+   colour-attachment write as destination, `TOP_OF_PIPE -> COLOR_ATTACHMENT_OUTPUT`)
+   for the multisampled colour image and the single-sample attachments the oracle
+   reads back - `PS5VK_GRAPHICS_PREPARE_FAILED ... phase=prelude site=701`. The
+   executor performs exactly this transition itself in the pass prelude, and the
+   recorder already accepted it, so `native/upload_commands_ps5.h` now accepts it
+   for those roles (run `20260922T185428184Z`, log
+   `7f46b94674cd2233f35252e16ec969c09493f83899b2a1a95f57931fd1a58021`, payload
+   `18b0efd3dc3b7c9cc2141c370c8f9ede556d982fd7e433255c23c31f6568d1d4`: the
+   prelude refusal is gone).
+2. The driver's own resolve draw then failed building the multisampled resource
+   record, because `ps5vk_image_resource_descriptor` required the
+   INPUT_ATTACHMENT usage bit - and the pinned CTS resolves an image it creates
+   with COLOR_ATTACHMENT and TRANSFER_SRC alone (`RENDER_TYPE_RESOLVE`). A
+   subpass resolve is implementation work, not an application's descriptor read,
+   so `src/texture_descriptor.c` now requires the colour-attachment role for a
+   multisampled record while the app-facing input-attachment gate keeps its
+   strict usage rule (`tests/test_texture_descriptor.c` pins both directions).
+
+Measured, run `20260922T185644808Z`, log
+`d895f7c050562780e6572c5db46b9eb8fd2055f7fab23bec75afd110620d01d6`, payload
+eboot `3b9bc090122363b64b783625463d80a550e8fa31cfe63dbc30d2c70dbafaee33`:
+**475 pass, 37 fail**, clean lifecycle, and thirteen sample-rate leaves PASS -
+the first upstream CTS leaves this row has ever had green, including
+`min_sample_shading.min_0_0.samples_2.primitive_triangle` and its `.samples_4`
+sibling.
+
+The remaining 37 failures are named, and they are three different problems:
+
+| count | deqp result | what it means |
+| ----- | ----------- | ------------- |
+| 20 | `VK_ERROR_FEATURE_NOT_PRESENT at vkPipelineConstructionUtil.cpp:178` | plain VS+FS POINT and LINE topologies, which this profile has never served (the same limitation T05 recorded as a diagnostic) |
+| 7 | `Got less unique colors than requested through minSampleShading` | the pixel-iteration count our state asks for is not the one the oracle expects for a fractional `minSampleShading` |
+| 8 | `Did not get any covered pixel` | a rendering/coverage defect on the leaves that reach the comparison with no covered pixel |
+| 2 | `Invalid color` | a rendered value outside the expected set |
+
+What this establishes: the CTS axis is no longer blocked by the compiler, the
+payload runs all 512 cases to a clean close, and thirteen focused leaves pass.
+What it does not establish: the row is not complete - 37 leaves still fail for
+the three reasons above, the compiler fix still needs merging in its own
+repository, and nothing is advertised.
+
+## The sample-shading state the compiler was never told (2026-09-22)
+
+The unique-colours family was expected to be the per-sample fragment coordinate:
+`radv_nir_lower_opt_fs_frag_pos` chooses between the per-sample position path
+and the pixel-centre one from the pipeline's sample-shading state, and the
+standalone compiler had no way to be told that state - it emitted a runtime
+selection reading the PS state user SGPR, which this ABI does not supply. The
+state was therefore published (`PsbcCompileOptions::sample_shading_enable`,
+opengnm-psbc branch `codex/fragment-coord-sample-shading`, commit
+`883747bf04af7746b6ec49e00d2a247a5327e326`, on top of the abort fix) and set
+from the pipeline key in `native/runtime_graphics_compiler.c`.
+
+Measured twice with the rebuilt compiler archive (identity
+`d9fa65080bf5761beaf0032f9a20ab5a1afd957c59814c07ff5d54f4cb4b64e1`), same
+selection, same payload eboot
+`e03fb14b98567c4ac4b5d7d8b8b4583e31e49f893c886c6fadf0b361a85e5b88`:
+
+- run `20260922T191325185Z`, log
+  `fd8b931eece17c1984d91a2cbca98cf0126ace48e1b1413a2f7d55c39556bc16`: 474 pass / 38 fail
+- run `20260922T191416917Z`, log
+  `01a3a3a10950fb681286870c38dd927338621b89ee08bce952bb13ad9543394c`: 477 pass / 35 fail
+
+The honest reading of the two runs together: **the hypothesis was not
+confirmed**. The stable unique-colour failures are unchanged by it - the five
+`min_sample_shading` triangle leaves at min 0.5, 0.75 and 1.0 at both served
+counts - and the leaves that move between runs are the `quad` families, which
+are FLAKY in this driver: across the two runs the coverage and invalid-colour
+sets differ by several leaves each (only one leaf is stable in each of those
+two groups), which is a defect of its own and would fail an acceptance run
+whatever the score. The change is kept because the state it publishes is one
+the compiler legitimately needs and the previously-working shapes still
+compile, but it is NOT the fix for the unique-colour family, and that family
+still needs the hardware per-sample position state to be understood and
+measured - the same way the per-sample sample-id path was.
+
+Current best measurement: 477 pass / 35 fail of 512, of which 20 are the
+plain point/line pipeline refusals, 5 are the stable unique-colour leaves, and
+the rest are the flaky `quad` families. Nothing is advertised.
+
+### What the failing leaves actually contain (2026-09-22)
+
+The unique-colour failure was then read directly out of the run's own report
+instead of inferred: the QPA of run `20260922T191416917Z` carries the three
+images the oracle compares for
+`min_sample_shading.min_1_0.samples_2.primitive_triangle` - the render without
+sample shading and one image per sample of the sample-shaded render - and
+decoding them says exactly what the driver produced:
+
+```text
+noSampleshadingImage : 1024 pixels, 976 zero, 48 of 808000ff
+sampleShadedImage[0] : identical histogram
+sampleShadedImage[1] : identical histogram
+sample image 0 vs 1    : 0 differing pixels
+covered pixel         : sample0 808000ff  sample1 808000ff  noShading 808000ff
+```
+
+`80 80 00 ff` is RGBA8 (0.5, 0.5, 0, 1): the shader's `fract(gl_FragCoord.xy)`
+is the PIXEL CENTRE for every sample, and the two per-sample images are
+byte-identical - so the fragment coordinate does not vary per sample, which is
+precisely what the oracle's `expectedUniqueSamplesCount =
+round(minSampleShading * samples)` then rejects at min 0.5/0.75/1.0.
+
+Two host experiments then placed the defect:
+
+- Compiling the leaf's own fragment module with the pipeline's sample-shading
+  state set and clear produces *byte-identical* machine code (104 bytes, same
+  checksum), so the state published in this window is not what the
+  fragment-coordinate lowering keys on - the shader's own
+  `nir->info.fs.uses_sample_shading` already decides it, which is why the
+  measurement above could not move.
+- The per-sample position itself is not in the shader's own arithmetic:
+  `radv_nir_lower_opt_fs_frag_pos` lowers per-sample `gl_FragCoord` to
+  `pixel_coord + sample_pos`, and the pinned tree resolves `sample_pos` through
+  `nir_load_sample_positions_amd` into a fetch from the RING at
+  `RING_PS_SAMPLE_POSITIONS` (`radv_nir_lower_abi.c`). This driver supplies no
+  sample-position table and no ring offset for the fragment stage, so the read
+  cannot return the sample's location.
+
+That is the next slice, and it is now stated as a driver-side gap with two
+concrete halves: supply the sample positions the fragment path reads, and make
+the compile decision follow the pipeline's state rather than only the shader's
+declaration.
+
+### Correction to the paragraph above (2026-09-22)
+
+The claim that this shader's per-sample coordinate needs the ring's
+sample-positions table is WRONG, and the compiled ISA says so. Disassembling the
+leaf's own fragment module (compiled through the same runtime compiler with
+`PSBC_DEBUG_DISASM=1`) shows it never reads a sample position:
+
+```text
+v_cvt_f32_u32                     ; the integer pixel coordinate
+v_add_f32 0.5, ...                ; pixel_coord + 0.5, the pixel centre
+v_cndmask_b32 <+0.5 value>, <interpolated coord>, <condition>
+v_fract_f32 ...
+```
+
+The condition comes from `load_use_float_frag_coord_xy_amd`, i.e. the
+`PS_STATE_USE_FLOAT_FRAG_COORD_XY` bit of the PS-state user SGPR - a slot this
+driver never writes - so it reads as zero, the shader takes the pixel-centre
+branch on every iteration, and every sample gets (0.5, 0.5). That is the
+failure; no sample-position table is involved for this shader at all.
+
+The next slice is therefore: (1) make the pipeline say which fragment
+coordinate it really delivers - the SPI input-address register's
+`POS_FIXED_PT_ENA` (`ac_shader_util.c` reads it, and
+`ac_nir_lower_intrinsics_to_args.c` unpacks the `pos_fixed_pt` argument), since
+per-sample positions are only reachable with it disabled and the float path
+selected - and (2) publish and program the PS-state user SGPR
+(`ps_state_user_data_dword`, alongside the existing base-vertex and
+push-constant slots) with that bit plus `NUM_SAMPLES`, `PS_ITER_MASK`
+(`ac_get_ps_iter_mask`), `USE_QUAD_POS` and `USE_SAMPLE_MASK_IN`, so the branch
+and the hardware agree. Nothing about the rendered images above changes: they
+still show the pixel centre for every sample.
+
+## The sample positions the raster stage never had (2026-09-23)
+
+The paragraph above ends by naming the next slice as "the PS-state user SGPR
+plus `POS_FIXED_PT_ENA`". **That reading was wrong, and the measurement says
+so.** The compiler already publishes the interpolated-coordinate shape for a
+sample-shaded standalone compile, and the register that decides the answer is
+neither of the two it named. What the device was missing is on the RASTER side,
+and the pinned PAL source (`third_party/amd-pal`, `gfx9MsaaState.cpp`) names
+both halves:
+
+* `PA_SC_MODE_CNTL_0.MSAA_ENABLE` - PAL sets it whenever the stage's coverage
+  samples are more than one. This driver published the single-sample word
+  (`0x22`) for every draw, so the rasteriser had no sample locations to work
+  with.
+* the sixteen `PA_SC_AA_SAMPLE_LOCS_PIXEL_*` context words (`0x2fe..0x30d`),
+  four samples each, X in the low nibble of a byte and Y in the high one as a
+  signed offset from the pixel centre in 1/16 pixel units, all four pixels of
+  the quad sharing the pattern. They had never been written, so all sixteen read
+  zero and every sample of a pixel sat ON the pixel centre.
+
+The pixel stage's own half comes from LLPC
+(`third_party/amd-llpc/lgc/lowering/RegisterMetadataBuilder.cpp`):
+`SPI_BARYC_CNTL.POS_FLOAT_LOCATION = 2` ("calculate per-pixel floating point
+position at iterated sample number") whenever the wave iterates per sample, and
+0 otherwise. This compiler published 0.
+
+### The measurement that places it
+
+A diagnostic payload publishes those registers per draw instead of taking them
+from the compiler (`native/sample_rate_diagnostic.h`, reachable only under
+`PS5VK_SAMPLE_RATE_DIAGNOSTIC`) and draws the `fract(gl_FragCoord.xy)` witness
+into a 4x target with per-sample shading. Payload eboot
+`bdebc7259a0bffb650e72728e7c2526e25c4f5b3253dd581b0d5f7c4b18dd7c4`, run
+`20260922T225844981Z_PPSA99994_ps5vk_0x1c10e85bc0773`, log
+`6ea767abc3ef017908d874e0dcd9e5091185393841b7a1bf5d5cad9706ea689d`, clean
+lifecycle. The census is the distinct-word count of the whole surface:
+
+```text
+default                           values=ff602000,ffdf6000,ff209f00,ff9fdf00 oracle=coordinate verdict=1
+without-msaa-enable               values=ff808000                          oracle=coordinate verdict=0
+without-sample-locations          values=ff808000                          oracle=coordinate verdict=0
+without-sample-distance           values=ff602000,ffdf6000,ff209f00,ff9fdf00 oracle=coordinate verdict=1
+without-position-location         values=ff808000                          oracle=coordinate verdict=0
+col-format-zero (control)         shaded_values=0                          oracle=coordinate verdict=0
+```
+
+`ff602000`, `ffdf6000`, `ff209f00` and `ff9fdf00` are RGBA8
+`fract(gl_FragCoord.xy)` for (0.375,0.125), (0.875,0.375), (0.125,0.625) and
+(0.625,0.875) - Vulkan's standard 4x sample locations, which is also what makes
+the 1/16-offset encoding above self-checking: the four values the hardware
+delivers are the four values the pattern asks for. `ff808000` is (0.5,0.5), the
+pixel centre, and is what every configuration produced before this fix.
+
+The three necessary elements are therefore `MSAA_ENABLE`, the sample-location
+words, and the position location; each one withdrawn collapses the census back
+to the pixel centre. Withdrawing `MAX_SAMPLE_DIST` (kept at the pattern's own
+extent, 6/16 at 4x, because PAL derives it from the pattern) does not change the
+position, and the `col-format-zero` control proves the overrides reach the
+pipeline at all. `PA_SC_MODE_CNTL_0`, the sample words and `SPI_BARYC_CNTL` are
+now published by `native/draw_state_ps5.c` for exactly this shape, only when the
+pipeline carries more than one sample, and the position location only when the
+wave really iterates per sample.
+
+### The focused selection after the fix
+
+The same 514-case measurement (the frozen acceptance selection plus the 50
+`t06-sample-rate-pending` leaves) on payload eboot
+`445c894191c4914b15119c33075af3efe9c3a3eb9e4322da6a323b0da20e500e`, run
+`20260922T230226909Z_PPSA99994_upstream-cts_0x1c142318ff862`, log
+`4706ca168f5f574f6dfb517fbecdf56dc503c754bb7106764d242594e66ebdac`, clean
+lifecycle, reports **489 Pass, 25 Fail, 0 NotSupported**. Every
+`min_sample_shading.*.primitive_triangle` leaf passes now; before the fix the
+unique-colour family failed 35 of 512 (five stable `min_sample_shading` triangle
+leaves at min 0.5, 0.75 and 1.0 at both served counts, plus the flaky `quad`
+families).
+
+What still fails, in full:
+
+* twenty leaves - `min_sample_shading.*.samples_2|samples_4.primitive_line` and
+  `...primitive_point_1px` - are the plain vertex+fragment POINT/LINE pipelines
+  this profile does not serve at all: `VK_ERROR_FEATURE_NOT_PRESENT` raised by
+  the CTS itself at `vkPipelineConstructionUtil.cpp:178`, with the driver's own
+  `PS5VK_PIPELINE_CREATE` line as the last driver record and no refusal marker.
+  That is the same scope decision the earlier runs recorded, not a
+  sample-position defect.
+* five leaves - `min_sample_shading_disabled.*.samples_4.quad` - fail inside the
+  oracle as "Invalid color" or "Did not get any covered pixel, cannot test
+  minSampleShadingDisabled". These are the `quad` family the earlier runs
+  already measured as run-to-run flaky; they are a defect of their own and would
+  fail an acceptance run whatever the score, so they are the next item, not part
+  of this fix.
+
+### The remaining flakiness was the colour-to-texture barrier (2026-09-23)
+
+That last paragraph was a prediction, not a diagnosis, and the next two runs
+replaced it with one. A repeat of the SAME payload (run
+`20260922T230750349Z`, log
+`edc244cc866c4aa6e6474c46f12852b90c7626c7b01881af39f57c21d25ea08e`, 488 Pass /
+26 Fail) failed a different set:
+one `min_sample_shading_enabled` quad and two `samples_2` quads joined the
+failing five, so no property of the *disabled* group explains it.
+
+The run's own QPA images name the defect instead. In
+`min_sample_shading_disabled.min_0_0.samples_4.quad` the oracle compares the
+resolved image against the four per-sample images:
+
+* the four per-sample images held the correct uniform `808000ff` -
+  `fract(gl_FragCoord.xy)` at the pixel centre, the value a per-pixel
+  invocation writes - over the whole 32x32, so the multisampled attachment
+  really did hold what the draw wrote;
+* the RESOLVED image held the drawn value in only a few 8x8 tiles
+  (`20200040` in one tile and `40400080` in others: one and two of four samples
+  covered) and the clear word everywhere else, while the previous run of the
+  same case resolved almost the whole target. Different tiles, different runs.
+
+That is the signature of the colour-to-texture barrier being ASYNCHRONOUS. The
+driver's `ps5vk_graphics_color_to_texture` emits the reference RELEASE_MEM
+packet (event 0x2d `FLUSH_AND_INV_CB_DATA_TS` with the GCR writeback/
+invalidation bits, `DST_SEL=TC_L2`, no completion token), and a RELEASE_MEM
+retires when the event is accepted: the writeback it starts continues behind
+it, so a draw that reads the attachment through the texture path can see
+whatever the caches had not written back yet. The pinned RADV emitter
+(`gfx10_cs_emit_cache_flush` in the gfx10 Mesa tree) uses the same event with
+the write CONFIRMED - `DST_SEL=MEM`, `INT_SEL=SEND_DATA_AFTER_WR_CONFIRM`,
+`DATA_SEL=VALUE_32BIT` towards a token - and then a `WAIT_REG_MEM` for it.
+
+`ps5vk_graphics_color_to_texture_wait` (`src/graphics_sync.c`) is that packet:
+the same CB data-flush event with the token selected (word 2 becomes
+`0x23000000`), the 32-bit token stored at the address the caller names, and a
+`PKT3_WAIT_REG_MEM` equality wait for it. Both barrier sites use it - the
+resolve draw's own boundary and the subpass boundary that publishes colour to
+the texture path - with the private token word of the arena that executes the
+wait, zeroed before the release so the equality wait cannot pass on a value a
+previous submission left behind.
+
+Measured on the same 514-case selection, payload eboot
+`7eed073a5e49b52ed9df75932b3e3b22504106e1a5d5a824b99765f89d22f27d`, three
+consecutive runs, all with a clean lifecycle:
+
+| run | log sha256 | Pass | Fail | quad failures |
+| --- | --- | ---: | ---: | ---: |
+| `20260922T231948101Z` | `ce28818943d639bca3305f2703d0aae8c4e77deda85f0196eed0052c72930027` | 494 | 20 | 0 |
+| `20260922T232046070Z` | `b078a112854bf6af369a472e50b75e7ba7e0e5a5afa7a8120d8644fb5996127f` | 494 | 20 | 0 |
+| `20260922T232129201Z` | `5c9a5863317461d4d0de756ad1efb6f9ba0e65602922f7678e3f618c1123d81c` | 494 | 20 | 0 |
+
+The twenty are the POINT/LINE refusals alone, so the 30 applicable
+`min_sample_shading*` leaves - the five min-fractions at both served counts for
+the triangle and quad geometries - pass deterministically, which is what the row
+needs and what the frozen selection cannot carry as a flaky member.
+
+## DXVK262-T06 sampleRateShading promotion (2026-09-23)
+
+T06 is complete: the four requirements of the tranche -
+`fragmentStoresAndAtomics`, `dualSrcBlend`, `independentBlend` and
+`sampleRateShading` - are satisfied on all four axes, so the live matrix reads
+**17/62 ready with 45 blockers** (from 16/62).
+
+The promotion moved the row's own oracle into the frozen selection. The
+multisample module has exactly one class whose `checkSupport` requires
+`DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING`; it registers five min-fractions at
+two served counts over five primitives. Thirty of those fifty leaves - the
+triangle and quad shapes - are the group `sample-rate-shading`, measured Pass;
+the twenty line and `primitive_point_1px` shapes moved to
+`plain-point-line-pipeline-refused`, because what refuses them is this
+profile's pipeline resolver, not this feature: `vkCreateGraphicsPipelines`
+returns `VK_ERROR_FEATURE_NOT_PRESENT` and the CTS reports it at
+`vkPipelineConstructionUtil.cpp:178` with the driver's own
+`PS5VK_PIPELINE_CREATE` line as the last record. The frozen selection is now
+494 acceptance cases and 66 diagnostics.
+
+The four axes, each with its own artifact:
+
+* **API** - the public-ABI capability probe on the promoted profile, artifact
+  SELF SHA-256
+  `439de5c96579b634bb4698adf439631dd545f9298bdccd1c5e1129f750184a07`, run
+  `20260922T234500151Z_PPSA99994_ps5vk_0x1c394a882c7bf`, log SHA-256
+  `2b04497f8ae6a8d01feb3961f2a7b724bb763c611b69b78d9f3c7b497ece8d20`
+  (rebuilt against the promoted matrix, and a first run on the same artifact,
+  `20260922T233053671Z` log
+  `93268e3d01eadd0a8d922bd7459cc3618010b2e7f03844eb50d6473ac059b13b`,
+  verified against the pre-promotion snapshot). Both strict verifications
+  reconstructed all 62 rows, observed `sampleRateShading = 1`, and derived the
+  same **19 satisfied / 43 blockers** result;
+  `framebufferColorSampleCounts` moved to 1x|2x|4x with it.
+* **CTS** - three consecutive runs of the 514-case measurement selection
+  (frozen 464 + the 50 pending leaves) reported 494 Pass / 20 Fail / 0
+  NotSupported each time, the twenty being the POINT/LINE refusals and every
+  one of the thirty applicable sample-rate leaves Pass. Payload eboot
+  `7eed073a5e49b52ed9df75932b3e3b22504106e1a5d5a824b99765f89d22f27d`
+  (measurement selection, register survey available), runs
+  `20260922T231948101Z`, `20260922T232046070Z` and `20260922T232129201Z`.
+* **Native** - the frozen acceptance selection itself, on the shipping profile
+  and without the measurement switch: payload eboot SELF SHA-256
+  `e1ed40fb0089c5a39eb0b6c333b74b9aa430d524c10d4f74220452263d40b4cb`,
+  selection SHA-256 `f6924b34930a837f88635e47cf388bf9a88fd72e1082a0f3ee9ab6bba5a540ed`,
+  run `20260922T232928853Z_PPSA99994_upstream-cts_0x1c2bbd396dece`, log SHA-256
+  `287f98ec1e81ccb09642bbf12b75062ed60bb95501d3451849d8f3d5f6633b54`: **494
+  reported, 494 Pass, 0 Fail, 0 NotSupported**, clean lifecycle. The
+  shipping witness payload (no measurement switch, eboot
+  `1ce2fe9cf7d0647535f044c69f48316272a860c2dead603ae9b2135e12a60613`, run
+  `20260922T233238023Z_PPSA99994_ps5vk_0x1c2e7dee46277`, log SHA-256
+  `0b82307d624e9adeb405e9ce93a782e577246dba50c54be894556f4f6293a570`) is the
+  row's own oracle executed directly:
+
+```text
+PS5VK_SAMPLE_RATE_SHADED extent=64x64 samples=4 words=65536 shaded_values=4 expected_values=4 matched=4 covered_words=16384 values=ff000000,ff010000,ff020000,ff030000 oracle=sample-id verdict=1
+PS5VK_SAMPLE_RATE_SHADED extent=64x64 samples=4 words=65536 shaded_values=4 expected_values=4 matched=4 covered_words=16384 values=ff602000,ffdf6000,ff209f00,ff9fdf00 oracle=coordinate verdict=1
+```
+
+One limit the promotion made applicable is NOT satisfied and is recorded rather
+than claimed. While `sampleRateShading` is unreported the CTS leaves the
+interpolation-offset limits out and this profile reports them relaxed; reporting
+the feature brings the core table's own floors (`maxInterpolationOffset >= 0.5`,
+`minInterpolationOffset <= -0.5`, `subPixelInterpolationOffsetBits >= 4`) into
+scope. This driver reports 0 for all three: no path lowers an interpolation
+offset, so they are documented as blockers in the reporting matrix
+(`tools/check_reporting_matrix.py`, `KNOWN_BLOCKERS`) instead of being raised to
+values nothing measured.
+
+The compiler half of this window is `mpereiraesaa/opengnm-psbc` PR #23
+(`codex/fragment-coord-sample-shading`, head
+`a33305201385947cb49d74b68f6311a0c2f4add7`): the unconditional fragment-coordinate
+lowering that stops the standalone compile from aborting in
+`ac_nir.c` (`assert(arg.used)`), the pipeline sample-shading state the
+standalone compile needs, and the single compile-time decision about which
+fragment coordinate the shader reads. Every payload above was built and run
+with that revision - the driver passes `sample_shading_enable` into
+`PsbcCompileOptions`, which does not exist before it - so
+`tools/prepare_compiler_deps.py` has to pin the merged commit before this
+promotion reproduces from a fresh clone. The current pin,
+`ee8959186cfb1f5c0a574d1e2ee329aad1fe2747`, includes that revision and
+the bounded storage-image descriptor ABI.
+
+## Standard uniform buffer layout (2026-09-23)
+
+The public Vulkan 1.0 device advertises `VK_KHR_uniform_buffer_standard_layout`
+through the `VK_KHR_get_physical_device_properties2` query route. Device
+creation requires an explicit `VkPhysicalDeviceUniformBufferStandardLayoutFeatures`
+opt-in. The shipping compiler validates uniform-buffer offsets, array and
+matrix strides, and nested members before lowering; invalid layouts remain
+rejected. The Vulkan 1.2 aggregate feature structure and API 1.3 remain
+unadvertised. `shaderSubgroupExtendedTypes` and `subgroupBroadcastDynamicId`
+remain false: the former has a Vulkan 1.1 KHR dependency and incomplete
+operation/type coverage, while the latter has no Vulkan 1.0 extension alias.
+
+The subgroup boundary is explicit. The shipping Vulkan 1.0 device exposes no
+subgroup stage or operation properties and rejects subgroup SPIR-V at shader
+module creation. Separate, default-off diagnostic builds used Vulkan 1.2
+SPIR-V and the merged PSBC revision `47ae2a3` to measure compute behavior.
+It selected each broadcast source ID from GPU memory, used two workgroups and
+even-lane activity, checked exact outputs and untouched inactive slots, and
+completed a bounded fence with zero guard mismatches. This is compiler/GPU
+evidence, not a legal public feature or original CTS result.
+
+| Operand and operation | Stage tested | Verified state | T08 feature bit |
+| --- | --- | --- | --- |
+| 32-bit unsigned `subgroupBroadcast` with a runtime buffer source ID | Compute | Diagnostic GPU readback: 64/64 active values, 64 inactive slots untouched, guards zero; repeated | False |
+| Unsigned 8-bit, signed 16-bit, unsigned 64-bit and 16-bit float scalar `subgroupBroadcast` | Compute | Each diagnostic GPU readback: 64/64 active values, 64 inactive untouched, guards zero | False |
+| The same four operand types as two-component vectors | Compute | Both components checked on GPU: 64/64 active values per type, 64 inactive untouched, guards zero | False |
+| All four extended operand types as three-component vectors | Compute | All three components checked on GPU: 64/64 active values per type, 64 inactive untouched, guards zero | False |
+| All four extended operand types as four-component vectors | Compute | All four components checked on GPU: 64/64 active values per type, 64 inactive untouched, guards zero | False |
+| 32-bit unsigned `subgroupBroadcast` with all runtime source IDs 0–31 | Compute | 4,096 GPU values checked across four wave32 groups; zero mismatches and intact guards | False |
+| 32-bit unsigned `subgroupBroadcast` in an upper-half active-lane branch | Compute | 128 all-lane control and 64 branch values checked; 64 inactive slots untouched, guards zero | False |
+| Unsigned Int8, signed Int16, unsigned Int64 and Float16 scalar through vec4 `subgroupBroadcastFirst` | Compute | 16 exact typed SPIR-V modules compiled to nonempty machine code; GPU evidence below covers unsigned Int64 vec4 only | False |
+| Unsigned Int64 vec4 `subgroupBroadcastFirst` inside an odd-lane branch | Compute | All eight high/low component words checked for 64 active outputs; 64 inactive slots untouched, guards zero | False |
+| Opposite integer signedness in scalar through vec4 `subgroupBroadcast` and `subgroupBroadcastFirst` | Compute | Signed Int8, unsigned Int16 and signed Int64: 24 typed SPIR-V modules compiled to nonempty machine code; GPU proof below covers signed Int64 vec4 BroadcastFirst only | False |
+| Negative signed Int64 vec4 `subgroupBroadcastFirst` inside an odd-lane branch | Compute | Distinct negative high and positive low words checked for 64 active outputs; 64 inactive slots untouched, guards zero | False |
+| 32-bit unsigned `subgroupBroadcast` with a runtime source ID | Vertex | Corrected linear-staging GPU readback: 320/320 drawn pixels across all 32 tiles matched source lane 7; the lane-ID control differed in all 320 | False |
+| Signed Int8 `subgroupBroadcast` with a runtime source ID | Vertex and fragment | Exact signed 8-bit SPIR-V and distinct live PS5 code in both stages; vertex Broadcast matched 320/320 pixels (control 0/320), while fragment Broadcast matched 104/104 active-source pixels (control 8/104), with zero invalid colors or guards | False |
+| 32-bit unsigned `subgroupBroadcast` with a runtime source ID | Fragment | Corrected linear-staging GPU readback: 2,004/2,004 pixels with active source lane matched lane 7 across a full 2,048-pixel, 32-tile target; the lane-ID control differed in 1,937 eligible pixels | False |
+| Unsigned Int8, signed Int16, unsigned Int64 and Float16 `subgroupAdd` reduction, scalar through vec4 | Compute | All 16 typed SPIR-V modules compiled to live PS5 machine code distinct from no-reduction controls; GPU evidence below covers unsigned Int8 vec4 and unsigned Int64 vec4 | False |
+| The same 16 type and width forms with inclusive and exclusive `subgroupAdd` scans | Compute | All 32 scan SPIR-V modules compiled to live PS5 machine code; reduce, both scans and no-op control had distinct code per form. GPU evidence below covers Int8 vec4 exclusive and Int64 vec4 inclusive only | False |
+| Unsigned Int8 vec4 `subgroupAdd` reduction with wraparound | Compute | Exact four-component results for 64 active outputs over four wave32 groups, 64 inactive slots untouched, guards zero | False |
+| Unsigned Int64 vec4 `subgroupAdd` reduction | Compute | Exact high and low words of all four components for 64 active outputs over four wave32 groups, 64 inactive slots untouched, guards zero | False |
+| Unsigned Int8 vec4 exclusive `subgroupAdd` scan | Compute | Exact per-lane four-component results including the zero first lane and eight-bit wraparound; 64 active outputs, 64 inactive slots untouched, guards zero | False |
+| Unsigned Int64 vec4 inclusive `subgroupAdd` scan | Compute | Exact per-lane high and low words of four components; 64 active outputs, 64 inactive slots untouched, guards zero | False |
+| Extended operand types with `subgroupMul`, `subgroupMin`, `subgroupMax` and integer `subgroupAnd`/`Or`/`Xor`, each reduce/inclusive/exclusive | Compute | 252 original-CTS-selected typed forms compiled to distinct live PS5 machine code; GPU evidence below covers unsigned Int8 vec4 Min reduction only | False |
+| Signed Int8, unsigned Int16 and signed Int64 arithmetic, scalar through vec4, reduce/inclusive/exclusive | Compute | 252 additional original-CTS-selected forms, including Add, compiled to distinct live PS5 machine code alongside 12 no-op controls; GPU evidence below covers signed Int8 vec4 Max reduction and inclusive scan | False |
+| Unsigned Int8 vec4 `subgroupMin` reduction | Compute | Four components used distinct minimum source lanes; exact results for 64 active outputs, 64 inactive slots untouched, guards zero | False |
+| Signed Int16 vec4 `subgroupMax` reduction | Compute | Four component maxima from lanes 0, 31, 17 and 25; 64 exact active outputs across two workgroups, 64 inactive slots untouched, guards zero | False |
+| Float16 vec4 `subgroupMax` reduction | Compute | Four component maxima from lanes 0, 31, 17 and 25; 64 exact active outputs across two workgroups, 64 inactive slots untouched, guards zero | False |
+| Float16 vec4 `subgroupMul` reduction | Compute | Four exact products from distinct lane pairs with group-varying factors; 64 exact active outputs across two workgroups, 64 inactive slots untouched, guards zero | False |
+| Signed Int8 vec4 `subgroupMax` with negative values | Compute | Four component maxima from lanes 0, 31, 17 and 25, including negative outputs and mixed-sign comparisons; 64 exact active outputs across two workgroups, 64 inactive slots untouched, guards zero | False |
+| Signed Int8 vec4 inclusive `subgroupMax` scan | Compute | Per-lane signed prefix maxima across four components: 64 exact active outputs in two workgroups, 64 inactive slots untouched, guards zero | False |
+| Other subgroup operations or graphics stages | None | No reviewed public stage exposure or GPU oracle | False |
+
+The diagnostic narrow-integer runs enabled compiler options and SPIR-V
+capabilities only in the private build. The shipping guards remain in place.
+The vec2 run IDs are `20260923T114013349Z`, `20260923T114102324Z`,
+`20260923T114235184Z`, and `20260923T114324202Z` for 8-bit, 16-bit,
+64-bit, and 16-bit float respectively; their signed eboot SHA-256 values are
+recorded with the private strict receipts. The pinned original dynamic
+broadcast CTS factory requires Vulkan 1.2, so no original subgroup leaf is
+eligible on this Vulkan 1.0 profile. Strict firmware 12.02 runs covered the
+four extended operand types in vec3 and vec4 forms, with separate high and low
+halves of every 64-bit component and exact binary16 bits for Float16 vec3/vec4.
+Each one-shot run checked 64 active and 64 inactive slots, all components,
+source IDs and guards, a bounded fence and clean title closure. The signed
+Int64 vec4 eboot SHA-256 was
+`dcdf2c56e5113bce00a61b6459880720419add7053dfefdee2f34d5e5c9c74c7`
+(run `20260923T132917238Z`); the exact-half Float16 vec4 eboot SHA-256 was
+`d183e93eab8daf92b325f14730266f8cda1fafd4818eb06952fc513a928061b3`
+(run `20260923T133502244Z`). Private strict receipts retain the other exact
+artifact identities. A separate shader loaded each of 32 runtime source IDs
+from GPU memory and issued 32 explicit Broadcast operations. Its strict run
+`20260923T134237991Z` checked 4,096 values over four wave32 groups with zero
+mismatches and intact source/guard bytes; signed eboot SHA-256
+`a256c635732ed4669be033c99a00fe3fa1e432730e314ce18b9e1f51ba84c06d`.
+The original nonconstant Broadcast shader also branches into only the upper
+half of each subgroup and uses an ID uniform across those active lanes. A
+separate diagnostic reproduced that shape: two workgroups checked 128 all-lane
+control values, 64 upper-half branch values, and 64 untouched inactive slots
+with zero output or guard mismatches. Strict run `20260923T140018066Z` completed
+with a bounded fence and clean title closure; signed eboot SHA-256
+`431a2ba030def9860285b3e5d67c56efab78358528a95b640798a84ee767594a`.
+The pinned compiler also produced nonempty compute machine code for all 16
+scalar through vec4 unsigned Int8, signed Int16, unsigned Int64 and Float16 `subgroupBroadcastFirst`
+variants. One separate GPU run placed full-width Int64 vec4 BroadcastFirst
+inside an odd-lane branch, making lane 1 the first active source. All four
+64-bit components matched in 64 active outputs, with 64 inactive slots and
+guards untouched. Strict run `20260923T141328523Z` completed with a bounded
+fence and clean title closure; signed eboot SHA-256
+`23848cdb5e9a260009aa6912843b06777454515b654ac47f0d2ca52514e27f1b`.
+The other 15 BroadcastFirst forms have host compiler evidence only.
+The pinned CTS format list also contains the opposite integer signedness.
+Twenty-four corresponding scalar through vec4 Broadcast/BroadcastFirst modules
+compiled on the host. A signed Int64 vec4 odd-lane GPU run then checked each
+component's distinct negative high word and positive low word, with 64 active
+outputs, 64 untouched inactive slots, zero guard mismatches and clean bounded
+completion. Strict run `20260923T142727583Z`; signed eboot SHA-256
+`634d1ce41d1c0af2c902ef36262bbcafd1acc34333c7ee29de5b8e58981fab2a`.
+The other counterpart forms have host compiler evidence only.
+
+The pinned original CTS arithmetic factory selects the same narrow operand
+families for `subgroupAdd` reduction. The host compiler regression compiles
+scalar through vec4 unsigned Int8, signed Int16, unsigned Int64 and Float16
+modules, confirms the expected reduction instruction in each SPIR-V module,
+and confirms that live PS5 machine code differs from a no-reduction control.
+Two separate diagnostic GPU runs then checked every component of 64 active
+outputs across four wave32 groups, 64 untouched inactive slots, guards, a
+bounded fence, a complete transport receipt and title closure. The unsigned
+Int64 vec4 run checked both 32-bit halves of each 64-bit result:
+`20260923T154756035Z`, signed eboot SHA-256
+`89dceae9af91be0c19d506eed48efab3a417222a26aa34f0ee330794b4ed23d5`.
+The unsigned Int8 vec4 run used values whose sums wrap at eight bits:
+`20260923T155857928Z`, signed eboot SHA-256
+`9518f1e1f0c99d7cea5946f170c3a2c00f90a7d4bca77d67d08156ed5a42aeab`.
+Both had zero result, inactive-slot and guard mismatches.
+
+The same original arithmetic factory selects inclusive and exclusive Add
+scans. The host regression checks 32 additional scalar through vec4 typed
+scan modules, their exact SPIR-V scan modes, and machine code distinct from
+the reduction and no-op controls. Separate firmware 12.02 GPU diagnostics
+checked per-lane results across four wave32 groups, 64 active outputs, 64
+untouched inactive slots, guards, bounded fences, complete transport and title
+closure. The unsigned Int8 vec4 exclusive scan included the zero first lane
+and wrapped sums: run `20260923T161253042Z`, signed eboot SHA-256
+`c97e879864014b5a59933b719f4a76635db6f92e2d544abba9c8c99290dbf6b9`.
+The unsigned Int64 vec4 inclusive scan checked both halves of all four
+components at every active lane: run `20260923T161354023Z`, signed eboot
+SHA-256 `e98f647ecfd09eced62b483c42814bb435bb5c0e3888b18e1794c02945a7c2b7`.
+Both had zero result, inactive-slot and guard mismatches. The Add diagnostics
+alone do not establish other arithmetic operations, original CTS eligibility
+or a public subgroup feature route.
+
+The pinned arithmetic factory also selects Mul, Min and Max for all four
+extended operand families, plus bitwise And, Or and Xor for the integer
+families. The host regression checked 252 additional scalar through vec4
+reduce/inclusive/exclusive modules with exact SPIR-V operations, nonempty PS5
+machine code and distinct code for every operation and scan mode per form.
+This establishes a compiler boundary, not GPU behavior for those 252 forms.
+A separate unsigned Int8 vec4 Min reduction chose each component's minimum
+from a different lane (31, 0, 17 and 25). Its bounded firmware 12.02 run
+checked 64 active outputs over four wave32 groups, 64 untouched inactive
+slots, guards, complete transport and title closure with zero mismatches:
+`20260923T162745545Z`, signed eboot SHA-256
+`5027881ae2c5ddd8188597423b73cb47b544fb9ba45a67cc04b55ecabbb0625c`.
+
+The source-derived arithmetic compiler contract also covers signed Int8,
+unsigned Int16 and signed Int64, scalar through vec4, for Add, Mul, Min, Max
+and integer And, Or and Xor across reduce and both scan modes. These 252
+additional typed forms each emitted nonempty PS5 machine code distinct from
+the other operations and a no-op control. Compilation alone does not prove
+their GPU results.
+
+Separate signed Int16 vec4 and Float16 vec4 Max reductions selected component
+maxima from lanes 0, 31, 17 and 25. A Float16 vec4 Mul reduction used four
+distinct lane pairs and group-varying exact products. Each diagnostic checked
+all four components for 64 active outputs across two workgroups, preserved 64
+inactive slots, and reported zero value or guard mismatches with bounded
+fences and complete transport. The Int16 Max run was `20260923T172928053Z`
+(signed eboot SHA-256
+`b8a761d25aab1e619413694c8a2ea0fcc5eefb530842d27b2166d22ca9e6d26e`);
+Float16 Max was `20260923T173238713Z` (signed eboot SHA-256
+`737bd68549d4c9719580440c6c3e848c01e7a919cc0ea95371b2cbe65396725d`);
+Float16 Mul was `20260923T173613150Z` (signed eboot SHA-256
+`dfa58860aeff09ad8ad860660542f688d1ee398b1038464133edb0952c7eaf11`).
+
+A signed Int8 vec4 Max reduction used negative result components and
+mixed-sign inputs, so an unsigned comparison would change the oracle. Four
+component maxima came from lanes 0, 31, 17 and 25. All 64 active outputs
+across two workgroups matched, 64 inactive slots and guards remained intact,
+and the 300 ms fence, transport and title lifecycle completed. Run
+`20260923T175308641Z` used signed eboot SHA-256
+`6e098cbaa26ed2abef696cc7f4dc9bd322d304dbe4ef113ff8bba484b3644812`.
+
+A separate signed Int8 vec4 inclusive Max scan checked prefix values with
+negative inputs and different winning lanes in all four components. A CPU
+control verified the expected values for each measured even lane and confirmed
+that unsigned Max and an exclusive scan would give different results. On
+firmware 12.02, the strict GPU run checked 64 exact active outputs across two
+workgroups, 64 untouched inactive slots and unchanged guards. Its 300 ms
+fence, transport and title lifecycle completed; the console was released with
+the accepted payload restored. Run `20260923T192201405Z` used signed eboot
+SHA-256
+`5496be4235e41788b2ea05121f9402a3d247305016d86e6d9022092c1865ff34`.
+These diagnostics do not change the public subgroup feature bits.
+
+A separate vertex-stage diagnostic used a runtime source ID loaded from a
+uniform buffer and passed the subgroup result through a flat varying to a
+fragment color attachment. Its control and Broadcast variants completed a
+bounded fence, verified the transport stream and closed cleanly. The control
+run was `20260923T152735648Z` (signed eboot SHA-256
+`85d7bf176103b240c0ff507158464f1d43691023bcb1e89c06524b70dc2b6739`);
+the Broadcast run was `20260923T152851269Z` (signed eboot SHA-256
+`5da72163e4dee7fe4e13c68c077357d8f2b0da889da1382d229d91d473de16c8`).
+The original color verifier directly indexed mapped memory of an optimal-tiled
+image as row-major pixels. Its reported pixel counts, colors and tile footprint
+are invalid as a GPU oracle. A corrected witness copied the rendered image to
+a linear staging image and read its rows using `vkGetImageSubresourceLayout`.
+The 96-vertex control and Broadcast draws each covered 320 pixels across all
+32 tile regions. Every control pixel differed from source lane 7, while every
+Broadcast pixel matched it. Both runs had zero invalid colors and unchanged
+source-buffer guards, completed bounded fences and closed cleanly. The control
+run was `20260923T171645174Z` (signed eboot SHA-256
+`50ec8a044661870601e605531f84f9fd7a1a5df76d7cb37fcb994dca81ef363e`);
+the Broadcast run was `20260923T171723313Z` (signed eboot SHA-256
+`55f6915717b934d5f9330fcbac94179db68df759edb66b95a236b75f50c07fb9`).
+
+A separate signed Int8 vertex diagnostic used a runtime source ID 7 from a
+uniform buffer. Its signed 8-bit Broadcast result for source lane 7 was
+negative nine, encoded as red byte 247; a lane-ID control used the same output
+path. Host contracts checked the exact signed 8-bit SPIR-V result and runtime
+source load, and distinct live PS5 machine code, in both vertex and fragment
+stages. On firmware 12.02, corrected linear-staging GPU readback covered 320
+pixels across all 32 tile regions for each vertex draw. The control differed
+from source lane 7 in all 320 pixels; Broadcast matched in all 320. Both had
+zero invalid colors and source-buffer guard changes, bounded fences, complete
+transport, clean title closure and exact accepted-payload restoration. The
+control run was `20260923T182435799Z` (signed eboot SHA-256
+`668bf61201e9bc84e2f1c0441cce98658864c46d3a2282d3780b2b8d8a933097`);
+the Broadcast run was `20260923T182501820Z` (signed eboot SHA-256
+`95bcc2813f1a5d58ce56b695ed33766366f6c9d2eff9558eb803268103c7e731`).
+These diagnostic runs establish vertex-stage GPU behavior without advertising
+a public subgroup feature.
+
+A separate signed Int8 fragment diagnostic loaded source ID 7 from a uniform
+buffer, checked its active state with a subgroup ballot, and compared a
+runtime Broadcast to a lane-local control. The signed 8-bit source-lane value
+was negative nine, encoded as red byte 247. Corrected linear-staging readback
+covered 320 pixels across all 32 tile regions. Of these, 104 had an active
+source lane: the control matched 8 and differed 96; Broadcast matched all
+104. The other 216 pixels carried the inactive-source marker. Both runs had
+zero invalid colors and source-buffer guard changes, bounded fences,
+complete transport, clean title closure and exact accepted-payload
+restoration. The control run was `20260923T183516491Z` (signed eboot SHA-256
+`dd974b35bdab593e8c0b75cbf6c9c02756f5bbe4b4f1955eb7f2812f3e2d76de`);
+the Broadcast run was `20260923T183544471Z` (signed eboot SHA-256
+`456653d3220afc831e7ee6c11d81dcfef56f38f588d212f565d4b138e40abfb4`).
+This is diagnostic fragment-stage GPU evidence; neither subgroup feature is
+advertised publicly.
+
+A separate fragment-stage diagnostic loaded source ID 7 from a uniform buffer
+and used a ballot to identify pixels whose source lane was active. Its control
+and Broadcast variants completed a bounded fence, verified the transport
+stream and closed cleanly. The control run was
+`20260923T164439965Z` (signed eboot SHA-256
+`d211a9c79d0e50d0c3ae69f9b4e17b7d33ca8b6c6eb685ecd95c872e651d758d`);
+the Broadcast run was `20260923T164545696Z` (signed eboot SHA-256
+`a9ec0bc73029dfd953b3e6d8cbfb5fed997cedd1710208707003213d04b9e36b`).
+This witness used the same invalid direct read of optimal-tiled image memory.
+Its reported 52 eligible pixels, color comparisons and 16-tile footprint do
+not establish fragment-stage Broadcast correctness. A corrected single-triangle
+witness copied the optimal image to linear staging and verified all 2,048
+pixels across all 32 tile regions. A ballot identified 2,004 pixels with an
+active source lane; the other 44 were excluded from the Broadcast oracle. The
+lane-ID control differed from source lane 7 in 1,937 eligible pixels, and the
+Broadcast variant matched lane 7 in all 2,004. Both had zero invalid colors
+or source-buffer guard mismatches, bounded fences, complete transport and
+clean title closure. The control run was `20260923T171258358Z` (signed eboot
+SHA-256 `70665b25cd0c7434c671f996d3b46b73863649985658732cb573fdc845a1de46`);
+the Broadcast run was `20260923T171340730Z` (signed eboot SHA-256
+`7dd33264159adcb5953ceb71ea0e536dc86bd3b132778c7a05c1bd22290a329d`).
+The shipping profile still rejects subgroup SPIR-V in graphics stages.
+
+The pinned original CTS factory and registry impose these public eligibility
+conditions. `VK_KHR_shader_subgroup_extended_types` depends on Vulkan 1.1;
+the factory queries its bit only when `VK_KHR_shader_float16_int8` is also
+available. The shipping Vulkan 1.0 device has neither extension route.
+
+| CTS operand family | Additional feature conditions in the pinned factory | Shipping profile |
+| --- | --- | --- |
+| Signed/unsigned 8-bit integer | `shaderInt8` and `storageBuffer8BitAccess` | `shaderInt8` false |
+| Signed/unsigned 16-bit integer | `shaderInt16` and `storageBuffer16BitAccess` | `shaderInt16` false |
+| Signed/unsigned 64-bit integer | `shaderInt64` | `shaderInt64` false |
+| 16-bit float | `shaderFloat16` and `storageBuffer16BitAccess` | `shaderFloat16` false |
+| 64-bit float | `shaderFloat64` | `shaderFloat64` false |
+
+The host route for core `shaderInt16` maps the legacy and Features2 query,
+device opt-in, shader-module gate, compute pipeline gate and compiler feature
+mask. The compute adapter forwards that bit to PSBC's `enable_int16` option.
+A host fixture declares only `Int16` and `Shader` capabilities, with 32-bit
+storage buffers: it is rejected without `shaderInt16` and compiles with it.
+The ordinary platform bit remains false. The original CTS measurement below
+establishes one bounded GPU prerequisite, followed by outstanding combined
+subgroup profile checks; it does not establish subgroup correctness.
+
+An isolated diagnostic build combined this route with the unchanged pinned
+indexing factory from the separate original-CTS registration change. With
+`PS5VK_SHADER_INT16_DIAGNOSTIC=1`, the original Vulkan 1.0
+`spirv_assembly.instruction.compute.indexing.input.struct.opaccesschain_u16`
+leaf passed its 128-value GPU oracle twice on the same signed eboot SHA-256
+`b602a2d71019d08c4a290007b746675173cbeb80ca0b5654228c1b0da0fcf345`.
+The one-leaf selection SHA-256 was
+`a49a36073c093f0e5e13f88d7b36be9255c5235cfa17c3c11583fe486d8286b9`:
+run `run-633858541401345` had QPA SHA-256
+`99d80d69b7f863cca7cb3ad2498891b153fa3d876359f854d11ca27bacfdc452`,
+and run `run-633899483926515` had QPA SHA-256
+`00bc3640af0723be07938ddcef7b52ac4758e872e76dff4b0b5c5c7864e866a2`.
+Both strict receipts recorded one Pass, zero Fail/NotSupported/missing or
+unexpected cases, and clean title closure. A preceding diagnostic eboot
+`25e0ed2ca670870214cfc8ec33c03cc972ced1614c7a320346d6ed7cd990588b`
+reached pipeline creation but failed with `VK_ERROR_UNKNOWN` because the
+compiler adapter had not forwarded the Int16 option. These measurements do
+not promote public `shaderInt16`, either subgroup bit, or `apiVersion`.
+Firmware was not independently recorded in these receipts.
+
+The unchanged frozen upstream acceptance selection on this default-off route
+passed 507/507 original cases, with zero Fail, NotSupported, missing,
+unexpected or duplicate results. The strict receipt verified signed eboot
+SHA-256 `a52ae2b604e722ad793bb54aa06a0b9cd5d24875c09d72a4d717ca26e6965380`,
+selection SHA-256
+`d93a2cb2ea282924c57c63f1412cddd8c22cd799b549fb4cdcbbecd6ce73c321`,
+and QPA SHA-256
+`9302316ca811d8359e5077f132d45ad93f7e8f0fe55551cfd24d5b9d64fb3b2d`
+for run `run-624227907988111`. The title closed, and the previously accepted
+payload was restored. This is Vulkan 1.0 selection neutrality, not an
+applicable original Int16 or subgroup CTS pass. The receipt does not record
+firmware, so this run makes no new firmware claim.
+
+After the diagnostic switch and PSBC Int16 option were added, the ordinary
+default-off build of this branch passed the same frozen 507-case selection:
+run `run-634753171512544`, signed eboot SHA-256
+`b6e2f729755d1a96fe621933c9418c20f606e50b9e0b9321118e8a510e810e48`,
+selection SHA-256
+`d93a2cb2ea282924c57c63f1412cddd8c22cd799b549fb4cdcbbecd6ce73c321`,
+and QPA SHA-256
+`85f1777cd6cf897a384225f21111dee714bc4c5e87038d7ebd2aeaf5d59c0771`.
+The strict receipt had 507 Pass, zero Fail, NotSupported, missing, unexpected
+or duplicate cases, and clean title closure. An earlier attempt with this
+identical eboot stopped while emitting QPA before a final receipt; it was
+closed and is not counted as an acceptance run. Firmware was not
+independently recorded in these receipts.
+The unchanged arithmetic factory first requires subgroup support and
+`VK_SUBGROUP_FEATURE_ARITHMETIC_BIT` in `supportedOperations`, then checks the
+operand format and any 8/16-bit uniform-buffer storage requirement. Package
+registration alone does not satisfy these gates or validate an oracle.
+
+The original nonconstant Broadcast factory separately requires Vulkan 1.2 and
+`subgroupBroadcastDynamicId`. Arithmetic GPU operations beyond the bounded
+Add and Min cases and graphics-stage subgroup operations beyond the bounded
+vertex and fragment Broadcast draws remain unproven on hardware. These
+diagnostics establish neither original CTS eligibility nor a public subgroup
+feature route.
+
+The next default-off Int8 compute prerequisite uses an internal platform mask
+and a separate PSBC `enable_int8` option. A compute pipeline with `OpCapability
+Int8` is refused unless that private mask is set; an application cannot enable
+it through `VkPhysicalDeviceFeatures`. The owned scalar Int8 `subgroupAdd`
+shader is compiled by the host test with that mask and refused without it.
+This test is compiler evidence only. The shipping module gate still refuses
+subgroup operations, and the public `shaderInt8`, subgroup bits, subgroup
+properties and API version remain unchanged. GPU readback and applicable
+original CTS remain requirements before any promotion.
+
+A default-off native diagnostic gate now admits only compute
+`OpGroupNonUniformBroadcast` with both `GroupNonUniform` and
+`GroupNonUniformBallot` capabilities through shader-module and pipeline
+creation. The host contract verifies the shipping rejection and rejects an
+unmeasured Shuffle operation, a missing Ballot capability and a vertex entry
+even in the diagnostic build. An SDK-linked diagnostic witness then compiled
+the actual compute shader, loaded four different source lane IDs from a GPU
+buffer and read back 128 exact Broadcast values, with zero value and guard
+mismatches, digest `a4d88c85`, bounded fence completion, and clean resource
+retirement. Both runs used signed eboot SHA-256
+`57bf96fc6c01eec081178e3b41b775b91492089633ef724108fbe0b4e3e2be4b`:
+`20260924T114110339Z_PPSA99994_ps5vk_0x2393d9689c7a3` (log SHA-256
+`29eb5e268601d1f23c614c099b5ffbcc4878cbda42f4e0faab16a3dfdcbb140b`)
+and `20260924T114129742Z_PPSA99994_ps5vk_0x239421af4a690` (log SHA-256
+`a82a5479fa71b9376f073ad3e2fb79dabbbc9ca9e698e4266b381a345e8b3cd8`).
+Each run verified artifact identity, closed the title and restored the prior
+payload. Firmware was not recorded in these receipts. This proves one bounded
+32-bit compute Broadcast path with runtime IDs. It does not prove 8-bit or
+16-bit subgroup types, other stages or operations, original CTS, either public
+T08 feature bit, or a higher public `apiVersion`.
+
+The later stacked witness builder verifies SPIR-V 1.5 and traces the Broadcast
+source ID through buffer loads and stores; host tests reject a constant ID or
+local variable fed by one. Its signed combined-branch eboot SHA-256 is
+`9be30438ae1dd5abf59ee9f97951423ea0422b351e05647eb4615f8cc31ea448`
+(shader SHA-256
+`3ab87a59111c45818f039f3ca4cb70dc8d791f9cd21e9c92475f643f47f88946`).
+Two strict runs of this exact payload again verified 128/128 Broadcast words,
+zero value and guard mismatches, digest `a4d88c85`, bounded fence completion
+and clean closure:
+
+- `20260924T235742672Z_PPSA99994_ps5vk_0x150e13cd8a63`, log SHA-256
+  `3bb169feed0194a916352d084e9fb4fb0fe707032fd4c229700f11035cf6d82a`.
+- `20260924T235758088Z_PPSA99994_ps5vk_0x1511aaa4305c`, log SHA-256
+  `60a58dc7ed005500fc009958c4fb1043809b451b22eb09fbe8ec0d83206f6950`.
+
+The acceptance eboot SHA-256
+`aad6299d6b245f5e3c2b73f2d125d34b01fa44411f119ff66edb11a80ccb9212`
+was restored after each run; the console ended idle with no claim. Firmware
+was not independently recorded. These runs remain diagnostic evidence only.
+
+An independent default-off diagnostic gate now admits compute
+`OpGroupNonUniformIAdd` only with `GroupNonUniform` and
+`GroupNonUniformArithmetic` capabilities. The host frontend accepts that
+single operation through pipeline creation and rejects it in the ordinary
+profile, under the Broadcast-only switch, without Arithmetic capability,
+outside compute, or when replaced by an unmeasured operation. The pinned
+compiler's separate typed arithmetic tests establish code generation, but
+the SDK-linked IAdd witness now builds as signed eboot SHA-256
+`2c9c39aa085ed628af1e1c809d394d6cf6ccc9b5139a93ad509673a7b7ad0f7a`.
+The exact witness SPIR-V also compiles through the host PSBC/ACO runtime path
+to nonempty GFX1013 wave32 code with one storage-buffer descriptor and a
+64-invocation workgroup.
+Its shader reads four host-provided seeds, reduces each 32-lane subgroup,
+and checks 128 output words plus untouched guards after a bounded fence. Two
+strict ps5log/1 runs of that exact signed eboot passed: 128/128 outputs,
+zero guard mismatches, digest `30acadc5`, completed fence and clean resource
+retirement each time. Runs
+`20260924T155206843Z_PPSA99994_ps5vk_0x246ef27b691a7` (log SHA-256
+`b9b0ebae49b541726a19877223b5fabadd9da2497a576914f12d4b01a6abe77e`)
+and `20260924T155235072Z_PPSA99994_ps5vk_0x246f5ba4a4168` (log SHA-256
+`9ef1e59972788bb9186124debe73db51df04df20f958f8535a1f07ed3374ae9a`)
+both verified artifact identity, closed the title and restored the previous
+payload. Firmware was not recorded in these receipts. This establishes one
+bounded 32-bit compute IAdd GPU path, not original CTS or broader subgroup
+operation/type/stage coverage. It does not report the public `ARITHMETIC`
+operation bit or either T08 feature.
+
+An earlier default-off SDK witness exercised signed Int8 scalar
+`OpGroupNonUniformIAdd` in compute. That signed eboot SHA-256 was
+`674e7db8d66e86b4f3826e4867f66725c5a3b0d7b5085d2d05dad7b9c598085b`;
+the shader and consumer source SHA-256 values are
+`f2bfd54fcbf09b35288b12e45e49d09ad3a30709cfb371857eab41e9f2d7f879`
+and `ad877bf0ee569ba1dedb1bb82c2ea9e75110d7a94bf8fa213e44e7d92638060a`.
+Two strict ps5log/1 runs of this exact payload each verified 128/128 wrapped
+8-bit results across four subgroups, zero value and guard mismatches, digest
+`eac277c5`, a completed fence, clean resource retirement and title closure:
+
+- `20260924T182841508Z_PPSA99994_ps5vk_0x319cb27ae6a`, log SHA-256
+  `fb7f6c603ed12fc0379fd5e958cfa1cb5e1f9eb597c0a6f16260e192bdc1a106`.
+- `20260924T182855467Z_PPSA99994_ps5vk_0x31d0b2d3c83`, log SHA-256
+  `e51b5c5c9031eb94a61b43cf76f2abce63395287d290ccc9f34dad21146d5066`.
+
+The combined T07, Int16 and private Int8 branch was then measured with a new
+signed eboot SHA-256
+`bd9befb2d1108d9c436c407128278221fc52d7f6c522afa5e7f1b434522d75e3`.
+The shader and witness source hashes remained the values above. Two more
+strict ps5log/1 runs of this exact combined artifact again verified 128/128
+wrapped results, zero value and guard mismatches, digest `eac277c5`, bounded
+fence completion and clean closure:
+
+- `20260924T234128014Z_PPSA99994_ps5vk_0x142b265e7b97`, log SHA-256
+  `4b569f72fda113b88033e6df28053f6ea9885d93a523e1de5754305b12c6f3de`.
+- `20260924T234151599Z_PPSA99994_ps5vk_0x1430a43fc7e0`, log SHA-256
+  `eb88b9b103a516e3f56f496f4243ddc0e6db7946593a5bb873b426d39fdd00b7`.
+
+The acceptance payload SHA-256
+`aad6299d6b245f5e3c2b73f2d125d34b01fa44411f119ff66edb11a80ccb9212`
+was restored after each combined run; the console ended `running=none` with
+no claim. Firmware was not independently recorded in these receipts. This
+establishes one bounded signed Int8 compute IAdd path;
+it does not establish the full narrow-type, operation or stage matrix, an
+applicable original CTS pass, public `shaderInt8`, either subgroup bit or a
+higher public `apiVersion`.
+
+The earlier default-off Broadcast-only build passed its unchanged frozen
+upstream acceptance selection: **507 Pass, zero Fail, zero NotSupported, zero
+missing or unexpected** in strict run `run-626719354771127`. Signed eboot
+SHA-256 `3f86fcea1ccc275720ff73605722dc1ee0e03955b5fb7f3d17e70cc4964b1ccd`,
+selection SHA-256
+`d93a2cb2ea282924c57c63f1412cddd8c22cd799b549fb4cdcbbecd6ce73c321`,
+QPA SHA-256 `de2a135debe7effbe381f7b83812db0d5995f4a940ce9b003039616cceb43955`,
+and log SHA-256 `66c5d6a48c932ca2b71b5b48f24f953287516feea8e2b63aaa55a6d1671072ea`
+bind that run to the default-off profile. The title closed and the previous
+payload was restored. This selection contains no applicable subgroup leaf;
+its result proves neutral acceptance, not subgroup conformance.
+The ordinary build of the later IAdd-witness source at `33ca70f` did pass the
+same frozen selection in strict run `run-641358420703191`: **507 Pass, zero
+Fail, zero NotSupported, zero missing or unexpected**. Signed eboot SHA-256
+`33349dec94197bd4c883bfa1a76e86965f5e4d90dec4fe260ff5bb7d60ed045b`,
+selection SHA-256
+`d93a2cb2ea282924c57c63f1412cddd8c22cd799b549fb4cdcbbecd6ce73c321`,
+QPA SHA-256 `96e37fd5ae00ab7a6e3d63203bdebb6851611381c17519b6a4e2cd5665310449`,
+and log SHA-256 `6e496f7ecb9095ad38c699f9fe5f46bcc1e163fe82323889a0e2dbbfecd98025`
+bind the result. The build recorded 507 selected cases, no measurement
+manifest, both subgroup diagnostic switches off, and no experimental build
+switch. The title closed and the previous payload was restored. This is a
+neutrality check: no subgroup leaf belongs to that selection.
+
+On the later combined T07 and Int16 source, the independent diagnostic
+Broadcast and IAdd gates still reported no public subgroup feature, stage or
+operation and kept `apiVersion` at 1.0. The Broadcast witness signed eboot
+SHA-256 was `bef277e1345d149e4ef8b34bb7d232e7c003025fc44e1b60871772b2048c0337`.
+Strict runs `20260924T223918841Z_PPSA99994_ps5vk_0x10c6e5728ecb` (log
+SHA-256 `6ab0b1d9ff1acb8666c672a5b40a85a7789efa505e02cd965883c6bb911e2a27`)
+and `20260924T224026995Z_PPSA99994_ps5vk_0x10d6c3adccc7` (log SHA-256
+`c3ce8e34a1e8c03eedd33a1f8aeb069b23cbc004aacfaad5cccccfa195c17f25`)
+each verified 128/128 exact 32-bit values, zero guard mismatches, digest
+`a4d88c85`, bounded fence completion and clean retirement. The IAdd witness
+signed eboot SHA-256 was
+`3201f183ce2f105a9a0a234133c7c3a53ab419d44742c69e8526057218adb7ed`.
+Strict runs `20260924T224005918Z_PPSA99994_ps5vk_0x10d1db6abf61` (log
+SHA-256 `780d0731e041cc1950734caed7a5c2f50c490e1b667107f6c101e708efcd84a2`)
+and `20260924T224045986Z_PPSA99994_ps5vk_0x10db2fa10d3d` (log SHA-256
+`f9a3b3d219e5ba03c45846c4448bdd7a8dbd24ece958f87d268c9b52e462535f`)
+each verified 128/128 exact 32-bit values, zero guard mismatches, digest
+`30acadc5`, bounded fence completion and clean retirement. All four runs
+verified deployed artifact identity and restored the prior payload. Firmware
+was not independently recorded. The current 829-case CTS package was built
+with selection SHA-256
+`81f656f1b0559f212bcc7b802c572d59c23919272f9109aa37f8774e78b849c4`
+and signed eboot SHA-256
+`2485e0e765c17a745517a54a042bd7d92300f40e5d54797466fcfe02e84ef9f7`;
+it was not deployed in this measurement. These readbacks confirm only the
+bounded 32-bit compute paths, not the public subgroup profile or original CTS.
+
+The host `VkPhysicalDeviceProperties2KHR` contract now writes zero to all four
+`VkPhysicalDeviceSubgroupProperties` fields for this Vulkan 1.0 profile, even
+when the caller supplied nonzero prior values. This closes an ambiguous public
+query; it does not measure subgroup size, stages or operations on hardware.
+Those values, a legal Vulkan 1.1 or 1.2 route, the feature bits and targeted
+native execution evidence remain prerequisites to subgroup promotion. The
+original subgroup CTS cases remain ineligible under the public API 1.0.
+
+The unchanged frozen upstream acceptance selection on this query-only change
+passed 507/507 original cases with zero Fail, NotSupported, missing, unexpected
+or duplicate results. The strict receipt verified the signed eboot SHA-256
+`c88bb1a66b8f8690b833fd74e9a3ed99a8769dc576731265042014d48a516f01`,
+selection SHA-256
+`d93a2cb2ea282924c57c63f1412cddd8c22cd799b549fb4cdcbbecd6ce73c321`,
+and QPA SHA-256
+`a09dfd8ba9483c26cb388f99196bab6c69b552fee42c3ad40110e4bb3af14536`
+for run `run-623240048430401`. The title closed, and the previously accepted
+payload was restored. This proves neutrality for the selected Vulkan 1.0 CTS
+suite; it includes no applicable original subgroup leaf. The receipt does not
+record firmware, so this run makes no new firmware claim.
+
+The focused CTS package now links and registers the unchanged original
+`subgroups.ballot_broadcast` and `subgroups.arithmetic` factories, but the
+frozen 507-case acceptance selection still contains no subgroup leaf. A
+separate diagnostic selection
+added the pinned mustpass cases `compute.subgroupbroadcast_i8vec4` and
+`compute.subgroupbroadcast_nonconst_uint` to the 507 controls. Run
+`run-619192142197878` reported 507 Pass and both subgroup leaves
+`NotSupported`, each at `vktSubgroupsBallotBroadcastTests.cpp:265` with
+"Subgroup operations are not supported"; there were no missing or unexpected
+cases. The verified QPA SHA-256 was
+`91a93da09d6e82d4ec2d870ce896e87f85ad1bcda8c33213a2e340fafc206cc7`,
+the signed eboot SHA-256 was
+`5c252dd90d2ef8e29cf6dfc15bd51f779949159173c6d983006b2e531763ef89`,
+and the diagnostic selection hash was
+`d5694f3de21a6d00086566d56f58bda26106cf02c7b7b74a4292736838b124c4`.
+The title closed and the accepted payload was restored. Firmware was not
+recorded in this receipt. This run verifies runtime registration and the
+current first support gate; it supplies no subgroup CTS pass or feature
+promotion evidence.
+
+On firmware 12.02, the public SDK shipping witness compiled a Vulkan 1.0 SPIR-V
+compute shader that reads compact scalar arrays, a row-major matrix and a
+nested struct. Two workgroups produced 64 exact values with zero mismatches and
+zero guard mismatches. Its bounded fence completed, the TCP receipt verified,
+and the title closed. Signed eboot SHA-256:
+`44eb76ca162e3c15ab35abc4bc48b0466a9144a0f28d53a5f4255a5fa337a408`;
+run `20260923T094543254Z_PPSA99994_ps5vk-ubo_0x1e45c7b386581`;
+log SHA-256 `db0771d2ec2b4aba7b56772f475bd698c8d3d095485814d43b1de7905f78c357`.
+
+The public ABI capability probe independently observed the extension and a true
+KHR feature field. It verified all 62 requirement records, with 20 reported
+satisfied and 42 reported blockers at the query layer. Signed eboot SHA-256:
+`9075c100fab8326c73b7bb458be1b560a153ebfb2eb2f8e85389303d5c431a62`;
+run `20260923T094657975Z_PPSA99994_ps5vk_0x1e46de0b656f8`;
+log SHA-256 `733e047d9014d7b5cd8481520e4a422df5bd6b6081f8182b85b156e7e9fbe4b6`.
+The four-axis DXVK matrix is 18/62 ready with 44 blockers.
+
+The unchanged original
+`dEQP-VK.ubo.single_basic_array.std430.uint.vertex` oracle passed twice in a
+495-case measurement selection and once in the promoted canonical selection.
+The canonical shipping run reported 495/495 Pass, zero missing, foreign or
+duplicate cases, zero Fail or NotSupported, verified payload identity and clean
+title closure. Signed eboot SHA-256:
+`b2dbc3f47eaabe6890e1e6a9d603c38344ad18dc011d2f5404913bbc3e9ed6f3`;
+selection SHA-256:
+`1a8f7ea9c33873abf40b7352c8ddbf3e533fd0048ebb3edc8c0bdbbc9ae695b3`;
+run `20260923T095014926Z_PPSA99994_upstream-cts_0x1e49bbbc79bac`;
+log SHA-256 `7845a522bf5040707b550a30c77d10b5e14a8868d0d888c8c83eb45613176ed1`.
+
+Three additional unchanged original `std430` UBO oracles cover a matrix array,
+a nested struct, and a two-level struct array in the vertex stage. They passed
+twice in the 498-case measurement selection (runs `20260923T115937942Z` and
+`20260923T120049216Z`) and then passed in the promoted frozen selection. The
+strict canonical receipt reports 498/498 Pass, zero missing, foreign or
+duplicate cases, and clean title closure. Signed eboot SHA-256:
+`38a8b6e2367a45f6eeebd3043637d6d01624e71bd46f5f95a53da898058a1ec1`;
+selection SHA-256:
+`c5b81c9814f1a993f74ebd2a19ce580d3022f26853a4f3e35216afad07dfe1ab`;
+run `20260923T120459357Z_PPSA99994_upstream-cts_0x1ebf603188bae`;
+log SHA-256 `94669451880f9a692ca7c6b07a4e93066f100c209d8cc6ca1cd7191f095a867b`.
+
+The driver now pins merged `opengnm-psbc` PR #25 at
+`47ae2a3bc9d6951d869d4bffd5112a62329ccf04` for corrected compute
+subgroup-ID lowering. Firmware 12.02 completed the unchanged 498-case
+acceptance selection with 498/498 Pass and zero missing, foreign, or duplicate
+cases. The signed eboot SHA-256 was
+`3028ca0e478ec1af88c82799e00c15a1e2e3899833d7aa8e8148878d2e927abf`,
+selection SHA-256
+`c5b81c9814f1a993f74ebd2a19ce580d3022f26853a4f3e35216afad07dfe1ab`,
+run `20260923T130249414Z_PPSA99994_upstream-cts_0x1ef1deeee8764`,
+and QPA SHA-256
+`e3e87c3e8513591062c76a03797d357dc01a6bd3c9aac46b716256439abf17e8`.
+The strict verifier recorded a clean close; the accepted payload was restored
+and the title stopped. This compiler update does not change public subgroup
+feature reporting.
+
+## Vulkan memory model and device address accounting (2026-09-23)
+
+The Vulkan 1.0 device uses feature-specific KHR queries. It does not expose a
+`VkPhysicalDeviceVulkan12Features` aggregate or claim the Vulkan 1.3.204 API
+floor. The public capability probe observed seven device extensions and the
+KHR memory-model query returned `vulkanMemoryModel=1` and
+`vulkanMemoryModelDeviceScope=0`; `bufferDeviceAddress=0`. Its signed eboot
+SHA-256 was `446142b15a5464851d004f463f26e8c4563ae8f7f1b5428df41e68916bca20c5`.
+Run `20260923T142938117Z_PPSA99994_ps5vk_0x1f3daaa244415`, log SHA-256
+`652e687a5745781c615ee15bfc8f4afa3bc72f6b2d53db5450f494de2809ae16`,
+passed strict identity, all 62 profile records, the explicit query-route
+checks and clean termination. The probe reported 21 queried values at their
+requested thresholds; the independent four-axis matrix has **19/62 ready**
+and **43 blockers**.
+
+### Vulkan memory model base
+
+The enabled base feature has an independent queue-family ordering witness:
+`20260923T110124909Z_PPSA99994_ps5vk_0x1e87de7316f98` on signed eboot
+`659df5ac7a95e873a97aa4dad448c990b01b6775700217a3c397b385ceaf8108`.
+A bounded producer/consumer dispatch observed all 1024 cross-workgroup pairs,
+with zero skipped, value failures or guard mismatches and a completed fence.
+Seven unchanged original `spirv_assembly.instruction.compute.opatomic_storage_buffer_volatile`
+leaves passed twice in a 501-case diagnostic selection before promotion.
+After the source-derived promotion, the 505-case frozen selection passed twice
+on one signed eboot SHA-256
+`af02547c751492c17bc362e30cd276298bc087517370ec79219e21f8dbaa26cd`
+and selection SHA-256
+`9ddd0d09c4dc8d6bf5d4c83fe55f3f3a13c92db66badeb9c504fa9c00d4911c7`.
+Runs `run-550981405618005` and `run-551035301819012` each reported
+**505 Pass, zero Fail, NotSupported, missing or unexpected**, with QPA
+SHA-256 `d2b5836fa4a5981d4295131ebf2422ed2905987905dd3febf47b79a5ba2db61c`
+and `ba730293b9bcb4a9dbefa592ab20e0734a140844ee2f07bff8a7ed24cc03a137`.
+Both titles closed cleanly. A third source-integrated candidate, eboot SHA-256
+`0aadc18fb2d7537b85fa678b7dd0abbcbe7ec5babcb6cd762523d3e367ea4ba4`,
+passed the same frozen selection in strict run `run-553885831365818`: **505 Pass,
+zero Fail, NotSupported, missing, unexpected or duplicate**, QPA SHA-256
+`f442542fb6bd1348fddd3ca74c8e3306ca30c1c49f89e306a03a1cda2518ad61`.
+The title closed cleanly, the previously deployed eboot was restored, and the
+console returned to `running=none` with no claim. Firmware was not emitted by
+these receipts. This evidence covers the selected volatile atomic oracles and
+the bounded ordering witness; it is not a claim about every memory-model
+instruction or cache topology.
+
+The first integrated 505-case attempt stopped inside the pre-existing
+`compute.basic.ssbo_local_barrier_multiple_groups` case without a completed
+QPA. An exact host reproduction showed that the compiler was applying its
+VulkanKHR memory-model option to that shader's GLSL450 `OpMemoryModel`, which
+made its legacy Device-scope barriers require the separate DeviceScope
+capability. The compute adapter now chooses those compiler options from the
+module's declared memory model. The original barrier leaf then passed alone
+and inside both complete 505-case runs.
+
+The graphics compiler independently reads each module's `OpMemoryModel` before
+setting PSBC's VulkanKHR options. A host compilation of the existing GLSL450
+vertex/fragment pipeline with an SSBO atomic fragment stage passed while the
+logical device enabled the base memory-model feature. PSBC takes one option
+set for a merged geometry or tessellation program, so mixed GLSL450/VulkanKHR
+modules in those merged stages are refused. This graphics change followed the
+first two 505-case receipts; the third run above verifies the integrated source
+under the same frozen selection.
+
+### Vulkan memory model DeviceScope
+
+The earlier diagnostic build kept the separate DeviceScope bit false in the
+ordinary profile. Two unchanged same-dispatch cross-workgroup runs on eboot
+`035e0a631e4f5521543b33c16f45c19e67e0beb3ce998180fe414f3cda0a1e40`
+each observed all 1024 producer/consumer pairs with zero skips, value failures
+or guard mismatches and bounded fence completion: runs
+`20260923T110012605Z_PPSA99994_ps5vk_0x1e86d119f7914` and
+`20260923T110031778Z_PPSA99994_ps5vk_0x1e8718860bd81`. The original
+`vktMemoryModelMessagePassing.cpp` support check rejects API versions below
+1.1 before querying the feature, so no original DeviceScope leaf is eligible
+on this Vulkan 1.0 profile.
+
+The ordinary SDK candidate now advertises `vulkanMemoryModelDeviceScope=1`
+through `VK_KHR_vulkan_memory_model` while leaving `apiVersion=1.0.0`.
+Its SDK-linked witness uses SPIR-V 1.0 VulkanKHR Device-scope acquire/release
+atomics and checks public query, opt-in and the required base-model dependency.
+Signed eboot SHA-256
+`2fc3798c759d71395a5f3256ec74c558705f9613bc0b5811ce23d677ec2ab560`
+passed twice after integrating the subgroup-properties change from main: runs
+`20260924T205016235Z_PPSA99994_ps5vk_0xad3993a0361` and
+`20260924T205028932Z_PPSA99994_ps5vk_0xad68e0ca74e` each observed
+1024/1024 producer-consumer pairs, zero skipped pairs, value or guard
+mismatches, bounded fence completion and clean retirement. Both runs closed
+the title, restored the acceptance eboot and left the console idle. The
+receipt did not record firmware.
+
+The separate ordinary public-ABI capability probe, signed eboot SHA-256
+`0b68d14114386e7e948b91c4e389dc96f0c59436f69acbf962bdfd23ae133eff`,
+strictly verified all 62 query records in run
+`20260924T205114609Z_PPSA99994_ps5vk_0xae1308d1178` (log SHA-256
+`3972ab2ecf71688a19b70c361d132c278b70186bc0166bcd941f33d9179503f0`).
+It observed DeviceScope true through the KHR feature chain, 27 requested
+query values and 35 query blockers; the query probe does not execute shaders.
+The checked four-axis DXVK matrix reaches 25/62 ready, with 37 blockers.
+DeviceScope's CTS axis is `not-mapped`, not `cts-pass`; the bounded witness
+does not establish general Vulkan conformance or all memory-model litmus cases.
+
+The pinned registry permits the `VK_KHR_vulkan_memory_model` feature query and
+device-create chain through `VkPhysicalDeviceVulkanMemoryModelFeatures` when
+`VK_KHR_get_physical_device_properties2` is present. This route does not
+require reporting Vulkan 1.1, but it does not remove the original CTS gate:
+the `ext` message-passing factory checks for Vulkan 1.1 before the
+`vulkanMemoryModelDeviceScope` feature, including its `device` scope cases.
+The API feature consistency cases instead target the Vulkan 1.2/1.3 aggregate
+rules. The next eligible validation requires an independently justified Vulkan
+1.1 public profile, registration and compilation of that unchanged original
+message-passing factory in the CTS runner, and passing selected `ext/device`
+leaves. The bounded KHR witness above cannot substitute for those leaves. The
+public DeviceScope bit is enabled through the extension route with native
+evidence; this is not an original CTS pass or a Vulkan 1.1 core-version claim.
+
+### Buffer device address
+
+At this measurement stage, the BDA bit stayed false. Its public-SDK diagnostic
+GPU witness used three distinct shader-address buffers with nonzero 256-byte bind offsets and a
+combined device-mask/address allocation. Run
+`20260923T125810572Z_PPSA99994_ps5vk_0x1eedd039ad681` on signed eboot
+`9d774447102cb5934e1581d37a130683a847cd015365a5fbf03960b08284fee0`
+read back 64 exact output values plus retained inputs and guards, with zero
+mismatches and a completed fence; stale, unbound and destroyed address queries
+returned zero. Both unchanged original selected BDA compute leaves in the
+strict 496-case diagnostic run failed at `vkCreateDescriptorSetLayout` for an
+unsupported storage-image output before shader execution. Run
+`run-546241633312304` reported 494 frozen Pass and those two Fail, QPA
+SHA-256 `3fe1acd7609f1719b3eaa997f4f636140b007b5f969e1e57e12e2b24093467c6`.
+The BDA implementation and bounded GPU path are recorded independently from
+the blocked public API and original CTS axes. Firmware was not recorded in
+these T08 receipts.
+
+The bounded `VK_FORMAT_R32_UINT` storage-image route now accepts the 8×8
+compute output used by those original BDA leaves: a one-sample 2D image in
+`GENERAL`, an image-store descriptor, integer clear and image-to-buffer
+readback. With the BDA diagnostic bit enabled, the unchanged original
+selection passed 496/496 twice on eboot
+`a6afe5d198846088c4e4bec426f0be99250359dd6862888df0003163b6fa32c4`
+(runs `run-563312724497565` and `run-563382634987775`). The two
+run logs have SHA-256
+`88f664187eb8ff4cce1cc1b06fb34ff4cbbe48c237363f09dd3427a864e03afb`
+and `ebfbd09171469f263ebdae01c42898ad0d62f4a1164f770ac9225b8e8a3de31f`.
+Before the KHR promotion, the ordinary shipping profile reported BDA false;
+its frozen acceptance selection passed 505/505 on eboot
+`adb3c13c121f25967b54d94b1a92fe401f96023adc4660cb598f741c3ab80fe4`
+(`run-563826813332835`). The bounded storage-image result does not qualify
+other formats, image loads or atomics.
+
+### Buffer device address KHR promotion
+
+The ordinary build now reports `bufferDeviceAddress=1` through
+`VK_KHR_buffer_device_address` on the Vulkan 1.0 KHR query and opt-in route;
+capture replay and multiple-device addressing remain false. The public SDK
+capability probe strictly verified all 62 profile records on signed eboot
+SHA-256 `cca94ae01eb55569fc8850e54ab04edd867a6560230b8b3433bcb084a38c7be3`.
+Run `20260923T194027559Z_PPSA99994_ps5vk_0x204d0c42239a2`, log SHA-256
+`b0263aacbdebc8f6170d70a21450e5f77121bd2e89e973dd06972203b0bff7a2`,
+reported the BDA KHR query as `1`, 22 requested values at their thresholds and
+40 queried blockers. The four-axis DXVK matrix records 20/62 ready and 42
+blockers; the difference includes independently missing CTS/native evidence
+for other requirements. Vulkan 1.2 aggregate feature structs and the Vulkan
+1.3.204 profile API floor remain unadvertised. The original two BDA compute
+oracles passed twice in the preceding diagnostic-bit runs; the shipping-bit
+507-case acceptance is recorded separately below.
+
+The shipping SDK's independent address witness ran on signed eboot SHA-256
+`cc5422c8f279c287beb39d459d598f5e8fc09aa286aeda62dbdd6dc2a8fc0396`.
+Run `20260923T195434898Z_PPSA99994_ps5vk_0x205960cd0cddf`, log SHA-256
+`1d267689f9d4dc15099ab50bbcb3446ae7b542adebba0e7f1030b419c410962f`,
+read back all 64 expected values from three distinct address buffers at
+256-byte bind offsets, with zero value or guard mismatches, the expected
+`178f01c5` digest, bounded fence completion and clean resource retirement.
+
+The ordinary shipping build then passed the promoted 507-case frozen upstream
+selection twice, with **507 Pass, zero Fail, zero NotSupported, zero missing or
+unexpected** in each strict receipt. Both runs used eboot SHA-256
+`bb47f59c159bc230da0f266197cfef1a14c3cd5ac9b1c0c133a2387815871745`
+and selection SHA-256
+`d93a2cb2ea282924c57c63f1412cddd8c22cd799b549fb4cdcbbecd6ce73c321`:
+
+- `20260923T195944895Z_PPSA99994_upstream-cts_0x205de39e95e8f`, log SHA-256
+  `e9855e3fdefd57735802a1d7850e3954d502234a2572db8da4e6ae63c4fbb84e`,
+  QPA SHA-256 `d6fb46eca0323fd6170217d2a0105ae3ae3021998dd12a8c1095d67c2e40c6da`.
+- `20260923T200037929Z_PPSA99994_upstream-cts_0x205ea92cf014e`, log SHA-256
+  `f0942c038f726fc1ddbf222a58d901ca3b4d31e7ae59be069913a29000002260`,
+  QPA SHA-256 `5fbfea1dd39d0300d41d94bedea9c45deb605432ebd33d1809f5a9afb0a4e4e0`.
+
+Both receipts verified the two original BDA compute leaves, exact build
+identity and clean title closure. An earlier attempt on the same eboot stopped
+while emitting QPA for a pre-existing multiview case and produced no final
+receipt; it was closed and is not counted as an acceptance run. Firmware was
+not independently recorded in these T08 receipts. The bounded result does
+not claim capture replay, multiple-device addressing or additional image
+formats.
+
+### Original core Int16 indexing CTS route
+
+The focused package now links the unchanged pinned
+`vktSpvAsmIndexingTests.cpp` compute factory. Its Vulkan 1.0
+`spirv_assembly.instruction.compute.indexing.input.struct.opaccesschain_u16`
+leaf uses `OpCapability Int16`, requests core `shaderInt16`, and compares its
+buffer reads against the original 128-value oracle. It is not a subgroup leaf;
+it measures a prerequisite for extended subgroup Int16 operands. At this
+historical measurement stage, the 507-case acceptance manifest was unchanged;
+the later T07 promotion expanded the frozen selection to 829 cases.
+
+A one-leaf diagnostic selection on signed eboot SHA-256
+`01a1457e5b8fc64005f3d96f30b5f2a4f3eb8a75924cb1942ec30a7dcf053eab`
+and selection SHA-256
+`a49a36073c093f0e5e13f88d7b36be9255c5235cfa17c3c11583fe486d8286b9`
+registered and ran that exact original leaf. Run `run-632095073483134`
+reported one `NotSupported`, zero missing or unexpected cases, and QPA
+SHA-256 `e0fe2a27be5d65c6616231e6e62ebabc935a7ed6021c9fae13b1cdcaef25914a`.
+Its first support gate was `shaderInt16` at
+`vktSpvAsmComputeShaderCase.cpp:437`. The title closed cleanly and the
+accepted payload was restored. This confirms case reachability and the
+shipping feature blocker, not Int16 GPU correctness or any subgroup feature.
+The next measurement requires a separately reviewed diagnostic `shaderInt16`
+capability, then this unchanged case must pass with artifact-bound GPU output
+before a public bit can be considered. Firmware was not recorded in the receipt.
+
+The ordinary build of this exact code passed the unchanged frozen CTS
+selection in strict run `run-632263053027911`: 507 Pass, zero Fail,
+NotSupported, missing or unexpected, with clean title closure. It used the
+same signed eboot SHA-256, selection SHA-256
+`d93a2cb2ea282924c57c63f1412cddd8c22cd799b549fb4cdcbbecd6ce73c321`
+and QPA SHA-256
+`db86c4f4a583a68babbac9c2b490c386d3d4a3187238ec4406ec358fe3fe713e`.
+This is neutral acceptance of the existing profile; the Int16 leaf was only
+in the separate diagnostic selection above.
+## T07 BC mip and array-layer transfer measurement (2026-09-24)
+
+The pinned original BC oracle has also passed in two earlier focused diagnostic
+selections: 48/48 compressed-texture sampling leaves across all 16 Vulkan 1.0
+BC formats (run `run-605956762551796`, eboot SHA-256
+`d3a0622bcd2f9711e939fd5d1f03c998bc6a42379b42d86ec850223347d135be`,
+selection SHA-256
+`ccb00a9543554419ed10aa8e058b1f1368b22b87867fa6cad76c5b8b673b611b`),
+and 128/128 compatible BC-to-RGBA8 blit leaves (run `run-608727480862315`,
+eboot SHA-256
+`db8f1972dd1d2977aa5e8d33ef3a295fa77dccafd3ea5a9fc56898323f2c8a98`,
+selection SHA-256
+`c438338dbcc7a7e613902cff31ff5f0d5bfdab2a533ac7254796c086c9d11117`).
+Both receipts have strict identity, complete QPA and clean closure. The 48-leaf
+receipt predates the full frozen-base metadata correction; its candidate
+selection was focused and omitted the 507 frozen cases. These runs are evidence
+for their original oracles, not a combined shipping acceptance run.
+
+An independent public SDK consumer exercised linear GPU sampling for all 16
+Vulkan 1.0 BC formats, one signed executable per format. Its final v3 reference
+uses normalized S3TC endpoint equations and bilinear filtering before the
+final RGBA8 conversion, with a fixed tolerance of two. All 16 strict native
+receipts passed: 65,536 pixels checked, zero mismatches, completed fences and
+clean closure. The ignored `build/bc-filter-v3/matrix.json` lists each format's
+executable SHA-256, receipt, source-log SHA-256 and independent reference
+hashes. All 16 archived executables and logs still match those records. These
+SDK results support the diagnostic sampled/filter roles; they do not replace
+the original CTS oracle or establish a shipping feature bit.
+
+The integrated diagnostic build also passed **74/74 original pinned BC copy
+leaves** in one strict, completed run: 66 image-to-buffer mip/array-layer cases
+covering 11 non-sRGB BC formats, two extents and one, two or five layers, plus
+eight compatible image-to-image cases. The unchanged CTS comparison reported
+zero Fail, NotSupported, missing or unexpected cases. Selection SHA-256 was
+`803a997a7a1a442c26d13585f07fae986031772d6f82ad193236dee21209c1f6`;
+eboot SHA-256 was
+`52790dffd9f6d11a1ad133254dd59fc5591d2ac9f6cb07bb63aa035dc5f7eec4`.
+Run `run-614985225661286` completed with QPA SHA-256
+`b7c176a7b8be8a559ef75ff36ca1bc6e4d94ec232488cae5588bd4cd48d42e94`.
+These original image-to-image cases use one mip and layer per image; the SDK
+consumer below supplies the separate mip/layer image-copy evidence.
+
+The integrated `6084d7e` branch passed `make check`. Its BC diagnostic build
+ran the eight original 2D BC image-copy leaves from the pinned CTS twice:
+**8 Pass, zero Fail, zero NotSupported, zero missing or unexpected** in each
+strict receipt. The two source/destination pairs were BC1 RGBA UNORM to BC4
+SNORM and BC3 UNORM to BC7 SRGB, each under all four GENERAL/OPTIMAL layout
+combinations. The selection SHA-256 was
+`912f2de20fd71bbf53813d991c196b376b5d91d860e425b495ae233e3b2241d2`;
+the diagnostic eboot SHA-256 was
+`a9d8592e16568a2564952b69705205be8ab501d19264f2972242422def213c52`.
+Run `run-621336816316363` produced QPA SHA-256
+`26d734132da166dbb261f76b76f2c9d8d57bf7e91e3acfb1d7342a5da0f635c4`;
+run `run-621372577415670` produced
+`1a826cacb66a751b5229bbb3fa85155c1654668cfb4fec0f56a93b84e08fc49b`.
+Both verified their exact build identity, QPA completion and clean title close.
+
+Four public SDK consumers, built from the integrated tree with isolated headers
+and symbols, each passed twice on hardware. Every run checked all 12 BC
+subresources byte for byte, preserved the other 11, sampled 4096 destination
+pixels with zero mismatches, completed its fence and closed cleanly:
+
+| Profile | Selected mip/layer and operation | Eboot SHA-256 |
+| --- | --- | --- |
+| `bc1-layer` | mip 0, layer 1, buffer to image | `50c0ce6b9396c109e241c824e07ec64e0211a6e1068df22d0abbd957333c0185` |
+| `bc1-mip` | mip 1, layer 2, buffer to image | `0e61ccfd6bda79c91aa0adb7e4fbc0a9d99c4b4cdbe4514d211d077656c51449` |
+| `bc1-imagecopy` | mip 1, layer 0 to layer 2, image to image | `49d13e039ee763d75e67e1338950a5a656a52863e27082baadc899282041e313` |
+| `bc3-tail` | mip 3, layer 2, buffer to image | `1bb1eb171279c2c8ebd0b73647af69cf4bcf5e67df4062261a176ec2c30cdd03` |
+
+The integrated `651a913` SDK consumer adds `bc1-partial-layers`: a BC1 image
+of 37×29 texels with four mips and three layers. One buffer-to-image region
+copies an 8×4 interior rectangle at offset (4,4) in mip 1 across layers 1–2;
+a second image-to-buffer region reads that rectangle with different row and
+layer strides. The independent oracle checks all 12 subresources, the two
+changed layers, untouched exterior blocks, readback padding and guards, then
+samples 4096 pixels from layer 1. Both strict hardware runs reported zero byte
+or pixel mismatches, maximum colour error 1 within tolerance 1, completed
+fences and clean closure. They used signed eboot SHA-256
+`0748c9c98708eb37ec6cd08853e4f1c8d53040d7aedcfa7892d3dc11df6c15c8`:
+
+- `20260924T124622442Z_PPSA99994_ps5vk_0x23ccc6ee08330`, log SHA-256
+  `0d8d81a68621cfa10a5c11c8105668774bb91820c1c990bce7cc178566391323`.
+- `20260924T124642084Z_PPSA99994_ps5vk_0x23cd10195fc3d`, log SHA-256
+  `2ac42d3fe9ea442fcec591d24c3d96945dbdd762e89655698f625659be720255`.
+
+The ordinary shipping build also passed the unchanged frozen selection in
+`run-621753906663208`: **507 Pass, zero Fail, zero NotSupported, zero missing
+or unexpected**, eboot SHA-256
+`d125d01918c88e763e7517dc6218ea71a211f21f116a8c6721653b19d9527eb1`,
+QPA SHA-256 `ea79a4561087966ad8d5c44332b48baa18673a5fa688863e961f95507256ac51`,
+with exact identity, completed report and clean close. The canonical eboot was
+restored after every run. Firmware was not recorded in these receipts.
+
+The original image-to-image CTS leaves exercise one mip and layer per image;
+the SDK image-copy witness exercises distinct layers at mip 1. The original
+buffer readback leaves exercise every mip and layer, while the SDK consumers
+also exercise whole-subresource and interior multi-layer regions. These runs do
+not establish every image-to-image rectangle and layer combination. The
+shipping `textureCompressionBC` feature bit remains off pending the full T07
+promotion audit. The ignored measurement manifest
+`build/upstream-cts/t07-bc-combined-measurement.json` combines the 507 frozen
+cases with all 250 source-derived BC sampling, blit and copy cases: 757 distinct
+cases, selection SHA-256
+`e3bcf6c498f94d90ca5f2487c151c3b649b162ddc73a2a0e3b60c23d423a4b4e`.
+Its BC-only diagnostic package linked 416 translation units and signed eboot
+SHA-256 `69e3e392a7236b3a405a7cde2d8df32a26d364da36894d7091f26e41334c5027`;
+the build manifest records 757 selected cases and the BC diagnostic switch as
+`1`. The combined diagnostic selection passed **757/757** original cases with
+zero Fail, NotSupported, missing or unexpected cases in
+`20260924T154900553Z_PPSA99994_upstream-cts_0x246c3c80f0d8f`. Its strict
+receipt verified exact identity, report completion and clean closure. This is
+a measurement selection; the frozen acceptance selection and public bit remain
+unchanged.
+
+## T07 D32 comparison-gather diagnostic measurement (2026-09-24)
+
+The isolated D32 route in `5067a1b` accepts a bounded 64×64, seven-mip
+sampled-depth image, full-mip buffer uploads and the exact transfer-to-sampling
+barrier sequence. The host byte oracle verifies every depth texel and untouched
+allocation byte; `make check` passed after the diagnostic build identity was
+wired in `984703e`.
+
+The original pinned `depth32f` comparison-gather CTS leaf passed twice with its
+unchanged image oracle: **1 Pass, zero Fail, zero NotSupported, zero missing or
+unexpected** in each strict receipt. Selection SHA-256 was
+`3564731db031196812cb5ecc800d943a13679e48bac0155b7af1adeb8a8b28c0`;
+diagnostic eboot SHA-256 was
+`f2f1d42fcc1fb3ec3409ec378ec8cbebda896925e2e4588c2896ab230866344f`.
+Run `run-623668162749001` yielded QPA SHA-256
+`a064613e54bc6a519694de937f06d49c4b493884bad6ce43f6950434515f5695`;
+repeat `run-623701544102072` yielded
+`36f95dd349633253c9a29fc04fa0199b750a3408de6f27b10ba4d893c629377d`.
+Both verified exact build identity, report completion and clean title closure;
+the canonical eboot was restored after each run. Firmware was not recorded.
+
+This diagnostic selection contains one D32 comparison-gather leaf. It does
+not establish the other typed gather profiles or public
+`shaderImageGatherExtended` reporting, which remains off pending the full T07
+audit.
+
+The current frozen manifest identifies 70 applicable original extended-gather
+leaves: 45 RGBA8 forms and 25 typed forms using RGBA8 signed/unsigned integer
+or D32 comparison. An ignored measurement manifest at
+`build/upstream-cts/t07-full-gather-measurement.json` combines all 70 with the
+507 frozen cases. Its 577-case selection SHA-256 is
+`464a436cd07eeb3c0471bf475d7001463f52f5f1e6424b06bf8725f40f83b8bd`.
+The package linked 416 translation units and signed eboot SHA-256
+`f6cece12464758ef08a9d8d18bb8f997cc067b9b62dc116f4eea1b3f23b888b7`;
+its build manifest records the gather, RGBA8 integer attachment and D32
+sampled diagnostic switches as `1`, with BC off. A separate 532-case selection
+of only the 25 typed leaves uses the same executable but a different selection
+SHA-256, `5702b90f15a93d623277846891b1bd47d4765f3f02a4b6f646b38a573d333b2a`.
+The complete 577-case selection passed twice with zero Fail, NotSupported,
+missing or unexpected cases on signed eboot SHA-256
+`16607e56d97cbb5c5df0502aa341bb4daab2e6880d84aa08b7107e28e2555751`:
+`20260924T161005906Z_PPSA99994_upstream-cts_0x247ea63df31f6` and
+`20260924T161103848Z_PPSA99994_upstream-cts_0x247f7e176f2d4`. Both strict
+receipts verified the original QPA oracle, exact identity and clean closure.
+The twelve earlier RGBA8 SINT refusals came from out-of-range integer clear
+values. Vulkan leaves their converted result undefined; the driver now accepts
+them using a deterministic low-byte conversion. Independent SDK-linked GPU
+readbacks passed constant, dynamic and four-offset forms in runs
+`20260924T160859672Z_PPSA99994_ps5vk_0x247daf8292e93`,
+`20260924T160915319Z_PPSA99994_ps5vk_0x247de9ca34ded` and
+`20260924T160929553Z_PPSA99994_ps5vk_0x247e1ed220fc3`. Public reporting
+and the frozen selection remain unchanged pending promotion.
+
+## T07 D16 depth attachment diagnostic witness (2026-09-24)
+
+The isolated 128×128 D16 attachment route now records the exact
+UNDEFINED-to-depth-attachment barrier and bounded full-surface depth clear;
+host tests reject wrong aspects, partial rectangles and unsupported dependency
+scopes. The native diagnostic SDK and SDK-linked offscreen witness built from
+this tree. The witness uses a render-pass load clear and depth-tested draw; the
+original synchronization CTS `vkCmdClearAttachments` path still needs its own
+upstream run and is not inferred from this witness.
+
+Signed eboot SHA-256
+`effb18b754835b2c878c8a1917c0ccd3ffd6bc1491037bf7cabea1b600a7f2df`
+passed the strict artifact-bound witness twice. Each run queried the bounded
+D16 format, rendered two frames at 128×128, observed 2888 changed colour
+pixels after a depth clear to 1.0 and zero after a clear to 0.0, completed the
+GPU submissions, reported no readback mismatches, released all allocations and
+closed cleanly:
+
+- `20260924T113700629Z_PPSA99994_ps5vk_0x2390372da9382`, log SHA-256
+  `06c81851c0e2554b74f777030d27760717d1266710c2e42fa3865e7a9dd5b1ab`.
+- `20260924T113722973Z_PPSA99994_ps5vk_0x23908a69edcad`, log SHA-256
+  `f38a16c42f8d76f7ce8bebc213bb7694de60fd8be6479395b9781e8b1e67d4b9`.
+
+The first diagnostic attempt used an auxiliary 1920×1080 region scan on this
+128×128 target and ended before the second frame; it is not counted as
+evidence. That scan is now excluded from the D16 variant, whose independent
+depth oracle remains active. The canonical eboot was restored after all three
+attempts. Firmware was not recorded. Public feature reporting remains
+unchanged.
+
+## T07 precise occlusion original CTS measurement (2026-09-24)
+
+The unchanged pinned `dEQP-VK.query_pool.occlusion_query.basic_precise` case
+uses a 128×128 D16 depth attachment and an RGBA8 colour attachment read back
+after rendering. The diagnostic path now accepts the case's exact colour
+barriers in both the recorder and native executor. Its rasterizer enables
+depth bias with all factors zero; the native draw path programs the D16
+fixed-depth bias format and continues to reject nonzero D16 bias factors.
+The corresponding host tests cover the admitted shapes and nearby refusals.
+
+The original CTS case passed twice with the upstream oracle unchanged: run
+`run-632898402692343` (QPA SHA-256
+`7d74fdcb4b14babe9eff66131af7617c8d3e09ed0006f7ef8cdc0647b7592ba4`)
+and run `run-632934419376926` (QPA SHA-256
+`72125c75b71eef1cd8aa0ebf422d0db532747d73c8695908bc367cd8bce0e67a`).
+Both strict receipts recorded 1 Pass, zero Fail, zero NotSupported, exact
+selection identity, complete report and clean title closure. The one-case
+selection SHA-256 was
+`a356b3c615fd7ed79f0e6f744e7fd7825bb13209645006e091a4e95a42d6dafc`.
+
+The same signed eboot SHA-256
+`a39b620eae748e7f688880e4b3c13604b9d21675b22d216c6a0f66b9b2b7b998`
+then passed a measurement selection containing the 507 frozen acceptance
+leaves plus this precise case: **508/508 Pass**, zero Fail, zero NotSupported,
+zero missing or unexpected. Run `run-633094482815947` recorded QPA SHA-256
+`70f78ac11d6bc61b12c45006306a7248d0a7da5b9972e982fc218e67e73932f4`
+and selection SHA-256
+`60bf95c41062832cffc3f6e95f5ee19c6ac47cce1c007b5c5fddec6b85a09d85`;
+identity, report completion and clean closure were verified. The canonical
+payload was restored after each run. Firmware was not recorded.
+
+This is diagnostic evidence for one original precise-query leaf and a neutral
+507-case regression. The frozen selection and public `occlusionQueryPrecise`
+reporting have not been promoted; the full T07 capability audit remains open.
+
+## T07 precise occlusion native API witness (2026-09-24)
+
+The SDK-linked native diagnostic uses a depth-tested draw and the Vulkan
+occlusion-query API with the precise bit enabled. Its independent verifier
+requires direct and copied 32-bit and 64-bit counts of zero, one and three,
+availability for each result, wait and partial-result paths, secondary-command
+execution, a same-pool reset and repeat, completed submissions, zero leaked
+allocations, ps5log/1 integrity and an exact match to the signed eboot.
+
+The signed eboot SHA-256
+`1975dd0757438c9a4df8121c3a9576bb041cc8c18031f0c6488fa71045eefae5`
+passed that verifier twice with identical query results:
+
+- `20260924T135031940Z_PPSA99994_ps5vk_0x2404cb3638f3e`, log SHA-256
+  `6e49354fd07c2e952c0d32d73cadbf66a6405770a0bb94f6c6151945e9c2ed87`.
+- `20260924T135057995Z_PPSA99994_ps5vk_0x24052c4740042`, log SHA-256
+  `65c632958ceb03ada66c9e3dd6ca38375c7fcff3d21a4fc9ca55845c657ea771`.
+
+Both titles closed cleanly and the canonical payload was restored. Firmware
+was not recorded. Together with the original CTS result above, this covers a
+bounded precise-query implementation; the shipping feature bit and frozen CTS
+selection remain unchanged pending the remaining T07 promotion checks.
+
+## T07 cube-array combined-branch diagnostic evidence (2026-09-24)
+
+On combined T07 source commit `3394040`, the unchanged pinned
+`dEQP-VK.api.object_management.single.image_view_cube_arr` case passed twice
+with its original support gate and oracle. The one-case selection SHA-256 was
+`839aa4c357c295af5378757f9df0a2dc37227c0a19fa3dd0b1efcae122abae3b`,
+and both runs used signed eboot SHA-256
+`7975fe24502c17bc284cf4576d416c5d520b7849f4a54e1984894263f1c3eee5`:
+
+- `run-634212869010775`, QPA SHA-256
+  `8e6168719e0a7f7f0f18bf16bdab90616e1203ab8314f491879c394d9c8e57f7`.
+- `run-634251931735986`, QPA SHA-256
+  `a297d23c6c0ee1d2adc095f8145aa3859df5beb9692fd0100cd6bb0e74cba4a2`.
+
+Each strict receipt recorded 1 Pass with no Fail, NotSupported, missing or
+unexpected leaf; it verified report completion, exact identity and clean title
+closure. An independent SDK-linked witness then sampled two cubes across all
+six faces, checking 12,288 colour pixels with zero mismatches per run:
+
+- Base layer 0, signed eboot SHA-256
+  `c746eb84578fa9fd78e23c867c0f7db3dbdc91cd71f02503f76419e2f8e27f14`:
+  logs `20260924T140242166Z_PPSA99994_ps5vk_0x240f6b75fdc70`
+  (SHA-256 `7268f908a01c79c56fc91f80394562f27d42fc0b83ee4168bc5094564964e04c`)
+  and `20260924T140304268Z_PPSA99994_ps5vk_0x240fbdd2205a3`
+  (SHA-256 `e94e58fe5a4ad8a3049a29e89eb90c364d9b5bde4c52216be685beb903ceb094`).
+- Base layer 1 in 13-layer storage, signed eboot SHA-256
+  `e0a48b9cbcc4122a9967968bb974bfbd3a93a3f59d9e8401107d4bd0de0369f0`:
+  logs `20260924T140351870Z_PPSA99994_ps5vk_0x24106f264848f`
+  (SHA-256 `fa38a0b02d20d2d56c540d49d46b623878c16a14a5629ef92a75c3294bcd21d4`)
+  and `20260924T140418640Z_PPSA99994_ps5vk_0x2410d2ddfcc54`
+  (SHA-256 `e7f6556779acc8bf18c2462429ea7a91e2b064c5f36a02cc1f5bddfac83a05f7`).
+
+The SDK verifier checked artifact identity, fence completion, ps5log/1
+integrity and clean lifecycle for each run; the canonical payload was restored
+after each. Firmware was not recorded. This evidence qualifies the diagnostic
+cube-array path, including a nonzero view base. Public `imageCubeArray`
+reporting and frozen CTS selection remain unchanged pending their promotion
+audit and combined acceptance. The audit found that
+`vkGetPhysicalDeviceImageFormatProperties` accepts the cube-compatible RGBA8
+`SAMPLED | COLOR_ATTACHMENT` usage used by the object-management CTS, while
+the old descriptor path refused its sampled role. A host regression reproduced
+that refusal. The CTS above checks view creation, not sampling from that tiled
+attachment. A native 4×4 render-to-sample probe exposed a layer-pitch mismatch:
+the target used 128 KiB per layer while the sampler advanced 64 KiB, so eleven
+of twelve faces read the wrong colour. The descriptor now refuses that shape
+before it can silently render wrong pixels. At 256×256 the pitches match; the
+independent tiled attachment-to-sample witness passed twice with twelve correct
+faces and 12,288 correct pixels, including strict artifact and lifecycle
+verification in `20260924T160809323Z_PPSA99994_ps5vk_0x247cf3f1ba220` on
+eboot SHA-256
+`941ba1a5aac7d7a69745efec339807adc2539ed150923646033177b03f9fc097`.
+Public reporting and the frozen selection remain unchanged pending promotion
+and combined shipping acceptance.
+
+## T07 four-axis pre-promotion audit (2026-09-24)
+
+At this audit point, the ordinary build reported all four T07 core feature bits
+false. A host
+contract confirms that each bit, when supplied by the platform, appears in
+both physical-device feature query routes, can be enabled through a logical
+device, and fails device creation when unsupported. That host result proves
+the negotiation wiring, not permission to advertise any bit. The evidence
+above leaves these promotion gates open:
+
+| Feature | Public query and device | Executable path and refusal | Original CTS oracle | Artifact-bound PS5 witness and remaining gate |
+| --- | --- | --- | --- | --- |
+| `imageCubeArray` | Host negotiation passes; shipping bit off. | Transfer-backed arrays sample two cubes, including a nonzero view base. The tiled path samples 256×256 attachment faces and refuses incompatible smaller pitches. | Original image-view leaf passed twice; it checks view creation, not tiled attachment sampling. | Transfer-backed SDK witness passed twice per view base; tiled 256×256 witness passed twice with 12,288 correct pixels. Public promotion and shipping acceptance remain. |
+| `textureCompressionBC` | Host negotiation passes; shipping bit and format roles off. | Diagnostic sampling, blit and mip/layer copy paths are bounded by format, layout and region checks. | Original focused selections passed 48/48 sampling, 128/128 blit and 74/74 copy; combined selection passed 757/757. | SDK filter and mip/layer witnesses passed on diagnostic builds. Public format roles, feature bit and shipping acceptance remain. |
+| `shaderImageGatherExtended` | Host negotiation passes; shipping bit off. | Diagnostic compiler accepts bounded gather forms; RGBA8 integer attachment and D32 comparison roles remain build-gated. | All 70 eligible original gather leaves passed in a 577/577 combined selection twice. | Native constant, dynamic and four-offset GPU readbacks passed. Public roles, bit and shipping acceptance remain. |
+| `occlusionQueryPrecise` | Host negotiation passes; shipping bit off. | Diagnostic query state, ZPASS and bounded result read/copy paths passed host and native checks. | Original D16 precise case passed twice and in a 508/508 combined selection. | SDK-linked API witness passed twice with 0/1/3 samples and result variants. Promotion still needs an enabled shipping build, frozen CTS update and exact post-promotion acceptance. |
+
+No row is promoted by the passing subset of another row. All new combined
+selection candidates remain measurements until their strict hardware receipts
+and the ordinary shipping build agree.
+
+## T07 public reporting candidate (2026-09-24)
+
+The ordinary graphics build now reports `imageCubeArray`,
+`textureCompressionBC`, `shaderImageGatherExtended` and
+`occlusionQueryPrecise` without T07 diagnostic switches. A public SDK
+capability probe signed as eboot SHA-256
+`c3857792f29221da1e0452c5971ad29c084cd4cf89ed6ec6974104c9699ed3ae`
+passed the strict native-query verifier in
+`20260924T165734913Z_PPSA99994_ps5vk_0x24a81b7608ca2` (source log SHA-256
+`a4b19620f2d9d3d9b03f5808a837bb9264ab994696c87f665417d13ddb972c60`).
+It observed 26 of the 62 DXVK baseline requirements at their requested values,
+four more than the prior public probe; 36 remain query blockers. The probe
+checks advertised values, not execution.
+
+The frozen upstream selection now contains 829 original cases: the previous
+507 plus 250 BC sampling/blit/copy cases, 70 gather cases, one precise-query
+case and one cube-array image-view case. Its case-list SHA-256 is
+`81f656f1b0559f212bcc7b802c572d59c23919272f9109aa37f8774e78b849c4`.
+The ordinary CTS package signed eboot SHA-256
+`95befcf38c164d38dec0748a9aa88608329fbc5e7681cc36ef70edff4f0f13f1`;
+shipping hardware acceptance of that package remains pending. The checked
+four-axis DXVK matrix therefore remains at 20/62 ready and 42 blockers.
+
+## T07 public upstream CTS promotion (2026-09-24)
+
+On firmware **12.02** (owner-reported), the ordinary public T07 build ran the
+frozen 829-case original upstream CTS selection twice. The eboot SHA-256 was
+`95befcf38c164d38dec0748a9aa88608329fbc5e7681cc36ef70edff4f0f13f1`;
+the selection SHA-256 was
+`81f656f1b0559f212bcc7b802c572d59c23919272f9109aa37f8774e78b849c4`.
+No T07 diagnostic switch was used. Both strict receipts verified the exact
+payload and selection, full QPA, case identities and title lifecycle. Each
+reported **829 Pass, zero Fail, zero NotSupported, zero missing, zero unexpected
+and zero duplicate** cases. The original CTS oracles were unchanged.
+
+| Strict receipt | Logging run | QPA SHA-256 | Source log SHA-256 |
+| --- | --- | --- | --- |
+| `run-3158572987094` | `20260924T182430756Z_PPSA99994_upstream-cts_0x2df693153d2` | `fdb0e8c0a8d9f4ee1025dca852bb76e1808de13304836f3679384a4a9272b4a6` | `3fecac2d959988f5187864bca1afdbdb2dbdc77f8976cd7320e6235886d6b367` |
+| `run-3231483363368` | `20260924T182543668Z_PPSA99994_upstream-cts_0x2f0634174f1` | `48a30ff0f1dbd164d5cbb0aaa656375d8a4eac21710185167a99c4de7db84b12` | `98c00e1b2b01657fe238ade5fda5680e11c5d58948b46144c07227c767fd963a` |
+
+The source logs used ps5log/1, closed with BYE and had zero sequence gaps. The
+T07 groups passed in **both** runs: `imageCubeArray` 1/1,
+`textureCompressionBC` 250/250 (48 sampling, 128 blit, 74 image/mip copies),
+`shaderImageGatherExtended` 70/70 and `occlusionQueryPrecise` 1/1. The full
+frozen selection passed with the four public bits enabled. The public ABI probe
+in the preceding section observed 26/62 requested query values; the joined
+four-axis DXVK matrix now has **24/62 satisfied and 38 blockers**. Native
+witness receipts and hashes for each feature are recorded in the T07 sections
+above and bound in `conformance_inventory/dxvk_v262_evidence.json`.
+
+The console window restored the previous ordinary payload, whose exact-self
+eboot SHA-256 was
+`aad6299d6b245f5e3c2b73f2d125d34b01fa44411f119ff66edb11a80ccb9212`.
+The wrapper released the console and the subsequent status reported
+`running=none`.
+
+
+## T09 diagnostic measurements (2026-09-24)
+
+These are default-off, SDK-linked measurements of three DXVK 2.6.2
+requirements. Their implementation and native evidence are recorded separately
+from the ordinary public capability query in
+`conformance_inventory/dxvk_v262_evidence.json`. The public device still
+reports all three false; the checked profile remains **25/62 satisfied, 37
+blockers** after T08 DeviceScope. Firmware was not queried in these T09 runs.
+Each console window restored the ordinary eboot with SHA-256
+`aad6299d6b245f5e3c2b73f2d125d34b01fa44411f119ff66edb11a80ccb9212`
+and released the console with `running=none`.
+
+### T09 host query reset diagnostic measurement (2026-09-24)
+
+The default-off `VK_EXT_host_query_reset` route accepted a host reset after
+completed precise occlusion queries. The strict SDK verifier checked the
+1/0/3-sample results, their availability, an unavailable result after reset,
+preservation of prior result words, and resubmission of the same command
+buffer. The `ps5log/1` run
+`20260924T194817339Z_PPSA99994_ps5vk_0x771bcbf0e04` completed with a clean
+title lifecycle. Eboot SHA-256:
+`d74390542e83e45e0010467beb9c5e3cd19b4cdfd776c000c9d14f6b9fae28ac`;
+source-log SHA-256:
+`66b1afc0116e1263e77ec15abe2ba8c28076dead266c57c0c3ecb91b587187ed`.
+The original CTS leaf
+`dEQP-VK.query_pool.occlusion_query.get_reset_results_precise_size_64_wait_queue_with_availability_draw_points`
+is identified in the pinned source but has not run against this artifact.
+Public extension and feature reporting remain disabled.
+
+### T09 host query reset public EXT promotion (2026-09-25)
+
+The ordinary Vulkan 1.0 graphics platform now advertises
+`VK_EXT_host_query_reset` and reports `hostQueryReset=1` through
+`VkPhysicalDeviceHostQueryResetFeaturesEXT`; `vkCreateDevice` requires the
+extension and explicit feature opt-in. The Vulkan 1.2 aggregate remains
+unadvertised. The public SDK capability probe run
+`20260924T215614288Z_PPSA99994_ps5vk_0xe6d244aa8b5` verified all 62 rows,
+28 satisfied query values, 34 query blockers and ten device extensions,
+including the tagged EXT feature route. Eboot SHA-256:
+`75df954111879f9a79860b4713ad3a76035c4bd2b3664629ac1cc2d821cba7de`;
+source-log SHA-256:
+`aa731814b25803746542265adea43f9752db864307a849b9345636013df5e3ad`.
+The `ps5log/1` receipt had 70 records, zero gaps and a complete BYE. Its
+build-time matrix SHA-256 was
+`d040f9e0c993aabe2c7eab283bb605f25dc1f6d2590d6b8f1ecf7a6b9a613644`.
+
+The independent shipping SDK graphics run
+`20260924T220133465Z_PPSA99994_ps5vk_0xeb77488067b` passed the strict
+host-reset witness: completed precise occlusion queries gave 1/0/3 samples;
+host reset made all three unavailable without changing old result words; the
+same command buffer then completed new 1/0/3 results with availability one.
+Eboot SHA-256:
+`b96f0a2192c056b18caef61988066ffda507d0cfe5249b284225551edff43aa1`;
+source-log SHA-256:
+`d017a09a63816c0be95ab5207b7f149b7f0080e90bebba2910b8f14ebd60ef87`.
+The `ps5log/1` receipt had 400 records, zero gaps, complete BYE and clean
+title closure. Both windows restored the prior eboot
+`aad6299d6b245f5e3c2b73f2d125d34b01fa44411f119ff66edb11a80ccb9212`
+and released the console idle. Firmware 12.02 is owner-reported, not queried
+in either run. The checked DXVK matrix is **26/62 ready with 36 blockers**.
+The original CTS leaf named above has not run and is not a claimed PASS.
+
+### T09 imageless framebuffer diagnostic measurement (2026-09-24)
+
+The initial SDK-linked clear/readback witness used one imageless framebuffer
+with two attachment views at separate render pass begins. Two completed
+submissions and 8,192 readback pixels matched the strict oracle with zero
+mismatches in run
+`20260924T194946966Z_PPSA99994_ps5vk_0x7869ad308ae`. Eboot SHA-256:
+`01ff1cfbf7ed3f3cf34a0e49dc1256f2d20f65fbfe7db4725c615cfd26abfd21`;
+source-log SHA-256:
+`df42d9306c02b962a5b7f116f1eee4a1b62083474df42236d023f105ba54deb9`.
+
+A second SDK-linked diagnostic witness cleared and drew into each of two
+begin-time views, then read back both after separate bounded submissions.
+It checked 2,048 drawn pixels and 6,144 clear pixels with zero mismatches
+in run `20260924T225116620Z_PPSA99994_ps5vk_0x116e03cca98b`.
+Eboot SHA-256:
+`0de8621154ed3da156d192631cf31cbd416876bce8a23252f7d2ae1531664cd3`;
+source-log SHA-256:
+`6ad91b76b5b8e41c5c3d18fb1dda16e9599696138a5e618945683c2da8d2dad6`.
+The strict verifier reported two draws, two views, 8,192 checked pixels,
+zero mismatches and clean title closure. Firmware was not queried for this run.
+
+The original `dEQP-VK.imageless_framebuffer.color` leaf was then packaged
+alone in a diagnostic CTS measurement: selection SHA-256
+`aed21135b8b6797c3cd0cf77dce77715d8eb0b701af8db547ae73561e313f7b5`,
+eboot SHA-256
+`34fc5cf0f94a3c2d1f31717852cb8f3c4515fdf71d840697c00bc969809f2cfc`.
+Run `20260924T233314986Z_PPSA99994_upstream-cts_0x13b85c07824e`
+reported **0 Pass, 0 Fail, 1 NotSupported**. QPA SHA-256:
+`9e56f4bdd01816f35c09c2d2a154c71b3665e52ba214f4bf092bda47746eca16`;
+source-log SHA-256:
+`c5fccc7a45d2b89b7197be0b8c88f8c406db08738f2fc91ec24d715b8eacca5f`;
+receipt SHA-256:
+`a86d9da03e503a7da19741d931f169352ece1cccd8cccfddc0b435705542d74b`.
+The upstream support check stopped before rendering because
+`VK_KHR_imageless_framebuffer` is not advertised. The QPA was complete, the
+title closed cleanly and the previous payload was restored. This is not a CTS
+PASS or a render failure. The Vulkan 1.0 public path still needs
+`VK_KHR_maintenance2` and `VK_KHR_image_format_list`; the instance extension
+`VK_KHR_get_physical_device_properties2` is already present.
+
+### T09 sampler mirror clamp diagnostic measurement (2026-09-24)
+
+Eight independently built, default-off SDK witnesses covered nearest and
+linear U/V sampling at negative, inside and positive-edge coordinates. Each
+strict draw readback matched 373,248 pixels; the run IDs and exact eboot
+SHA-256 for all eight cases are bound one to one in
+`conformance_inventory/dxvk_v262_evidence.json`. The first U run was
+`20260924T200150243Z_PPSA99994_ps5vk_0x82f00e17429` on eboot SHA-256
+`950bcfcd86e1e2796997518c327c5e3e0bfe58b603e3bd99d2aa0d838909c2e7`;
+the final V run was
+`20260924T201225901Z_PPSA99994_ps5vk_0x8c3008fcd12` on eboot SHA-256
+`192d0289da708c5cc1f6cc81752b9be6cd812c4d3de9c6d289b613598d57b5f2`.
+
+Two focused original 3D filtering CTS leaves then exercised W mirror clamp:
+`dEQP-VK.texture.filtering.3d.combinations.nearest.nearest.clamp_to_edge.clamp_to_edge.mirror_clamp_to_edge`
+and
+`dEQP-VK.texture.filtering.3d.combinations.linear.linear.clamp_to_edge.clamp_to_edge.mirror_clamp_to_edge`.
+Both reported `Fail` in run
+`20260924T205134796Z_PPSA99994_upstream-cts_0xae5e3b2989b`, but the first
+refusal was `PS5VK_UPLOAD_PREPARE_FAILED site=0 rc=-13` while loading the 3D
+RGBA8 mip image. Neither leaf reached W sampling, so this run cannot establish
+W behavior. The CTS eboot SHA-256 was
+`882beae5a17991b36348407b7aee24521f843410183572a6a2fc74d2a8aa1798`;
+case-list SHA-256
+`ec857802f748d97f664811d1ccb967435aea7f6e59d200411a77db58a1226608`;
+strict receipt SHA-256
+`4d4ae7cb6f483ceae5847e69a6a3a6e2f996042f644fbcc753bd7d79149f8d10`;
+QPA SHA-256
+`f96d8cd5edebe3b6326c51932856f84533cd528b2b24e64362c7ecc74f34daf6`.
+Six subsequent default-off SDK draws tested 3D W mirror clamp without that
+CTS upload path. Nearest and linear filtering each used W coordinates below
+zero, inside the image and above one. The strict CPU/readback oracle matched
+all 373,248 pixels in each draw (zero mismatches); each verifier reported a
+clean lifecycle. The table binds each result to its run, exact eboot and
+source-log SHA-256. Firmware was not re-probed for these runs.
+
+| Case | Filter and W coordinate | Run ID | Eboot SHA-256 | Source-log SHA-256 |
+| --- | --- | --- | --- | --- |
+| 20 | nearest, -0.25 | `20260924T215415552Z_PPSA99994_ps5vk_0xe517f2f1704` | `d0319cafd2af347c4e764ea87e4596b4886beeaa48d806e5affe435786060295` | `0f60ef1c40602ba1c60bc0ae19355ad0e798c260bbb20ebadcc73ee6594e4d64` |
+| 21 | nearest, 0.25 | `20260924T220203376Z_PPSA99994_ps5vk_0xebe6b628f46` | `f55991e7cc49a15ecd17dcdde5b923957ce7858fdf0134c5e7b675873edd6c2c` | `450a2d48ca7b4b15df347417f4a6fcfd661b83c548600a18956be3948ae9667e` |
+| 22 | nearest, 1.25 | `20260924T220213923Z_PPSA99994_ps5vk_0xec0dff2da2b` | `02b71c58dfff32fe6471b063e49cd30cc433209aea8fecf8b23383c3b8b8f848` | `e320118de014abb890ad0c143cd68649ffba35b27c4da84c0aa237b538a31d45` |
+| 23 | linear, -0.375 | `20260924T215647835Z_PPSA99994_ps5vk_0xe74f3dab544` | `b2e07979c046c4e7d5d3eb5f5ce23a8f8ffa5900e05e920ee73c9f681752b744` | `e4c5277266baf0c85767bb00079a629b6d27ea93ecf73a3965705085cc494ac6` |
+| 24 | linear, 0.375 | `20260924T220222966Z_PPSA99994_ps5vk_0xec2faf6f3b7` | `889455cad4f286701dc3b7dcbf134eaa87bf6c537c56f139b1b7fef2fcc38b27` | `d9f25c50e65fafcf5921a9ec5942441ff5c903a769423aef3d525c3cc789773f` |
+| 25 | linear, 1.25 | `20260924T220232022Z_PPSA99994_ps5vk_0xec516a2da69` | `377e0711d350702fdc2f34b76a44979625f0ce9c58544cd158c6ab7d0bc60bdc` | `3673ebfe533f8581f95a32315a27412d827fe149899e9db8de27c32b22f95362` |
+
+These draws establish the bounded W path's native evidence, so the DXVK row's
+native axis is now `native-evidence`. The two original CTS leaves still have
+the pre-sampling `Fail` described above and need a rerun after the 3D upload
+blocker is fixed. The ordinary public
+`samplerMirrorClampToEdge` feature and `VK_KHR_sampler_mirror_clamp_to_edge`
+extension remain disabled, so the DXVK requirement remains blocked.
+
+### T09 sampler mirror clamp compact CTS measurement (2026-09-24)
+
+The pinned upstream
+`dEQP-VK.pipeline.monolithic.sampler.view_type.3d.format.r8g8b8a8_unorm.address_modes.all_mode_mirror_clamp_to_edge`
+leaf uploads an 8×8×8 RGBA8 3D image and samples varying W coordinates. Its
+unchanged upstream oracle reported `Pass` (1/1 selected, no missing cases),
+and the strict runner verified a clean title close. The measurement used the
+default-off sampler diagnostic build; the public feature remained disabled.
+Firmware was not re-probed for this run.
+
+Run ID:
+`20260924T225630973Z_PPSA99994_upstream-cts_0x11b7346e8255`;
+signed eboot SHA-256:
+`ddc59b40852806bee34f144358bc28386acfd067714edbfb4a8f17c0b1999cb1`;
+case-list SHA-256:
+`67d8bfece3acc7305bd211738997b8cfbf2746bc0421ba2719d1372f8a03b627`;
+strict receipt SHA-256:
+`d2e41e12ded0dbc968fb3a91cd6b1f5c1d6bb923d7d200b73da3c11082fc59e2`;
+QPA SHA-256:
+`4d717869c9625040243787e90bdabbe507fd483e54b52af408c8fe64feb15226`;
+source-log SHA-256:
+`106d61194a9f65021088c4fa1b96af838c14d08951452c5b6c2555b6508b9442`.
+The two larger 3D filtering leaves above remain `Fail` at image upload before
+sampling; this compact PASS does not change their recorded verdicts.
+
+### T09 sampler mirror clamp public KHR promotion (2026-09-25)
+
+The shipping graphics profile advertises `VK_KHR_sampler_mirror_clamp_to_edge`
+on Vulkan 1.0 and enables mirror clamp through the ordinary device extension
+route. The SDK-linked public capability probe observed the route and reported
+29/62 requested values, with 33 query blockers. Its strict verifier accepted
+the log and clean lifecycle. Signed eboot SHA-256:
+`b88157ffa829add85acc213a25a40840256825ab1180f839a0f556f32c7d6b60`;
+run ID: `20260924T235311412Z_PPSA99994_ps5vk_0x14ceeba58a1e`;
+source-log SHA-256:
+`2c5997d112288f768b6ad1b2c631e7e39843c204d40773c4c2bc02a9af7522c2`;
+strict receipt SHA-256:
+`a0e2a60e7c15d7e329fb09633641aa6c17a187978a1d8315da1d8aa42fea42d4`;
+pre-promotion matrix SHA-256:
+`e4bad3e4fac18113effd6b02fa85e38fa5a215eea32d70df188f1da7fc1c6628`.
+
+Two further SDK-linked shipping draws used the same public bit without a
+sampler diagnostic build switch. Both passed the strict CPU/readback oracle:
+373,248 expected pixels, zero other pixels, completed submission and clean
+resource retirement. Firmware was not re-probed for these runs.
+
+| Case | Filter/coordinate | Run ID | Eboot SHA-256 | Source-log SHA-256 | Strict receipt SHA-256 |
+| --- | --- | --- | --- | --- | --- |
+| 8 | U nearest, -0.25 | `20260924T235846865Z_PPSA99994_ps5vk_0x151d05eafcc2` | `2fcf57f73b48a8d4078a762fc275dfe0790fae231462c8b835679a534f47bae4` | `4ebc318ab873524e03225bc64735cbbb5332b143ca7d4cd68054fb0f6ea7f25a` | `c6fd0b2e56f9bac4ac41247ae4f7214b874fc9b3705e51472bd342cc2dabd3a9` |
+| 23 | W linear, -0.375 | `20260924T235706586Z_PPSA99994_ps5vk_0x1505ace25712` | `3358b78774f99678c39a9f247dab6208ef8c026dedeab8e6c9697906a16d08b8` | `dd5022ec4d62bd6172506e9d950dc41e79a6a44431b2684c785c39dfd4907eed` | `d5518610f27c080b4aa050abea264b0a4905fd049ed0f3c25d8f69fd8553ec82` |
+
+The earlier 14/14 default-off U/V/W draw results and compact original CTS
+3D W address-mode 1/1 PASS remain separate evidence. The two larger 3D
+filtering leaves remain `Fail` at image upload before sampling. The checked
+four-axis DXVK matrix then recorded **27/62 ready with 35 blockers**; its score
+is distinct from the public probe's 29/62 query count.
+
+## T09 timeline semaphores and separate depth/stencil layouts promotion (2026-09-25)
+
+DXVK 2.6.2 requires `timelineSemaphore`, `maxTimelineSemaphoreValueDifference`
+and `separateDepthStencilLayouts`. The device still reports API 1.0.0. All three
+rows are reached through Vulkan 1.0 KHR extensions:
+
+* `VK_KHR_timeline_semaphore`, which needs
+  `VK_KHR_get_physical_device_properties2` on the instance;
+* `VK_KHR_separate_depth_stencil_layouts`, which needs
+  `VK_KHR_create_renderpass2`, which in turn needs `VK_KHR_multiview` and
+  `VK_KHR_maintenance2`, as the pinned `vk.xml` lists them.
+
+`vkCreateDevice` refuses any of these extensions when one of its dependencies
+is not enabled. The Vulkan 1.2 aggregate structures stay unadvertised. The
+promoted build had no measurement switch. The
+`PS5VK_TIMELINE_DIAGNOSTIC` and `PS5VK_DEPTH_STENCIL_DIAGNOSTIC` switches are
+retired, and `tests/test_native_diagnostic_options.py` fails if either returns.
+Firmware was not re-probed for these runs.
+
+**Reported values.** `maxTimelineSemaphoreValueDifference` is `UINT64_MAX`. The
+queue frontend stores each payload, wait value and signal value as a full
+`uint64_t` and orders them only with full-width comparisons. No modular window
+exists that a smaller bound would describe. The combined
+`D32_SFLOAT_S8_UINT` format reports only its witnessed roles: depth/stencil
+attachment and transfer source. The following are not implemented for it:
+sampled or single-aspect views, `vkCmdClearDepthStencilImage`, transfer
+destination, mip levels, array layers and HTILE. `D24_UNORM_S8_UINT` stays
+unreported.
+
+**Native witnesses on the shipping SDK.** Each witness ran twice from the same
+signed artifact, with strict ps5log/1 receipts and a clean title close:
+
+| Witness | eboot SHA-256 | Runs | Log SHA-256 |
+| --- | --- | --- | --- |
+| Timeline (public SDK) | `612de7a09058f8b57130eaf88e5104381a7b2d673465220bb6dc80508e52eae2` | `20260925T002416578Z_PPSA99994_ps5vk_0x16812ebb8301`, `20260925T002420804Z_PPSA99994_ps5vk_0x16822a9eabf2` | `68a5d207cacc532753bb320f5306760882ddec6bef5b8b78c7e7deb4059f248c`, `5cc5b4f3c26da3179f57f42fba337919819591ac63057192c9f2099d17d78142` |
+| D32S8 separate layouts (public SDK) | `8fa2b2410ee4e635e5ec7b5a85274d1625f6f51b95d6855405c1cfaff573b742` | `20260925T002437399Z_PPSA99994_ps5vk_0x168607a70485`, `20260925T002441648Z_PPSA99994_ps5vk_0x168704e1920e` | `7d3bf8cc8a82bf1d00d9f2ce5e7b596048011a7cbfecd94f7f98cb3b3b083530`, `4ddebce9cc2077d6bd5f47461e2148e27c977b58a1bd73a2dd8100aae809811a` |
+
+* **Timeline witness.** It negotiates the KHR feature. A compute submission
+  waits on a value that has not been signalled yet. Its buffer and counter do
+  not move until the host signals. `vkWaitSemaphoresKHR` then observes the exact
+  GPU-written data. A second device signal reaches 2^40. The guard words stay
+  intact.
+* **Depth/stencil witness.** It negotiates `separateDepthStencilLayouts` and
+  the extension chain. The DB writes both 64x64 planes, and each aspect is read
+  back separately with zero mismatches. Depth-only and stencil-only transitions
+  leave the other aspect's data unchanged.
+
+Earlier measurement-build runs of the same witnesses are retained only as
+history. They were
+`20260924T203941004Z_PPSA99994_ps5vk_0xa3fb2ed879a` for the timeline, and
+`20260924T223931620Z_PPSA99994_ps5vk_0x10c9df198899` and
+`20260924T223940271Z_PPSA99994_ps5vk_0x10cbe2bcf6e0` for depth/stencil.
+
+**Focused original CTS.** 50 source-verified leaves ran outside the frozen
+selection:
+
+* 16 legacy timeline leaves: `synchronization.timeline_semaphore.device_host.misc.*`,
+  `.wait.*` and `synchronization.basic.timeline_semaphore.*`;
+* 2 `renderpass2.suballocation.attachment_write_mask` leaves;
+* 12 + 12 `pipeline.monolithic.stencil.format.d32_sfloat_s8_uint[_separate_layouts].states.*`
+  leaves;
+* 4 + 4 `pipeline.monolithic.depth.format.d32_sfloat_s8_uint[_separate_layouts].compare_ops.triangle_list_*`
+  leaves.
+
+Both runs used case list SHA-256
+`d0e28eee2592d7013d8ea0b76e934c26db8abd0df7b32b845391c490a3b7c28a`:
+
+| Build | eboot SHA-256 | Run | Result | QPA SHA-256 | Source log SHA-256 |
+| --- | --- | --- | --- | --- | --- |
+| Measurement (pre-promotion switches) | `fa1c35315ff138850624dc93f23a055bc5787cac196266a110dc59191d82d574` | `20260925T001516592Z_PPSA99994_upstream-cts_0x1603757c86f7` | 50/50 Pass | `5cb0e98713cf66de16a299ad8c2367a31053a7af438b7ae7bc5c9ac89a217e8d` | `7149e021eef99b37f301b7f56357f95ec80bddba281f34d3092a56df49e92898` |
+| Promoted shipping | `7f9bba150da8241db59d430fa4e934e285fbe3da243327c8b0d10b723c31e0f1` | `20260925T002648833Z_PPSA99994_upstream-cts_0x16a4a1a6323f` | 50/50 Pass | `ed01b891d7b6a67e660f6ca52d302c8df60e69af9c3bfc1440a828e106fe940f` | `4c30628836dd1186c15b2a66328ce5e14f8d85ea09f66f38dfd552d833e8a256` |
+
+In each run, every named case reported `Pass`: zero Fail, zero NotSupported,
+zero missing and zero unexpected. The upstream oracles were unchanged.
+
+**Neutrality.** The promoted shipping build ran the frozen 829-case acceptance
+selection, SHA-256
+`81f656f1b0559f212bcc7b802c572d59c23919272f9109aa37f8774e78b849c4`.
+
+* eboot SHA-256:
+  `fa8497b11bb9e8aa00bf6accb1fc01c1e0b84350e83fe4937696de26574eb07d`
+* Run: `20260925T002842262Z_PPSA99994_upstream-cts_0x16bf0a65db9c`
+* QPA SHA-256: `f439e73dc7e67891c899fcef942750c8efe084ce94841373a232255d03ff99d5`
+* Source log SHA-256:
+  `341aef326dd1a28ccb0e9085b3e82752237ffcdb9620f86790a8920970d3c406`
+
+It reported **829 Pass, zero Fail, zero NotSupported** and verified strict
+identity and lifecycle. This includes the twelve
+`dynamic_state.monolithic.compute_transfer.*.stencil_*` leaves. Those leaves
+exercise the dynamic stencil compare mask, write mask and reference that the
+default build accepts since the T09 stencil-test change.
+
+**Public-ABI capability probe.** The probe was re-measured on the promoted
+build:
+
+* eboot SHA-256:
+  `f206382f04686ac42b0a33a4eec4265fefa7857beb959eddb1d9c7a4ccfab414`
+* Run: `20260925T002500503Z_PPSA99994_ps5vk_0x168b688f5bd8`
+* Log SHA-256:
+  `2c640eb60bde32473ae31529000dc49493207c29fb52279e43a194fffacb3832`
+
+`tools/verify_dxvk_probe.py` verified it strictly. It found API 1.0.0 and 13
+device extensions, and 30/62 requested query values met, reached through
+explicit `VK_KHR_timeline_semaphore` and
+`VK_KHR_separate_depth_stencil_layouts` query routes. The joined four-axis DXVK
+matrix then had **28/62 ready and 34 blockers**.
+
+**Open, outside these rows.** On this path, fragment `discard`/kill does not
+suppress depth/stencil writes, even though the compiled fragment shader
+enables kill (`DB_SHADER_CONTROL=0x50`). The depth/stencil witness saw every
+texel written. The root cause is not known. This breaks alpha-tested depth in
+DXVK, and it is tracked as an open blocker in
+[docs/DXVK_V262_BACKLOG.md](docs/DXVK_V262_BACKLOG.md). (Resolved later: see
+[the T11 promotion](#t11-demote-and-terminate-public-extension-promotion-2026-09-25).)
+
+Every console window restored the ordinary acceptance payload, exact-self eboot
+SHA-256
+`aad6299d6b245f5e3c2b73f2d125d34b01fa44411f119ff66edb11a80ccb9212`.
+Status afterwards reported `running=none`, and no GPU hang occurred.
+
+## T09 combined public query (2026-09-25)
+
+The integration tree combines the host-query-reset and mirror-clamp work with
+the timeline and separate-depth/stencil work. The SDK-linked public capability
+probe was rebuilt from that tree with every measurement switch off. Its signed
+eboot SHA-256 is
+`d2bb5425d51c11f214efd7533b51c81dab49956e769852eacd9279d98a689248`;
+the build-time matrix snapshot SHA-256 is
+`d9776b6f225ae9c3854dce7c97604ea7fe31325c88eb1846aca08eb9863bdcdf`.
+Strict verification of run
+`20260925T012038463Z_PPSA99994_ps5vk_0x199493f2488f` (log SHA-256
+`f123a5bc4e3e5cf287c1877e7725965cb9c4cd207363adb9499063ef579585ab`)
+found API 1.0.0, 15 device extensions and 32/62 requested query values met.
+The explicit query routes included host reset, sampler mirror clamp, timeline
+semaphores and separate depth/stencil layouts. The title closed cleanly and
+the ordinary acceptance eboot was restored by exact-self readback. Firmware
+was not independently queried in this run.
+
+The checked four-axis matrix is 30/62 ready with 32 blockers. The public probe
+validates reporting; two additional SDK witnesses built from the same combined
+source tree executed GPU work:
+
+* Timeline: signed eboot SHA-256
+  `6263a45790b002cf152f06f9f1d272f0cffdc060d41bbf0e52f8727584a89a41`,
+  run `20260925T013419733Z_PPSA99994_ps5vk_0x1a53cacfc908`, log SHA-256
+  `ef8b8bc259d20f9e3e1ffe0063b5886f641ef3857399b8e5b48d075339ad2939`.
+  Strict verification observed both expected phase digests, a signal above
+  2^32, `maxTimelineSemaphoreValueDifference=UINT64_MAX` and clean closure.
+* Separate depth/stencil: signed eboot SHA-256
+  `3151e1d86bb8d0a1abe764ba93b73d8a4030278ca4f40b36eef707fe9ec95d8a`,
+  run `20260925T013437345Z_PPSA99994_ps5vk_0x1a57e466ec0c`, log SHA-256
+  `3bef166a4e1b7f2b62f7578db1ae13bda9d37b7f4d83a666dbfdad46c19fa0dd`.
+  Strict verification found zero mismatches in all four depth/stencil checks
+  and clean closure. `D24_UNORM_S8_UINT` remained unreported.
+
+Each window restored the ordinary acceptance eboot by exact-self readback and
+left the title stopped. The host-reset and mirror-clamp GPU witnesses and
+focused CTS receipts remain bound to their separately documented artifacts;
+they were not rerun on this combined source tree. Execution of the real DXVK
+2.6.2 build remains open.
+## T08 top ordinary acceptance after T07 (2026-09-25)
+
+The unchanged frozen 829-case original CTS selection was rebuilt from T08
+source HEAD `a90434c` with the pinned CTS and PSBC dependencies. All subgroup
+Broadcast, IAdd and narrow-type diagnostic switches were off. The signed
+eboot SHA-256 was
+`0adca480234f9b6cf19fc65eef05530a043f65574b49f125e84bf9edea556164`;
+the case-list SHA-256 was
+`81f656f1b0559f212bcc7b802c572d59c23919272f9109aa37f8774e78b849c4`.
+The two strict runs on that same artifact each reported **829 Pass**, zero
+Fail, NotSupported, other, missing, unexpected or duplicate cases, a complete
+QPA, verified build identity, successful title closure and payload restoration.
+
+| Strict receipt | Logging run | QPA SHA-256 | Source log SHA-256 |
+| --- | --- | --- | --- |
+| `run-26549023647502` | `20260925T005421535Z_PPSA99994_upstream-cts_0x18256cf56309` | `9babfa3d2c1be09974f8115a2205ff8e8229d56b862b0fb1977e0283cfbb8f2e` | `615950b012edcf7a7c8b46694ee3a9fe6b4a0949afab864d49952ea40cea8a26` |
+| `run-26611944624449` | `20260925T005524456Z_PPSA99994_upstream-cts_0x183413422b39` | `185a504162146c9a104c5da004b44a75d8c6d730dcb2fa667376915184c6a9b0` | `89feaab61c56ab822eac2023cb22547438da51ba5db6f9f164a76533e6463a8d` |
+
+The receipts did not independently record firmware; the most recent owner
+report before these runs was 12.02. The console was idle with no active claim
+after each run, and the restored ordinary payload's exact-self eboot SHA-256
+was `aad6299d6b245f5e3c2b73f2d125d34b01fa44411f119ff66edb11a80ccb9212`.
+An earlier combined preview on a different artifact had one complete run and
+two incomplete repeats; those receipts remain incomplete and are not counted
+as acceptance of this artifact. The 829-case selection contains no applicable
+subgroup leaf. These runs establish neutrality of the advertised Vulkan 1.0
+profile, not subgroup conformance or either blocked T08 profile row.
+
+## Final integrated public query after T08 (2026-09-25)
+
+The ordinary SDK consumer was built from `main` HEAD
+`1d39842d72871982db795a5b0a3e4095d3891504` with every diagnostic switch
+off and the `--dxvk-v262-probe` entry point. Its signed eboot SHA-256 was
+`acc01ac16af98e981aa19ef6756a45aaeb386cdc6733ee2e31a581e6cc87f250`;
+the build-time DXVK matrix snapshot SHA-256 was
+`4d23dc4652fe12f72a0355e2e3a36efe221f97bf987df25d2ebbca0ec0019caa`.
+The captured run
+`20260925T025408988Z_PPSA99994_ps5vk_0x1eaedc9924e5` has source-log
+SHA-256 `29ede471249a16eb33a09a653471e28032bba3572f32ff1d4322ec13179b36e9`.
+
+`tools/verify_dxvk_probe.py` strictly verified all 62 ordered query records,
+the artifact identity and complete transport. It observed API 1.0.0, 15 device
+extensions and 32/62 requested query values met; both
+`shaderSubgroupExtendedTypes` and `subgroupBroadcastDynamicId` were false.
+The separate four-axis matrix remained 30/62 ready with 32 blockers. This
+probe creates no logical device and executes no GPU work.
+
+The first command used the generic consumer resource verifier, which rejected
+the probe artifact profile. The captured log then passed the dedicated probe
+verifier without a second console run. The consumer's close check succeeded,
+and the ordinary acceptance eboot SHA-256
+`aad6299d6b245f5e3c2b73f2d125d34b01fa44411f119ff66edb11a80ccb9212`
+was restored by exact-self readback. Console status afterwards was
+`running=none` with no active claim. Firmware was not independently recorded
+in this receipt. This run is public reporting evidence, not subgroup CTS,
+subgroup execution or execution of DXVK 2.6.2.
+
+## T09 focused leaves frozen into acceptance (2026-09-25)
+
+The 50 original leaves of the focused T09 run
+`20260925T002648833Z_PPSA99994_upstream-cts_0x16a4a1a6323f` (case list
+SHA-256 `d0e28eee2592d7013d8ea0b76e934c26db8abd0df7b32b845391c490a3b7c28a`,
+50/50 Pass) moved into the frozen selection with `tools/move_leaves.py`:
+16 `t09-timeline`, 2 `t09-renderpass2`, 16 `t09-d32s8-combined` and 16
+`t09-separate-depth-stencil-layouts` cases. The existing 829 cases keep their
+order and the 50 are appended; the 66 diagnostics are unchanged.
+`tools/check_upstream_selection.py` now traces the stencil op groups
+(`fail_*`, `pass_*`, `dfail_*`), the `*_separate_layouts` format groups and
+the depth `compare_ops` leaf names to the tables of the pinned stencil and
+depth factories.
+
+The package was rebuilt from `main` `e4c3287` plus this change, with PSBC
+`ee8959186cfb1f5c0a574d1e2ee329aad1fe2747` and every diagnostic switch off.
+Signed eboot SHA-256
+`a2790d6d8c83ddaf38951ba553a53e1f41026b53eae5780f489a120be14f3973`;
+selection SHA-256
+`31ff8907185593bd9ae803e09ead776eee2c866a2c196ec279fbbf0e61451c28`.
+The strict run reported **879 Pass**, zero Fail, NotSupported, other, missing,
+unexpected or duplicate cases, a complete QPA, verified build identity and
+successful title closure.
+
+| Strict receipt | Logging run | QPA SHA-256 | Source log SHA-256 |
+| --- | --- | --- | --- |
+| `run-41423133303939` | `20260925T050215847Z_PPSA99994_upstream-cts_0x25ac92fe5a27` | `2a43a1cf81fe2a7c125f46ca530b6e610973bad07549c82aadb500fcf7bb385a` | `7a5892921b3500ee007824cb078ff78cd253beee2bd43a241099b225c959845a` |
+
+The ordinary payload with exact-self eboot SHA-256
+`aad6299d6b245f5e3c2b73f2d125d34b01fa44411f119ff66edb11a80ccb9212` was
+restored afterwards and the console was idle. Firmware was not independently
+recorded in this receipt. The `timelineSemaphore`,
+`maxTimelineSemaphoreValueDifference` and `separateDepthStencilLayouts` DXVK
+rows now cite these leaves as frozen-selection CTS evidence; the matrix stays
+at 30/62 ready.
+
+## T11 demote and terminate public extension promotion (2026-09-25)
+
+**Root cause of the fragment-discard defect.** A pixel program that can remove
+pixels (`OpKill`, `OpTerminateInvocation` or `OpDemoteToHelperInvocation`) and
+exports no colour, depth, stencil or sample mask compiles to
+`DB_SHADER_CONTROL.KILL_ENABLE` with `SPI_SHADER_COL_FORMAT=0`. The pinned RADV
+source records that the hardware ignores the EXEC mask when no export memory
+is allocated, and allocates MRT0 `32_R` for such a program; the standalone
+compiler has no pipeline step that does. The runtime draw now applies that rule
+to every pixel package (`native/kill_export_ps5.h`); `CB_SHADER_MASK` is never
+widened.
+
+**Pixel-removal witness** (`tools/build_t11_kill_depth_witness.py`): a 64x64
+`D32_SFLOAT_S8_UINT` target, a no-removal control and the three removal forms,
+each removing a checkerboard from a depth plane and a stencil REPLACE, each
+aspect read back in its own submission, 300 ms fences.
+
+* Before the rule (measurement build): eboot SHA-256
+  `5c0658ff2d1a633239cd1e9597d6bf40eda8c8514ce0639492bcc9e4591d4528`, run
+  `20260925T070247555Z_PPSA99994_ps5vk_0x2c4050540adf`. The control was clean;
+  every form wrote all 2048 removed pixels in both planes.
+* With the rule (measurement build): eboot SHA-256
+  `820ac34b4f169a7390ea11c396bb4410570bb7dfb1c668b07be2ee145c73069c`, run
+  `20260925T070255953Z_PPSA99994_ps5vk_0x2c424502f192`. Every form: zero depth
+  and stencil mismatches, no kept pixel lost.
+* Regression witness on the promoted rule: eboot SHA-256
+  `ca27870206acb3a36f2ce08e81dd34c0842f045a3b34760c7b86e7937939690f`, run
+  `20260925T075052853Z_PPSA99994_ps5vk_0x2ee0169efba3`, log SHA-256
+  `6748d7c187ed0506e7dcbb10cad7830fffb27e5b6c532676fb99e627d7e3606c`,
+  `regression_ok`.
+
+The T09 depth/stencil witness on the same tree (eboot SHA-256
+`4f94a27a1970902cd9bde2956801978511c20894ef4c70e7ba4170b6ad57fb37`, run
+`20260925T075101112Z_PPSA99994_ps5vk_0x2ee20386132c`) stayed exact, and the
+frozen acceptance selection (eboot SHA-256
+`88a6a422c997df7d16940b590b4c6dbe7cc4a43356d391ae5fab15d389af809d`, run
+`20260925T094305586Z_PPSA99994_upstream-cts_0x34ffa7d95328`) passed 879/879.
+
+**Helper-invocation witness** (`tools/build_t11_helper_witness.py`): a 64x64
+`R8G8B8A8_UNORM` target; the top-left pixel of every quad is removed before the
+quad takes `dFdx`/`dFdy` that read it. Eboot SHA-256
+`d8064caa4b2e4c54f14bd03b6b884dff1f7aa448819202e3fb863c735bee99de`, run
+`20260925T094400138Z_PPSA99994_ps5vk_0x350c5b5ff3a9`, log SHA-256
+`205dd6f58fce6254218a87bd5b00ceac3aa4258e0acbfb747cab08bf0d16cfc2`,
+`helper_ok`. `OpKill` and every demote spelling (SPIR-V 1.6 core without the
+extension declaration, as DXVK 2.6.2 emits it; 1.6 with it; the 1.3 EXT form)
+left removed pixels unwritten and every kept pixel exact. After
+`OpTerminateInvocation`, 3069 kept pixels had wrong derivatives; the
+specification leaves derivatives that involve a terminated invocation
+undefined, so this is recorded as a measurement, not a defect. The host
+compiler contract shows the same split in machine code.
+
+**Public routes.** The shipping platform sets both T09-mask bits:
+`VK_EXT_shader_demote_to_helper_invocation` carries
+`shaderDemoteToHelperInvocation` and `VK_KHR_shader_terminate_invocation`
+carries `shaderTerminateInvocation`. The DXVK profile checker and probe
+verifier join both through one table of single-feature extension routes.
+
+**Public-ABI capability probe.** Eboot SHA-256
+`40ff50ee5f22a6197b5c31bee1156adb2b35ce0d7f15560759710b38079c3d0e`, build-time
+matrix snapshot SHA-256
+`48199dbd39cda74ae046dcaabd569ac8c2b4d19b1fe69bf633b893cc168bcf07`, run
+`20260925T104135104Z_PPSA99994_ps5vk_0x3830c556bcc9`, log SHA-256 `6c9519a32bd0fde218459f0558af97c13f9c884114e95a6debda863e9f250bc8`. `tools/verify_dxvk_probe.py`
+verified it strictly: API 1.0.0, 17 device extensions, 34/62 requested query
+values met, both routes queried explicitly. The joined four-axis DXVK matrix
+has **32/62 ready and 30 blockers**. This probe creates no logical device and
+executes no GPU work. The payload was launched and closed with
+`tools/run_consumer.py`, whose resource-witness verifier rejects the probe
+artifact profile by design; the captured log is verified with
+`tools/verify_dxvk_probe.py <run> --manifest <artifact.json> --artifact
+<eboot.bin> --matrix-snapshot <build-time matrix>`.
+
+## T14 transform feedback promotion (2026-09-26)
+
+**Route.** `VK_EXT_transform_feedback` with `transformFeedback` and
+`geometryStreams`; properties: 4 streams, 4 buffers, 512-byte stream and
+buffer data, 2048-byte stride, 2^31-byte buffer ranges, stream queries and
+`vkCmdDrawIndirectByteCountEXT` served, line/triangle multi-stream output and
+rasterization-stream selection not claimed. Capture runs in the geometry
+stage (the shape DXVK emits for every stream-output shader) through the
+pinned compiler's no-GDS streamout (`ps5_global_streamout`, opengnm-psbc PR
+30): each workgroup reserves its range with global atomics on the begin's
+control block, in primitive order through a ticket keyed on its first
+primitive id, and returns the part it did not write. Each begin/end session
+loads its counters by CP DMA and stores them back after the capture drains.
+Rasterizer discard is `DX_RASTERIZATION_KILL`.
+
+**Measurement that moved the design.** The first capture witness passed 4/6:
+6000 points came back out of order (5872 records misplaced, counter exact),
+proving that unordered global reservation is not enough, and an overflowing
+binding left a 512-byte counter for 320 written bytes. Keying the order on the
+hardware ordered id did not hold either: it does not restart per draw on this
+GPU (session tickets 55→106 across submissions, fallback taken). The
+primitive-id ticket fixed both.
+
+**Capture witness** (`tools/build_t14_xfb_witness.py`,
+`tools/run_t14_xfb_witness.py`): nine cases, one bounded submission each —
+a capture pipeline with capture inactive; 3 points; 6000 points with a
+record-order check; counter preloaded to 64 with two draws; a 320-byte
+binding overflowing with 16 points; stream 0 into buffer 0 and stream 1 into
+buffer 1; 3 points x 2 instances; DrawIndirectByteCount (counter 128, offset
+32, stride 32); a stream query around the overflow (written 10, needed 16).
+Every record, sentinel and counter is checked.
+
+* Measurement build: eboot SHA-256
+  `05ad8022331520e1d9d87cc7a9f1c09e2ec0651d06fe09be8734259aac8e35d2`, run
+  `20260926T004624010Z_PPSA99994_ps5vk_0x664a88782421`, strict 9/9; every
+  capture session reported no unordered workgroup.
+* Shipping SDK: eboot SHA-256
+  `915f8f20e0bcf53b1697d4df9a012de9cb656d0c3202039a86e2554a68e5dcc0`, run
+  `20260926T010723192Z_PPSA99994_ps5vk_0x676fb45dc43b`, strict 9/9.
+
+The frozen acceptance selection on the same tree (eboot SHA-256
+`32e9676393f4d850ee49f1f3572a1f9887dfa140c595178ae1b09cd148f3cfcb`, run
+`20260926T010737807Z_PPSA99994_upstream-cts_0x67731b8711d3`) passed 879/879.
+
+**Public-ABI capability probe.** Eboot SHA-256
+`176bd90da56d74e71c07f971e872a81ac0b353035c5ef4ae0c6447d9b5ec8811`, run
+`20260926T010716926Z_PPSA99994_ps5vk_0x676e3ee8ce7a`, log SHA-256
+`c1fa6916a86fdd0f952bdb860ea13ea9aab625b7d2c3d158d866eddeea70c92a`, verified
+strictly by `tools/verify_dxvk_probe.py`: API 1.0.0, 18 device extensions,
+37/62 requested query values met, the transform feedback route queried
+explicitly. The joined four-axis DXVK matrix has **35/62 ready and 27
+blockers**. The measurement switch is retired and a test forbids its return.
+
+**Combined probe after rebasing onto the synchronization2 promotion.** The
+probe above predates the synchronization2 promotion. The capability probe was
+rebuilt from the rebased tree (eboot SHA-256
+`54dff6e7393e52b8b95b4ce4d17d95403dad4ab93b80e06d135f26faf56adbd5`) and run
+`20260926T021915145Z_PPSA99994_ps5vk_0x6b5ba59f5b7d` (log SHA-256
+`34e5bada22c5555bcc4a666e7ec94ca58bb54919d3d2825ec80a0bfd1c84e5e3`) was
+verified strictly by `tools/verify_dxvk_probe.py`: API 1.0.0, 21 device
+extensions, 38/62 requested query values met, with both the synchronization2
+and transform feedback routes queried explicitly. The joined four-axis DXVK
+matrix has **36/62 ready and 26 blockers**.
+
+## DXVK 2.6.2 D3D11 diagnostic render on PS5 (2026-09-25)
+
+**Scope.** The pinned DXVK `9d6f54a1ade20d1d27dd421024717a636f3d8c68`
+D3D11/DXGI libraries are statically linked with the SDK-linked ps5vk from
+`main` `9c133ef8b0f1071edddca011f42f2c696ebe9096`, built by
+`tools/build_dxvk_ps5_native.py --diagnostic-integration` and run by
+`tools/run_dxvk_ps5_native.py`. The workload creates a feature-level 11_0
+device and immediate context with no swapchain, a 64x64 `R8G8B8A8_UNORM`
+render target and view, a staging texture, a vertex and pixel shader (DXBC
+committed in `examples/dxvk_native/dxvk_shaders.h`), clears, draws a
+full-screen triangle with a per-pixel pattern, copies to staging, maps, and
+compares all 4096 pixels with the CPU oracle, then releases everything.
+
+**Driver configuration (both variants).** Default-off measurement switches:
+`PS5VK_DESCRIPTOR_UPDATE_TEMPLATE_DIAGNOSTIC`,
+`PS5VK_DXVK_FORMAT_ROUTES_DIAGNOSTIC`, `PS5VK_DXVK_RENDER_DIAGNOSTIC`,
+`PS5VK_DXVK_ROUTES_DIAGNOSTIC`, `PS5VK_HOST_COHERENT_DIAGNOSTIC`,
+`PS5VK_IMAGELESS_FRAMEBUFFER_DIAGNOSTIC`, `PS5VK_MAINTENANCE4_DIAGNOSTIC`,
+`PS5VK_ROBUSTNESS2_DIAGNOSTIC`, `PS5VK_STORAGE_TEXEL_DIAGNOSTIC`,
+`PS5VK_SYNCHRONIZATION2_DIAGNOSTIC`. None of these is in the shipping build;
+the public device still reports Vulkan 1.0.
+
+| Variant | DXVK changes | Eboot SHA-256 | Run | Result |
+|---|---|---|---|---|
+| unmodified | none | `39e7b0fa7930d6682a7e7696bbb46dff0bdd47e79360111c6a8eaaf2fe926cb6` | `20260925T201717096Z_PPSA99994_ps5vk_0x579b16abdf0e` | `Skipping Vulkan 1.0 adapter` after `vkEnumeratePhysicalDevices` (no Vulkan error); `D3D11CreateDevice` fails; clean close |
+| diagnostic-compat | 1.3 adapter filter bypassed; transform-feedback terms of the FL gate required only if reported; payload translation of core names and Vulkan 1.1–1.3 structures onto ps5vk extension routes (patch list SHA-256 `042b72b4b441d50ad78e78bfef128457fc15d6e3aa1ada0f7a8b219784820823`) | `07f43473a7826e32829d7706928b43d52355b4803bf51e9bb456a809b0c8e113` | `20260925T201724777Z_PPSA99994_ps5vk_0x579ce0d447bb` | rendered, 0/4096 mismatches, checksum `6e17a4c5` |
+| diagnostic-compat, relaunch 1 | same | same | `20260925T201728163Z_PPSA99994_ps5vk_0x579daa86ee2f` | rendered, 0/4096, `6e17a4c5` |
+| diagnostic-compat, relaunch 2 | same | same | `20260925T201731180Z_PPSA99994_ps5vk_0x579e5e8839a1` | rendered, 0/4096, `6e17a4c5` |
+
+Every run ended with device and context reference counts 0, a finalized
+`ps5log/1` stream, the title closed and no GPU hang. The expected checksum is
+the same workload's result on a host Vulkan driver. The translation layer
+never reports a bit that ps5vk does not report through its own extension
+structure; it only renames. This is evidence that the Vulkan paths DXVK
+executes for this workload work on hardware. It is **not** an unmodified DXVK
+result and does not change any public claim; the contracts still missing are
+listed in [docs/DXVK_V262_BACKLOG.md](docs/DXVK_V262_BACKLOG.md).
+
+## Diagnostic route promotion: sync2, formats, storage texel (2026-09-26)
+
+Three measurement switches are retired and their routes ship:
+`PS5VK_SYNCHRONIZATION2_DIAGNOSTIC` (`VK_KHR_synchronization2`),
+`PS5VK_DXVK_FORMAT_ROUTES_DIAGNOSTIC` (`VK_KHR_format_feature_flags2` and
+`VK_KHR_image_format_list` with the RGBA8 UNORM/SRGB mutable views) and
+`PS5VK_STORAGE_TEXEL_DIAGNOSTIC` (the storage-texel-buffer role on R32_UINT,
+R8G8B8A8_UNORM and R32G32B32A32_SFLOAT). `tests/test_retired_diagnostic_switches.py`
+forbids the switches from returning.
+
+The measurement-build witnesses that justified each route are unchanged
+evidence (sync2 eboot
+`454bffab2d37f20e74512543992af92daac5dccdd0fbbd0731d1df3018a5c961`, run
+`20260925T160735208Z_PPSA99994_ps5vk_0x49fae568a1b6`; mutable view eboot
+`71ce3f3769aaac01fe01ccb9a0dd03a4b27f6fb18b1983c42a3d202b8c25d5ed`, run
+`20260925T104209123Z_PPSA99994_ps5vk_0x3838b10382df`; separate sampler eboot
+`2d17854f63427bb7f537841b99f0d276bd68812b6249391152288439b76ffaa0`, run
+`20260925T151958910Z_PPSA99994_ps5vk_0x4761df2981c9`). The same three
+witnesses, rebuilt on the ordinary SDK with no switch, passed again strictly:
+sync2 eboot `7d720e28a18b59bda27af6d8878dce1c3b2d6a856e152e10f4835a2fd2ef3fec`,
+run `20260925T232900572Z_PPSA99994_ps5vk_0x62116a183b59`; mutable view eboot
+`4d8b7f1a05aebb4c9157eaca83b6f7538c6639e85ab701ca2a38f2a29c153dc4`, run
+`20260925T232908925Z_PPSA99994_ps5vk_0x62135bedb1dd`; separate sampler eboot
+`a992105c3670507befc360c76f000c4615de86deb0d488116834b64c9f70d5c7`, run
+`20260925T232919263Z_PPSA99994_ps5vk_0x6215c41e8b66`. Timestamp2 stays
+refused with every timestamp (timestampValidBits is zero); R32_SINT keeps only
+the uniform-texel role.
+
+The frozen acceptance selection on this tree (eboot
+`b2fe8d26f72ade220fbd4d598da63b06e9989a140edebb7673d52d575dfa5026`, run
+`20260925T232806141Z_PPSA99994_upstream-cts_0x6204bdc010aa`) passed 879/879.
+
+**Public-ABI capability probe.** Eboot SHA-256
+`ebcf7eb50f99aa206596c9d072108c051e2961f6a4e0fe34e85040914454a5df` (rebuilt
+byte-identically from the committed tree), build-time matrix snapshot SHA-256
+`fcc26d7bdcd279d86b429acf7d12271c3335c8ac2692a693de484991446acaf1`, run
+`20260925T232646238Z_PPSA99994_ps5vk_0x61f222c41344`, log SHA-256
+`1ebe72cd18d7857c766514e48e940ed6ff1f7605c8717371d384eda09bac9bbe`.
+`tools/verify_dxvk_probe.py` verified it strictly: API 1.0.0, 20 device
+extensions, 35/62 query values, with `synchronization2` through an explicit
+`VK_KHR_synchronization2` route query. The joined DXVK matrix has **33/62
+ready and 29 blockers**.
+
+## Imageless framebuffer public KHR promotion (2026-09-26)
+
+`PS5VK_IMAGELESS_FRAMEBUFFER_DIAGNOSTIC` is retired. `imagelessFramebuffer` is
+reported through `VK_KHR_imageless_framebuffer`, which the pinned registry
+makes depend on `VK_KHR_maintenance2` and `VK_KHR_image_format_list`; the
+extension is enumerated only when both are, and `vkCreateDevice` refuses it
+without both (and without `VK_KHR_get_physical_device_properties2` on the
+instance). The SDK consumer's imageless witness now negotiates exactly that
+public route on the ordinary SDK: eboot SHA-256
+`2ac95461c666315413f66ba04190e8a82c8f7ec42b38b3883bdeabc99c79944c`, run
+`20260926T011005066Z_PPSA99994_ps5vk_0x679564ac8fd7`, log SHA-256
+`b27f0fc08ea1f2ceb1be0afd367ad5fc349b2072195c1d99b5c67ccc16fa881a`,
+strictly verified with zero mismatches.
+
+The frozen acceptance selection on this tree (eboot
+`ab727cfc5037fff04e5703528510b62d61194945edaf65ab1ec9af8160436c17`, run
+`20260926T011024300Z_PPSA99994_upstream-cts_0x6799df21f52b`) passed 879/879.
+
+**Public-ABI capability probe.** Eboot SHA-256
+`3b59eae4883fa14d838132e28ed3f77f5aaf2af965840bcf478772c4a750a87f`, build-time
+matrix snapshot SHA-256
+`06de9a0d42ca7ba462b7d234592a9a68ad24012890e3e7933e50e584f62c0cbe`, run
+`20260926T011013573Z_PPSA99994_ps5vk_0x67975fc4de05`, log SHA-256
+`4dafe380b421ea8e2603426809dd4e477bfbf8cbafd8bd6d50be4d2bc4caa24c`:
+API 1.0.0, 21 device extensions, 36/62, with `imagelessFramebuffer` through an
+explicit `VK_KHR_imageless_framebuffer` route query. The DXVK matrix has
+**34/62 ready and 28 blockers**.
+
+
+**Combined probe after rebasing onto the transform feedback promotion.** The
+probe above predates the synchronization2 and transform feedback promotions.
+The capability probe was rebuilt from the rebased tree (eboot SHA-256
+`829ddacfa0cb688d51913d2ba6cdc3d4c98460f82ae0aa9baf7b2b9b7435aca1`) and run
+`20260926T024716317Z_PPSA99994_ps5vk_0x6ce3120b9d3b` (log SHA-256
+`a2d75c52e7661cd1f4eae429b58447482fdc601ab339c5f1738353958515c185`) was
+verified strictly by `tools/verify_dxvk_probe.py`: API 1.0.0, 22 device
+extensions, 39/62 requested query values met, with the synchronization2,
+transform feedback and imageless framebuffer routes queried explicitly. The
+joined four-axis DXVK matrix has **37/62 ready and 25 blockers**.
+
+## Robustness2 promotion (2026-09-26)
+
+`PS5VK_ROBUSTNESS2_DIAGNOSTIC` is retired. The ordinary profile enumerates
+`VK_EXT_robustness2` with `robustBufferAccess2` and `nullDescriptor`
+(`robustImageAccess2` stays false), and the capability probe reads both
+features through an explicit `VK_EXT_robustness2` route query.
+
+The vertex-input path gained the two behaviours the extension requires. With
+`nullDescriptor` enabled, `vkCmdBindVertexBuffers` accepts `VK_NULL_HANDLE`
+(offset 0) and the draw binds an all-zero vertex descriptor, which reads zero.
+With `robustBufferAccess2` enabled, a non-indexed draw that runs past the end
+of a vertex buffer is no longer refused: the descriptor's record count bounds
+the fetch and the missing vertices read zero.
+
+A new public-SDK vertex-input witness (`examples/t13_vertex_robustness_witness`)
+draws three scissored columns into a 48x16 RGBA8 target: one from a null vertex
+binding, one with `firstVertex` 3 past a three-vertex buffer, and an in-bounds
+control whose colour comes from the vertex data. The readback runs in its own
+submission.
+
+- Measurement build: eboot SHA-256
+  `45c8b49cbc5ea216976aeff120f0e19433d212e609cbab6598d1160945d36dfc`, run
+  `20260926T014114236Z_PPSA99994_ps5vk_0x6948967a49d2`, log SHA-256
+  `ac6e018e5f7c16632eb4c5fe7c71fb2be63a8283fded0ed5353865ef73f947db`, strict.
+- Ordinary SDK: eboot SHA-256
+  `78322cf1055ee67ca85513f52a3b2cba23c1a2beb6b4d788f20b2d732cf1d6d5`, run
+  `20260926T024526733Z_PPSA99994_ps5vk_0x6cc98e68f652`, log SHA-256
+  `1f5ce5cbef3fa394ec7b0fb818d00e635deaa095e0e1eaaed6e3323c8774d28f`, strict:
+  the null and past-end columns read `00000000`, the control `4080bfff`, with
+  no mismatch inside any column.
+
+The compute witness (`examples/t13_robustness2_witness`: out-of-range storage
+and uniform reads, null descriptors) ran again on the ordinary SDK: eboot
+SHA-256 `a3574f338a4bc993712f54e67d6ed79a3f33d702b223f21d37b9a91e1c6e56c1`, run
+`20260926T024516067Z_PPSA99994_ps5vk_0x6cc712bdfdd1`, log SHA-256
+`4566ba7a5e6f95130a2fa85baae9625e8668865680912ad2b42d8f16f3b1cb57`, strict.
+
+The frozen acceptance selection on this tree (eboot
+`279c89ba82a3948c77e4e392b8569093fa7279f150b332daa472a56b241a4bdc`, run
+`20260926T024537975Z_PPSA99994_upstream-cts_0x6ccc2c8a01b5`, log SHA-256
+`44164867a3ad8bf71fe1881506501899c178aec28b3f3e1ef87fa48670e536fb`) passed
+879/879. After rebasing onto the transform feedback promotion it passed again
+on the combined tree (eboot
+`45cd1dd5038215f68b47b94c933a77888ea82190837ebf6e0663a2ece57cd2c7`, run
+`20260926T025257217Z_PPSA99994_upstream-cts_0x6d3270d4ecd8`, log SHA-256
+`cd4673aec15e16d0e4106943adacf17418dad4f5a62a7938636cc4944809c433`).
+
+**Public-ABI capability probe.** On the pre-rebase tree: eboot SHA-256
+`86adde7931b05233d94359dfc90b55be23eb6740a67fdeb443bb05af308a2018`, run
+`20260926T024509592Z_PPSA99994_ps5vk_0x6cc590c2fd6b`, 21 device extensions,
+38/62. On the combined tree: eboot SHA-256
+`35dda92c4b3b455e41a4a35d5214272e941abe6dc4a0180c87e08599566a9e3f`, run
+`20260926T025244554Z_PPSA99994_ps5vk_0x6d2f7e091699`, log SHA-256
+`430896e8ecd132bd7c2dcfa162ff1d015b5891924103042fd6a911a52966f29d`: API 1.0.0, 22 device extensions, 41/62. The DXVK matrix has **39/62
+ready and 23 blockers** (the robustness2 extension row and both feature rows
+on top of transform feedback).
+
+## Memory-requirement, binding and descriptor-template route promotion (2026-09-26)
+
+`PS5VK_DXVK_ROUTES_DIAGNOSTIC` and `PS5VK_DESCRIPTOR_UPDATE_TEMPLATE_DIAGNOSTIC`
+are retired. The ordinary profile enumerates `VK_KHR_get_memory_requirements2`,
+`VK_KHR_dedicated_allocation`, `VK_KHR_bind_memory2` and
+`VK_KHR_descriptor_update_template`. None of them is a DXVK 2.6.2 requirement
+row, so the matrix count is unchanged; DXVK calls all four right after device
+creation.
+
+A bounded public-SDK witness (`examples/dxvk_routes_witness`) drives the four
+routes together: the `*2` requirement queries for a buffer and an image must
+agree exactly with the Vulkan 1.0 queries and report neither a dedicated
+preference nor a requirement; a dedicated buffer and a dedicated image are
+allocated and bound through `vkBindBufferMemory2KHR`/`vkBindImageMemory2KHR`;
+two buffers are bound into one allocation in a single `vkBindBufferMemory2KHR`
+call, the second at a non-zero offset; the descriptor sets are written only
+through `vkUpdateDescriptorSetWithTemplateKHR`; three compute dispatches write
+seeded values into the three targets, each completion bounded by a 300 ms
+fence, and every word and its guard words are compared on the host.
+
+- Measurement build (switches on): eboot SHA-256
+  `6688f6e3734f0e06d78c08f1d37f925685664fdde0efec9c06fc1390a875eea9`, run
+  `20260926T014107501Z_PPSA99994_ps5vk_0x6947050d8575`, log SHA-256
+  `d9f5111591a39a818889dc63ec7bac2828f730044c2c76aa4debebbce555352b`, strict.
+- Ordinary SDK (switches retired): eboot SHA-256
+  `d524cd00a99ffb4502dba022a943a8069585edc732c29cbbe352d0cb2d01a76e`, run
+  `20260926T015628596Z_PPSA99994_ps5vk_0x6a1d7a0105cc`, log SHA-256
+  `9ca88253962e1e1dbd56ec761c5a747f6ff0cf0a60d262b890d5429cbaa73caa`, strict:
+  shared bind offset 768, zero data and guard mismatches in all five
+  dispatch/target results, resources retired cleanly.
+
+The frozen acceptance selection on this tree (eboot
+`cec77a0c8bb9b8b6ad851dd87f60615f98c96ebf64a06ceb2a72508a7bdd2968`, run
+`20260926T015640551Z_PPSA99994_upstream-cts_0x6a2042999648`) passed 879/879.
+
+**Public-ABI capability probe.** Eboot SHA-256
+`f3036d5be089bf10aa0ad9b130c8b56e154a6e680c3e27152de48f39390dad95`, run
+`20260926T015621519Z_PPSA99994_ps5vk_0x6a1bd43a33d7`, log SHA-256
+`780569182278a664dffb21711a01ac39100933bb6e27d5e73169c73c6917a843`: API 1.0.0,
+24 device extensions, 35/62. The DXVK matrix is unchanged at **33/62 ready and
+29 blockers**.
+
+## Render route promotion: dynamic rendering, copy2, maintenance1 (2026-09-26)
+
+`PS5VK_DXVK_RENDER_DIAGNOSTIC` is retired. The ordinary profile enumerates
+`VK_KHR_dynamic_rendering` with its `VK_KHR_depth_stencil_resolve` dependency,
+`VK_KHR_copy_commands2` and `VK_KHR_maintenance1`, and reports
+`dynamicRendering` through an explicit `VK_KHR_dynamic_rendering` route query.
+`VK_EXT_extended_dynamic_state` does not ship: dynamic primitive topology and
+vertex input binding stride are still refused, so it moved onto its own
+measurement switch, `PS5VK_EXTENDED_DYNAMIC_STATE_DIAGNOSTIC`.
+
+The pinned CTS multiview device copies the queried feature chain, so once
+`dynamicRendering` is reported it arrives true with only `VK_KHR_multiview`
+enabled. The first acceptance run of this tree refused that device
+(48 multiview query leaves, `VK_ERROR_FEATURE_NOT_PRESENT`, eboot
+`f9fc0285492d90031e9984435573bb02daafde52cd14c60056c8e2155a97350b`, run
+`20260926T021558452Z_PPSA99994_upstream-cts_0x6b2dda13d14e`). A reported
+`dynamicRendering` without the extension is now accepted and enables nothing,
+because the commands stay unreachable without it; an unreported one is still
+refused. `tests/test_dxvk_dynamic_rendering.c` reproduces the CTS shape.
+
+The public-SDK render witness (the ordinary routes plus the extended dynamic
+state switch, which it uses to toggle cull mode and front face) draws with
+`vkCmdBeginRenderingKHR`, a negative-height viewport, and reads the target back
+with `vkCmdCopyImageToBuffer2KHR`: eboot SHA-256
+`134c43570a7a6a3884e99390e59756c480a082a1eef70475f2c3d904d1b9a8d9`, run
+`20260926T021545840Z_PPSA99994_ps5vk_0x6b2aea5c885d`, log SHA-256
+`df5e46667313dd007425bcc9a04353ce5ed39ff2320b655248a502ec7004f78c`, strict:
+zero full, sub-rectangle and sentinel mismatches, four visible markers,
+digest `2da9cdc5`.
+
+The frozen acceptance selection on the fixed tree (eboot
+`34c3c6ae32d73e8986d569ebd73bb95ae9f014a325ac9d95d023bb676389b4b3`, run
+`20260926T022757688Z_PPSA99994_upstream-cts_0x6bd54f5f311a`, log SHA-256 `3ca3741d1de0debc701d8713eafef6e9c7db2c47cff46336c6e04cd836bbb22c`) passed 879/879.
+
+**Public-ABI capability probe.** Eboot SHA-256
+`a295d0eb7b7e39c79f557865adb0bcda2bbae8ca14587a1962e013f58c467607`, run
+`20260926T021539591Z_PPSA99994_ps5vk_0x6b2975cfcf67`, log SHA-256
+`b455edbd68f6d58a0e18796fa45ffddd837b7d2ba7a149bc8c995e5c917990d2`: API 1.0.0,
+24 device extensions, 36/62. The probe and the render witness predate the
+`vkCreateDevice` fix above, which only admits a reported feature without its
+extension; neither the reporting they measured nor the extension-enabled route
+the witness drove changes. The DXVK matrix has **34/62 ready and 28
+blockers**.
+
+## Driver-maintained HOST_COHERENT memory type promotion (2026-09-26)
+
+`PS5VK_HOST_COHERENT_DIAGNOSTIC` is retired. The PS5 profile now reports a
+second memory type: type 0 is unchanged and first, and type 1 is the same
+direct memory with `HOST_COHERENT` added. The driver keeps that type coherent
+by construction: before a submission launches it writes back every mapped
+coherent range from the CPU caches, and after it observes the completion it
+invalidates them, so no stale CPU line survives either boundary.
+
+The public-SDK witness (`examples/coherent_memory_witness`) selects the type
+the way DXVK does (the first `HOST_VISIBLE|HOST_COHERENT` type) and never
+flushes or invalidates it. On the ordinary SDK: eboot SHA-256
+`084ec469ae64d56fd992f86e1981edbedbfabe5c875f2bc112ed5425e5e2491f`, run
+`20260926T015723365Z_PPSA99994_ps5vk_0x6a2a3a916559`, log SHA-256
+`184231a2987ccf8652146e3b3d4d4d3cc0a461a96aabe6abb5731b272b11882c`, strict:
+host-to-GPU (C1), GPU-to-host (C2) and a mixed host/GPU round trip (C3) each
+had zero mismatches and zero stale words over 4096 words.
+
+The witness is weaker than the claim in one respect, recorded here. Its
+negative control repeats the traffic on the non-coherent type 0 without any
+flush or invalidate, and it did not observe staleness either
+(`verdict=no-stale-observed`, zero unmaintained mismatches). The underlying
+`0x0c` direct-memory mapping may itself be coherent for these access patterns,
+so the driver's writeback and invalidation may be redundant on this hardware.
+They are still correct, and they are what makes the reported property hold
+independently of that mapping. The positive cases C1-C3 prove the observable
+contract.
+
+The frozen acceptance selection on this tree, with the second memory type
+reported (eboot
+`f6e3f85fafcbc7e7b226c869f13ff80cce9fae18395cacd6f376b262491ab3f8`, run
+`20260926T015735877Z_PPSA99994_upstream-cts_0x6a2d245b4043`, log SHA-256
+`7c38bf186ffcf86ad7f83839c204ddd1bb86c47aeab27663e5f1420c208435da`), passed
+879/879. The leaves earlier kept as diagnostics because they need a
+`HOST_COHERENT` type (for example the `host-coherent-memory-gap` Amber leaf and
+`uniform_8_to_8.stress_test`) are not re-measured here; the dated sections
+above describe the profile before this change. The capability probe is not
+re-measured either: the change adds no device extension and no DXVK
+requirement row.
+
+## Combined evidence for the robustness2, routes, render and coherent promotions (2026-09-26)
+
+The four promotions above (robustness2; memory requirements 2, dedicated
+allocation, bind memory 2 and descriptor update templates; dynamic rendering,
+copy commands 2 and maintenance1; the host-coherent memory type) landed as one
+stack on top of the imageless framebuffer promotion. Each family's own witness
+and probe runs are recorded in its section; the counts quoted there describe
+the tree each was first measured on. One capability probe and one acceptance
+run measured the whole stack.
+
+**Public-ABI capability probe.** Eboot SHA-256
+`ac46bfca58296f3d3876a7fc376f9d3f968d901a525141addf1ace6a7b06bdfd`, run
+`20260926T031405453Z_PPSA99994_ps5vk_0x6e59b86caee4`, log SHA-256
+`ae0152c4d8f082d5e8d961ab6c405b6e50afdbd408373b18394dc1d1c83644fe`: API 1.0.0,
+31 device extensions, 43/62, with the synchronization2, transform feedback,
+imageless framebuffer, robustness2 and dynamic rendering routes queried
+explicitly.
+
+The frozen acceptance selection on the same tree, with the second
+(host-coherent) memory type reported (eboot
+`10a1859338b791e9f2e220095e3e78c14cd1657845c3acd7c3c39e3527f61daf`, run
+`20260926T031417276Z_PPSA99994_upstream-cts_0x6e5c79244671`, log SHA-256
+`0aeda568b439f700e2079b58b138e62b2ef02b4d0fdaef57c5e5aeb818b106d6`), passed
+879/879.
+
+The DXVK matrix has **41/62 ready and 21 blockers**;
+`tools/check_dxvk_backlog.py --check` reports 40 implementation-ready original
+blockers and 40 profile-satisfied ones.
+
+## Descriptor set capacity: 1024 descriptors in one set (2026-09-26)
+
+Descriptor sets are sized from their layout, and per-draw and per-dispatch
+tables from the compiled program, up to `PS5VK_MAX_DESCRIPTORS = 1024` records
+per set. The public-SDK capacity witness
+(`tools/build_dxvk_descriptor_capacity_witness.py --variant capacity`, strict
+verification in `tools/run_dxvk_descriptor_capacity_witness.py`) uploads 1024
+distinct one-texel images and reads them through constant indices:
+
+- a compute set of exactly 1024 descriptors, `SAMPLED_IMAGE[1023]` plus the
+  output buffer, compared word for word with the oracle and a guard word;
+- a fragment-stage set of `SAMPLED_IMAGE[1024]`, one image per pixel of a
+  32x32 target, read back and compared with the same oracle.
+
+| Eboot SHA-256 | Run | Result |
+|---|---|---|
+| `72a80e2fdfb459b00094e4296d19eda0493f1abf444641814aad8a964067d92c` | `20260926T015917366Z_PPSA99994_ps5vk_0x6a44c544427e` | strict pass, lifecycle clean |
+| same | `20260926T015926506Z_PPSA99994_ps5vk_0x6a46e601675f` | strict pass, lifecycle clean |
+
+The witness now also reads a compute set of `UNIFORM_TEXEL_BUFFER[1023]` plus
+the output buffer (1023 `R32_UINT` views over one buffer), the other member of
+the sampled-image accounting class. The payloads below were built from this
+change combined with the pinned compiler update, with every diagnostic switch
+off:
+
+| Payload | Eboot SHA-256 | Run | Result |
+|---|---|---|---|
+| capacity witness with the texel pass | `a916407697953b160bdca0d1e20350e68943bc48deb2136971a1cc3b00a2e1d2` | `20260926T022320430Z_PPSA99994_ps5vk_0x6b94c1989266` | strict pass (sampled images, texel buffers, fragment set) |
+| dynamic-offset witness | `ede9e604f8a3c97f8fa65a23e9fa52730c63aa2aed2642ecea9bb63b52ea7dd9` | `20260926T022328018Z_PPSA99994_ps5vk_0x6b9685d87ab5` | strict pass |
+| DXVK capability probe | `c0c4cb0796d408cdb77c270837e34f7cf83bc08fc4d7c7fffaa75f064c8e9764` | `20260926T022336442Z_PPSA99994_ps5vk_0x6b987c0f2190` | `tools/verify_dxvk_probe.py` strict: API 1.0.0, 17 device extensions, 34/62 requested values met; source log SHA-256 `065c2076dbea14bed1d5cd466166ece2e655df2a78bbc6ad0577e1e7117670c1` |
+| public consumer resource ABI | `78a27440964e875e3150fd1c0632d2d38268995a270aa96c0aba96e2a6754e40` | `20260926T022342642Z_PPSA99994_ps5vk_0x6b99ed9aa59c` | strict pass, report hash `7f34799b` |
+| canonical acceptance | `d83f7f91c7b7da2c4b89ae2bfb6ab85a2051e61c59c4e22acfeb9dcea805763d` | `20260926T022355269Z_PPSA99994_upstream-cts_0x6b9cde32da43` | 879/879 |
+
+On this evidence the graphics profile
+reports `maxPerStageDescriptorSampledImages`, `maxDescriptorSetSampledImages`
+and `maxPerStageResources` as 1024, and the Vulkan 1.1 `maxPerSetDescriptors`
+contract row is satisfied. Samplers, storage and uniform buffers, and dynamic
+buffers keep their earlier qualified values; storage images and input
+attachments stay blocked.
+
+## Extended dynamic state promotion, with fans and adjacency (2026-09-26)
+
+`PS5VK_EXTENDED_DYNAMIC_STATE_DIAGNOSTIC` is retired and
+`VK_EXT_extended_dynamic_state` ships with every state, including the two it
+was held back for:
+
+- **Dynamic vertex input binding stride.** The vertex program is compiled with
+  stride 0, which disables the compiler's only stride-dependent rewrites, and
+  the draw writes the stride named through `vkCmdBindVertexBuffers2EXT` into the
+  vertex descriptor; the draw refuses a stride below the attributes' extent. A
+  host contract (`tests/test_runtime_graphics_compiler.c`) shows that stride 0,
+  the extent and a wider stride compile to identical machine code, while a
+  stride below the extent does not (the control that the comparison can see a
+  stride dependence).
+- **Dynamic primitive topology.** Without `dynamicPrimitiveTopologyUnrestricted`
+  the topology may change within its class, so a pipeline declaring it is also
+  built, at creation, for every other member the profile draws (at most four
+  extra builds, owned and destroyed with it), and the draw records the build for
+  the topology the command buffer set.
+
+Triangle fans (DI type 5) and the four adjacency topologies (DI types 10-13)
+were refused even as static state; they now resolve statically and
+dynamically. Triangle adjacency draws without a geometry stage (the assembler
+skips the adjacent vertices) and feeds a `triangles_adjacency` geometry stage
+six vertices. Line topologies, with or without adjacency, still require a
+geometry stage, as plain lines already did. Primitive restart is admitted on
+fans and adjacency strips as well as strips.
+
+The public-SDK dynamic-state witness (`examples/dxvk_eds_witness`) draws eight
+16x16 columns through two pipelines with dynamic topology and stride over a
+buffer whose unused bytes are 0xAB: list, strip, list at stride 24, strip at
+stride 32, fan, list and strip adjacency without a geometry stage (adjacent
+vertices far away and black), and list adjacency into a geometry stage that
+takes the colour from adjacency vertex 1. Eboot SHA-256
+`70bc2948771c87ea02a8466f5769d43f8c80a3d2efe8ebc3bdccef5997de6ba9`, run
+`20260926T062738292Z_PPSA99994_ps5vk_0x78e9823f81be`, log SHA-256
+`91ca4f9463795560c1276905266f8744bab4265c35e5709563245d032a67396b`, strict:
+every column exactly its own colour. The render witness, now on the ordinary
+SDK (eboot `ddc1d7c7b67f07b80539f405571f30b8ceaffe096ebb5b516f92a379638bc759`,
+run `20260926T062747871Z_PPSA99994_ps5vk_0x78ebbd1c8a4e`, log SHA-256
+`b24c768ed45514acfd7cb263c8fa33f3e9a5a3c8330dd07c9b2c8e8795979fa6`), stayed
+strict with digest `2da9cdc5`.
+
+The frozen acceptance selection on this tree (eboot
+`19ea2e6048829d3cb45a7252741ab5550d9026913479bb119c2943811f0470e4`, run
+`20260926T062809795Z_PPSA99994_upstream-cts_0x78f0d777b0be`, log SHA-256
+`8f088699d2899e81002af8b559e5a02cc0f5d3285d76da42a44e0167f3452964`) passed
+879/879.
+
+**Public-ABI capability probe.** Eboot SHA-256
+`be0fdecaac47411c2c690a5f981a8ec30bee7769a2631276e406f7ba75777025`, run
+`20260926T062757231Z_PPSA99994_ps5vk_0x78edeb11a054`, log SHA-256
+`83557ae2d7a2c3dafd1edd851ea785321e810820bc83cbc667a5e1d3808a7ea6`: API 1.0.0,
+32 device extensions, 43/62. `VK_EXT_extended_dynamic_state` is not a DXVK
+requirement row, so the matrix stays at **41/62 ready and 21 blockers**.

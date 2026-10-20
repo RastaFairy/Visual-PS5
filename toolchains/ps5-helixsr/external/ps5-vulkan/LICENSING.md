@@ -1,0 +1,99 @@
+# Licensing and source provenance
+
+## This fork
+
+Modified by BlackBearReloaded, 2026-09-26 to 2026-09-28. This fork of
+[mpereiraesaa/ps5-vulkan](https://github.com/mpereiraesaa/ps5-vulkan) is maintained by BlackBearReloaded for the
+[PS5 FSR4 port](https://github.com/blackbearreloaded/ps5-fsr4), which uses it
+as a submodule. It adds compute subgroup size control (wave32/wave64), chained
+compute submission with resident code and shared scratch, compute shader code
+prefetch (GL2 and instruction prefetch), fused compute FMAs in the PSBC
+compiler, larger command buffers and the extended compute profile.
+
+These modifications are Copyright (C) 2026 BlackBearReloaded and licensed
+under `GPL-3.0-or-later`. Upstream has not endorsed or validated them.
+
+## Upstream licensing and source provenance
+
+Unless a file states otherwise, the original work in this repository is:
+
+Copyright (C) 2026 Manuel Pereira
+
+It is licensed under the GNU General Public License, version 3 or (at your
+option) any later version (`GPL-3.0-or-later`). The complete license text is in
+[`LICENSE`](LICENSE).
+
+Contributions intentionally submitted to this repository are accepted under
+the same `GPL-3.0-or-later` terms. A contributor must have the right to submit
+their change and must preserve copyright, SPDX and provenance notices from any
+adapted source. This policy does not relicense third-party works that carry
+their own notices.
+
+## PS5 OpenGL provenance
+
+The project may adapt compatible GPU implementation work from
+[`blackbearreloaded/ps5-opengl`](https://github.com/blackbearreloaded/ps5-opengl),
+which is also licensed under `GPL-3.0-or-later`. The reference revision used by
+the current audit is:
+
+- repository: `https://github.com/blackbearreloaded/ps5-opengl`
+- commit: `7f9bfabdddb187a11e4401058eba8c9e55194d0a`
+- author/project lead: BlackBearReloaded
+
+Current derived or adapted files are:
+
+| ps5-vulkan file | ps5-opengl reference | Relationship |
+| --- | --- | --- |
+| `native/runtime_shader.c` | `src/platform/ps5_agc_package.c` | AGC compiler-metadata/package ABI adaptation |
+| `src/color_detile.c` | `src/gallium/ps5/ps5_screen.c`, `ps5_tiled_color_offset` | General 1/2/4/8/16-byte `SW_64K_R_X` tiled-address equations and surface sizing |
+| `src/vk_sampler.c` | `src/gallium/ps5/ps5_screen.c`, `ps5_texture_descriptor_wrap`, `ps5_texture_descriptor_lod_bias` and fixed-border handling | GFX10.3 repeat, mirrored-repeat, edge/border clamp, signed 8.8 LOD-bias and fixed border-color encodings |
+| `src/texture_format.c`, `src/texture_format.h` | `src/gallium/ps5/ps5_screen.c`, `ps5_texture_descriptor_format`, `ps5_texture_descriptor_swizzle` and `ps5_texture_format_size` | GFX10.3 sampled-image format words, component selectors and texel sizes; public rows require ps5-vulkan-owned typed shader and readback evidence. The `A8B8G8R8_*_PACK32` rows reuse those words and selectors because the pinned Khronos registry's packed-component order makes them byte-identical to the corresponding `R8G8B8A8_*` rows (provenance recorded per row). The implemented-versus-witnessed capability model itself is original ps5-vulkan design |
+| `src/texture_descriptor.c` | `src/gallium/ps5/ps5_screen.c`, texture resource descriptor construction | GFX10.3 1D, 1D-array, 2D, 2D-array, cube and 3D resource-type and dimension-field adaptation; ps5-vulkan supplies the Vulkan image/view validation and hardware readback gates |
+| `src/texture_layout.c` | `src/gallium/ps5/ps5_screen.c`, linear sampled-resource allocation | Descending, 256-byte-aligned GFX1013 mip-level packing and complete-chain-per-layer layout; ps5-vulkan supplies Vulkan mip bounds, transfer planning and memory-overflow gates |
+| `native/runtime_graphics_compiler.c`, `native/runtime_shader.c`, `native/runtime_draw_abi.h`, `native/draw_emit_ps5.c`, `src/graphics_formats.h` | `src/gallium/ps5/ps5_screen.c`, bounded PSBC texture-descriptor ABI, `ps5_integer_vertex_format` and `ps5_packed_vertex_format` | Vulkan-to-PSBC GFX1013 vertex formats plus the exact fragment set-0 combined-sampler metadata/user-SGPR bridge; unsupported descriptor profiles fail closed and explicit mip LOD has public-SDK-linked hardware readback |
+
+## Public AGC and logger support
+
+The SDK builder fetches
+[mpereiraesaa/ps5-agc-gears](https://github.com/mpereiraesaa/ps5-agc-gears)
+at commit `1ae1f9182abd2770c131b97419034fb85173c2dc` into ignored
+`third_party/ps5-agc-gears`. Its source-level AGC helpers and
+`native/ps5log/ps5log.c`, `ps5log_ps5_net.c` and headers are built into the
+native Vulkan archive. The pinned logger header is byte-identical to this
+repository's existing `cts/ps5log.h`. The dependency retains its GPL-3.0-or-later
+license and original copyright notices; distributed linked binaries require
+its corresponding source as part of the GPL distribution.
+
+## BC block decoder
+
+[`third_party/bcdec/bcdec.h`](third_party/bcdec/bcdec.h) is vendored from
+Sergii Kudlai's `iOrange/bcdec` repository at commit
+[`80859ed3b7afb1c527a2a99d70c61457bea72d0c`](https://github.com/iOrange/bcdec/commit/80859ed3b7afb1c527a2a99d70c61457bea72d0c).
+Only trailing whitespace was removed from the pinned header. It is used only by
+the CPU-side diagnostic oracle for BC block decoding. This project selects the
+upstream MIT license, whose complete notice is preserved in
+[`third_party/bcdec/LICENSE`](third_party/bcdec/LICENSE).
+
+| ps5-vulkan file | upstream source | relationship |
+| --- | --- | --- |
+| `third_party/bcdec/bcdec.h` | `iOrange/bcdec`, pinned commit above | MIT-licensed decoder used by the diagnostic CPU oracle; trailing whitespace removed |
+| `src/bc_blit_decode.h` | `iOrange/bcdec`, pinned commit above | Original format dispatch, decode normalization, sRGB conversion and RGBA8 target quantization around the decoder API |
+
+Every future direct adaptation must add an SPDX identifier and identify its
+source file and pinned revision in the file header and this table. Ideas and
+observations that lead to an independent implementation should still be cited
+when the reference materially influenced the design.
+
+## Dependencies and distributed artifacts
+
+Mesa/ACO, Vulkan-Headers, PSBC and the other pinned source dependencies retain
+their own compatible licenses and notices. Generated SDK distributions include
+this GPL license. Third-party source checkouts and generated artifacts are not
+committed to this repository; individually vendored source files retain their
+upstream provenance and license notices as documented above.
+
+`libps5vk.a` is linked statically by the current native application workflow.
+Anyone distributing a linked executable must satisfy GPLv3 corresponding-source
+requirements for the combined work. Link-time import facades describe console
+system-library symbols; proprietary console modules themselves are neither
+copied into nor distributed by this project.

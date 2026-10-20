@@ -1,0 +1,672 @@
+#include "vk_pipeline.h"
+#include <assert.h>
+#include <stdio.h>
+#include <string.h>
+
+/* Structural state-machine fixtures, not valid executable GPU programs. Real
+ * LLPC artifact integration is a separate compiler-dependent test. */
+static uint32_t module_a[] = {0x07230203, 0x10000, 0, 2, 0,
+    (5u << 16) | 15, 5, 1, 0x6e69616d, 0, (6u << 16) | 16, 1, 17, 64, 1, 1};
+static uint32_t module_b[] = {0x07230203, 0x10000, 1, 2, 0,
+    (5u << 16) | 15, 5, 1, 0x6e69616d, 0, (6u << 16) | 16, 1, 17, 64, 1, 1};
+static uint32_t code_a[] = {0x11111111}, code_b[] = {0x22222222};
+static struct ps5vk_compiled_program fixture(const uint32_t *module, const uint32_t *code)
+{
+    return (struct ps5vk_compiled_program){.spirv = module, .spirv_words = 16,
+        .code = code, .code_words = 1, .entry = "main", .gfx = 1013,
+        .local_size = {64, 1, 1}, .wave_size = 32, .vgprs = 3, .sgprs = 10,
+        .float_mode = 192, .mem_ordered = 1, .user_sgprs = 3, .tg_size = 1,
+        .tgid = {1, 1, 1}, .descriptor_set_mask=1,.descriptor_set_sgpr={2},
+        .descriptor_count = 1, .descriptors = {{0, 0, 0, 0,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER}}};
+}
+static struct ps5vk_compiled_program legacy_fixture(const uint32_t *module, const uint32_t *code)
+{
+    struct ps5vk_compiled_program p=fixture(module,code);
+    p.user_sgprs=2;p.descriptor_set_sgpr[0]=1;
+    return p;
+}
+static VkShaderModule shader(VkDevice d, const uint32_t *words)
+{
+    VkShaderModuleCreateInfo info = {.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+        .codeSize = sizeof(module_a), .pCode = words}; VkShaderModule m;
+    assert(vkCreateShaderModule(d, &info, NULL, &m) == VK_SUCCESS);
+    return m;
+}
+static VkPipelineLayout layout(VkDevice d)
+{
+    VkDescriptorSetLayoutBinding binding = {.binding = 0, .descriptorCount = 1,
+        .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT};
+    VkDescriptorSetLayoutCreateInfo info = {.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+        .bindingCount = 1, .pBindings = &binding}; VkDescriptorSetLayout set;
+    assert(vkCreateDescriptorSetLayout(d, &info, NULL, &set) == VK_SUCCESS);
+    VkPipelineLayoutCreateInfo pi = {.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+        .setLayoutCount = 1, .pSetLayouts = &set}; VkPipelineLayout result;
+    assert(vkCreatePipelineLayout(d, &pi, NULL, &result) == VK_SUCCESS);
+    vkDestroyDescriptorSetLayout(d, set, NULL); return result;
+}
+static VkComputePipelineCreateInfo info(VkShaderModule m, VkPipelineLayout l)
+{
+    return (VkComputePipelineCreateInfo){.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
+        .layout = l, .stage = {.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+        .stage = VK_SHADER_STAGE_COMPUTE_BIT, .module = m, .pName = "main"}};
+}
+/* A program whose descriptor sits past the historical 128-dword table: the
+ * last storage buffer of a 1024-descriptor set (1023 sampled images first). */
+static void full_set_table_offsets(void)
+{
+    static struct ps5vk_compiled_program p;
+    p = fixture(module_a, code_a);
+    p.descriptors[0] = (struct ps5vk_program_descriptor){0, 1, 0, (PS5VK_MAX_DESCRIPTORS - 1) * 8u,
+        VK_DESCRIPTOR_TYPE_STORAGE_BUFFER};
+    struct ps5vk_program_library lib = {&p, 1};
+    struct VkDevice_T d = {.compiler = {&lib, ps5vk_program_resolve}, .graphics_enabled = VK_TRUE};
+    VkDescriptorSetLayoutBinding bindings[2] = {
+        {0, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, PS5VK_MAX_DESCRIPTORS - 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL},
+        {1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL}};
+    VkDescriptorSetLayoutCreateInfo si = {.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+        .bindingCount = 2, .pBindings = bindings}; VkDescriptorSetLayout set;
+    assert(vkCreateDescriptorSetLayout(&d, &si, NULL, &set) == VK_SUCCESS);
+    VkPipelineLayoutCreateInfo pi = {.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+        .setLayoutCount = 1, .pSetLayouts = &set}; VkPipelineLayout pl;
+    assert(vkCreatePipelineLayout(&d, &pi, NULL, &pl) == VK_SUCCESS);
+    VkShaderModule m = shader(&d, module_a);
+    VkComputePipelineCreateInfo ci = info(m, pl);
+    VkPipeline pipeline = VK_NULL_HANDLE;
+    assert(vkCreateComputePipelines(&d, VK_NULL_HANDLE, 1, &ci, NULL, &pipeline) == VK_SUCCESS);
+    assert(pipeline->program.descriptors[0].table_dword == (PS5VK_MAX_DESCRIPTORS - 1) * 8u);
+    vkDestroyPipeline(&d, pipeline, NULL);
+    vkDestroyShaderModule(&d, m, NULL); vkDestroyPipelineLayout(&d, pl, NULL);
+    vkDestroyDescriptorSetLayout(&d, set, NULL);
+}
+static void lifecycle(void)
+{
+    struct ps5vk_compiled_program programs[] = {fixture(module_a, code_a), fixture(module_b, code_b)};
+    struct ps5vk_program_library lib = {programs, 2};
+    struct VkDevice_T d = {.compiler = {&lib, ps5vk_program_resolve}};
+    VkShaderModule a = shader(&d, module_a), b = shader(&d, module_b);
+    module_a[2] = 99; assert(a->words[2] == 0); module_a[2] = 0; /* Owned module bytes. */
+    VkPipelineLayout l = layout(&d);
+    VkComputePipelineCreateInfo infos[] = {info(a, l), info(b, l)}; VkPipeline pipelines[2];
+    assert(vkCreateComputePipelines(&d, VK_NULL_HANDLE, 2, infos, NULL, pipelines) == VK_SUCCESS);
+    assert(pipelines[0]->code[0] != pipelines[1]->code[0]);
+    assert(pipelines[0]->program.code == pipelines[0]->code && !pipelines[0]->program.spirv);
+    code_a[0] = 0; assert(pipelines[0]->code[0] == 0x11111111); code_a[0] = 0x11111111;
+    vkDestroyShaderModule(&d, a, NULL); vkDestroyShaderModule(&d, b, NULL);
+    vkDestroyPipelineLayout(&d, l, NULL);
+    assert(pipelines[0]->sets[0].binding[0].count == 1 && d.pipeline_objects == 2);
+    pipelines[0]->pending = 1; vkDestroyPipeline(&d, pipelines[0], NULL);
+    assert(d.pipeline_objects == 2 && d.lifetime_errors == 1);
+    pipelines[0]->pending = 0;
+    vkDestroyPipeline(&d, pipelines[0], NULL); vkDestroyPipeline(&d, pipelines[1], NULL);
+    assert(!d.pipeline_objects && !d.descriptor_objects);
+}
+static void legacy_offline_abi(void)
+{
+    struct ps5vk_compiled_program p=legacy_fixture(module_a,code_a);
+    struct ps5vk_program_library lib={&p,1};
+    struct VkDevice_T d={.compiler={&lib,ps5vk_program_resolve}};
+    VkShaderModule m=shader(&d,module_a);VkPipelineLayout l=layout(&d);
+    VkComputePipelineCreateInfo ci=info(m,l);VkPipeline pipeline;
+    assert(vkCreateComputePipelines(&d,VK_NULL_HANDLE,1,&ci,NULL,&pipeline)==VK_SUCCESS);
+    vkDestroyPipeline(&d,pipeline,NULL);
+    p.descriptor_set_sgpr[0]=2;
+    assert(vkCreateComputePipelines(&d,VK_NULL_HANDLE,1,&ci,NULL,&pipeline)!=VK_SUCCESS);
+    vkDestroyShaderModule(&d,m,NULL);vkDestroyPipelineLayout(&d,l,NULL);
+}
+static void dispatch_base_flag(void)
+{
+    struct ps5vk_compiled_program p = fixture(module_a, code_a);
+    struct ps5vk_program_library lib = {&p, 1};
+    struct VkDevice_T d = {.compiler = {&lib, ps5vk_program_resolve}};
+    VkShaderModule m = shader(&d, module_a);
+    VkPipelineLayout l = layout(&d);
+    VkComputePipelineCreateInfo ci = info(m, l);
+    ci.flags = VK_PIPELINE_CREATE_DISPATCH_BASE_BIT_KHR;
+    VkPipeline pipeline = VK_NULL_HANDLE;
+    assert(vkCreateComputePipelines(&d, VK_NULL_HANDLE, 1, &ci, NULL,
+                                    &pipeline) == VK_ERROR_FEATURE_NOT_PRESENT);
+    assert(!pipeline);
+    d.device_group_extension_enabled = VK_TRUE;
+    assert(vkCreateComputePipelines(&d, VK_NULL_HANDLE, 1, &ci, NULL,
+                                    &pipeline) == VK_SUCCESS);
+    assert(pipeline->dispatch_base_enabled);
+    vkDestroyPipeline(&d, pipeline, NULL);
+    ci.flags |= VK_PIPELINE_CREATE_ALLOW_DERIVATIVES_BIT;
+    assert(vkCreateComputePipelines(&d, VK_NULL_HANDLE, 1, &ci, NULL,
+                                    &pipeline) != VK_SUCCESS);
+    assert(!pipeline);
+    vkDestroyPipelineLayout(&d, l, NULL);
+    vkDestroyShaderModule(&d, m, NULL);
+    assert(!d.pipeline_objects && !d.descriptor_objects);
+}
+static void negative(void)
+{
+    struct ps5vk_compiled_program p = fixture(module_a, code_a);
+    struct ps5vk_program_library lib = {&p, 1}; struct VkDevice_T d = {.compiler = {&lib, ps5vk_program_resolve}};
+    VkShaderModule a = shader(&d, module_a), b = shader(&d, module_b); VkPipelineLayout l = layout(&d);
+    VkComputePipelineCreateInfo infos[] = {info(a, l), info(b, l)}; VkPipeline out[2];
+    assert(vkCreateComputePipelines(&d, VK_NULL_HANDLE, 2, infos, NULL, out) == VK_ERROR_UNKNOWN);
+    assert(out[0] && !out[1]); vkDestroyPipeline(&d, out[0], NULL);
+    p.descriptors[0].binding = 1;
+    assert(vkCreateComputePipelines(&d, VK_NULL_HANDLE, 1, infos, NULL, out) != VK_SUCCESS && !out[0]);
+    p.descriptors[0].binding = 0; p.local_size[0] = 32;
+    assert(vkCreateComputePipelines(&d, VK_NULL_HANDLE, 1, infos, NULL, out) != VK_SUCCESS);
+    p.local_size[0] = 64; p.gfx = 1030;
+    assert(vkCreateComputePipelines(&d, VK_NULL_HANDLE, 1, infos, NULL, out) != VK_SUCCESS);
+    p.gfx = 1013; infos[0].stage.pName = "other";
+    assert(vkCreateComputePipelines(&d, VK_NULL_HANDLE, 1, infos, NULL, out) != VK_SUCCESS);
+    infos[0].stage.pName = "main"; d.compiler.resolve = NULL;
+    assert(vkCreateComputePipelines(&d, VK_NULL_HANDLE, 1, infos, NULL, out) == VK_ERROR_UNKNOWN);
+    VkShaderModuleCreateInfo bad = {.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+        .codeSize = sizeof(module_a), .pCode = module_a}; VkShaderModule rejected;
+    module_a[5] = 15;
+    assert(vkCreateShaderModule(&d, &bad, NULL, &rejected) != VK_SUCCESS && !rejected);
+    module_a[5] = (5u << 16) | 15;
+    vkDestroyShaderModule(&d, a, NULL); vkDestroyShaderModule(&d, b, NULL); vkDestroyPipelineLayout(&d, l, NULL);
+    assert(!d.pipeline_objects && !d.descriptor_objects);
+}
+static void graphics_entries(void)
+{
+    /* Structural fixture: two different execution models may share a name. */
+    uint32_t words[] = {0x07230203, 0x10000, 0, 3, 0,
+        (5u << 16) | 15, 0, 1, 0x6e69616d, 0,
+        (5u << 16) | 15, 4, 2, 0x6e69616d, 0};
+    struct VkDevice_T d = {0};
+    VkShaderModuleCreateInfo info = {.sType=VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+        .codeSize=sizeof(words), .pCode=words};
+    VkShaderModule module; uint32_t id;
+    assert(vkCreateShaderModule(&d, &info, NULL, &module) == VK_SUCCESS);
+    assert(ps5vk_shader_entry(module, VK_SHADER_STAGE_VERTEX_BIT, "main", &id) && id == 1);
+    assert(ps5vk_shader_entry(module, VK_SHADER_STAGE_FRAGMENT_BIT, "main", &id) && id == 2);
+    assert(!ps5vk_shader_entry(module, VK_SHADER_STAGE_COMPUTE_BIT, "main", &id) && !id);
+    assert(!ps5vk_shader_entry(module, VK_SHADER_STAGE_FRAGMENT_BIT, "other", &id));
+    module->words[11] = 0; /* Duplicate vertex/main is ambiguous. */
+    assert(!ps5vk_shader_entry(module, VK_SHADER_STAGE_VERTEX_BIT, "main", &id));
+    module->words[11] = 4; module->words[12] = 3;
+    assert(!ps5vk_shader_entry(module, VK_SHADER_STAGE_FRAGMENT_BIT, "main", &id));
+    module->words[12] = 2; module->words[14] = 0xffffffff;
+    assert(!ps5vk_shader_entry(module, VK_SHADER_STAGE_FRAGMENT_BIT, "main", &id));
+    vkDestroyShaderModule(&d, module, NULL); assert(!d.pipeline_objects);
+}
+static void t08_capability_gates(void)
+{
+    const struct { uint32_t capability, required; } cases[] = {
+        {5347u, PS5VK_FEATURE_BUFFER_DEVICE_ADDRESS},
+        {5345u, PS5VK_FEATURE_VULKAN_MEMORY_MODEL},
+        {5346u, PS5VK_FEATURE_VULKAN_MEMORY_MODEL |
+                PS5VK_FEATURE_VULKAN_MEMORY_MODEL_DEVICE_SCOPE},
+    };
+    for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); ++i) {
+        uint32_t words[] = {0x07230203, 0x10000, 0, 2, 0,
+            (2u << 16) | 17, cases[i].capability,
+            (5u << 16) | 15, 5, 1, 0x6e69616d, 0,
+            (6u << 16) | 16, 1, 17, 64, 1, 1};
+        uint32_t code[] = {0x11111111};
+        struct ps5vk_compiled_program p = fixture(words, code);
+        p.spirv_words = sizeof(words) / sizeof(words[0]);
+        struct ps5vk_program_library lib = {&p, 1};
+        struct VkDevice_T d = {.compiler = {&lib, ps5vk_program_resolve}};
+        VkShaderModuleCreateInfo si = {.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+            .codeSize = sizeof(words), .pCode = words};
+        VkShaderModule m = VK_NULL_HANDLE;
+        assert(vkCreateShaderModule(&d, &si, NULL, &m) == VK_SUCCESS);
+        VkPipelineLayout l = layout(&d);
+        VkComputePipelineCreateInfo ci = info(m, l);
+        VkPipeline pipeline = VK_NULL_HANDLE;
+        assert(vkCreateComputePipelines(&d, VK_NULL_HANDLE, 1, &ci, NULL,
+                                        &pipeline) == VK_ERROR_FEATURE_NOT_PRESENT);
+        assert(!pipeline);
+        d.enabled_features = cases[i].required;
+        if (cases[i].capability == 5346u) {
+            d.enabled_features = PS5VK_FEATURE_VULKAN_MEMORY_MODEL_DEVICE_SCOPE;
+            assert(vkCreateComputePipelines(&d, VK_NULL_HANDLE, 1, &ci, NULL,
+                                            &pipeline) == VK_ERROR_FEATURE_NOT_PRESENT);
+            assert(!pipeline);
+            d.enabled_features = cases[i].required;
+        }
+        assert(vkCreateComputePipelines(&d, VK_NULL_HANDLE, 1, &ci, NULL,
+                                        &pipeline) == VK_SUCCESS);
+        vkDestroyPipeline(&d, pipeline, NULL);
+        vkDestroyPipelineLayout(&d, l, NULL);
+        vkDestroyShaderModule(&d, m, NULL);
+        assert(!d.pipeline_objects && !d.descriptor_objects);
+    }
+}
+static void int8_compute_probe_gate(void)
+{
+    uint32_t words[] = {0x07230203, 0x10000, 0, 2, 0,
+        (2u << 16) | 17, 39u, /* Int8 */
+        (5u << 16) | 15, 5, 1, 0x6e69616d, 0,
+        (6u << 16) | 16, 1, 17, 64, 1, 1};
+    struct ps5vk_compiled_program p = fixture(words, code_a);
+    p.spirv_words = sizeof(words) / sizeof(words[0]);
+    struct ps5vk_program_library lib = {&p, 1};
+    struct VkDevice_T d = {.compiler = {&lib, ps5vk_program_resolve}};
+    VkShaderModuleCreateInfo si = {.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+        .codeSize = sizeof(words), .pCode = words};
+    VkShaderModule m = VK_NULL_HANDLE;
+    assert(vkCreateShaderModule(&d, &si, NULL, &m) == VK_SUCCESS);
+    VkPipelineLayout l = layout(&d);
+    VkComputePipelineCreateInfo ci = info(m, l);
+    VkPipeline pipeline = VK_NULL_HANDLE;
+    assert(vkCreateComputePipelines(&d, VK_NULL_HANDLE, 1, &ci, NULL,
+                                    &pipeline) == VK_ERROR_FEATURE_NOT_PRESENT);
+    assert(!pipeline);
+    d.enabled_features = PS5VK_FEATURE_SHADER_INT8_COMPUTE;
+    assert(vkCreateComputePipelines(&d, VK_NULL_HANDLE, 1, &ci, NULL,
+                                    &pipeline) == VK_ERROR_FEATURE_NOT_PRESENT);
+    assert(!pipeline);
+    d.enabled_features = 0;
+    d.platform_features = PS5VK_FEATURE_SHADER_INT8_COMPUTE;
+    assert(vkCreateComputePipelines(&d, VK_NULL_HANDLE, 1, &ci, NULL,
+                                    &pipeline) == VK_SUCCESS);
+    vkDestroyPipeline(&d, pipeline, NULL);
+    vkDestroyPipelineLayout(&d, l, NULL);
+    vkDestroyShaderModule(&d, m, NULL);
+    assert(!d.pipeline_objects && !d.descriptor_objects);
+}
+static void uniform_block_layout_gate(void)
+{
+    /* One Block-decorated Uniform uint[3]. The four-byte stride is legal
+     * only when the logical device enabled standard UBO layout. This is a
+     * structural shader-module contract, so no executable entry is needed. */
+    uint32_t words[] = {
+        0x07230203, 0x00010000, 0, 7, 0,
+        (4u << 16) | 21, 1, 32, 0,             /* uint */
+        (4u << 16) | 43, 1, 2, 3,              /* length = 3 */
+        (4u << 16) | 28, 3, 1, 2,              /* uint[3] */
+        (4u << 16) | 71, 3, 6, 4,              /* ArrayStride 4 */
+        (3u << 16) | 30, 4, 3,                 /* struct { uint[3] } */
+        (5u << 16) | 72, 4, 0, 35, 0,          /* member Offset 0 */
+        (3u << 16) | 71, 4, 2,                 /* Block */
+        (4u << 16) | 32, 5, 2, 4,              /* Uniform pointer */
+        (4u << 16) | 59, 5, 6, 2,              /* Uniform variable */
+    };
+    struct VkDevice_T device = {0};
+    VkShaderModule module = VK_NULL_HANDLE;
+    VkShaderModuleCreateInfo info = {.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+        .codeSize = sizeof(words), .pCode = words};
+    assert(vkCreateShaderModule(&device, &info, NULL, &module) != VK_SUCCESS && !module);
+    device.enabled_features = PS5VK_FEATURE_UNIFORM_BUFFER_STANDARD_LAYOUT;
+    assert(vkCreateShaderModule(&device, &info, NULL, &module) == VK_SUCCESS);
+    vkDestroyShaderModule(&device, module, NULL);
+    assert(!device.pipeline_objects);
+    words[5 + 4 + 4 + 4 + 3] = 1; /* ArrayStride 1: invalid even when enabled. */
+    assert(vkCreateShaderModule(&device, &info, NULL, &module) != VK_SUCCESS && !module);
+    words[5 + 4 + 4 + 4 + 3] = 16; /* Extended layout is valid without the bit. */
+    device.enabled_features = 0;
+    assert(vkCreateShaderModule(&device, &info, NULL, &module) == VK_SUCCESS);
+    vkDestroyShaderModule(&device, module, NULL);
+    assert(!device.pipeline_objects);
+}
+static void unadvertised_subgroup_gate(void)
+{
+    struct ps5vk_compiled_program p = fixture(module_a, code_a);
+    struct ps5vk_program_library lib = {&p, 1};
+    struct VkDevice_T device = {.compiler = {&lib, ps5vk_program_resolve}};
+    VkPipelineLayout pipeline_layout = layout(&device);
+    VkShaderModule module = shader(&device, module_a);
+    VkComputePipelineCreateInfo create = info(module, pipeline_layout);
+    VkPipeline pipeline = VK_NULL_HANDLE;
+    assert(vkCreateComputePipelines(&device, VK_NULL_HANDLE, 1, &create,
+                                    NULL, &pipeline) == VK_SUCCESS);
+    vkDestroyPipeline(&device, pipeline, NULL);
+    vkDestroyShaderModule(&device, module, NULL);
+
+    /* GroupNonUniform capability on an otherwise ordinary compute fixture. */
+    uint32_t capability[18];
+    memcpy(capability, module_a, 5 * sizeof(uint32_t));
+    capability[5] = (2u << 16) | 17u;
+    capability[6] = 61u;
+    memcpy(capability + 7, module_a + 5, 11 * sizeof(uint32_t));
+    VkShaderModuleCreateInfo shader_info = {
+        .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+        .codeSize = sizeof(capability), .pCode = capability};
+    module = VK_NULL_HANDLE;
+    assert(vkCreateShaderModule(&device, &shader_info, NULL, &module) ==
+           VK_ERROR_FEATURE_NOT_PRESENT && !module);
+
+    /* OpGroupNonUniformBroadcast without its required capability still fails. */
+    uint32_t operation[21];
+    memcpy(operation, module_a, sizeof(module_a));
+    operation[16] = (5u << 16) | 337u;
+    operation[17] = operation[18] = operation[19] = operation[20] = 1u;
+    shader_info.codeSize = sizeof(operation);
+    shader_info.pCode = operation;
+    assert(vkCreateShaderModule(&device, &shader_info, NULL, &module) ==
+           VK_ERROR_FEATURE_NOT_PRESENT && !module);
+    vkDestroyPipelineLayout(&device, pipeline_layout, NULL);
+    assert(!device.pipeline_objects && !device.descriptor_objects);
+}
+static void diagnostic_compute_broadcast_gate(void)
+{
+    uint32_t words[25];
+    memcpy(words, module_a, 5 * sizeof(uint32_t));
+    words[5] = words[7] = (2u << 16) | 17u; /* OpCapability */
+    words[6] = 61u; /* GroupNonUniform */
+    words[8] = 64u; /* GroupNonUniformBallot */
+    memcpy(words + 9, module_a + 5, 11 * sizeof(uint32_t));
+    words[20] = (5u << 16) | 337u; /* OpGroupNonUniformBroadcast */
+    words[21] = words[22] = words[23] = words[24] = 1u;
+    uint32_t code[] = {0x11111111};
+    struct ps5vk_compiled_program program = fixture(words, code);
+    program.spirv_words = sizeof(words) / sizeof(words[0]);
+    struct ps5vk_program_library library = {&program, 1};
+    struct VkDevice_T device = {.compiler = {&library, ps5vk_program_resolve}};
+    VkShaderModuleCreateInfo shader_info = {
+        .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+        .codeSize = sizeof(words), .pCode = words};
+    VkShaderModule module = VK_NULL_HANDLE;
+    assert(vkCreateShaderModule(&device, &shader_info, NULL, &module) ==
+           VK_ERROR_FEATURE_NOT_PRESENT && !module);
+    device.platform_features = PS5VK_FEATURE_SUBGROUP_BROADCAST_COMPUTE;
+    assert(vkCreateShaderModule(&device, &shader_info, NULL, &module) == VK_SUCCESS);
+    VkPipelineLayout pipeline_layout = layout(&device);
+    VkComputePipelineCreateInfo create = info(module, pipeline_layout);
+    VkPipeline pipeline = VK_NULL_HANDLE;
+    assert(vkCreateComputePipelines(&device, VK_NULL_HANDLE, 1, &create,
+                                    NULL, &pipeline) == VK_SUCCESS);
+    vkDestroyPipeline(&device, pipeline, NULL);
+    vkDestroyShaderModule(&device, module, NULL);
+
+    words[20] = (5u << 16) | 345u; /* Shuffle is outside the measured slice. */
+    assert(vkCreateShaderModule(&device, &shader_info, NULL, &module) ==
+           VK_ERROR_FEATURE_NOT_PRESENT && !module);
+    words[20] = (5u << 16) | 337u;
+    words[8] = 62u; /* Broadcast needs the Ballot capability. */
+    assert(vkCreateShaderModule(&device, &shader_info, NULL, &module) ==
+           VK_ERROR_FEATURE_NOT_PRESENT && !module);
+    words[8] = 64u;
+    words[10] = 0u; /* Vertex is outside the measured compute route. */
+    assert(vkCreateShaderModule(&device, &shader_info, NULL, &module) ==
+           VK_ERROR_FEATURE_NOT_PRESENT && !module);
+    vkDestroyPipelineLayout(&device, pipeline_layout, NULL);
+    assert(!device.pipeline_objects && !device.descriptor_objects);
+}
+static void diagnostic_compute_basic_gate(void)
+{
+    /* GroupNonUniform + OpGroupNonUniformElect, compute only. */
+    uint32_t words[22];
+    memcpy(words, module_a, 5 * sizeof(uint32_t));
+    words[5] = (2u << 16) | 17u; /* OpCapability */
+    words[6] = 61u;              /* GroupNonUniform */
+    memcpy(words + 7, module_a + 5, 11 * sizeof(uint32_t));
+    words[18] = (4u << 16) | 333u; /* OpGroupNonUniformElect */
+    words[19] = words[20] = words[21] = 1u;
+    uint32_t code[] = {0x11111111};
+    struct ps5vk_compiled_program program = fixture(words, code);
+    program.spirv_words = sizeof(words) / sizeof(words[0]);
+    struct ps5vk_program_library library = {&program, 1};
+    struct VkPhysicalDevice_T physical = {0};
+    struct VkDevice_T device = {.compiler = {&library, ps5vk_program_resolve},
+                                .physical = &physical};
+    VkShaderModuleCreateInfo shader_info = {
+        .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+        .codeSize = sizeof(words), .pCode = words};
+    VkShaderModule module = VK_NULL_HANDLE;
+    assert(vkCreateShaderModule(&device, &shader_info, NULL, &module) ==
+           VK_ERROR_FEATURE_NOT_PRESENT && !module);
+    /* The Broadcast diagnostic does not admit Elect. */
+    device.platform_features = PS5VK_FEATURE_SUBGROUP_BROADCAST_COMPUTE;
+    assert(vkCreateShaderModule(&device, &shader_info, NULL, &module) ==
+           VK_ERROR_FEATURE_NOT_PRESENT && !module);
+    device.platform_features = 0;
+    physical.platform.supported_features_t09 = PS5VK_T09_FEATURE_SUBGROUP_BASIC_COMPUTE;
+    assert(vkCreateShaderModule(&device, &shader_info, NULL, &module) == VK_SUCCESS);
+    VkPipelineLayout pipeline_layout = layout(&device);
+    VkComputePipelineCreateInfo create = info(module, pipeline_layout);
+    VkPipeline pipeline = VK_NULL_HANDLE;
+    assert(vkCreateComputePipelines(&device, VK_NULL_HANDLE, 1, &create,
+                                    NULL, &pipeline) == VK_SUCCESS);
+    vkDestroyPipeline(&device, pipeline, NULL);
+    vkDestroyShaderModule(&device, module, NULL);
+
+    words[18] = (4u << 16) | 334u; /* OpGroupNonUniformAll (VOTE) is not BASIC. */
+    assert(vkCreateShaderModule(&device, &shader_info, NULL, &module) ==
+           VK_ERROR_FEATURE_NOT_PRESENT && !module);
+    words[18] = (4u << 16) | 333u;
+    words[6] = 64u; /* Ballot capability is outside the BASIC route. */
+    assert(vkCreateShaderModule(&device, &shader_info, NULL, &module) ==
+           VK_ERROR_FEATURE_NOT_PRESENT && !module);
+    words[6] = 61u;
+    words[8] = 0u; /* Vertex is outside the compute route. */
+    assert(vkCreateShaderModule(&device, &shader_info, NULL, &module) ==
+           VK_ERROR_FEATURE_NOT_PRESENT && !module);
+    vkDestroyPipelineLayout(&device, pipeline_layout, NULL);
+    assert(!device.pipeline_objects && !device.descriptor_objects);
+}
+static void diagnostic_compute_quad_gate(void)
+{
+    /* Private GroupNonUniformQuad, compute only. */
+    uint32_t words[24];
+    memcpy(words, module_a, 5 * sizeof(uint32_t));
+    words[5] = (2u << 16) | 17u; /* OpCapability */
+    words[6] = 68u;              /* GroupNonUniformQuad */
+    memcpy(words + 7, module_a + 5, 11 * sizeof(uint32_t));
+    words[18] = (6u << 16) | 365u; /* QuadBroadcast */
+    words[19] = words[20] = words[21] = words[22] = words[23] = 1u;
+    uint32_t code[] = {0x11111111};
+    struct ps5vk_compiled_program program = fixture(words, code);
+    program.spirv_words = sizeof(words) / sizeof(words[0]);
+    struct ps5vk_program_library library = {&program, 1};
+    struct VkPhysicalDevice_T physical = {0};
+    struct VkDevice_T device = {.compiler = {&library, ps5vk_program_resolve},
+                                .physical = &physical};
+    VkShaderModuleCreateInfo shader_info = {
+        .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+        .codeSize = sizeof(words), .pCode = words};
+    VkShaderModule module = VK_NULL_HANDLE;
+    assert(vkCreateShaderModule(&device, &shader_info, NULL, &module) ==
+           VK_ERROR_FEATURE_NOT_PRESENT && !module);
+    /* The Broadcast diagnostic does not admit quad operations. */
+    device.platform_features = PS5VK_FEATURE_SUBGROUP_BROADCAST_COMPUTE;
+    assert(vkCreateShaderModule(&device, &shader_info, NULL, &module) ==
+           VK_ERROR_FEATURE_NOT_PRESENT && !module);
+    device.platform_features = 0;
+    physical.platform.supported_features_t09 = PS5VK_T09_FEATURE_SUBGROUP_QUAD_COMPUTE;
+    assert(vkCreateShaderModule(&device, &shader_info, NULL, &module) == VK_SUCCESS);
+    VkPipelineLayout pipeline_layout = layout(&device);
+    VkComputePipelineCreateInfo create = info(module, pipeline_layout);
+    VkPipeline pipeline = VK_NULL_HANDLE;
+    assert(vkCreateComputePipelines(&device, VK_NULL_HANDLE, 1, &create,
+                                    NULL, &pipeline) == VK_SUCCESS);
+    vkDestroyPipeline(&device, pipeline, NULL);
+    vkDestroyShaderModule(&device, module, NULL);
+
+    words[18] = (6u << 16) | 366u; /* QuadSwap is the other admitted opcode. */
+    assert(vkCreateShaderModule(&device, &shader_info, NULL, &module) == VK_SUCCESS);
+    vkDestroyShaderModule(&device,module,NULL);
+    words[18] = (6u << 16) | 334u; /* Vote is outside the QUAD route. */
+    assert(vkCreateShaderModule(&device,&shader_info,NULL,&module) ==
+           VK_ERROR_FEATURE_NOT_PRESENT && !module);
+    words[18] = (6u << 16) | 365u;
+    words[6] = 61u; /* A quad opcode without its capability is refused. */
+    assert(vkCreateShaderModule(&device,&shader_info,NULL,&module) ==
+           VK_ERROR_FEATURE_NOT_PRESENT && !module);
+    words[6] = 68u;
+    words[8] = 0u; /* Vertex remains refused. */
+    assert(vkCreateShaderModule(&device,&shader_info,NULL,&module) ==
+           VK_ERROR_FEATURE_NOT_PRESENT && !module);
+    vkDestroyPipelineLayout(&device,pipeline_layout,NULL);
+    assert(!device.pipeline_objects && !device.descriptor_objects);
+}
+static void diagnostic_compute_helixsr_gate(void)
+{
+    uint32_t words[26];
+    memcpy(words, module_a, 5 * sizeof(uint32_t));
+    words[5] = words[7] = (2u << 16) | 17u;
+    words[6] = 61u; /* GroupNonUniform */
+    words[8] = 65u; /* GroupNonUniformShuffle */
+    memcpy(words + 9, module_a + 5, 11 * sizeof(uint32_t));
+    words[20] = (5u << 16) | 345u; /* Shuffle */
+    words[21] = words[22] = words[23] = words[24] = 1u;
+    struct VkPhysicalDevice_T physical = {0};
+    struct VkDevice_T device = {.physical = &physical};
+    VkShaderModuleCreateInfo create = {
+        .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+        .codeSize = 25u * sizeof(uint32_t), .pCode = words};
+    VkShaderModule module = VK_NULL_HANDLE;
+    assert(vkCreateShaderModule(&device, &create, NULL, &module) ==
+           VK_ERROR_FEATURE_NOT_PRESENT && !module);
+    physical.platform.supported_features_t09 =
+        PS5VK_T09_FEATURE_SUBGROUP_HELIXSR_COMPUTE;
+    assert(vkCreateShaderModule(&device, &create, NULL, &module) == VK_SUCCESS);
+    vkDestroyShaderModule(&device, module, NULL);
+
+    module = VK_NULL_HANDLE;
+    words[20] = (5u << 16) | 346u; /* ShuffleXor stays outside the profile. */
+    assert(vkCreateShaderModule(&device, &create, NULL, &module) ==
+           VK_ERROR_FEATURE_NOT_PRESENT && !module);
+    words[20] = (5u << 16) | 345u;
+    words[8] = 64u; /* Ballot capability cannot authorize Shuffle. */
+    assert(vkCreateShaderModule(&device, &create, NULL, &module) ==
+           VK_ERROR_FEATURE_NOT_PRESENT && !module);
+
+    words[8] = 64u; /* GroupNonUniformBallot */
+    words[20] = (5u << 16) | 339u; /* Ballot */
+    assert(vkCreateShaderModule(&device, &create, NULL, &module) == VK_SUCCESS);
+    vkDestroyShaderModule(&device, module, NULL);
+    module = VK_NULL_HANDLE;
+    words[20] = (5u << 16) | 340u; /* InverseBallot remains refused. */
+    assert(vkCreateShaderModule(&device, &create, NULL, &module) ==
+           VK_ERROR_FEATURE_NOT_PRESENT && !module);
+
+    words[8] = 68u; /* GroupNonUniformQuad */
+    words[20] = (6u << 16) | 365u; /* QuadBroadcast */
+    words[25] = 1u;
+    create.codeSize = sizeof(words);
+    assert(vkCreateShaderModule(&device, &create, NULL, &module) == VK_SUCCESS);
+    vkDestroyShaderModule(&device, module, NULL);
+    module = VK_NULL_HANDLE;
+    words[20] = (6u << 16) | 366u; /* QuadSwap remains refused here. */
+    assert(vkCreateShaderModule(&device, &create, NULL, &module) ==
+           VK_ERROR_FEATURE_NOT_PRESENT && !module);
+    words[20] = (6u << 16) | 365u;
+    words[10] = 0u; /* Vertex is outside the compute-only route. */
+    assert(vkCreateShaderModule(&device, &create, NULL, &module) ==
+           VK_ERROR_FEATURE_NOT_PRESENT && !module);
+}
+static void diagnostic_compute_all_gate(void)
+{
+    uint32_t words[25];
+    memcpy(words, module_a, 5 * sizeof(uint32_t));
+    words[5] = words[7] = (2u << 16) | 17u;
+    words[6] = 61u; words[8] = 62u;
+    memcpy(words + 9, module_a + 5, 11 * sizeof(uint32_t));
+    words[20] = (5u << 16) | 334u;
+    words[21] = words[22] = words[23] = words[24] = 1u;
+    struct VkPhysicalDevice_T physical = {0};
+    struct VkDevice_T device = {.physical = &physical};
+    VkShaderModuleCreateInfo create = {
+        .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+        .codeSize = sizeof(words), .pCode = words};
+    VkShaderModule module = VK_NULL_HANDLE;
+    assert(vkCreateShaderModule(&device, &create, NULL, &module) ==
+           VK_ERROR_FEATURE_NOT_PRESENT);
+    physical.platform.supported_features_t09 = PS5VK_T09_FEATURE_SUBGROUP_ALL_COMPUTE;
+    assert(vkCreateShaderModule(&device, &create, NULL, &module) == VK_SUCCESS);
+    vkDestroyShaderModule(&device, module, NULL);
+    words[20] = (5u << 16) | 335u; /* Any remains unsupported. */
+    assert(vkCreateShaderModule(&device, &create, NULL, &module) ==
+           VK_ERROR_FEATURE_NOT_PRESENT);
+    words[20] = (5u << 16) | 334u; words[8] = 64u;
+    assert(vkCreateShaderModule(&device, &create, NULL, &module) ==
+           VK_ERROR_FEATURE_NOT_PRESENT);
+    words[8] = 62u; words[10] = 0u;
+    assert(vkCreateShaderModule(&device, &create, NULL, &module) ==
+           VK_ERROR_FEATURE_NOT_PRESENT);
+}
+static void diagnostic_compute_iadd_gate(void)
+{
+    uint32_t words[25];
+    memcpy(words, module_a, 5 * sizeof(uint32_t));
+    words[5] = words[7] = (2u << 16) | 17u; /* OpCapability */
+    words[6] = 61u; /* GroupNonUniform */
+    words[8] = 63u; /* GroupNonUniformArithmetic */
+    memcpy(words + 9, module_a + 5, 11 * sizeof(uint32_t));
+    words[20] = (5u << 16) | 349u; /* OpGroupNonUniformIAdd */
+    words[21] = words[22] = words[23] = words[24] = 1u;
+    uint32_t code[] = {0x11111111};
+    struct ps5vk_compiled_program program = fixture(words, code);
+    program.spirv_words = sizeof(words) / sizeof(words[0]);
+    struct ps5vk_program_library library = {&program, 1};
+    struct VkDevice_T device = {.compiler = {&library, ps5vk_program_resolve}};
+    VkShaderModuleCreateInfo shader_info = {
+        .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+        .codeSize = sizeof(words), .pCode = words};
+    VkShaderModule module = VK_NULL_HANDLE;
+    assert(vkCreateShaderModule(&device, &shader_info, NULL, &module) ==
+           VK_ERROR_FEATURE_NOT_PRESENT && !module);
+    device.platform_features = PS5VK_FEATURE_SUBGROUP_BROADCAST_COMPUTE;
+    assert(vkCreateShaderModule(&device, &shader_info, NULL, &module) ==
+           VK_ERROR_FEATURE_NOT_PRESENT && !module);
+    device.platform_features = PS5VK_FEATURE_SUBGROUP_IADD_COMPUTE;
+    assert(vkCreateShaderModule(&device, &shader_info, NULL, &module) == VK_SUCCESS);
+    VkPipelineLayout pipeline_layout = layout(&device);
+    VkComputePipelineCreateInfo create = info(module, pipeline_layout);
+    VkPipeline pipeline = VK_NULL_HANDLE;
+    assert(vkCreateComputePipelines(&device, VK_NULL_HANDLE, 1, &create,
+                                    NULL, &pipeline) == VK_SUCCESS);
+    vkDestroyPipeline(&device, pipeline, NULL);
+    vkDestroyShaderModule(&device, module, NULL);
+
+    words[20] = (5u << 16) | 351u; /* IMul is outside the diagnostic gate. */
+    assert(vkCreateShaderModule(&device, &shader_info, NULL, &module) ==
+           VK_ERROR_FEATURE_NOT_PRESENT && !module);
+    words[20] = (5u << 16) | 349u;
+    words[8] = 64u; /* IAdd needs Arithmetic, not Ballot. */
+    assert(vkCreateShaderModule(&device, &shader_info, NULL, &module) ==
+           VK_ERROR_FEATURE_NOT_PRESENT && !module);
+    words[8] = 63u;
+    words[10] = 0u; /* Vertex is outside the compute route. */
+    assert(vkCreateShaderModule(&device, &shader_info, NULL, &module) ==
+           VK_ERROR_FEATURE_NOT_PRESENT && !module);
+    vkDestroyPipelineLayout(&device, pipeline_layout, NULL);
+    assert(!device.pipeline_objects && !device.descriptor_objects);
+}
+static void unadvertised_int16_gate(void)
+{
+    uint32_t words[18];
+    memcpy(words, module_a, 5 * sizeof(uint32_t));
+    words[5] = (2u << 16) | 17u; /* OpCapability Int16 */
+    words[6] = 22u;
+    memcpy(words + 7, module_a + 5, 11 * sizeof(uint32_t));
+    VkShaderModuleCreateInfo shader_info = {.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+        .codeSize = sizeof(words), .pCode = words};
+    uint32_t code[] = {0x11111111};
+    struct ps5vk_compiled_program program = fixture(words, code);
+    program.spirv_words = sizeof(words) / sizeof(words[0]);
+    struct ps5vk_program_library library = {&program, 1};
+    struct VkDevice_T device = {.compiler = {&library, ps5vk_program_resolve}};
+    VkShaderModule module = VK_NULL_HANDLE;
+    assert(vkCreateShaderModule(&device, &shader_info, NULL, &module) ==
+           VK_ERROR_FEATURE_NOT_PRESENT && !module);
+    device.enabled_features = PS5VK_FEATURE_SHADER_INT16;
+    assert(vkCreateShaderModule(&device, &shader_info, NULL, &module) == VK_SUCCESS);
+    VkPipelineLayout pipeline_layout = layout(&device);
+    VkComputePipelineCreateInfo create = info(module, pipeline_layout);
+    VkPipeline pipeline = VK_NULL_HANDLE;
+    device.enabled_features = 0;
+    assert(vkCreateComputePipelines(&device, VK_NULL_HANDLE, 1, &create,
+                                    NULL, &pipeline) == VK_ERROR_FEATURE_NOT_PRESENT && !pipeline);
+    device.enabled_features = PS5VK_FEATURE_SHADER_INT16;
+    assert(vkCreateComputePipelines(&device, VK_NULL_HANDLE, 1, &create,
+                                    NULL, &pipeline) == VK_SUCCESS);
+    vkDestroyPipeline(&device, pipeline, NULL);
+    vkDestroyPipelineLayout(&device, pipeline_layout, NULL);
+    vkDestroyShaderModule(&device, module, NULL);
+    assert(!device.pipeline_objects && !device.descriptor_objects);
+}
+int main(void)
+{
+    full_set_table_offsets();
+    lifecycle(); legacy_offline_abi(); dispatch_base_flag(); negative(); graphics_entries();
+    t08_capability_gates(); uniform_block_layout_gate(); unadvertised_subgroup_gate();
+    diagnostic_compute_basic_gate(); diagnostic_compute_quad_gate();
+    diagnostic_compute_helixsr_gate();
+    int8_compute_probe_gate();
+    diagnostic_compute_broadcast_gate(); diagnostic_compute_iadd_gate();
+    diagnostic_compute_all_gate();
+    unadvertised_int16_gate();
+    puts("Shader/pipeline contracts: pass (synthetic, no GPU execution)");
+}

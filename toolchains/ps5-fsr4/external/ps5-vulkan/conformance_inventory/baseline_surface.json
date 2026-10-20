@@ -1,0 +1,1312 @@
+{
+  "schema_version": "1.0",
+  "baseline_commit": "4784766ff74314290122b6d3024b60994746872c",
+  "inspected_commit": "4784766ff74314290122b6d3024b60994746872c",
+  "baseline_commit_note": "baseline_commit is the newest commit that touched src/, include/ or native/, which is the revision the surface below describes. inspected_commit is HEAD of the worktree used to collect it.",
+  "method": "Parsed VKAPI_ATTR definitions in src/*.c and native/*.c, the ENTRY(name, SCOPE) dispatch table in src/vk_dispatch.c, and VKAPI_ATTR declarations in include/ps5vk/*.h at the pinned baseline commit. Regenerate with tools/collect_baseline_surface.py.",
+  "reading_note": "public_header=false means the entry point is not declared in include/ps5vk/; it does not mean the entry point is missing. Symbols absent from this list are absent from the baseline implementation.",
+  "counts": {
+    "entry_points": 144,
+    "dispatched": 144,
+    "public_header": 144,
+    "implementation_only": 0
+  },
+  "entry_points": [
+    {
+      "name": "vkAllocateCommandBuffers",
+      "files": [
+        "src/vk_command.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkAllocateDescriptorSets",
+      "files": [
+        "src/vk_descriptor.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkAllocateMemory",
+      "files": [
+        "src/vk_memory.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkBeginCommandBuffer",
+      "files": [
+        "src/vk_command.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkBindBufferMemory",
+      "files": [
+        "src/vk_memory.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkBindImageMemory",
+      "files": [
+        "src/vk_memory.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkCmdBeginQuery",
+      "files": [
+        "src/vk_query_pool.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkCmdBeginRenderPass",
+      "files": [
+        "src/vk_command.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkCmdBindDescriptorSets",
+      "files": [
+        "src/vk_command.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkCmdBindIndexBuffer",
+      "files": [
+        "src/vk_command.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkCmdBindPipeline",
+      "files": [
+        "src/vk_command.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkCmdBindVertexBuffers",
+      "files": [
+        "src/vk_command.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkCmdBlitImage",
+      "files": [
+        "src/vk_image_transfer.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkCmdClearAttachments",
+      "files": [
+        "src/vk_image_transfer.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkCmdClearColorImage",
+      "files": [
+        "src/vk_image_transfer.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkCmdClearDepthStencilImage",
+      "files": [
+        "src/vk_image_transfer.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkCmdCopyBuffer",
+      "files": [
+        "src/vk_transfer.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkCmdCopyBufferToImage",
+      "files": [
+        "src/vk_transfer.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkCmdCopyImage",
+      "files": [
+        "src/vk_image_transfer.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkCmdCopyImageToBuffer",
+      "files": [
+        "src/vk_transfer.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkCmdCopyQueryPoolResults",
+      "files": [
+        "src/vk_query_pool.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkCmdDispatch",
+      "files": [
+        "src/vk_command.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkCmdDispatchIndirect",
+      "files": [
+        "src/vk_command.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkCmdDraw",
+      "files": [
+        "src/vk_command.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": "Exists, is dispatched (DEVICE) and is declared in the public header. Evidence: src/vk_command.c, include/ps5vk/ps5vk.h."
+    },
+    {
+      "name": "vkCmdDrawIndexed",
+      "files": [
+        "src/vk_command.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkCmdDrawIndexedIndirect",
+      "files": [
+        "src/vk_command.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkCmdDrawIndirect",
+      "files": [
+        "src/vk_command.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkCmdEndQuery",
+      "files": [
+        "src/vk_query_pool.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkCmdEndRenderPass",
+      "files": [
+        "src/vk_command.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkCmdExecuteCommands",
+      "files": [
+        "src/vk_command.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkCmdFillBuffer",
+      "files": [
+        "src/vk_transfer.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkCmdNextSubpass",
+      "files": [
+        "src/vk_command.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkCmdPipelineBarrier",
+      "files": [
+        "src/vk_command.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkCmdPushConstants",
+      "files": [
+        "src/vk_command.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkCmdResetEvent",
+      "files": [
+        "src/vk_command.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkCmdResetQueryPool",
+      "files": [
+        "src/vk_query_pool.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkCmdResolveImage",
+      "files": [
+        "src/vk_image_transfer.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkCmdSetBlendConstants",
+      "files": [
+        "src/vk_command.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkCmdSetDepthBias",
+      "files": [
+        "src/vk_command.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkCmdSetDepthBounds",
+      "files": [
+        "src/vk_command.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkCmdSetEvent",
+      "files": [
+        "src/vk_command.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkCmdSetLineWidth",
+      "files": [
+        "src/vk_command.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkCmdSetScissor",
+      "files": [
+        "src/vk_command.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkCmdSetStencilCompareMask",
+      "files": [
+        "src/vk_command.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkCmdSetStencilReference",
+      "files": [
+        "src/vk_command.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkCmdSetStencilWriteMask",
+      "files": [
+        "src/vk_command.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkCmdSetViewport",
+      "files": [
+        "src/vk_command.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkCmdUpdateBuffer",
+      "files": [
+        "src/vk_transfer.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkCmdWaitEvents",
+      "files": [
+        "src/vk_command.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": "Records validated event execution and memory dependencies; queue segmentation retires frontend event transitions around native jobs. Evidence: src/vk_command.c, src/vk_queue.c."
+    },
+    {
+      "name": "vkCmdWriteTimestamp",
+      "files": [
+        "src/vk_query_pool.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkCreateBuffer",
+      "files": [
+        "src/vk_memory.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkCreateBufferView",
+      "files": [
+        "src/vk_memory.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkCreateCommandPool",
+      "files": [
+        "src/vk_command.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkCreateComputePipelines",
+      "files": [
+        "src/vk_pipeline.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkCreateDescriptorPool",
+      "files": [
+        "src/vk_descriptor.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkCreateDescriptorSetLayout",
+      "files": [
+        "src/vk_descriptor.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkCreateDevice",
+      "files": [
+        "src/vk_device.c"
+      ],
+      "dispatch_scope": "INSTANCE",
+      "public_header": true,
+      "observed": "Accepts only the enumerated narrow-storage extensions and exact supported feature structs; unsupported features, unknown chains and invalid booleans fail closed. Evidence: src/vk_device.c."
+    },
+    {
+      "name": "vkCreateEvent",
+      "files": [
+        "src/vk_sync.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": "Creates a device-parented Vulkan 1.0 event with separate host and recorded device transitions. Evidence: src/vk_sync.c, src/vk_command.c, src/vk_queue.c."
+    },
+    {
+      "name": "vkCreateFence",
+      "files": [
+        "src/vk_fence.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkCreateFramebuffer",
+      "files": [
+        "src/vk_framebuffer.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkCreateGraphicsPipelines",
+      "files": [
+        "src/vk_graphics_pipeline.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": "Exists, is dispatched (DEVICE) and is declared in the public header. Evidence: src/vk_graphics_pipeline.c, include/ps5vk/ps5vk.h."
+    },
+    {
+      "name": "vkCreateImage",
+      "files": [
+        "src/vk_memory.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": "Exists, is dispatched (DEVICE) and is declared in the public header. Evidence: src/vk_memory.c, include/ps5vk/ps5vk.h."
+    },
+    {
+      "name": "vkCreateImageView",
+      "files": [
+        "src/vk_image_view.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkCreateInstance",
+      "files": [
+        "src/vk_device.c"
+      ],
+      "dispatch_scope": "GLOBAL",
+      "public_header": true,
+      "observed": "Accepts only apiVersion 1.0; other versions are rejected. Evidence: src/vk_device.c, src/platform_host.c."
+    },
+    {
+      "name": "vkCreatePipelineCache",
+      "files": [
+        "src/vk_pipeline_cache.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkCreatePipelineLayout",
+      "files": [
+        "src/vk_descriptor.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkCreateQueryPool",
+      "files": [
+        "src/vk_query_pool.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkCreateRenderPass",
+      "files": [
+        "src/vk_render_pass.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": "Exists, is dispatched (DEVICE) and is declared in the public header. Evidence: src/vk_render_pass.c, include/ps5vk/ps5vk.h."
+    },
+    {
+      "name": "vkCreateSampler",
+      "files": [
+        "src/vk_sampler.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": "Exists, is dispatched (DEVICE) and is declared in the public header. Evidence: src/vk_sampler.c, include/ps5vk/ps5vk.h."
+    },
+    {
+      "name": "vkCreateSemaphore",
+      "files": [
+        "src/vk_sync.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": "Creates a device-parented Vulkan 1.0 binary semaphore; queue wait/signal semantics are implemented in src/vk_queue.c. Evidence: src/vk_sync.c, src/vk_queue.c."
+    },
+    {
+      "name": "vkCreateShaderModule",
+      "files": [
+        "src/vk_pipeline.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkDestroyBuffer",
+      "files": [
+        "src/vk_memory.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkDestroyBufferView",
+      "files": [
+        "src/vk_memory.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkDestroyCommandPool",
+      "files": [
+        "src/vk_command.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkDestroyDescriptorPool",
+      "files": [
+        "src/vk_descriptor.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkDestroyDescriptorSetLayout",
+      "files": [
+        "src/vk_descriptor.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkDestroyDevice",
+      "files": [
+        "src/vk_device.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkDestroyEvent",
+      "files": [
+        "src/vk_sync.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkDestroyFence",
+      "files": [
+        "src/vk_fence.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkDestroyFramebuffer",
+      "files": [
+        "src/vk_framebuffer.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkDestroyImage",
+      "files": [
+        "src/vk_memory.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkDestroyImageView",
+      "files": [
+        "src/vk_image_view.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkDestroyInstance",
+      "files": [
+        "src/vk_device.c"
+      ],
+      "dispatch_scope": "INSTANCE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkDestroyPipeline",
+      "files": [
+        "src/vk_pipeline.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkDestroyPipelineCache",
+      "files": [
+        "src/vk_pipeline_cache.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkDestroyPipelineLayout",
+      "files": [
+        "src/vk_descriptor.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkDestroyQueryPool",
+      "files": [
+        "src/vk_query_pool.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkDestroyRenderPass",
+      "files": [
+        "src/vk_render_pass.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkDestroySampler",
+      "files": [
+        "src/vk_sampler.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkDestroySemaphore",
+      "files": [
+        "src/vk_sync.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkDestroyShaderModule",
+      "files": [
+        "src/vk_pipeline.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkDeviceWaitIdle",
+      "files": [
+        "src/vk_queue.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkEndCommandBuffer",
+      "files": [
+        "src/vk_command.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkEnumerateDeviceExtensionProperties",
+      "files": [
+        "src/vk_device.c"
+      ],
+      "dispatch_scope": "INSTANCE",
+      "public_header": true,
+      "observed": "Exists and is dispatched (INSTANCE). Enumerates VK_KHR_storage_buffer_storage_class, VK_KHR_8bit_storage and VK_KHR_16bit_storage when the platform exposes the corresponding storage-buffer features. Evidence: src/vk_device.c."
+    },
+    {
+      "name": "vkEnumerateDeviceLayerProperties",
+      "files": [
+        "src/vk_device.c"
+      ],
+      "dispatch_scope": "INSTANCE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkEnumerateInstanceExtensionProperties",
+      "files": [
+        "src/vk_device.c"
+      ],
+      "dispatch_scope": "GLOBAL",
+      "public_header": true,
+      "observed": "Exists and is dispatched (GLOBAL). Enumerates VK_KHR_get_physical_device_properties2; a non-NULL layer name returns VK_ERROR_LAYER_NOT_PRESENT. Evidence: src/vk_device.c."
+    },
+    {
+      "name": "vkEnumerateInstanceLayerProperties",
+      "files": [
+        "src/vk_device.c"
+      ],
+      "dispatch_scope": "GLOBAL",
+      "public_header": true,
+      "observed": "Exists and is dispatched (GLOBAL). Returns VK_SUCCESS with *count = 0. Evidence: src/vk_device.c."
+    },
+    {
+      "name": "vkEnumeratePhysicalDevices",
+      "files": [
+        "src/vk_device.c"
+      ],
+      "dispatch_scope": "INSTANCE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkFlushMappedMemoryRanges",
+      "files": [
+        "src/vk_memory.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkFreeCommandBuffers",
+      "files": [
+        "src/vk_command.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkFreeDescriptorSets",
+      "files": [
+        "src/vk_descriptor.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkFreeMemory",
+      "files": [
+        "src/vk_memory.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkGetBufferMemoryRequirements",
+      "files": [
+        "src/vk_memory.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkGetDeviceMemoryCommitment",
+      "files": [
+        "src/vk_memory.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkGetDeviceProcAddr",
+      "files": [
+        "src/vk_dispatch.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": "Exists and is dispatched (DEVICE) over the same table. Evidence: src/vk_dispatch.c."
+    },
+    {
+      "name": "vkGetDeviceQueue",
+      "files": [
+        "src/vk_device.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkGetEventStatus",
+      "files": [
+        "src/vk_sync.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkGetFenceStatus",
+      "files": [
+        "src/vk_fence.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkGetImageMemoryRequirements",
+      "files": [
+        "src/vk_memory.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkGetImageSparseMemoryRequirements",
+      "files": [
+        "src/vk_memory.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkGetImageSubresourceLayout",
+      "files": [
+        "src/vk_memory.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkGetInstanceProcAddr",
+      "files": [
+        "src/vk_dispatch.c"
+      ],
+      "dispatch_scope": "GLOBAL",
+      "public_header": true,
+      "observed": "Exists and is dispatched (GLOBAL) over a fixed internal dispatch table. Evidence: src/vk_dispatch.c."
+    },
+    {
+      "name": "vkGetPhysicalDeviceFeatures",
+      "files": [
+        "src/vk_device.c"
+      ],
+      "dispatch_scope": "INSTANCE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkGetPhysicalDeviceFeatures2KHR",
+      "files": [
+        "src/vk_device.c"
+      ],
+      "dispatch_scope": "INSTANCE",
+      "public_header": true,
+      "observed": "Reports storageBuffer8BitAccess and storageBuffer16BitAccess while leaving narrow arithmetic and other narrow storage classes false. Evidence: src/vk_device.c."
+    },
+    {
+      "name": "vkGetPhysicalDeviceFormatProperties",
+      "files": [
+        "src/vk_device.c"
+      ],
+      "dispatch_scope": "INSTANCE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkGetPhysicalDeviceFormatProperties2KHR",
+      "files": [
+        "src/vk_device.c"
+      ],
+      "dispatch_scope": "INSTANCE",
+      "public_header": true,
+      "observed": "Delegates to the bounded core format report through VkFormatProperties2. Evidence: src/vk_device.c."
+    },
+    {
+      "name": "vkGetPhysicalDeviceImageFormatProperties",
+      "files": [
+        "src/vk_device.c"
+      ],
+      "dispatch_scope": "INSTANCE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkGetPhysicalDeviceImageFormatProperties2KHR",
+      "files": [
+        "src/vk_device.c"
+      ],
+      "dispatch_scope": "INSTANCE",
+      "public_header": true,
+      "observed": "Delegates validated image-format queries through the KHR structure pair. Evidence: src/vk_device.c."
+    },
+    {
+      "name": "vkGetPhysicalDeviceMemoryProperties",
+      "files": [
+        "src/vk_device.c"
+      ],
+      "dispatch_scope": "INSTANCE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkGetPhysicalDeviceMemoryProperties2KHR",
+      "files": [
+        "src/vk_device.c"
+      ],
+      "dispatch_scope": "INSTANCE",
+      "public_header": true,
+      "observed": "Reports the bounded memory profile through VkPhysicalDeviceMemoryProperties2. Evidence: src/vk_device.c."
+    },
+    {
+      "name": "vkGetPhysicalDeviceProperties",
+      "files": [
+        "src/vk_device.c"
+      ],
+      "dispatch_scope": "INSTANCE",
+      "public_header": true,
+      "observed": "Reports apiVersion = VK_API_VERSION_1_0. Evidence: src/platform_host.c."
+    },
+    {
+      "name": "vkGetPhysicalDeviceProperties2KHR",
+      "files": [
+        "src/vk_device.c"
+      ],
+      "dispatch_scope": "INSTANCE",
+      "public_header": true,
+      "observed": "Returns the Vulkan 1.0 physical-device properties through the KHR properties2 structure. Evidence: src/vk_device.c."
+    },
+    {
+      "name": "vkGetPhysicalDeviceQueueFamilyProperties",
+      "files": [
+        "src/vk_device.c"
+      ],
+      "dispatch_scope": "INSTANCE",
+      "public_header": true,
+      "observed": "Reports a single queue family with queueCount = 1. Evidence: src/vk_device.c."
+    },
+    {
+      "name": "vkGetPhysicalDeviceQueueFamilyProperties2KHR",
+      "files": [
+        "src/vk_device.c"
+      ],
+      "dispatch_scope": "INSTANCE",
+      "public_header": true,
+      "observed": "Reports the single queue family through VkQueueFamilyProperties2. Evidence: src/vk_device.c."
+    },
+    {
+      "name": "vkGetPhysicalDeviceSparseImageFormatProperties",
+      "files": [
+        "src/vk_device.c"
+      ],
+      "dispatch_scope": "INSTANCE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkGetPhysicalDeviceSparseImageFormatProperties2KHR",
+      "files": [
+        "src/vk_device.c"
+      ],
+      "dispatch_scope": "INSTANCE",
+      "public_header": true,
+      "observed": "Returns an empty list because sparseBinding is not advertised. Evidence: src/vk_device.c."
+    },
+    {
+      "name": "vkGetPipelineCacheData",
+      "files": [
+        "src/vk_pipeline_cache.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkGetQueryPoolResults",
+      "files": [
+        "src/vk_query_pool.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkGetRenderAreaGranularity",
+      "files": [
+        "src/vk_render_pass.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkInvalidateMappedMemoryRanges",
+      "files": [
+        "src/vk_memory.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkMapMemory",
+      "files": [
+        "src/vk_memory.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkMergePipelineCaches",
+      "files": [
+        "src/vk_pipeline_cache.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkQueueBindSparse",
+      "files": [
+        "src/vk_queue.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkQueueSubmit",
+      "files": [
+        "src/vk_queue.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkQueueWaitIdle",
+      "files": [
+        "src/vk_queue.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkResetCommandBuffer",
+      "files": [
+        "src/vk_command.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkResetCommandPool",
+      "files": [
+        "src/vk_command.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkResetDescriptorPool",
+      "files": [
+        "src/vk_descriptor.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkResetEvent",
+      "files": [
+        "src/vk_sync.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkResetFences",
+      "files": [
+        "src/vk_fence.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkSetEvent",
+      "files": [
+        "src/vk_sync.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkUnmapMemory",
+      "files": [
+        "src/vk_memory.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkUpdateDescriptorSets",
+      "files": [
+        "src/vk_descriptor.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    },
+    {
+      "name": "vkWaitForFences",
+      "files": [
+        "src/vk_fence.c"
+      ],
+      "dispatch_scope": "DEVICE",
+      "public_header": true,
+      "observed": null
+    }
+  ]
+}

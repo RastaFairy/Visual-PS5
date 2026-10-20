@@ -1,0 +1,35 @@
+{
+  "repository": "blackbearreloaded/ps5-fsr4",
+  "mirrorRepository": "manoma080/ps5-fsr4",
+  "branch": "archived",
+  "commit": "3789980ceba27568f2910a561483aa1cee383342",
+  "sourceCommit": "3789980ceba27568f2910a561483aa1cee383342",
+  "sourceTree": "4819a0aac0bc4ef59a8ff5ad0dfe2a039b2b6000",
+  "sourceRef": "3789980ceba27568f2910a561483aa1cee383342",
+  "method": "vendored-snapshot",
+  "vendoredSnapshot": true,
+  "vendorRepository": "RastaFairy/Visual-PS5",
+  "vendoredAt": "2026-10-20T17:11:28Z",
+  "historicalSnapshot": true,
+  "webArchiveSnapshot": "https://web.archive.org/web/20260928200623/https://github.com/blackbearreloaded/ps5-fsr4",
+  "archiveCapturedAt": "2026-09-28T20:06:23Z",
+  "submodulesMaterialized": true,
+  "sourceOnly": false,
+  "buildableWithoutExternalRepo": true,
+  "materializedSubmodules": [
+    {
+      "path": "external/ps5-vulkan",
+      "repository": "mpereiraesaa/ps5-vulkan",
+      "sourceUrl": "https://github.com/mpereiraesaa/ps5-vulkan",
+      "commit": "6a0228bedebef949fd2dd90643eae4a5b711c23f",
+      "tree": "e09c15f888cd622cd658599598a6d3cd8bee3154",
+      "materializedAsFiles": true
+    }
+  ],
+  "submoduleRecovery": {
+    "status": "verified",
+    "method": "vendored-tree",
+    "completedAt": "2026-10-20T17:11:28Z",
+    "note": "The declared Vulkan Gitlink was replaced with the exact verified tree as ordinary files."
+  }
+}
