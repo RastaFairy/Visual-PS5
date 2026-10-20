@@ -1,0 +1,37 @@
+Broker clients: a short spin and short sleeps while waiting for the GPU, so waiting clients leave the CPUs to the
+owner and to each other, and a longer wait ends soon after the GPU's write. Applied after
+radv-gpu-broker-local-memory.patch, to the overlay copies only.
+
+--- a/src/amd/vulkan/winsys/ps5/radv_ps5_winsys.c
++++ b/src/amd/vulkan/winsys/ps5/radv_ps5_winsys.c
+@@ -87,6 +87,12 @@
+ /* Before sleeping, the marker is checked in a loop for this long: most waits
+  * end well inside a millisecond (PS5_Vulkan R36). */
+ #define RADV_PS5_SPIN_NS UINT64_C(1500000)
++/* A broker client spins far less, and sleeps in short steps: its waits share the CPUs with the owner's broker threads
++ * and the other clients. Measured: no change in the probe's submission phases (graphics-child-gpu-async-04), whose
++ * waits end within microseconds; a longer wait now ends within about one short sleep of the GPU's write rather than
++ * one 1 ms sleep. */
++#define RADV_PS5_CLIENT_SPIN_NS UINT64_C(20000)
++#define RADV_PS5_CLIENT_SLEEP_US 50
+ 
+ bool
+ radv_ps5_queue_wait_seq(struct radv_ps5_queue *queue, uint64_t seq, uint64_t abs_timeout_ns)
+@@ -95,7 +101,7 @@
+    if (completed >= seq)
+       return true;
+    uint64_t now = os_time_get_nano();
+-   const uint64_t spin_until = now + RADV_PS5_SPIN_NS;
++   const uint64_t spin_until = now + RADV_PS5_CLIENT_SPIN_NS;
+    uint64_t progress_at = now;
+    uint64_t last = completed;
+    for (;;) {
+@@ -116,7 +122,7 @@
+       if (now < spin_until)
+          __builtin_ia32_pause();
+       else
+-         radv_ps5_sleep_us(1000);
++         radv_ps5_sleep_us(RADV_PS5_CLIENT_SLEEP_US);
+    }
+ }
+ 

@@ -1,0 +1,46 @@
+--- a/src/amd/vulkan/winsys/ps5/radv_ps5_winsys.c
++++ b/src/amd/vulkan/winsys/ps5/radv_ps5_winsys.c
+@@ -360,7 +360,7 @@
+     * page table's PRT bits, so an unbound page is not known to read zero or
+     * to report itself non-resident; and a bind is a mapping change made at
+     * once, after the submission's waits. */
+-   info->has_sparse = true;
++   info->has_sparse = false;
+    /* A compute and transfer queue family, as upstream offers on this family
+     * of GPUs, whose queues submit to the graphics ring through the same
+     * sceAgcDriverSubmitDcb: their work runs in turn with graphics rather than
+@@ -368,7 +368,7 @@
+     * would run it alongside; they are not used yet. */
+    info->num_compute_queues_on_gfx = 4;
+    info->has_sparse_prt = false;
+-   info->has_sparse_cpu_binds = true;
++   info->has_sparse_cpu_binds = false;
+    info->max_sparse_va_bytes = radv_ps5_vrange_space_bytes();
+    /* A captured buffer can be placed at its address again
+     * (radv_ps5_memory_alloc_replayable); before that, every replay case of
+@@ -377,12 +377,12 @@
+     * kernel places buffers, so replayable ones (the ray tracing pipelines'
+     * shader arenas, whose group handles are captured) go in a range at its
+     * top the port keeps for them (radv_ps5_window_replayable). */
+-   info->has_replayable_va = true;
++   info->has_replayable_va = false;
+    info->has_replayable_va_32bit = radv_ps5_window_replayable();
+    info->has_vm_always_valid = true;
+    /* buffer_from_ptr gives the application's host memory GPU access, which the
+     * GPU reaches at the CPU's address (HARDWARE_FINDINGS.md, 2026-09-27). */
+-   info->has_userptr = true;
++   info->has_userptr = false;
+    info->max_submitted_ibs[AMD_IP_GFX] = 1;
+ 
+    /* ac_query_gpu_info's own derivations, which have no kernel input. */
+--- a/src/amd/vulkan/winsys/ps5/radv_ps5_winsys.h
++++ b/src/amd/vulkan/winsys/ps5/radv_ps5_winsys.h
+@@ -27,6 +27,7 @@
+  * buffer of its own. */
+-#define RADV_PS5_RING_BYTES (UINT64_C(16) << 20)
++/* The broker completes submissions before replying; avoid a 16 MiB ring per child. */
++#define RADV_PS5_RING_BYTES (UINT64_C(2) << 20)
+ #define RADV_PS5_RING_WORDS ((uint32_t)(RADV_PS5_RING_BYTES / 4))
+ #define RADV_PS5_MAX_IN_FLIGHT 4096
+ 
+ struct radv_ps5_in_flight {

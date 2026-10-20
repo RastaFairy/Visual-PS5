@@ -1,0 +1,107 @@
+Broker clients: device-local memory from the owning title, as a discrete GPU without a CPU window.
+Applied after radv-gpu-broker-features.patch, to the overlay copies of the pinned winsys sources only.
+
+--- a/src/amd/vulkan/winsys/ps5/radv_ps5_bo.c
++++ b/src/amd/vulkan/winsys/ps5/radv_ps5_bo.c
+@@ -64,12 +64,15 @@
+     * or nowhere (radv_ps5_memory_alloc_replayable). */
+    const bool window32 = flags & RADEON_FLAG_32BIT;
+    const bool replayable = (flags & RADEON_FLAG_REPLAYABLE) || replay_address;
++   /* What the CPU never maps goes in the broker's device-local memory, when it offers any. */
++   const bool local = (flags & RADEON_FLAG_NO_CPU_ACCESS) && !replayable && ps5_gpu_client_local_limit();
+ 
+    struct radv_ps5_bo *const bo = calloc(1, sizeof(*bo));
+    if (!bo)
+       return VK_ERROR_OUT_OF_HOST_MEMORY;
+-   if (replayable ? !radv_ps5_memory_alloc_replayable(size, alignment, window32, replay_address, &bo->memory)
+-                  : !radv_ps5_memory_alloc(size, alignment, window32, &bo->memory)) {
++   if (local ? !ps5_gpu_client_alloc_local(size, alignment, window32, flags & RADEON_FLAG_ZERO_VRAM, &bo->memory)
++       : replayable ? !radv_ps5_memory_alloc_replayable(size, alignment, window32, replay_address, &bo->memory)
++                    : !radv_ps5_memory_alloc(size, alignment, window32, &bo->memory)) {
+       free(bo);
+       return replay_address ? VK_ERROR_INVALID_OPAQUE_CAPTURE_ADDRESS : VK_ERROR_OUT_OF_DEVICE_MEMORY;
+    }
+@@ -87,7 +90,8 @@
+     * both: an event's buffer is never written before its first status read
+     * (dEQP-VK.api.command_buffers.submit_count_equal_zero read a stale 1).
+     * The GPU reads through the CPU's writes only once they are in memory. */
+-   if ((flags & RADEON_FLAG_ZERO_VRAM) || (domain & RADEON_DOMAIN_GTT)) {
++   /* The broker zeroes device-local memory when asked; there is no CPU mapping here to do it. */
++   if (!local && ((flags & RADEON_FLAG_ZERO_VRAM) || (domain & RADEON_DOMAIN_GTT))) {
+       memset(bo->memory.cpu, 0, size);
+       radv_ps5_cpu_flush(bo->memory.cpu, size);
+    }
+@@ -135,7 +139,7 @@
+ {
+    (void)rws;
+    struct radv_ps5_bo *const bo = radv_ps5_bo(base);
+-   if (bo->sparse)
++   if (bo->sparse || bo->memory.physical == RADV_PS5_MEMORY_BROKER_LOCAL)
+       return NULL;
+    if (!use_fixed_addr)
+       return bo->memory.cpu;
+--- a/src/amd/vulkan/winsys/ps5/radv_ps5_winsys.c
++++ b/src/amd/vulkan/winsys/ps5/radv_ps5_winsys.c
+@@ -200,11 +200,13 @@
+       .gs_prim_buffer_depth = 1792,
+       .max_gs_waves_per_vgt = 32,
+    };
+-   const uint64_t pool = radv_ps5_memory_pool_bytes();
++   /* A broker client with device-local memory is a discrete GPU without a CPU window on its memory: VRAM is the
++    * owner's direct memory, GTT the shared host-visible memory. */
++   const uint64_t pool = radv_ps5_memory_pool_bytes(), local = ps5_gpu_client_local_limit();
+    const struct drm_amdgpu_memory_info memory = {
+-      .vram = {.total_heap_size = pool},
+-      .cpu_accessible_vram = {.total_heap_size = pool},
+-      .gtt = {0},
++      .vram = {.total_heap_size = local ? local : pool},
++      .cpu_accessible_vram = {.total_heap_size = local ? 0 : pool},
++      .gtt = {.total_heap_size = local ? pool : 0},
+    };
+    const struct amdgpu_gpu_info gpu_info = {
+       .gb_addr_cfg = RADV_PS5_GB_ADDR_CONFIG,
+@@ -347,8 +349,8 @@
+     * host-cached types. The CPU's mapping of that memory is cached and the GPU
+     * reads and writes it coherently with the CPU's caches (the RADV smoke
+     * title's coherence probe). */
+-   info->has_dedicated_vram = false;
+-   info->all_vram_visible = true;
++   info->has_dedicated_vram = ps5_gpu_client_local_limit() != 0;
++   info->all_vram_visible = !info->has_dedicated_vram;
+    info->address32_hi = RADV_PS5_ADDRESS32_HI;
+    /* Timeline semaphores: the runtime builds them over the binary sync type
+     * (vk_sync_timeline), with threaded submission for waits before signals. */
+@@ -402,6 +404,15 @@
+ void
+ radv_ps5_winsys_heap_usage(uint64_t *pool_bytes, uint64_t *available_bytes, uint64_t *driver_bytes)
+ {
++   const uint64_t local = ps5_gpu_client_local_limit();
++   if (local) {
++      /* The budget RADV reports is the device-local heap's. */
++      const uint64_t used = ps5_gpu_client_local_allocated();
++      *pool_bytes = local;
++      *available_bytes = local - MIN2(used, local);
++      *driver_bytes = used;
++      return;
++   }
+    *pool_bytes = radv_ps5_memory_pool_bytes();
+    *available_bytes = radv_ps5_memory_available_bytes();
+    *driver_bytes = p_atomic_read(&radv_ps5_allocated_bytes);
+--- a/src/amd/vulkan/winsys/ps5/radv_ps5_winsys.h
++++ b/src/amd/vulkan/winsys/ps5/radv_ps5_winsys.h
+@@ -182,6 +182,15 @@
+ /* Direct memory held by every winsys in the process. */
+ extern uint64_t radv_ps5_allocated_bytes;
+ 
++/* A broker client (Proton): device-local memory is the owning title's direct memory, mapped for the GPU there and
++ * never in this process, which has its address only. A local limit of zero means the broker offers none, and every
++ * buffer is shared host-visible memory, one pool, as before. */
++#define RADV_PS5_MEMORY_BROKER_LOCAL (-2)
++uint64_t ps5_gpu_client_local_limit(void);
++uint64_t ps5_gpu_client_local_allocated(void);
++bool ps5_gpu_client_alloc_local(uint64_t bytes, uint64_t alignment, bool window32, bool zero,
++                                   struct radv_ps5_memory *out);
++
+ void radv_ps5_bo_init_functions(struct radv_ps5_winsys *ws);
+ void radv_ps5_cs_init_functions(struct radv_ps5_winsys *ws);
+ 
