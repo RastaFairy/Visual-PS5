@@ -1996,10 +1996,32 @@ function BuildNativeVisualProject($Body) {
     }
     $existingMarker = Join-Path $targetCandidate '.ps5hs-project.json'
     if (!(Test-Path -LiteralPath $existingMarker -PathType Leaf)) {
-      return @{ok=$false;message='No se puede sobrescribir: la carpeta existente no contiene el manifiesto de Homebrew Studio.';output=[string]$targetCandidate;path=[string]$targetCandidate;exitCode=2}
-    }
-    try { $existingMeta = Get-Content -LiteralPath $existingMarker -Raw | ConvertFrom-Json } catch {
-      return @{ok=$false;message='No se puede sobrescribir: el manifiesto existente no se puede leer.';output=$_.Exception.Message;path=[string]$targetCandidate;exitCode=2}
+      # Legacy projects created by older Studio releases lack this marker. They are only
+      # eligible for migration if their native scaffold is recognizable and TITLE_ID matches.
+      $legacyRequiredFiles = if ($backend -eq 'opengl-ui') {
+        @('Makefile','sce_sys/param.json','src/main.cpp','tools/prepare-opengl.sh')
+      } else {
+        @('Makefile','sce_sys/param.json','README.md','ps5/src/samples.cpp','ps5/tools/build.sh')
+      }
+      $legacyMissingFiles = @($legacyRequiredFiles | Where-Object {
+        !(Test-Path -LiteralPath (Join-Path $targetCandidate $_) -PathType Leaf)
+      })
+      if ($legacyMissingFiles.Count -gt 0) {
+        return @{ok=$false;message='No se puede reemplazar de forma segura: la carpeta no tiene manifiesto ni coincide con la estructura de un proyecto nativo antiguo de Homebrew Studio.';output=([string]$targetCandidate + [Environment]::NewLine + 'Faltan: ' + ($legacyMissingFiles -join ', '));path=[string]$targetCandidate;exitCode=2}
+      }
+      $legacyParamPath = Join-Path $targetCandidate 'sce_sys/param.json'
+      try { $legacyParam = Get-Content -LiteralPath $legacyParamPath -Raw | ConvertFrom-Json } catch {
+        return @{ok=$false;message='No se puede adoptar la carpeta antigua: sce_sys/param.json no se puede leer.';output=$_.Exception.Message;path=[string]$targetCandidate;exitCode=2}
+      }
+      if ([string]$legacyParam.titleId -ine $titleId) {
+        return @{ok=$false;message='No se puede adoptar la carpeta antigua: TITLE_ID no coincide. No se ha movido ni sobrescrito nada.';output=('Detectado: ' + [string]$legacyParam.titleId + '; solicitado: ' + $titleId);path=[string]$targetCandidate;exitCode=2}
+      }
+      $existingMeta = @{schema='ps5hs-native-project';template=$expectedTemplate;name=$name;titleId=$titleId}
+      WriteBuildJobLog $script:ActiveBuildLogPath 'Proyecto antiguo sin manifiesto reconocido por su estructura y TITLE_ID; se conservará completo en una copia de seguridad antes de regenerar.'
+    } else {
+      try { $existingMeta = Get-Content -LiteralPath $existingMarker -Raw | ConvertFrom-Json } catch {
+        return @{ok=$false;message='No se puede sobrescribir: el manifiesto existente no se puede leer.';output=$_.Exception.Message;path=[string]$targetCandidate;exitCode=2}
+      }
     }
     if ($existingMeta.schema -ne 'ps5hs-native-project' -or [string]$existingMeta.template -ne $expectedTemplate) {
       return @{ok=$false;message='No se puede sobrescribir: el destino no es un proyecto de Homebrew Studio de la misma plantilla.';output=[string]$targetCandidate;path=[string]$targetCandidate;exitCode=2}
