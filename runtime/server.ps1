@@ -19,29 +19,13 @@ $script:ToolchainPins = $null
 if (Test-Path -LiteralPath $script:ToolchainPinsPath -PathType Leaf) {
   try { $script:ToolchainPins = Get-Content -LiteralPath $script:ToolchainPinsPath -Raw | ConvertFrom-Json } catch { $script:ToolchainPins = $null }
 }
-function GetPS5HSUpstreamUnavailable([string]$Repo) {
-  if (!$script:ToolchainPins -or !$script:ToolchainPins.mirrors) { return $false }
-  $prop = $script:ToolchainPins.mirrors.PSObject.Properties[[string]$Repo]
-  return ($null -ne $prop)
-}
-function GetPS5HSMirrorAlternatives([string]$Repo) {
-  if (!$script:ToolchainPins -or !$script:ToolchainPins.mirrors) { return @() }
-  $prop = $script:ToolchainPins.mirrors.PSObject.Properties[[string]$Repo]
-  if (!$prop) { return @() }
-  return @(@($prop.Value.alternatives) | Where-Object { $_ } | ForEach-Object { [string]$_ })
-}
 function GetPS5HSSdkArtifactPin {
   if (!$script:ToolchainPins -or !$script:ToolchainPins.artifacts) { return $null }
   $prop = $script:ToolchainPins.artifacts.PSObject.Properties['ps5-opengl-sdk']
   if (!$prop) { return $null }
   return $prop.Value
 }
-function GetPS5HSSdkMirrorUrls {
-  $pin = GetPS5HSSdkArtifactPin
-  if ($pin -and $pin.urls) { return @(@($pin.urls) | ForEach-Object { [string]$_ }) }
-  return @()
-}
-function GetPS5HSToolchainPackRoot { return (Join-Path $script:Root 'toolchain-pack') }
+function GetPS5HSToolchainPackRoot { return (Join-Path $script:Toolchains 'toolchain-pack') }
 function GetPS5HSToolchainPackSdkArchive {
   $pin = GetPS5HSSdkArtifactPin
   if (!$pin) { return @{present=$false;verified=$false;path='';version='';sha256='';bytes=0} }
@@ -201,31 +185,25 @@ function GetStatus {
     $sourceOnly=[bool]($localSource.sourceInfo -and $localSource.sourceInfo.sourceOnly)
     $installed=[bool]$localSource.installed -and !$sourceOnly
     $category='backend';if($e.category){$category=[string]$e.category}
-    $upstreamUnavailable=$null
-    $mirrorAlternatives=@()
     $buildVerified=$null
     $buildStatus=''
     if($localSource.sourceInfo -and $localSource.sourceInfo.PSObject.Properties['buildVerified']) {
       $buildVerified=[bool]$localSource.sourceInfo.buildVerified
       $buildStatus=[string]$localSource.sourceInfo.buildStatus
     }
-    if(!$localSource.bundled) {
-      $upstreamUnavailable=GetPS5HSUpstreamUnavailable ([string]$e.repo)
-      $mirrorAlternatives=GetPS5HSMirrorAlternatives ([string]$e.repo)
-    }
     $sdks+=@{
       id=$e.id;name=$e.name;folder=$e.folder;role=$e.role;license=$e.license;
       description=$e.description;category=$category;method=$e.method;
       href=('https://github.com/RastaFairy/Visual-PS5/tree/main/toolchains/'+$e.folder);
-      sourceHref=('https://github.com/'+$e.repo);
+      sourceHref=('https://github.com/RastaFairy/Visual-PS5/tree/main/toolchains/'+$e.folder);
       installed=$installed;bundled=[bool]$localSource.bundled;sourceOnly=$sourceOnly;
       buildVerified=$buildVerified;buildStatus=$buildStatus;
       buildable=([bool]$localSource.installed -and !$sourceOnly);path=$p;sourceCommit=[string]$localSource.commit;
-      upstreamUnavailable=$upstreamUnavailable;mirrorAlternatives=$mirrorAlternatives
+      localAvailable=(Test-Path -LiteralPath $p -PathType Container);localRelativePath=('toolchains/'+[string]$e.folder);localOnly=$true
     }
   }
   $sdkPackInfo=GetPS5HSToolchainPackSdkArchive
-  $toolchainHealth=@{pinsLoaded=($null -ne $script:ToolchainPins);pinsPath=$script:ToolchainPinsPath;sdkPack=@{present=$sdkPackInfo.present;verified=$sdkPackInfo.verified;version=$sdkPackInfo.version;sha256=$sdkPackInfo.sha256;bytes=$sdkPackInfo.bytes;path=$sdkPackInfo.path}}
+  $toolchainHealth=@{sourcePolicy='local-only';sourceRoot=$script:Toolchains;pinsLoaded=($null -ne $script:ToolchainPins);pinsPath=$script:ToolchainPinsPath;sdkPack=@{present=$sdkPackInfo.present;verified=$sdkPackInfo.verified;version=$sdkPackInfo.version;sha256=$sdkPackInfo.sha256;bytes=$sdkPackInfo.bytes;path=$sdkPackInfo.path}}
   return @{root=$script:Root;workspace=$script:Workspace;wslDistribution=$wslDist;sdks=$sdks;toolchainHealth=$toolchainHealth;prerequisites=@{git=$git.ok;gitPath=$git.path;dotnet10=$dot10;wsl=$wslOk;wslDotnet10=$wslDot;wslGitPython=$wslGitPython;items=$items}}
 }
 function Slug([string]$Text) { $s=([string]$Text).Normalize([Text.NormalizationForm]::FormD) -replace '\p{Mn}','';$s=$s -replace '[^a-zA-Z0-9_-]+','-';$s=$s.Trim('-');if(!$s){$s='MiHomebrew'};if($s.Length -gt 48){$s=$s.Substring(0,48)};return $s }
@@ -284,7 +262,8 @@ function GetPS5HSBundledToolchainInfo($Entry,[string]$Path) {
   }
   if($Entry.method -ne 'git') {
     $result.installed=($hasMarker -or $readme)
-    $result.bundled=($hasMarker -and $readme)
+    # Unmatched provenance must never be trusted as a vendored source.
+    $result.bundled=$false
   }
   return $result
 }
@@ -1440,8 +1419,8 @@ function BuildNativeProject([string]$ProjectPath,[bool]$CleanBeforeBuild=$false,
     } catch { return @{ok=$false;message=$_.Exception.Message;output=$_.Exception.Message;path=$projectRoot;templateId=$template} }
   } elseif ($template -eq 'hui-gl' -and $script:ActiveBuildLogPath) { WriteBuildJobLog $script:ActiveBuildLogPath 'Atlas tipográfico europeo omitido por política; se conserva la configuración upstream.' }
   if ($template -eq 'hui-gl') {
-    $mirrorPatch = ApplyPS5HSSdkMirrorChainPatch -ProjectRoot $projectRoot -Policy $policy -Backend 'opengl-ui' -SourceRepository ([string]$profile.repository) -MirrorUrls (GetPS5HSSdkMirrorUrls)
-    if ($mirrorPatch.changed -and $script:ActiveBuildLogPath) { WriteBuildJobLog $script:ActiveBuildLogPath 'Cadena de mirrors del SDK OpenGL aplicada antes de compilar.' }
+    $localOnlySdkPatch = ApplyPS5HSSdkLocalOnlyPatch -ProjectRoot $projectRoot -Policy $policy -Backend 'opengl-ui' -SourceRepository ([string]$profile.repository)
+    if ($localOnlySdkPatch.changed -and $script:ActiveBuildLogPath) { WriteBuildJobLog $script:ActiveBuildLogPath 'Resolver SDK OpenGL fijado a fuente local; no se descargará durante el build.' }
     $sdkSeed = SeedProjectOpenGlSdkCache $projectRoot
     if ($sdkSeed.seeded -and $script:ActiveBuildLogPath) { WriteBuildJobLog $script:ActiveBuildLogPath 'SDK ps5-opengl sembrado desde el pack local en .deps/ps5-opengl (SHA-256 verificado); el build no necesitará red para el SDK.' }
   }
@@ -2110,7 +2089,7 @@ function BuildNativeVisualProject($Body) {
     }
 
     if ($backend -eq 'opengl-ui') {
-      $mirrorPatch = ApplyPS5HSSdkMirrorChainPatch -ProjectRoot $projectRoot -Policy $policy -Backend $backend -SourceRepository 'blackbearreloaded/ps5-homebrew-ui' -MirrorUrls (GetPS5HSSdkMirrorUrls)
+      $localOnlySdkPatch = ApplyPS5HSSdkLocalOnlyPatch -ProjectRoot $projectRoot -Policy $policy -Backend $backend -SourceRepository 'blackbearreloaded/ps5-homebrew-ui'
       if ($mirrorPatch.changed -and $script:ActiveBuildLogPath) { WriteBuildJobLog $script:ActiveBuildLogPath 'Cadena de mirrors del SDK OpenGL aplicada al crear el proyecto.' }
       $sdkSeed = SeedProjectOpenGlSdkCache $projectRoot
       if ($sdkSeed.seeded -and $script:ActiveBuildLogPath) { WriteBuildJobLog $script:ActiveBuildLogPath 'SDK ps5-opengl sembrado desde el pack local en .deps/ps5-opengl (SHA-256 verificado); el build no necesitará red para el SDK.' }
