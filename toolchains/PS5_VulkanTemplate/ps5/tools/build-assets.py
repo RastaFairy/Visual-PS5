@@ -25,7 +25,6 @@ import json
 import os
 import shutil
 import sys
-import urllib.request
 from pathlib import Path
 
 PS5 = Path(__file__).resolve().parent.parent
@@ -59,19 +58,27 @@ def licence_path(asset):
 
 
 def download(url, sha256):
+    """Resolve a pinned asset from the local cache only; never fetch a URL."""
     DOWNLOADS.mkdir(parents=True, exist_ok=True)
     target = DOWNLOADS / sha256
     if target.is_file() and hashlib.sha256(target.read_bytes()).hexdigest() == sha256:
         return target
-    print(f"download {url}")
-    request = urllib.request.Request(url, headers={"User-Agent": "ps5-vulkan-samples-asset-build"})
-    with urllib.request.urlopen(request, timeout=120) as response:
-        data = response.read()
-    actual = hashlib.sha256(data).hexdigest()
-    if actual != sha256:
-        sys.exit(f"{url}: sha256 {actual}, expected {sha256}")
-    target.write_bytes(data)
-    return target
+
+    # Optional source packs may seed content-addressed files into one of these
+    # explicit local cache locations. The URL in assets.json is provenance only.
+    local_candidates = [
+        ROOT.parent / "toolchain-pack" / "downloads" / sha256,
+        ROOT.parent / "toolchain-pack" / "assets" / sha256,
+    ]
+    for candidate in local_candidates:
+        if candidate.is_file() and hashlib.sha256(candidate.read_bytes()).hexdigest() == sha256:
+            shutil.copy2(candidate, target)
+            return target
+
+    sys.exit(
+        f"Local-only mode: required asset is missing from the local cache: {target}; "
+        f"expected SHA-256 {sha256}. The source URL is metadata only and was not contacted."
+    )
 
 
 def source_path(asset, manifest):
