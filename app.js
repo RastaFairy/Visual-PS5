@@ -1328,7 +1328,7 @@
     if(needsInit)keys.unshift('allowExecuteUpstreamGenerationTools');
     if(templateId==='nativecpp'||templateId==='hui-gl')keys.push('allowWindowsBuildEntrypointPatch','normalizeBuildFiles');
     if(templateId==='vulkan-template')keys.push('normalizeBuildFiles','allowVulkanBuildHelperRestore');
-    if(templateId==='hui-gl')keys.push('allowOpenGlRuntimeProfile','allowOpenGlEuropeanAtlas','allowUpstreamSdkMirrorPatch');
+    if(templateId==='hui-gl')keys.push('allowOpenGlRuntimeProfile','allowOpenGlEuropeanAtlas');
     return [...new Set(keys)];
   }
   function nativeBuildModificationOptionsMarkup(templateId, needsInit=false) {
