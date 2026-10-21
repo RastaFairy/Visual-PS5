@@ -10,8 +10,7 @@ The new title is this repository's foundation with one program: the base class
 starter sample (examples/starter/) renamed to the title's own program. It is
 built, deployed, run and checked exactly as the samples are, and a technique
 from any sample can be copied into it as it stands, since every sample is a
-class on the same base. The foundation is copied at this repository's last
-commit (git archive), and its revision is recorded in the new title's README.
+class on the same base. The foundation is copied from the versioned local source snapshot under toolchains/; a recorded upstream revision is included only when the vendor manifest provides one.
 
 The title id is PPSA and five digits, unique on the console: the ids my titles
 use are refused. The name is what the home screen shows: up to 40 letters,
