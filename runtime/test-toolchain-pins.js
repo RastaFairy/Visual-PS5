@@ -78,7 +78,7 @@ assert.match(packer, /toolchain-pins\.json/, 'the packer must read the pin manif
 assert.match(packer, /manifest\.json/, 'the packer must emit a pack manifest');
 assert.match(packer, /Compress-Archive/, 'the packer must support its optional ZIP backup');
 assert.match(packer, /networkAccess = \$false/, 'the packer must declare that it does not access the network');
-assert.match(packer, /toolchains\\ps5-opengl-sdk/, 'the SDK must be read from toolchains/');
+assert.ok(packer.includes("$sdkDir = Join-Path $toolchainsRoot 'ps5-opengl-sdk'"), 'the SDK must be read from toolchains/');
 assert.equal(packer.includes('Invoke-WebRequest'), false, 'the packer must not download archives');
 assert.equal(packer.includes('https://'), false, 'the packer must not contain remote URLs');
 assert.equal(packer.includes('.urls'), false, 'the packer must not iterate remote URL lists');
