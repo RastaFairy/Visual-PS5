@@ -74,6 +74,45 @@ verify_plain_tree() {
   fi
 }
 
+ensure_build_metadata() {
+  local manifest="$1"
+  python3 - "$manifest" <<'PY'
+import json, sys
+path = sys.argv[1]
+with open(path, encoding="utf-8") as f:
+    data = json.load(f)
+changed = False
+if "buildVerified" not in data:
+    data["buildVerified"] = False
+    changed = True
+if "buildStatus" not in data:
+    data["buildStatus"] = "source-tree-verified; target build not yet run"
+    changed = True
+default_notes = [
+    "This manifest proves the pinned source tree is materialized locally; it does not claim a successful compile or console test.",
+    "Generic host build dependencies and precompiled SDK artifacts remain separate.",
+]
+notes = data.get("buildNotes")
+if not isinstance(notes, list):
+    notes = default_notes.copy()
+    data["buildNotes"] = notes
+    changed = True
+elif not notes:
+    data["buildNotes"] = default_notes.copy()
+    notes = data["buildNotes"]
+    changed = True
+if ("helixsr" in path.lower() or str(data.get("repository", "")).lower().endswith("/ps5-helixsr")) and not any(
+    "legitimate user-supplied model DLL" in str(note) for note in notes
+):
+    notes.append("HelixSR still requires a legitimate user-supplied model DLL.")
+    changed = True
+if changed:
+    with open(path, "w", encoding="utf-8", newline="\\n") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+        f.write("\\n")
+PY
+}
+
 write_parent_manifest() {
   local parent="$1" driver_commit="$2" driver_tree="$3" label="$4"
   python3 - "$parent/.ps5hs-source.json" "$driver_commit" "$driver_tree" "$label" "$stamp" <<'PY'
@@ -114,6 +153,16 @@ data["submoduleRecovery"] = {
     "completedAt": stamp,
     "note": "The declared Vulkan Gitlink was replaced with the exact verified tree as ordinary files."
 }
+# Materializing source is not proof of a successful build. Preserve any explicit
+# result already recorded, and default missing build metadata to "not verified".
+data.setdefault("buildVerified", False)
+data.setdefault("buildStatus", "source-tree-verified; target build not yet run")
+notes = data.setdefault("buildNotes", [
+    "This manifest proves the pinned source tree is materialized locally; it does not claim a successful compile or console test.",
+    "Generic host build dependencies and precompiled SDK artifacts remain separate.",
+])
+if "helixsr" in path.lower() and not any("legitimate user-supplied model DLL" in str(note) for note in notes):
+    notes.append("HelixSR still requires a legitimate user-supplied model DLL.")
 with open(path, "w", encoding="utf-8", newline="\n") as f:
     json.dump(data, f, ensure_ascii=False, indent=2)
     f.write("\n")
@@ -125,6 +174,7 @@ materialize_module() {
   local dest="$parent/external/ps5-vulkan" source marker_ok=""
 
   [[ -f "$parent/.ps5hs-source.json" ]] || fail "$parent: missing parent source manifest."
+  ensure_build_metadata "$parent/.ps5hs-source.json"
   source="$(prepare_source "mpereiraesaa/ps5-vulkan" "$driver_commit" "$driver_tree" "driver-$label")"
   [[ -f "$source/README.md" && -f "$source/Makefile" ]] ||
     fail "The pinned tree mpereiraesaa/ps5-vulkan@$driver_commit failed structural validation."
@@ -200,6 +250,7 @@ except Exception:
 PY
 )"
     [[ "$marker_status" == "ok" ]] || fail "$dest points at a different revision; refusing to overwrite."
+    ensure_build_metadata "$dest/.ps5hs-source.json"
   else
     source="$(prepare_source "$repo" "$root_commit" "$root_tree" "root-$label")"
     mkdir -p "$dest"
@@ -228,6 +279,12 @@ data = {
     "unresolvedSubmodules": ["external/ps5-vulkan@" + driver_commit],
     "buildableWithoutExternalRepo": False,
     "materializedSubmodules": [],
+    "buildVerified": False,
+    "buildStatus": "source-tree-verified; target build not yet run",
+    "buildNotes": [
+        "This manifest proves the pinned source tree is materialized locally; it does not claim a successful compile or console test.",
+        "Generic host build dependencies and precompiled SDK artifacts remain separate.",
+    ] + (["HelixSR still requires a legitimate user-supplied model DLL."] if name.lower() == "ps5-helixsr" else []),
 }
 with open(path, "w", encoding="utf-8", newline="\n") as f:
     json.dump(data, f, ensure_ascii=False, indent=2)
