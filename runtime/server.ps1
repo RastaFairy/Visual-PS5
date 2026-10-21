@@ -203,6 +203,12 @@ function GetStatus {
     $category='backend';if($e.category){$category=[string]$e.category}
     $upstreamUnavailable=$null
     $mirrorAlternatives=@()
+    $buildVerified=$null
+    $buildStatus=''
+    if($localSource.sourceInfo -and $localSource.sourceInfo.PSObject.Properties['buildVerified']) {
+      $buildVerified=[bool]$localSource.sourceInfo.buildVerified
+      $buildStatus=[string]$localSource.sourceInfo.buildStatus
+    }
     if(!$localSource.bundled) {
       $upstreamUnavailable=GetPS5HSUpstreamUnavailable ([string]$e.repo)
       $mirrorAlternatives=GetPS5HSMirrorAlternatives ([string]$e.repo)
@@ -213,6 +219,7 @@ function GetStatus {
       href=('https://github.com/RastaFairy/Visual-PS5/tree/main/toolchains/'+$e.folder);
       sourceHref=('https://github.com/'+$e.repo);
       installed=$installed;bundled=[bool]$localSource.bundled;sourceOnly=$sourceOnly;
+      buildVerified=$buildVerified;buildStatus=$buildStatus;
       buildable=(!$sourceOnly);path=$p;sourceCommit=[string]$localSource.commit;
       upstreamUnavailable=$upstreamUnavailable;mirrorAlternatives=$mirrorAlternatives
     }
