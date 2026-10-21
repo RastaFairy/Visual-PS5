@@ -3,7 +3,7 @@
 # Copyright (C) 2026 BlackBearReloaded
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# Fetches a verified GoogleTest source release into the ignored dependency cache.
+# Uses a cached archive, or a pinned copy from toolchains/artifacts/ in IDE local-only mode.
 
 set -euo pipefail
 
@@ -31,7 +31,16 @@ fi
 if [[ ! -f $archive ]]; then
     temporary="$archive.download"
     rm -f -- "$temporary"
-    wget -q "$url" -O "$temporary"
+    if [[ ${PS5HS_LOCAL_TOOLCHAINS_ONLY:-0} == 1 ]]; then
+        local_archive="${PS5HS_TOOLCHAINS_ROOT:-}/artifacts/googletest-$version.tar.gz"
+        [[ -n ${PS5HS_TOOLCHAINS_ROOT:-} && -f $local_archive ]] || {
+            echo "local-only: missing toolchains/artifacts/googletest-$version.tar.gz (pinned SHA-256 required)" >&2
+            exit 2
+        }
+        cp -- "$local_archive" "$temporary"
+    else
+        wget -q "$url" -O "$temporary"
+    fi
     printf '%s  %s\n' "$hash" "$temporary" | sha256sum --check --strict >/dev/null
     mv "$temporary" "$archive"
 fi
