@@ -1396,59 +1396,6 @@ function BuildNativeProject([string]$ProjectPath,[bool]$CleanBeforeBuild=$false,
   if (!$st.prerequisites.wsl) { return @{ok=$false;message='No hay una distribución WSL inicializada.';output='Configura WSL + Debian y completa su primer arranque.';templateId=$template} }
   if (!$st.prerequisites.wslGitPython) { return @{ok=$false;message='Faltan Git o Python 3 dentro de WSL.';output='Instala git y python3 en la distribución Linux indicada por la documentación upstream.';templateId=$template} }
   $dist = [string]$st.wslDistribution
-  # A Homebrew Studio OpenGL project has its own supported Windows entry point.
-  # Prefer it over preparing a second shared SDK under toolchains/ on a different
-  # drive. build.ps1 resolves the project-local pinned SDK/dependencies and is the
-  # same command users can run manually from the project directory.
-  $studioBuildScript = Join-Path $projectRoot 'build.ps1'
-  if ($template -eq 'hui-gl' -and [bool]$meta.generatedFromStudio -and (Test-Path -LiteralPath $studioBuildScript -PathType Leaf)) {
-    $shell = CmdInfo 'pwsh.exe'
-    if (!$shell.ok) { $shell = CmdInfo 'pwsh' }
-    if (!$shell.ok) { $shell = CmdInfo 'powershell.exe' }
-    if (!$shell.ok) { throw 'No se encontró PowerShell para ejecutar el build.ps1 del proyecto.' }
-    WriteBuildJobLog $script:ActiveBuildLogPath 'Proyecto visual de Homebrew Studio detectado: se usa el build.ps1 del propio proyecto y su SDK local. Se omite la compilación redundante del SDK compartido en toolchains/.'
-    if ($CleanBeforeBuild) {
-      $cleanWslPath = ConvertToWslPath $projectRoot
-      $cleanWsl = CmdInfo 'wsl.exe'
-      if (!$cleanWsl.ok) { throw 'No se pudo localizar wsl.exe para ejecutar la limpieza previa solicitada.' }
-      $cleanCommand = 'cd ' + (BashQuote $cleanWslPath) + ' && if make -qp 2>/dev/null | grep -qE ' + (BashQuote '^[[:space:]]*clean[[:space:]]*:') + '; then echo "[CLEAN] Ejecutando make clean en el proyecto"; make clean; else echo "[CLEAN] El Makefile no declara clean; se conserva la salida anterior"; fi'
-      $cleanOutput = @(& $cleanWsl.path -d $dist --exec bash -lc $cleanCommand 2>&1 | ForEach-Object { $line=$_.ToString(); WriteBuildJobLog $script:ActiveBuildLogPath $line; $line })
-      $cleanExit = $LASTEXITCODE
-      if ($cleanExit -ne 0) { throw ('Falló make clean antes de build.ps1 (código ' + $cleanExit + '): ' + (($cleanOutput | ForEach-Object { [string]$_ }) -join "`r`n")) }
-    }
-    $studioInvocation = InvokePS5HSNativeTreeModificationWithAudit -ProjectRoot $projectRoot -Backend $template -Operation 'execute-native-upstream-build-script' -PermissionKey 'allowExecuteUpstreamBuildTools' -Policy $policy -SourceRepository ([string]$profile.repository) -Action {
-      $capturedOutput = @()
-      $capturedExit = 1
-      Push-Location -LiteralPath $projectRoot
-      try {
-        $capturedOutput = @(& $shell.path -NoLogo -NoProfile -ExecutionPolicy Bypass -File $studioBuildScript 2>&1 | ForEach-Object {
-          $line = $_.ToString()
-          WriteBuildJobLog $script:ActiveBuildLogPath $line
-          $line
-        })
-        $capturedExit = $LASTEXITCODE
-      } catch {
-        $capturedOutput += [string]$_.Exception.Message
-        $capturedExit = 1
-      } finally { Pop-Location }
-      return @{output=@($capturedOutput | ForEach-Object { [string]$_ });exitCode=[int]$capturedExit}
-    }
-    $studioOutput = @($studioInvocation.output)
-    $studioExit = [int]$studioInvocation.exitCode
-    $studioLog = ($studioOutput | ForEach-Object { [string]$_ }) -join "`r`n"
-    $artifact = ''
-    $eboots = @(GetProjectEbootFolders $projectRoot)
-    foreach ($candidate in $eboots) {
-      $titleFolder = Split-Path -Parent $candidate.FullName
-      $paramPath = Join-Path $titleFolder 'sce_sys\param.json'
-      if (!(Test-Path -LiteralPath $paramPath -PathType Leaf)) { $paramPath = Join-Path $projectRoot 'sce_sys\param.json' }
-      if (Test-Path -LiteralPath $paramPath -PathType Leaf) { $artifact = $candidate.FullName; break }
-    }
-    if ($studioExit -eq 0 -and $artifact) {
-      return @{ok=$true;message='El build.ps1 del proyecto terminó correctamente; eboot.bin y sce_sys/param.json verificados.';output=$studioLog;path=$projectRoot;artifact=$artifact;templateId=$template;titleId=[string]$meta.titleId;exitCode=0;buildEntryPoint=$studioBuildScript}
-    }
-    return @{ok=$false;message="El build.ps1 del proyecto terminó con código $studioExit o no produjo un título actual verificable (eboot.bin + sce_sys/param.json).";output=$studioLog;path=$projectRoot;artifact=$artifact;templateId=$template;titleId=[string]$meta.titleId;exitCode=$studioExit;buildEntryPoint=$studioBuildScript;diagnostics=@(@{severity='error';title='Falló build.ps1';message='Se ejecutó el pipeline del propio proyecto. Revisa su salida para ver el error real; no se intentó reconstruir otra copia del SDK compartido.';location=$studioBuildScript})}
-  }
   $dependencyLog = @()
   try {
     if ($template -eq 'vulkan-template') {
