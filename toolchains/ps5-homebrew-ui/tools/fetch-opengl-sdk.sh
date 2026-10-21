@@ -24,6 +24,25 @@ mkdir -p "$cache"
 # under the repository's toolchains/ tree and match the pinned SHA-256.
 toolchains_root="${PS5HS_TOOLCHAINS_ROOT:-$(dirname "$root")}"
 local_archive="$toolchains_root/ps5-opengl-sdk/ps5-opengl-sdk-$version.tar.gz"
+local_prefixes=(
+    "$toolchains_root/ps5-opengl-sdk/ps5-opengl-sdk-$version/sdk"
+    "$toolchains_root/ps5-opengl-sdk/sdk"
+    "$toolchains_root/ps5-opengl/build/sdk/ps5-opengl-gl46"
+    "$toolchains_root/ps5-opengl-mihawk/build/sdk/ps5-opengl-gl46"
+)
+
+# Accept an already-extracted local SDK only if every file passes its manifest
+# and the manifest itself matches the exact pinned release identity.
+if [[ ! -f $prefix/manifest.sha256 ]]; then
+    for candidate in "${local_prefixes[@]}"; do
+        [[ -f $candidate/manifest.sha256 ]] || continue
+        (cd "$candidate" && sha256sum --check --strict --quiet manifest.sha256) || continue
+        actual_candidate_manifest=$(sha256sum "$candidate/manifest.sha256" | cut -d' ' -f1)
+        [[ $actual_candidate_manifest == "$manifest_sha256" ]] || continue
+        printf '%s\\n' "$candidate"
+        exit 0
+    done
+fi
 
 if [[ ! -f $prefix/manifest.sha256 ]]; then
     # A previously extracted SDK is reusable only via the manifest checks below.
@@ -31,7 +50,7 @@ if [[ ! -f $prefix/manifest.sha256 ]]; then
     # seed it from the versioned toolchains tree; never use HTTP fallbacks.
     if [[ ! -f $archive ]] || ! sha256sum --check --status <<<"$archive_sha256  $archive"; then
         [[ -f $local_archive ]] || {
-            echo "local-only: falta toolchains/ps5-opengl-sdk/ps5-opengl-sdk-$version.tar.gz; no se consulta Internet" >&2
+            echo "local-only: falta el tarball fijado o un SDK $version ya extraído y verificado dentro de toolchains/; no se consulta Internet" >&2
             exit 2
         }
         sha256sum --check --strict <<<"$archive_sha256  $local_archive" || {
