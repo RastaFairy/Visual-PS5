@@ -1,22 +1,6 @@
 # PS5 Homebrew Studio - Build-ToolchainPack.ps1
-# Consolida el material de toolchains local (fuentes ya adoptadas en toolchains\)
-# y el SDK binario ps5-opengl en toolchain-pack\, con verificacion SHA-256 del pin.
-#
-# Uso (desde la carpeta del IDE, en Windows PowerShell 5.1+):
-#   powershell -ExecutionPolicy Bypass -File runtime\Build-ToolchainPack.ps1
-# Opciones:
-#   -SdkTarball <ruta>   Ruta a ps5-opengl-sdk-1.0.2.tar.gz ya descargado
-#                        (si se omite, se intenta la cadena de mirrors del pin).
-#   -OutputZip <ruta>    Ademas del pack en disco, crea un ZIP de respaldo
-#                        completo (toolchains + pack). Puede tardar.
-#   -Include <lista>     Carpetas de toolchains a incluir en el inventario y el
-#                        ZIP (por defecto las 8 gestionadas por el IDE).
-#
-# El pack resultante:
-#   toolchain-pack\ps5-opengl-sdk\ps5-opengl-sdk-1.0.2.tar.gz  (binario verificado)
-#   toolchain-pack\manifest.json                                (inventario + origenes)
-# El IDE detecta toolchain-pack\ automaticamente: siembra el tarball en .deps\
-# de cada proyecto OpenGL antes de compilar y asi el build no necesita red.
+# Valida y empaqueta exclusivamente fuentes/artefactos que ya existen en toolchains/.
+# No descarga archivos ni prueba mirrors.
 param(
   [string]$SdkTarball = '',
   [string]$OutputZip = '',
@@ -33,7 +17,8 @@ $artifact = $pins.artifacts.'ps5-opengl-sdk'
 if (!$artifact) { throw 'El manifiesto de pins no declara el artefacto ps5-opengl-sdk.' }
 $expectedSha = [string]$artifact.archive.sha256
 $expectedFile = [string]$artifact.file
-$expectedBytes = [int64]$artifact.bytes
+$sdkDir = Join-Path $toolchainsRoot 'ps5-opengl-sdk'
+$sdkTarget = Join-Path $sdkDir $expectedFile
 
 function Write-Utf8([string]$Path,[string]$Content) {
   $dir = Split-Path -Parent $Path
@@ -46,40 +31,22 @@ function Test-ArchivePin([string]$Path) {
   return ($hash -eq $expectedSha)
 }
 
-# 1. Ubicar o descargar el tarball del SDK con la cadena de mirrors del pin.
-$sdkDir = Join-Path $packRoot 'ps5-opengl-sdk'
-$sdkTarget = Join-Path $sdkDir $expectedFile
-$downloaded = $false
 if ($SdkTarball) {
-  if (!(Test-Path -LiteralPath $SdkTarball -PathType Leaf)) { throw "No se encontro el tarball indicado en -SdkTarball: $SdkTarball" }
-  if (!(Test-ArchivePin $SdkTarball)) { throw "El tarball indicado no coincide con el pin SHA-256 ($expectedSha). No se usara." }
-  New-Item -ItemType Directory -Force -Path $sdkDir | Out-Null
-  Copy-Item -LiteralPath $SdkTarball -Destination $sdkTarget -Force
-} elseif (Test-ArchivePin $sdkTarget) {
-  Write-Host "SDK ya presente y verificado: $sdkTarget"
-} else {
-  New-Item -ItemType Directory -Force -Path $sdkDir | Out-Null
-  $tempArchive = Join-Path $env:TEMP ('ps5hs-' + [guid]::NewGuid().ToString('N') + '.tar.gz')
-  $ok = $false
-  foreach ($url in @($artifact.urls)) {
-    Write-Host "Descargando SDK desde: $url"
-    try {
-      Invoke-WebRequest -Uri ([string]$url) -OutFile $tempArchive -UseBasicParsing -TimeoutSec 1800
-      if (Test-ArchivePin $tempArchive) { $ok = $true; break }
-      Write-Host '  El archivo descargado no coincide con el pin SHA-256; se descarta.' -ForegroundColor Yellow
-    } catch { Write-Host ('  Fallo: ' + $_.Exception.Message) -ForegroundColor Yellow }
-    Remove-Item -LiteralPath $tempArchive -Force -ErrorAction SilentlyContinue
+  $provided = [IO.Path]::GetFullPath($SdkTarball)
+  $required = [IO.Path]::GetFullPath($sdkTarget)
+  if ($provided -ne $required) {
+    throw "Modo local-only: -SdkTarball solo acepta el archivo versionado en $required."
   }
-  if (!$ok) { throw "No se pudo obtener un tarball del SDK que verifique el pin SHA-256 $expectedSha desde ninguna URL del manifiesto." }
-  Copy-Item -LiteralPath $tempArchive -Destination $sdkTarget -Force
-  Remove-Item -LiteralPath $tempArchive -Force -ErrorAction SilentlyContinue
-  $downloaded = $true
 }
-if (!(Test-ArchivePin $sdkTarget)) { throw "Verificacion final fallida para $sdkTarget." }
+if (!(Test-Path -LiteralPath $sdkTarget -PathType Leaf)) {
+  throw "Falta el SDK OpenGL local fijado: $sdkTarget. No se descargara; incorpora el archivo verificado a toolchains/ps5-opengl-sdk/."
+}
+if (!(Test-ArchivePin $sdkTarget)) {
+  throw "El SDK OpenGL local no coincide con el SHA-256 fijado ($expectedSha): $sdkTarget."
+}
 $actualBytes = (Get-Item -LiteralPath $sdkTarget).Length
-Write-Host ("SDK verificado: {0} ({1:N0} bytes, SHA-256 {2})" -f $sdkTarget, $actualBytes, $expectedSha)
+Write-Host ("SDK local verificado: {0} ({1:N0} bytes, SHA-256 {2})" -f $sdkTarget, $actualBytes, $expectedSha)
 
-# 2. Inventario de los toolchains adoptados localmente (origen, commit, licencia).
 $inventory = @()
 foreach ($folder in $Include) {
   $dir = Join-Path $toolchainsRoot $folder
@@ -109,28 +76,29 @@ foreach ($folder in $Include) {
   }
 }
 
-# 3. Manifiesto del pack.
+New-Item -ItemType Directory -Force -Path $packRoot | Out-Null
 $manifest = [pscustomobject]@{
   schema = 'ps5hs-toolchain-pack'
   version = 1
   generatedAt = (Get-Date).ToString('o')
   ideRoot = $ideRoot
+  networkAccess = $false
+  localOnly = $true
   sdk = [pscustomobject]@{
     name = 'ps5-opengl-sdk'
     version = [string]$artifact.version
     file = $expectedFile
+    localPath = 'toolchains/ps5-opengl-sdk/' + $expectedFile
     bytes = $actualBytes
     sha256 = $expectedSha
-    downloadedNow = $downloaded
-    mirrors = @($artifact.urls)
+    downloadedNow = $false
   }
   toolchains = $inventory
-  notes = 'Las fuentes de los toolchains permanecen en toolchains\; el IDE las adopta sin sobrescribirlas. Este pack anade el binario del SDK que el IDE siembra en .deps\ de cada proyecto OpenGL antes de compilar. Conserva las licencias LICENSE/THIRD_PARTY_NOTICES de cada checkout upstream.'
+  notes = 'El packer solo inspecciona el árbol versionado toolchains/. No descarga fuentes, releases, mirrors ni paquetes. Los artefactos deben estar presentes localmente y superar los checksums fijados.'
 }
 Write-Utf8 (Join-Path $packRoot 'manifest.json') ($manifest | ConvertTo-Json -Depth 6)
-Write-Host "Manifiesto escrito: $(Join-Path $packRoot 'manifest.json')"
+Write-Host "Manifiesto local escrito: $(Join-Path $packRoot 'manifest.json')"
 
-# 4. ZIP de respaldo completo (opcional).
 if ($OutputZip) {
   $OutputZip = [IO.Path]::GetFullPath($OutputZip)
   $staging = Join-Path $env:TEMP ('ps5hs-pack-' + [guid]::NewGuid().ToString('N'))
@@ -143,9 +111,9 @@ if ($OutputZip) {
     Copy-Item -LiteralPath $packRoot -Destination $staging -Recurse -Force
     if (Test-Path -LiteralPath $OutputZip) { Remove-Item -LiteralPath $OutputZip -Force }
     Compress-Archive -Path (Join-Path $staging '*') -DestinationPath $OutputZip -CompressionLevel Optimal
-    Write-Host ("Respaldo completo creado: {0} ({1:N0} bytes)" -f $OutputZip, (Get-Item -LiteralPath $OutputZip).Length)
+    Write-Host ("Respaldo local creado: {0} ({1:N0} bytes)" -f $OutputZip, (Get-Item -LiteralPath $OutputZip).Length)
   } finally {
     Remove-Item -LiteralPath $staging -Recurse -Force -ErrorAction SilentlyContinue
   }
 }
-Write-Host 'Listo. El IDE detectara toolchain-pack\ en el proximo arranque o al refrescar el estado.' -ForegroundColor Green
+Write-Host 'Listo. No se consultaron servicios externos.' -ForegroundColor Green
