@@ -53,6 +53,7 @@ assert.match(server, /\$candidateRepos=@\(\[string\]\$Entry\.repo\)\+\(GetPS5HSM
 assert.match(server, /mirrorRepository=\$usedRepo/, 'el clon con mirror debe registrar la fuente usada');
 assert.match(server, /toolchainHealth/, 'GetStatus debe exponer la salud de toolchains');
 assert.match(server, /buildVerified=\$buildVerified;buildStatus=\$buildStatus/, 'GetStatus debe exponer la verificación de compilación por separado del estado de la fuente');
+assert.match(server, /buildable=\(\[bool\]\$localSource\.installed\s+-and\s+!\$sourceOnly\)/, 'una toolchain ausente o marcada source-only no debe exponerse como compilable');
 assert.match(server, /\$upstreamUnavailable=\$null[\s\S]*?if\(!\$localSource\.bundled\)\s*\{\s*\$upstreamUnavailable=GetPS5HSUpstreamUnavailable\s+\(\[string\]\$e\.repo\)/, 'el estado solo debe comprobar disponibilidad upstream si no existe una copia local agrupada');
 assert.match(server, /\$mirrorAlternatives=GetPS5HSMirrorAlternatives\s+\(\[string\]\$e\.repo\)/, 'el estado debe seguir mostrando mirrors si la fuente no está agrupada');
 assert.ok(
