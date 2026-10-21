@@ -202,12 +202,16 @@ function AssertPS5HSNativeModificationManifestWritable {
       if ($stream) { $stream.Dispose() }
     }
   } else {
+    # A new project path may not exist yet. Probe the nearest existing ancestor,
+    # not only its immediate parent; the generator creates the project tree afterwards.
     $probeRoot = $root
-    if (!(Test-Path -LiteralPath $probeRoot -PathType Container)) {
-      $probeRoot = [IO.Path]::GetDirectoryName($root)
+    while (![string]::IsNullOrWhiteSpace($probeRoot) -and !(Test-Path -LiteralPath $probeRoot -PathType Container)) {
+      $parent = [IO.Directory]::GetParent($probeRoot)
+      if ($null -eq $parent) { $probeRoot = ''; break }
+      $probeRoot = $parent.FullName
     }
     if ([string]::IsNullOrWhiteSpace($probeRoot) -or !(Test-Path -LiteralPath $probeRoot -PathType Container)) {
-      throw 'No existe una carpeta accesible donde preparar el registro de auditoría.'
+      throw ('No existe una carpeta accesible donde preparar el registro de auditoría. Ruta solicitada: ' + $root)
     }
     $probePath = Join-Path $probeRoot ('.ps5hs-audit-probe-' + [guid]::NewGuid().ToString('N') + '.tmp')
     try {
