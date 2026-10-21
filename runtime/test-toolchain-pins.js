@@ -52,8 +52,19 @@ assert.match(openglSdkFetcher, /toolchains_root/, 'el SDK OpenGL debe resolver t
 assert.equal(openglSdkFetcher.includes('curl'), false, 'el SDK OpenGL no debe contener un cliente HTTP');
 assert.equal(openglSdkFetcher.includes('wget'), false, 'el SDK OpenGL no debe usar wget');
 assert.ok(server.includes('$legacyRequiredFiles') && server.includes('$legacyParam.titleId') && server.includes('Proyecto antiguo sin manifiesto') && server.includes('Move-Item -LiteralPath $targetCandidate -Destination $replacementBackupPath'), 'legacy visual projects must be identity-checked and backed up before regeneration');
-const legacyFreeBsdHeader = fs.readFileSync(path.join(root, 'toolchains', 'PS5_PayloadSDK-pinned-b83202be', 'include', 'freebsd', '_semaphore.h'), 'utf8');
-assert.ok(legacyFreeBsdHeader.includes('#ifndef __SEMAPHORE_H_'), 'Windows source ZIP must contain the actual FreeBSD header rather than its symlink target text');
+const windowsZipSafeFreeBsdHeaders = [
+  '_semaphore.h', 'aio.h', 'errno.h', 'fcntl.h', 'float.h',
+  'floatingpoint.h', 'linker_set.h', 'ncurses.h', 'poll.h', 'sched.h',
+  'stdarg.h', 'stdatomic.h', 'stdint.h', 'syslog.h', 'ucontext.h'
+];
+const freebsdIncludeDir = path.join(root, 'toolchains', 'PS5_PayloadSDK-pinned-b83202be', 'include', 'freebsd');
+for (const name of windowsZipSafeFreeBsdHeaders) {
+  const header = fs.readFileSync(path.join(freebsdIncludeDir, name), 'utf8');
+  assert.ok(header.length > 100, `Windows source ZIP must contain the actual ${name} header, not a symbolic-link placeholder`);
+}
+const sdkCacheCheck = openglSdkFetcher.indexOf('if [[ ! -f $prefix/manifest.sha256 ]]');
+const localArchiveCheck = openglSdkFetcher.indexOf('[[ -f $local_archive ]]');
+assert.ok(sdkCacheCheck >= 0 && localArchiveCheck > sdkCacheCheck, 'OpenGL bootstrap must accept a fully verified SDK cache before requiring the source tarball');
 assert.match(openglSdkFetcher, /toolchains\/ps5-opengl-sdk\/ps5-opengl-sdk-\$version\.tar\.gz/, 'el tarball del SDK solo se busca en el árbol toolchains');
 for (const [name, script] of [['OpenGL native', openGlNativeDeps], ['Native C++', nativeCppDeps], ['Vulkan', vulkanDeps]]) {
   assert.match(script, /PS5HS_LOCAL_TOOLCHAINS_ONLY:-0/, name + ' debe respetar el modo local-only');
