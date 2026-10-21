@@ -261,8 +261,8 @@ function GetPS5HSBundledToolchainInfo($Entry,[string]$Path) {
     }
   }
   if($Entry.method -ne 'git') {
-    $result.installed=($hasMarker -or $readme)
-    # Unmatched provenance must never be trusted as a vendored source.
+    # A present but mismatched manifest is not a valid installed source.
+    $result.installed=(!$hasMarker -and $readme)
     $result.bundled=$false
   }
   return $result
@@ -362,7 +362,8 @@ function InstallRepo($Entry) {
     return @{ok=$true;name=$Entry.name;message='Fuente ya presente localmente; se conserva sin sobrescribir y sin consultar Internet.';path=$dest;localOnly=$true}
   }
   throw "La carpeta '$dest' no contiene una fuente local reconocible. No se descargará una copia externa."
-}function BashQuote([string]$Text) { return "'" + $Text.Replace("'", "'\''") + "'" }
+}
+function BashQuote([string]$Text) { return "'" + $Text.Replace("'", "'\''") + "'" }
 function ConvertToWslPath([string]$Path) {
   $full=[IO.Path]::GetFullPath($Path)
   if($full -notmatch '^([A-Za-z]):\\(.*)$'){throw "La ruta no puede traducirse a WSL: $full. Usa una carpeta dentro de una unidad local."}
