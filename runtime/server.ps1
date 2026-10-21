@@ -290,117 +290,100 @@ function GetPS5HSBundledToolchainInfo($Entry,[string]$Path) {
 }
 
 function InstallRepo($Entry) {
-  $dest=Join-Path $script:Toolchains $Entry.folder
-  $marker=Test-Path (Join-Path $dest '.ps5hs-source.json')
-  if($Entry.method -eq 'git'){
+  $dest = Join-Path $script:Toolchains ([string]$Entry.folder)
+  if (!(Test-Path -LiteralPath $script:Toolchains -PathType Container)) {
+    throw "No existe el directorio local de toolchains: $($script:Toolchains)"
+  }
+  if (!(Test-Path -LiteralPath $dest -PathType Container)) {
+    throw "Dependencia local ausente: no existe '$dest'. El IDE solo resuelve fuentes desde toolchains/ de este repositorio; no consulta GitHub, mirrors ni descarga ZIP."
+  }
+
+  $markerPath = Join-Path $dest '.ps5hs-source.json'
+  $hasMarker = Test-Path -LiteralPath $markerPath -PathType Leaf
+  $readmePath = @('README.md','readme.md','README') | ForEach-Object { Join-Path $dest $_ } | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } | Select-Object -First 1
+  $hasReadme = [bool]$readmePath
+  $localSource = GetPS5HSBundledToolchainInfo $Entry $dest
+
+  if ($Entry.method -eq 'git') {
+    if ($localSource.bundled) {
+      $sourceOnly = [bool]($localSource.sourceInfo -and $localSource.sourceInfo.sourceOnly)
+      $message = if ($sourceOnly) {
+        'La fuente local está presente, pero figura como source-only y no debe tratarse como backend compilable.'
+      } else {
+        'Fuente local versionada en toolchains/; se utiliza sin consultar el upstream.'
+      }
+      return @{ok=$true;name=$Entry.name;message=$message;path=$dest;commit=[string]$localSource.commit;vendored=$true;sourceOnly=$sourceOnly;localOnly=$true}
+    }
+
     $gitDir = Join-Path $dest '.git'
-    $readmePath = Join-Path $dest 'README.md'
-    if ((Test-Path -LiteralPath $gitDir -PathType Container) -and (Test-Path -LiteralPath $readmePath -PathType Leaf)) {
+    if ((Test-Path -LiteralPath $gitDir -PathType Container) -and $hasReadme) {
       $gitCmd = CmdInfo 'git.exe'; if (!$gitCmd.ok) { $gitCmd = CmdInfo 'git' }
       $commit = ''
       if ($gitCmd.ok) { try { $commit = ((& $gitCmd.path -C $dest rev-parse HEAD 2>$null) | Out-String).Trim() } catch { $commit = '' } }
-      if (!$marker) {
-        WriteUtf8 (Join-Path $dest '.ps5hs-source.json') (ConvertTo-Json -InputObject @{repository=$Entry.repo;branch=$Entry.branch;commit=$commit;method='existing git checkout; adopted without overwriting';installedAt=(Get-Date).ToString('o')} -Depth 5)
+      if (!$hasMarker) {
+        WriteUtf8 $markerPath (ConvertTo-Json -InputObject @{repository=$Entry.repo;branch=$Entry.branch;commit=$commit;method='existing local Git checkout; adopted without network or overwrite';installedAt=(Get-Date).ToString('o')} -Depth 5)
       }
-      return @{ok=$true;name=$Entry.name;message=$(if($marker){'Ya estaba clonado; no se ha sobrescrito.'}else{'Checkout Git existente reconocido y registrado sin sobrescribir archivos.'});path=$dest;commit=$commit}
+      return @{ok=$true;name=$Entry.name;message='Checkout Git ya existente reconocido localmente; no se ha descargado ni sobrescrito.';path=$dest;commit=$commit;localOnly=$true}
     }
-    $localSource = GetPS5HSBundledToolchainInfo $Entry $dest
-    if ($localSource.bundled) {
-      $sourceOnly=[bool]($localSource.sourceInfo -and $localSource.sourceInfo.sourceOnly)
-      $message=if($sourceOnly){'Se ha conservado la fuente local como referencia, pero falta un submódulo; no se debe tratar como backend compilable.'}else{'Fuente vendorizada en RastaFairy/Visual-PS5/toolchains; se usa la copia local sin clonar ni consultar el upstream.'}
-      return @{ok=$true;name=$Entry.name;message=$message;path=$dest;commit=[string]$localSource.commit;vendored=$true;sourceOnly=$sourceOnly}
-    }
-    if(Test-Path $dest){throw "Existe una carpeta en $dest que no parece un checkout Git válido y no tiene un manifiesto de fuente coincidente. No se ha sobrescrito para proteger sus archivos; revisa la carpeta manualmente."}
-  } elseif($marker -or (Test-Path (Join-Path $dest 'README.md'))){
-    if($Entry.id -ne 'ps5-ultrapack') { return @{ok=$true;name=$Entry.name;message='Ya estaba instalado; no se ha sobrescrito.';path=$dest} }
+    throw "La carpeta local '$dest' existe, pero no tiene una procedencia válida ni un checkout Git completo. No se ha sobrescrito ni consultado Internet."
   }
-  # Repair an existing UltraPack checkout in place. Never delete a user's checkout or
-  # custom native helper merely because its virtual environment is missing.
-  if ($Entry.id -eq 'ps5-ultrapack' -and (Test-Path -LiteralPath $dest -PathType Container)) {
+
+  if ($Entry.id -eq 'ps5-ultrapack') {
     $existingCli = Join-Path $dest 'backend\cli.py'
     if (!(Test-Path -LiteralPath $existingCli -PathType Leaf)) {
-      throw "Existe una carpeta UltraPack incompleta en '$dest' sin backend\cli.py. No se ha sobrescrito para proteger archivos locales; renómbrala manualmente si deseas volver a descargar el repositorio."
+      throw "La fuente local de UltraPack está incompleta: falta '$existingCli'. No se descargará otra copia."
     }
+
     $venvPath = Join-Path $dest '.venv'
     $venvPython = Join-Path $venvPath 'Scripts\python.exe'
     if (!(Test-Path -LiteralPath $venvPython -PathType Leaf)) {
       $pythonCmd = CmdInfo 'python.exe'; if (!$pythonCmd.ok) { $pythonCmd = CmdInfo 'python' }
-      if (!$pythonCmd.ok -or !$pythonCmd.path) { throw "La copia de UltraPack ya existe en '$dest'. Instala Python 3.10+ para reparar su entorno virtual sin reemplazar la carpeta." }
+      if (!$pythonCmd.ok -or !$pythonCmd.path) {
+        throw "UltraPack está en '$dest', pero falta Python 3.10+ para crear su entorno local. No se instalará Python por Internet desde este gestor."
+      }
       $venvOut = @(& $pythonCmd.path -m venv $venvPath 2>&1); $venvExit = $LASTEXITCODE
       if ($venvExit -ne 0 -or !(Test-Path -LiteralPath $venvPython -PathType Leaf)) {
-        $detail = ($venvOut | ForEach-Object { $_.ToString() }) -join "`r`n"
-        throw "No se pudo crear el entorno virtual de UltraPack en '$venvPath'. $detail"
+        $detail = ($venvOut | ForEach-Object { $_.ToString() }) -join [Environment]::NewLine
+        throw "No se pudo crear el entorno virtual local de UltraPack. $detail"
       }
     }
-    $pipOut = @(& $venvPython -m pip install --disable-pip-version-check py7zr rarfile psutil cryptography 2>&1); $pipExit = $LASTEXITCODE
-    if ($pipExit -ne 0) {
-      $detail = ($pipOut | ForEach-Object { $_.ToString() }) -join "`r`n"
-      throw "No se pudieron instalar las dependencias CLI en '$venvPath'. La carpeta de fuentes se ha conservado. $detail"
+
+    $moduleOut = @(& $venvPython -c 'import py7zr, rarfile, psutil, cryptography' 2>&1)
+    $moduleExit = $LASTEXITCODE
+    if ($moduleExit -ne 0) {
+      $wheels = Join-Path $dest 'wheels'
+      if (!(Test-Path -LiteralPath $wheels -PathType Container)) {
+        throw "Faltan dependencias Python de UltraPack y no hay ruedas locales en '$wheels'. Añade allí los archivos wheel necesarios; este IDE no ejecuta pip contra Internet."
+      }
+      $pipOut = @(& $venvPython -m pip install --no-index --disable-pip-version-check --find-links $wheels py7zr rarfile psutil cryptography 2>&1)
+      $pipExit = $LASTEXITCODE
+      if ($pipExit -ne 0) {
+        $detail = ($pipOut | ForEach-Object { $_.ToString() }) -join [Environment]::NewLine
+        throw "No se pudieron resolver las dependencias de UltraPack usando únicamente wheels locales de '$wheels'. $detail"
+      }
+      $moduleOut = @(& $venvPython -c 'import py7zr, rarfile, psutil, cryptography' 2>&1)
+      $moduleExit = $LASTEXITCODE
+      if ($moduleExit -ne 0) {
+        $detail = ($moduleOut | ForEach-Object { $_.ToString() }) -join [Environment]::NewLine
+        throw "La verificación posterior de los módulos locales de UltraPack falló. $detail"
+      }
     }
-    WriteUtf8 (Join-Path $dest '.ps5hs-ultrapack-python.json') (ConvertTo-Json -InputObject @{pythonExe=$venvPython;cli=$existingCli;installedAt=(Get-Date).ToString('o')} -Depth 4)
-    return @{ok=$true;name=$Entry.name;message="Entorno Python de UltraPack reparado sin reemplazar fuentes ni helpers locales: $venvPath";path=$dest;pythonExe=$venvPython;cli=$existingCli}
+
+    WriteUtf8 (Join-Path $dest '.ps5hs-ultrapack-python.json') (ConvertTo-Json -InputObject @{pythonExe=$venvPython;cli=$existingCli;dependencySource='toolchains/ps5-ultrapack/wheels';installedAt=(Get-Date).ToString('o')} -Depth 4)
+    return @{ok=$true;name=$Entry.name;message='UltraPack y sus módulos Python se han validado localmente; no se ha usado pip online.';path=$dest;pythonExe=$venvPython;cli=$existingCli;localOnly=$true}
   }
-  $temp=Join-Path $script:Runtime ([guid]::NewGuid().ToString('N'));New-Item -ItemType Directory -Force -Path $temp|Out-Null
-  try {
-    if($Entry.method -eq 'git'){
-      $git=CmdInfo 'git.exe';if(!$git.ok){$git=CmdInfo 'git'}
-      if(!$git.ok){throw 'Git no está instalado. Usa Configurar entorno para instalar Git y vuelve a intentarlo.'}
-      $stage=Join-Path $temp 'checkout'
-      $candidateRepos=@([string]$Entry.repo)+(GetPS5HSMirrorAlternatives ([string]$Entry.repo))
-      $usedRepo='';$cloneErrors=@();$cloneOut=@()
-      foreach($repoAttempt in $candidateRepos){
-        $cloneArgs=@('-c','core.longpaths=true','-c','core.autocrlf=false','clone','--recurse-submodules');if(!$Entry.fullHistory){$cloneArgs+=@('--depth','1','--shallow-submodules')};$cloneArgs+=@('--branch',[string]$Entry.branch,('https://github.com/'+$repoAttempt+'.git'),$stage)
-        $cloneOut=@(& $git.path @cloneArgs 2>&1);$cloneExit=$LASTEXITCODE
-        if($cloneExit -eq 0 -and (Test-Path (Join-Path $stage 'README.md'))){$usedRepo=$repoAttempt;break}
-        $cloneErrors+=('('+$repoAttempt+') código '+$cloneExit)
-        if(Test-Path $stage){Remove-Item $stage -Recurse -Force -ErrorAction SilentlyContinue}
-      }
-      if(!$usedRepo){$detail=($cloneOut|ForEach-Object{$_.ToString()}) -join "`r`n";throw "git clone falló para $($Entry.repo) y sus mirrors: $($cloneErrors -join '; ').`r`n$detail"}
-      $commit=((& $git.path -C $stage rev-parse HEAD 2>$null)|Out-String).Trim()
-      if(Test-Path $dest){Remove-Item $dest -Recurse -Force}
-      Move-Item -LiteralPath $stage -Destination $dest
-      $sourceRecord=@{repository=$Entry.repo;branch=$Entry.branch;commit=$commit;method='git clone --recurse-submodules';installedAt=(Get-Date).ToString('o')}
-      if($usedRepo -ne [string]$Entry.repo){$sourceRecord.mirrorRepository=$usedRepo}
-      WriteUtf8 (Join-Path $dest '.ps5hs-source.json') (ConvertTo-Json -InputObject $sourceRecord -Depth 5)
-      $mirrorNote=if($usedRepo -ne [string]$Entry.repo){' (mirror: '+$usedRepo+'; upstream original no disponible)'}else{''}
-      return @{ok=$true;name=$Entry.name;message="Repositorio clonado con submódulos$mirrorNote. Commit: $commit";path=$dest;commit=$commit;repository=$usedRepo;mirrorUsed=($usedRepo -ne [string]$Entry.repo)}
-    }
-    $zip=Join-Path $temp 'repo.zip';$unpack=Join-Path $temp 'unpack';New-Item -ItemType Directory -Force -Path $unpack|Out-Null;$ok=$false;$why='';$zipRepo=[string]$Entry.repo
-    foreach($repoAttempt in (@([string]$Entry.repo)+(GetPS5HSMirrorAlternatives ([string]$Entry.repo)))) {
-      foreach($branch in (@($Entry.branch,'main','master') | Select-Object -Unique)) { try {Invoke-WebRequest -Uri ('https://codeload.github.com/'+$repoAttempt+'/zip/refs/heads/'+$branch) -OutFile $zip -UseBasicParsing -TimeoutSec 240;if((Get-Item $zip).Length -lt 100){throw 'ZIP vacío'};$ok=$true;$zipRepo=$repoAttempt;break}catch{$why=$_.Exception.Message;Remove-Item $zip -Force -ErrorAction SilentlyContinue } }
-      if($ok){break}
-    }
-    if(!$ok){throw "Descarga fallida de $($Entry.repo) y sus mirrors: $why"}
-    $zipSourceRecord=@{repository=$Entry.repo;branch=$branch;installedAt=(Get-Date).ToString('o');method='source ZIP'}
-    if($zipRepo -ne [string]$Entry.repo){$zipSourceRecord.mirrorRepository=$zipRepo}
-    Expand-Archive -LiteralPath $zip -DestinationPath $unpack -Force;$top=Get-ChildItem $unpack -Directory|Select-Object -First 1;if(!$top){throw 'El ZIP no tiene raíz de proyecto.'};if(Test-Path $dest){Remove-Item $dest -Recurse -Force};Move-Item -LiteralPath $top.FullName -Destination $dest;WriteUtf8 (Join-Path $dest '.ps5hs-source.json') (ConvertTo-Json -InputObject $zipSourceRecord -Depth 5)
-    if($Entry.id -eq 'etahen'){$nid=$script:Catalog|Where-Object id -eq 'nid'|Select-Object -First 1;$nidDir=Join-Path $script:Toolchains $nid.folder;if(!(Test-Path (Join-Path $nidDir 'README.md'))){InstallRepo $nid|Out-Null};$sub=Join-Path $dest 'libNidResolver';if(Test-Path $sub){Remove-Item $sub -Recurse -Force};if(Test-Path $nidDir){Copy-Item -LiteralPath $nidDir -Destination $sub -Recurse}}
-    if($Entry.id -eq 'ps5-ultrapack') {
-      $pythonCmd = CmdInfo 'python.exe'; if(!$pythonCmd.ok){$pythonCmd=CmdInfo 'python'}
-      if($pythonCmd.ok -and $pythonCmd.path) {
-        $venvPath = Join-Path $dest '.venv'
-        $venvPython = Join-Path $venvPath 'Scripts\python.exe'
-        if(!(Test-Path -LiteralPath $venvPython -PathType Leaf)) {
-          $venvOut = @(& $pythonCmd.path -m venv $venvPath 2>&1); $venvExit = $LASTEXITCODE
-          if($venvExit -ne 0 -or !(Test-Path -LiteralPath $venvPython -PathType Leaf)) {
-            $detail = ($venvOut | ForEach-Object { $_.ToString() }) -join "`r`n"
-            throw "UltraPack se descargó en '$dest', pero no se pudo crear su entorno Python. Instala Python 3.10+ y vuelve a intentarlo. $detail"
-          }
-        }
-        $pipOut = @(& $venvPython -m pip install --disable-pip-version-check py7zr rarfile psutil cryptography 2>&1); $pipExit = $LASTEXITCODE
-        if($pipExit -ne 0) {
-          $detail = ($pipOut | ForEach-Object { $_.ToString() }) -join "`r`n"
-          throw "UltraPack se descargó en '$dest', pero falló la instalación de dependencias Python en '$venvPath'. Revisa la conexión y el registro de pip. $detail"
-        }
-        WriteUtf8 (Join-Path $dest '.ps5hs-ultrapack-python.json') (ConvertTo-Json -InputObject @{pythonExe=$venvPython;cli=(Join-Path $dest 'backend\cli.py');installedAt=(Get-Date).ToString('o')} -Depth 4)
-        return @{ok=$true;name=$Entry.name;message="Código fuente descargado y dependencias CLI instaladas en el entorno aislado: $venvPath";path=$dest;pythonExe=$venvPython;cli=(Join-Path $dest 'backend\cli.py')}
-      }
-      return @{ok=$true;name=$Entry.name;message="Código fuente descargado en '$dest'. No se detectó Python; instala Python 3.10+ y configura su ruta en Herramientas. El CLI está en backend\cli.py.";path=$dest;cli=(Join-Path $dest 'backend\cli.py')}
-    }
-    return @{ok=$true;name=$Entry.name;message="Descargado de GitHub: $dest";path=$dest}
-  } finally {Remove-Item $temp -Recurse -Force -ErrorAction SilentlyContinue}
-}
-function BashQuote([string]$Text) { return "'" + $Text.Replace("'", "'\''") + "'" }
+
+  if ($localSource.bundled) {
+    return @{ok=$true;name=$Entry.name;message='Fuente local versionada en toolchains/; no se ha consultado el upstream.';path=$dest;commit=[string]$localSource.commit;vendored=$true;localOnly=$true}
+  }
+  if ($hasMarker) {
+    throw "El manifiesto de '$dest' no coincide con el repositorio esperado. No se reemplazará ni se descargará otra fuente."
+  }
+  if ($hasReadme) {
+    return @{ok=$true;name=$Entry.name;message='Fuente ya presente localmente; se conserva sin sobrescribir y sin consultar Internet.';path=$dest;localOnly=$true}
+  }
+  throw "La carpeta '$dest' no contiene una fuente local reconocible. No se descargará una copia externa."
+}function BashQuote([string]$Text) { return "'" + $Text.Replace("'", "'\''") + "'" }
 function ConvertToWslPath([string]$Path) {
   $full=[IO.Path]::GetFullPath($Path)
   if($full -notmatch '^([A-Za-z]):\\(.*)$'){throw "La ruta no puede traducirse a WSL: $full. Usa una carpeta dentro de una unidad local."}
@@ -476,10 +459,10 @@ function NewNativeTitle([string]$Name,[string]$TitleId,[string]$Category,[string
   $entry=$script:Catalog | Where-Object id -eq $TemplateId | Select-Object -First 1
   if(!$entry) { return @{ok=$false;message='No se encontró la plantilla en el catálogo.';output=$TemplateId} }
   try { $cloneResult = InstallRepo $entry; if(!$cloneResult.ok) { return @{ok=$false;message=$cloneResult.message;output=$cloneResult.path} } }
-  catch { return @{ok=$false;message='No se pudo descargar la plantilla upstream.';output=$_.Exception.Message} }
+  catch { return @{ok=$false;message='No se pudo resolver la plantilla local desde toolchains/';output=$_.Exception.Message} }
   $src=Join-Path $script:Toolchains $entry.folder
   $expected=@('Makefile','src/main.cpp')
-  foreach($rel in $expected) { if(!(Test-Path (Join-Path $src $rel))) { return @{ok=$false;message="La plantilla upstream está incompleta: falta $rel. Vuelve a clonar $($entry.repo).";output=$src} } }
+  foreach($rel in $expected) { if(!(Test-Path (Join-Path $src $rel))) { return @{ok=$false;message="La plantilla local está incompleta: falta $rel en '$src'. Revisa la copia versionada bajo toolchains/";output=$src} } }
   $st=GetStatus
   if(!$st.prerequisites.wsl) { return @{ok=$false;message='No hay distribución WSL inicializada.';output='Configura WSL + Debian y completa su primer arranque.'} }
   if(!$st.prerequisites.wslGitPython) { return @{ok=$false;message='Faltan Git o Python 3 dentro de WSL.';output='Instala git y python3 dentro de la distribución Linux según la documentación upstream.'} }
@@ -1014,9 +997,9 @@ function EnsureVulkanBuildSupport([string]$VulkanDir) {
   # helpers, but some published revisions omit them from tools/. Restore the actual
   # upstream scripts from the project's companion native boilerplate, never stubs.
   $nativeEntry = $script:Catalog | Where-Object id -eq 'nativecpp' | Select-Object -First 1
-  if (!$nativeEntry) { throw 'No está registrada la fuente upstream de las herramientas nativas compartidas.' }
+  if (!$nativeEntry) { throw 'No está registrada la fuente local de las herramientas nativas compartidas.' }
   $nativeInstall = InstallRepo $nativeEntry
-  if (!$nativeInstall.ok) { throw "No se pudo obtener el repositorio de herramientas nativas: $($nativeInstall.message)" }
+  if (!$nativeInstall.ok) { throw "No se encontró la fuente local de herramientas nativas: $($nativeInstall.message)" }
   $nativeRoot = Join-Path $script:Toolchains $nativeEntry.folder
   $provenance = @()
   foreach ($relative in @('tools/ninja-build.sh','tools/build-host-tools.sh')) {
@@ -1168,13 +1151,13 @@ function PackageNativeProjectWithUltraPack($Body) {
     if ([IO.Path]::GetFileName($cli) -ine 'cli.py' -or (Split-Path -Leaf (Split-Path -Parent $cli)) -ine 'backend') {
       throw "La ruta configurada no apunta a backend\cli.py: $cli. Corrige la ruta en Herramientas."
     }
-    if (!(Test-Path -LiteralPath $cli -PathType Leaf)) { throw "No existe el CLI configurado de UltraPack: $cli. Vuelve a descargar la fuente desde Herramientas o corrige la ruta." }
+    if (!(Test-Path -LiteralPath $cli -PathType Leaf)) { throw "No existe el CLI configurado de UltraPack: $cli. Asegúrate de que la fuente local exista en toolchains/ps5-ultrapack o corrige la ruta." }
   }
   if (!$python -or !(Test-Path -LiteralPath $python -PathType Leaf)) {
     throw 'No se ha configurado Python. En Herramientas, indica python.exe (Python 3.10 o posterior).'
   }
   if (!$cli -or !(Test-Path -LiteralPath $cli -PathType Leaf)) {
-    throw "No se ha encontrado backend\cli.py de UltraPack. Usa 'Descargar UltraPack (fuente)' en Herramientas o indica su ruta manualmente. Repositorio: https://github.com/knutwurst/ps5-ultrapack"
+    throw "No se ha encontrado backend\cli.py de UltraPack. Usa el gestor de fuentes locales y comprueba toolchains/ps5-ultrapack o indica su ruta manualmente. Fuente esperada: toolchains/ps5-ultrapack"
   }
   if ($format -eq 'pkg') {
     $backendRoot = Split-Path -Parent $cli
