@@ -102,7 +102,7 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           $archive = Join-Path $env:RUNNER_TEMP 'ps5-opengl-sdk-1.0.2.tar.gz'
-          Invoke-WebRequest -Uri $env:SDK_URL -OutFile $archive
+          Invoke-WebRequest -Uri $env:SDK_URL -OutFile $archive | Out-Null
           $actual = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant()
           if ($actual -ne $env:SDK_SHA256) { throw "OpenGL SDK SHA-256 mismatch: $actual" }
           $sourceZip = Join-Path $env:RUNNER_TEMP 'PS5-Homebrew-Studio-source.zip'
@@ -111,6 +111,7 @@ jobs:
           $bundle = Join-Path $PWD 'PS5-Homebrew-Studio-offline-bundle.zip'
           Copy-Item -LiteralPath $sourceZip -Destination $bundle
           Add-Type -AssemblyName System.IO.Compression
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
           $zip = [System.IO.Compression.ZipFile]::Open($bundle, [System.IO.Compression.ZipArchiveMode]::Update)
           try {
             $entryName = 'PS5-Homebrew-Studio/toolchains/ps5-opengl-sdk/ps5-opengl-sdk-1.0.2.tar.gz'
