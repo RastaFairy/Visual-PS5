@@ -20,20 +20,21 @@ extracted="$cache/ps5-opengl-sdk-$version"
 prefix="$extracted/sdk"
 mkdir -p "$cache"
 
-# The IDE must never fetch this SDK from a release URL. It must already exist
-# under the repository's toolchains/ tree and match the pinned SHA-256.
+# The IDE must never fetch this SDK from a release URL. Prefer an already
+# extracted cache only if its full manifest is verified below; otherwise the pinned
+# archive must exist in the repository's toolchains/ tree.
 toolchains_root="${PS5HS_TOOLCHAINS_ROOT:-$(dirname "$root")}"
 local_archive="$toolchains_root/ps5-opengl-sdk/ps5-opengl-sdk-$version.tar.gz"
-[[ -f $local_archive ]] || {
-    echo "local-only: falta toolchains/ps5-opengl-sdk/ps5-opengl-sdk-$version.tar.gz; no se consulta Internet" >&2
-    exit 2
-}
-sha256sum --check --strict <<<"$archive_sha256  $local_archive" || {
-    echo "ps5-opengl SDK archive checksum mismatch in toolchains/: $local_archive" >&2
-    exit 2
-}
 
 if [[ ! -f $prefix/manifest.sha256 ]]; then
+    [[ -f $local_archive ]] || {
+        echo "local-only: falta toolchains/ps5-opengl-sdk/ps5-opengl-sdk-$version.tar.gz; no se consulta Internet" >&2
+        exit 2
+    }
+    sha256sum --check --strict <<<"$archive_sha256  $local_archive" || {
+        echo "ps5-opengl SDK archive checksum mismatch in toolchains/: $local_archive" >&2
+        exit 2
+    }
     cp -- "$local_archive" "$archive.part"
     mv -- "$archive.part" "$archive"
     sha256sum --check --status <<<"$archive_sha256  $archive" || {
