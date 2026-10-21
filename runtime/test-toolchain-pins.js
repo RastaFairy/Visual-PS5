@@ -52,6 +52,7 @@ assert.match(server, /function GetPS5HSToolchainPackSdkArchive\b/, 'server.ps1 d
 assert.match(server, /\$candidateRepos=@\(\[string\]\$Entry\.repo\)\+\(GetPS5HSMirrorAlternatives/, 'el clon git debe intentar el upstream y luego los mirrors');
 assert.match(server, /mirrorRepository=\$usedRepo/, 'el clon con mirror debe registrar la fuente usada');
 assert.match(server, /toolchainHealth/, 'GetStatus debe exponer la salud de toolchains');
+assert.match(server, /buildVerified=\$buildVerified;buildStatus=\$buildStatus/, 'GetStatus debe exponer la verificación de compilación por separado del estado de la fuente');
 assert.match(server, /\$upstreamUnavailable=\$null[\s\S]*?if\(!\$localSource\.bundled\)\s*\{\s*\$upstreamUnavailable=GetPS5HSUpstreamUnavailable\s+\(\[string\]\$e\.repo\)/, 'el estado solo debe comprobar disponibilidad upstream si no existe una copia local agrupada');
 assert.match(server, /\$mirrorAlternatives=GetPS5HSMirrorAlternatives\s+\(\[string\]\$e\.repo\)/, 'el estado debe seguir mostrando mirrors si la fuente no está agrupada');
 assert.ok(
@@ -71,6 +72,7 @@ assert.ok(!/required:\s*true/.test(policyJs.match(/key:'allowUpstreamSdkMirrorPa
 
 // app.js: UI de salud y consentimiento.
 assert.match(app, /MIRROR DISPONIBLE/, 'el panel SDK debe mostrar mirrors disponibles');
+assert.match(app, /BUILD SIN VERIFICAR/, 'la UI no debe presentar una fuente como compilada si no hay una prueba de build');
 assert.match(app, /PACK SDK/, 'el dock debe mostrar el estado del pack local');
 assert.match(app, /allowUpstreamSdkMirrorPatch/, 'el flujo de build hui-gl debe ofrecer el nuevo permiso');
 assert.match(app, /toolchain-pins\.json/, 'la UI debe documentar el manifiesto de pins');
