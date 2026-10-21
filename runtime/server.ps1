@@ -19,33 +19,17 @@ $script:ToolchainPins = $null
 if (Test-Path -LiteralPath $script:ToolchainPinsPath -PathType Leaf) {
   try { $script:ToolchainPins = Get-Content -LiteralPath $script:ToolchainPinsPath -Raw | ConvertFrom-Json } catch { $script:ToolchainPins = $null }
 }
-function GetPS5HSUpstreamUnavailable([string]$Repo) {
-  if (!$script:ToolchainPins -or !$script:ToolchainPins.mirrors) { return $false }
-  $prop = $script:ToolchainPins.mirrors.PSObject.Properties[[string]$Repo]
-  return ($null -ne $prop)
-}
-function GetPS5HSMirrorAlternatives([string]$Repo) {
-  if (!$script:ToolchainPins -or !$script:ToolchainPins.mirrors) { return @() }
-  $prop = $script:ToolchainPins.mirrors.PSObject.Properties[[string]$Repo]
-  if (!$prop) { return @() }
-  return @(@($prop.Value.alternatives) | Where-Object { $_ } | ForEach-Object { [string]$_ })
-}
 function GetPS5HSSdkArtifactPin {
   if (!$script:ToolchainPins -or !$script:ToolchainPins.artifacts) { return $null }
   $prop = $script:ToolchainPins.artifacts.PSObject.Properties['ps5-opengl-sdk']
   if (!$prop) { return $null }
   return $prop.Value
 }
-function GetPS5HSSdkMirrorUrls {
-  $pin = GetPS5HSSdkArtifactPin
-  if ($pin -and $pin.urls) { return @(@($pin.urls) | ForEach-Object { [string]$_ }) }
-  return @()
-}
-function GetPS5HSToolchainPackRoot { return (Join-Path $script:Root 'toolchain-pack') }
+function GetPS5HSLocalSdkRoot { return (Join-Path $script:Toolchains 'ps5-opengl-sdk') }
 function GetPS5HSToolchainPackSdkArchive {
   $pin = GetPS5HSSdkArtifactPin
   if (!$pin) { return @{present=$false;verified=$false;path='';version='';sha256='';bytes=0} }
-  $candidate = Join-Path (GetPS5HSToolchainPackRoot) (Join-Path 'ps5-opengl-sdk' ([string]$pin.file))
+  $candidate = Join-Path (GetPS5HSLocalSdkRoot) ([string]$pin.file)
   $present = (Test-Path -LiteralPath $candidate -PathType Leaf)
   $verified = $false
   $bytes = 0
@@ -201,27 +185,20 @@ function GetStatus {
     $sourceOnly=[bool]($localSource.sourceInfo -and $localSource.sourceInfo.sourceOnly)
     $installed=[bool]$localSource.installed -and !$sourceOnly
     $category='backend';if($e.category){$category=[string]$e.category}
-    $upstreamUnavailable=$null
-    $mirrorAlternatives=@()
     $buildVerified=$null
     $buildStatus=''
     if($localSource.sourceInfo -and $localSource.sourceInfo.PSObject.Properties['buildVerified']) {
       $buildVerified=[bool]$localSource.sourceInfo.buildVerified
       $buildStatus=[string]$localSource.sourceInfo.buildStatus
     }
-    if(!$localSource.bundled) {
-      $upstreamUnavailable=GetPS5HSUpstreamUnavailable ([string]$e.repo)
-      $mirrorAlternatives=GetPS5HSMirrorAlternatives ([string]$e.repo)
-    }
     $sdks+=@{
       id=$e.id;name=$e.name;folder=$e.folder;role=$e.role;license=$e.license;
       description=$e.description;category=$category;method=$e.method;
       href=('https://github.com/RastaFairy/Visual-PS5/tree/main/toolchains/'+$e.folder);
-      sourceHref=('https://github.com/'+$e.repo);
+      sourceHref=('https://github.com/RastaFairy/Visual-PS5/tree/main/toolchains/'+$e.folder);
       installed=$installed;bundled=[bool]$localSource.bundled;sourceOnly=$sourceOnly;
       buildVerified=$buildVerified;buildStatus=$buildStatus;
       buildable=([bool]$localSource.installed -and !$sourceOnly);path=$p;sourceCommit=[string]$localSource.commit;
-      upstreamUnavailable=$upstreamUnavailable;mirrorAlternatives=$mirrorAlternatives
     }
   }
   $sdkPackInfo=GetPS5HSToolchainPackSdkArchive
@@ -282,123 +259,68 @@ function GetPS5HSBundledToolchainInfo($Entry,[string]$Path) {
       # A malformed or unrelated marker is not trusted as a valid vendored source.
     }
   }
-  if($Entry.method -ne 'git') {
-    $result.installed=($hasMarker -or $readme)
-    $result.bundled=($hasMarker -and $readme)
-  }
+  # A README or loose marker is not proof that this is the expected source tree.
+  # Only a matching provenance manifest (or a verified local Git remote) is trusted.
   return $result
 }
 
 function InstallRepo($Entry) {
-  $dest=Join-Path $script:Toolchains $Entry.folder
-  $marker=Test-Path (Join-Path $dest '.ps5hs-source.json')
-  if($Entry.method -eq 'git'){
-    $gitDir = Join-Path $dest '.git'
-    $readmePath = Join-Path $dest 'README.md'
-    if ((Test-Path -LiteralPath $gitDir -PathType Container) -and (Test-Path -LiteralPath $readmePath -PathType Leaf)) {
-      $gitCmd = CmdInfo 'git.exe'; if (!$gitCmd.ok) { $gitCmd = CmdInfo 'git' }
-      $commit = ''
-      if ($gitCmd.ok) { try { $commit = ((& $gitCmd.path -C $dest rev-parse HEAD 2>$null) | Out-String).Trim() } catch { $commit = '' } }
-      if (!$marker) {
-        WriteUtf8 (Join-Path $dest '.ps5hs-source.json') (ConvertTo-Json -InputObject @{repository=$Entry.repo;branch=$Entry.branch;commit=$commit;method='existing git checkout; adopted without overwriting';installedAt=(Get-Date).ToString('o')} -Depth 5)
-      }
-      return @{ok=$true;name=$Entry.name;message=$(if($marker){'Ya estaba clonado; no se ha sobrescrito.'}else{'Checkout Git existente reconocido y registrado sin sobrescribir archivos.'});path=$dest;commit=$commit}
-    }
-    $localSource = GetPS5HSBundledToolchainInfo $Entry $dest
-    if ($localSource.bundled) {
-      $sourceOnly=[bool]($localSource.sourceInfo -and $localSource.sourceInfo.sourceOnly)
-      $message=if($sourceOnly){'Se ha conservado la fuente local como referencia, pero falta un submódulo; no se debe tratar como backend compilable.'}else{'Fuente vendorizada en RastaFairy/Visual-PS5/toolchains; se usa la copia local sin clonar ni consultar el upstream.'}
-      return @{ok=$true;name=$Entry.name;message=$message;path=$dest;commit=[string]$localSource.commit;vendored=$true;sourceOnly=$sourceOnly}
-    }
-    if(Test-Path $dest){throw "Existe una carpeta en $dest que no parece un checkout Git válido y no tiene un manifiesto de fuente coincidente. No se ha sobrescrito para proteger sus archivos; revisa la carpeta manualmente."}
-  } elseif($marker -or (Test-Path (Join-Path $dest 'README.md'))){
-    if($Entry.id -ne 'ps5-ultrapack') { return @{ok=$true;name=$Entry.name;message='Ya estaba instalado; no se ha sobrescrito.';path=$dest} }
+  $dest = Join-Path $script:Toolchains ([string]$Entry.folder)
+  if (!(Test-Path -LiteralPath $dest -PathType Container)) {
+    throw "Dependencia local no disponible: toolchains\$($Entry.folder). El IDE solo utiliza fuentes incorporadas en toolchains/ y no clona ni descarga repositorios. Añade y versiona esta fuente antes de reintentar."
   }
-  # Repair an existing UltraPack checkout in place. Never delete a user's checkout or
-  # custom native helper merely because its virtual environment is missing.
-  if ($Entry.id -eq 'ps5-ultrapack' -and (Test-Path -LiteralPath $dest -PathType Container)) {
-    $existingCli = Join-Path $dest 'backend\cli.py'
-    if (!(Test-Path -LiteralPath $existingCli -PathType Leaf)) {
-      throw "Existe una carpeta UltraPack incompleta en '$dest' sin backend\cli.py. No se ha sobrescrito para proteger archivos locales; renómbrala manualmente si deseas volver a descargar el repositorio."
-    }
-    $venvPath = Join-Path $dest '.venv'
-    $venvPython = Join-Path $venvPath 'Scripts\python.exe'
-    if (!(Test-Path -LiteralPath $venvPython -PathType Leaf)) {
-      $pythonCmd = CmdInfo 'python.exe'; if (!$pythonCmd.ok) { $pythonCmd = CmdInfo 'python' }
-      if (!$pythonCmd.ok -or !$pythonCmd.path) { throw "La copia de UltraPack ya existe en '$dest'. Instala Python 3.10+ para reparar su entorno virtual sin reemplazar la carpeta." }
-      $venvOut = @(& $pythonCmd.path -m venv $venvPath 2>&1); $venvExit = $LASTEXITCODE
-      if ($venvExit -ne 0 -or !(Test-Path -LiteralPath $venvPython -PathType Leaf)) {
-        $detail = ($venvOut | ForEach-Object { $_.ToString() }) -join "`r`n"
-        throw "No se pudo crear el entorno virtual de UltraPack en '$venvPath'. $detail"
-      }
-    }
-    $pipOut = @(& $venvPython -m pip install --disable-pip-version-check py7zr rarfile psutil cryptography 2>&1); $pipExit = $LASTEXITCODE
-    if ($pipExit -ne 0) {
-      $detail = ($pipOut | ForEach-Object { $_.ToString() }) -join "`r`n"
-      throw "No se pudieron instalar las dependencias CLI en '$venvPath'. La carpeta de fuentes se ha conservado. $detail"
-    }
-    WriteUtf8 (Join-Path $dest '.ps5hs-ultrapack-python.json') (ConvertTo-Json -InputObject @{pythonExe=$venvPython;cli=$existingCli;installedAt=(Get-Date).ToString('o')} -Depth 4)
-    return @{ok=$true;name=$Entry.name;message="Entorno Python de UltraPack reparado sin reemplazar fuentes ni helpers locales: $venvPath";path=$dest;pythonExe=$venvPython;cli=$existingCli}
+  $readme = $false
+  foreach ($name in @('README.md','readme.md','README')) {
+    if (Test-Path -LiteralPath (Join-Path $dest $name) -PathType Leaf) { $readme = $true; break }
   }
-  $temp=Join-Path $script:Runtime ([guid]::NewGuid().ToString('N'));New-Item -ItemType Directory -Force -Path $temp|Out-Null
-  try {
-    if($Entry.method -eq 'git'){
-      $git=CmdInfo 'git.exe';if(!$git.ok){$git=CmdInfo 'git'}
-      if(!$git.ok){throw 'Git no está instalado. Usa Configurar entorno para instalar Git y vuelve a intentarlo.'}
-      $stage=Join-Path $temp 'checkout'
-      $candidateRepos=@([string]$Entry.repo)+(GetPS5HSMirrorAlternatives ([string]$Entry.repo))
-      $usedRepo='';$cloneErrors=@();$cloneOut=@()
-      foreach($repoAttempt in $candidateRepos){
-        $cloneArgs=@('-c','core.longpaths=true','-c','core.autocrlf=false','clone','--recurse-submodules');if(!$Entry.fullHistory){$cloneArgs+=@('--depth','1','--shallow-submodules')};$cloneArgs+=@('--branch',[string]$Entry.branch,('https://github.com/'+$repoAttempt+'.git'),$stage)
-        $cloneOut=@(& $git.path @cloneArgs 2>&1);$cloneExit=$LASTEXITCODE
-        if($cloneExit -eq 0 -and (Test-Path (Join-Path $stage 'README.md'))){$usedRepo=$repoAttempt;break}
-        $cloneErrors+=('('+$repoAttempt+') código '+$cloneExit)
-        if(Test-Path $stage){Remove-Item $stage -Recurse -Force -ErrorAction SilentlyContinue}
-      }
-      if(!$usedRepo){$detail=($cloneOut|ForEach-Object{$_.ToString()}) -join "`r`n";throw "git clone falló para $($Entry.repo) y sus mirrors: $($cloneErrors -join '; ').`r`n$detail"}
-      $commit=((& $git.path -C $stage rev-parse HEAD 2>$null)|Out-String).Trim()
-      if(Test-Path $dest){Remove-Item $dest -Recurse -Force}
-      Move-Item -LiteralPath $stage -Destination $dest
-      $sourceRecord=@{repository=$Entry.repo;branch=$Entry.branch;commit=$commit;method='git clone --recurse-submodules';installedAt=(Get-Date).ToString('o')}
-      if($usedRepo -ne [string]$Entry.repo){$sourceRecord.mirrorRepository=$usedRepo}
-      WriteUtf8 (Join-Path $dest '.ps5hs-source.json') (ConvertTo-Json -InputObject $sourceRecord -Depth 5)
-      $mirrorNote=if($usedRepo -ne [string]$Entry.repo){' (mirror: '+$usedRepo+'; upstream original no disponible)'}else{''}
-      return @{ok=$true;name=$Entry.name;message="Repositorio clonado con submódulos$mirrorNote. Commit: $commit";path=$dest;commit=$commit;repository=$usedRepo;mirrorUsed=($usedRepo -ne [string]$Entry.repo)}
+  if (!$readme) {
+    throw "Fuente local incompleta: toolchains\$($Entry.folder) no contiene README. No se sobrescribirá ni reparará desde Internet."
+  }
+  $localSource = GetPS5HSBundledToolchainInfo $Entry $dest
+  $gitDir = Join-Path $dest '.git'
+  if ((Test-Path -LiteralPath $gitDir -PathType Container) -and !$localSource.bundled) {
+    $git = CmdInfo 'git.exe'; if (!$git.ok) { $git = CmdInfo 'git' }
+    if (!$git.ok) { throw "El checkout local toolchains\$($Entry.folder) no tiene manifiesto verificable y Git no está disponible para inspeccionar su origen." }
+    $originUrl = ((& $git.path -C $dest remote get-url origin 2>$null) | Out-String).Trim()
+    $originRepo = $originUrl -replace '^(https?://github\.com/|git@github\.com:|ssh://git@github\.com/)', ''
+    $originRepo = ($originRepo -replace '\.git$', '').Trim('/').ToLowerInvariant()
+    $expectedRepo = ([string]$Entry.repo).ToLowerInvariant()
+    if (!$originRepo -or $originRepo -ne $expectedRepo) {
+      throw "La fuente local toolchains\$($Entry.folder) no acredita el repositorio esperado $($Entry.repo). No se consultarán mirrors ni se modificará la carpeta."
     }
-    $zip=Join-Path $temp 'repo.zip';$unpack=Join-Path $temp 'unpack';New-Item -ItemType Directory -Force -Path $unpack|Out-Null;$ok=$false;$why='';$zipRepo=[string]$Entry.repo
-    foreach($repoAttempt in (@([string]$Entry.repo)+(GetPS5HSMirrorAlternatives ([string]$Entry.repo)))) {
-      foreach($branch in (@($Entry.branch,'main','master') | Select-Object -Unique)) { try {Invoke-WebRequest -Uri ('https://codeload.github.com/'+$repoAttempt+'/zip/refs/heads/'+$branch) -OutFile $zip -UseBasicParsing -TimeoutSec 240;if((Get-Item $zip).Length -lt 100){throw 'ZIP vacío'};$ok=$true;$zipRepo=$repoAttempt;break}catch{$why=$_.Exception.Message;Remove-Item $zip -Force -ErrorAction SilentlyContinue } }
-      if($ok){break}
+    $commit = ((& $git.path -C $dest rev-parse HEAD 2>$null) | Out-String).Trim()
+    return @{ok=$true;name=$Entry.name;message="Checkout Git local reconocido; no se ha accedido a Internet. Commit: $commit";path=$dest;commit=$commit;vendored=$false}
+  }
+  if (!$localSource.bundled) {
+    throw "La fuente toolchains\$($Entry.folder) no tiene un manifiesto .ps5hs-source.json válido que coincida con $($Entry.repo). No se descargará ni sobrescribirá nada."
+  }
+  $sourceOnly = [bool]($localSource.sourceInfo -and $localSource.sourceInfo.sourceOnly)
+  if ($Entry.id -eq 'ps5-ultrapack') {
+    $cli = Join-Path $dest 'backend\cli.py'
+    if (!(Test-Path -LiteralPath $cli -PathType Leaf)) {
+      throw "La copia local de UltraPack no contiene backend\cli.py. No se volverá a descargar el repositorio."
     }
-    if(!$ok){throw "Descarga fallida de $($Entry.repo) y sus mirrors: $why"}
-    $zipSourceRecord=@{repository=$Entry.repo;branch=$branch;installedAt=(Get-Date).ToString('o');method='source ZIP'}
-    if($zipRepo -ne [string]$Entry.repo){$zipSourceRecord.mirrorRepository=$zipRepo}
-    Expand-Archive -LiteralPath $zip -DestinationPath $unpack -Force;$top=Get-ChildItem $unpack -Directory|Select-Object -First 1;if(!$top){throw 'El ZIP no tiene raíz de proyecto.'};if(Test-Path $dest){Remove-Item $dest -Recurse -Force};Move-Item -LiteralPath $top.FullName -Destination $dest;WriteUtf8 (Join-Path $dest '.ps5hs-source.json') (ConvertTo-Json -InputObject $zipSourceRecord -Depth 5)
-    if($Entry.id -eq 'etahen'){$nid=$script:Catalog|Where-Object id -eq 'nid'|Select-Object -First 1;$nidDir=Join-Path $script:Toolchains $nid.folder;if(!(Test-Path (Join-Path $nidDir 'README.md'))){InstallRepo $nid|Out-Null};$sub=Join-Path $dest 'libNidResolver';if(Test-Path $sub){Remove-Item $sub -Recurse -Force};if(Test-Path $nidDir){Copy-Item -LiteralPath $nidDir -Destination $sub -Recurse}}
-    if($Entry.id -eq 'ps5-ultrapack') {
-      $pythonCmd = CmdInfo 'python.exe'; if(!$pythonCmd.ok){$pythonCmd=CmdInfo 'python'}
-      if($pythonCmd.ok -and $pythonCmd.path) {
-        $venvPath = Join-Path $dest '.venv'
-        $venvPython = Join-Path $venvPath 'Scripts\python.exe'
-        if(!(Test-Path -LiteralPath $venvPython -PathType Leaf)) {
-          $venvOut = @(& $pythonCmd.path -m venv $venvPath 2>&1); $venvExit = $LASTEXITCODE
-          if($venvExit -ne 0 -or !(Test-Path -LiteralPath $venvPython -PathType Leaf)) {
-            $detail = ($venvOut | ForEach-Object { $_.ToString() }) -join "`r`n"
-            throw "UltraPack se descargó en '$dest', pero no se pudo crear su entorno Python. Instala Python 3.10+ y vuelve a intentarlo. $detail"
-          }
-        }
-        $pipOut = @(& $venvPython -m pip install --disable-pip-version-check py7zr rarfile psutil cryptography 2>&1); $pipExit = $LASTEXITCODE
-        if($pipExit -ne 0) {
-          $detail = ($pipOut | ForEach-Object { $_.ToString() }) -join "`r`n"
-          throw "UltraPack se descargó en '$dest', pero falló la instalación de dependencias Python en '$venvPath'. Revisa la conexión y el registro de pip. $detail"
-        }
-        WriteUtf8 (Join-Path $dest '.ps5hs-ultrapack-python.json') (ConvertTo-Json -InputObject @{pythonExe=$venvPython;cli=(Join-Path $dest 'backend\cli.py');installedAt=(Get-Date).ToString('o')} -Depth 4)
-        return @{ok=$true;name=$Entry.name;message="Código fuente descargado y dependencias CLI instaladas en el entorno aislado: $venvPath";path=$dest;pythonExe=$venvPython;cli=(Join-Path $dest 'backend\cli.py')}
-      }
-      return @{ok=$true;name=$Entry.name;message="Código fuente descargado en '$dest'. No se detectó Python; instala Python 3.10+ y configura su ruta en Herramientas. El CLI está en backend\cli.py.";path=$dest;cli=(Join-Path $dest 'backend\cli.py')}
+    $python = CmdInfo 'python.exe'; if (!$python.ok) { $python = CmdInfo 'python' }
+    $pythonReady = $false
+    $pythonPath = ''
+    if ($python.ok -and $python.path) {
+      $pythonPath = [string]$python.path
+      try {
+        & $python.path -c 'import py7zr, rarfile, psutil, cryptography' 2>$null
+        $pythonReady = ($LASTEXITCODE -eq 0)
+      } catch { $pythonReady = $false }
     }
-    return @{ok=$true;name=$Entry.name;message="Descargado de GitHub: $dest";path=$dest}
-  } finally {Remove-Item $temp -Recurse -Force -ErrorAction SilentlyContinue}
+    $message = if ($pythonReady) {
+      'Fuentes de UltraPack y dependencias Python locales detectadas. No se ha instalado ni descargado ningún paquete.'
+    } else {
+      'Fuentes de UltraPack verificadas. Su runtime Python no está completo; no se usará pip online. Para habilitarlo, instala las dependencias previamente o aporta wheels locales y usa una instalación pip con --no-index.'
+    }
+    return @{ok=$true;name=$Entry.name;message=$message;path=$dest;cli=$cli;pythonExe=$pythonPath;pythonReady=$pythonReady;vendored=$true;commit=[string]$localSource.commit}
+  }
+  if ($sourceOnly) {
+    return @{ok=$true;name=$Entry.name;message='Fuente local conservada como source-only; un submódulo o requisito indicado en su manifiesto sigue pendiente. No se considera un backend compilable.';path=$dest;commit=[string]$localSource.commit;vendored=$true;sourceOnly=$true}
+  }
+  return @{ok=$true;name=$Entry.name;message='Fuente local verificada en toolchains/. No se ha consultado ni descargado nada desde Internet.';path=$dest;commit=[string]$localSource.commit;vendored=$true;sourceOnly=$false}
 }
 function BashQuote([string]$Text) { return "'" + $Text.Replace("'", "'\''") + "'" }
 function ConvertToWslPath([string]$Path) {
@@ -1457,7 +1379,8 @@ function BuildNativeProject([string]$ProjectPath,[bool]$CleanBeforeBuild=$false,
     } catch { return @{ok=$false;message=$_.Exception.Message;output=$_.Exception.Message;path=$projectRoot;templateId=$template} }
   } elseif ($template -eq 'hui-gl' -and $script:ActiveBuildLogPath) { WriteBuildJobLog $script:ActiveBuildLogPath 'Atlas tipográfico europeo omitido por política; se conserva la configuración upstream.' }
   if ($template -eq 'hui-gl') {
-    $mirrorPatch = ApplyPS5HSSdkMirrorChainPatch -ProjectRoot $projectRoot -Policy $policy -Backend 'opengl-ui' -SourceRepository ([string]$profile.repository) -MirrorUrls (GetPS5HSSdkMirrorUrls)
+    $mirrorPatch = ApplyPS5HSSdkLocalOnlyPatch -ProjectRoot $projectRoot -Policy $policy -Backend 'opengl-ui' -SourceRepository ([string]$profile.repository)
+    if (!$mirrorPatch.ok) { throw [string]$mirrorPatch.message }
     if ($mirrorPatch.changed -and $script:ActiveBuildLogPath) { WriteBuildJobLog $script:ActiveBuildLogPath 'Cadena de mirrors del SDK OpenGL aplicada antes de compilar.' }
     $sdkSeed = SeedProjectOpenGlSdkCache $projectRoot
     if ($sdkSeed.seeded -and $script:ActiveBuildLogPath) { WriteBuildJobLog $script:ActiveBuildLogPath 'SDK ps5-opengl sembrado desde el pack local en .deps/ps5-opengl (SHA-256 verificado); el build no necesitará red para el SDK.' }
@@ -2127,7 +2050,8 @@ function BuildNativeVisualProject($Body) {
     }
 
     if ($backend -eq 'opengl-ui') {
-      $mirrorPatch = ApplyPS5HSSdkMirrorChainPatch -ProjectRoot $projectRoot -Policy $policy -Backend $backend -SourceRepository 'blackbearreloaded/ps5-homebrew-ui' -MirrorUrls (GetPS5HSSdkMirrorUrls)
+      $mirrorPatch = ApplyPS5HSSdkLocalOnlyPatch -ProjectRoot $projectRoot -Policy $policy -Backend $backend
+      if (!$mirrorPatch.ok) { throw [string]$mirrorPatch.message } -SourceRepository 'blackbearreloaded/ps5-homebrew-ui'
       if ($mirrorPatch.changed -and $script:ActiveBuildLogPath) { WriteBuildJobLog $script:ActiveBuildLogPath 'Cadena de mirrors del SDK OpenGL aplicada al crear el proyecto.' }
       $sdkSeed = SeedProjectOpenGlSdkCache $projectRoot
       if ($sdkSeed.seeded -and $script:ActiveBuildLogPath) { WriteBuildJobLog $script:ActiveBuildLogPath 'SDK ps5-opengl sembrado desde el pack local en .deps/ps5-opengl (SHA-256 verificado); el build no necesitará red para el SDK.' }
@@ -2504,12 +2428,14 @@ function BuildSharp($P,[string]$Code,[string]$Backend,[string]$RequestedOutput='
   return @{ok=$false;message="SharpProspero terminó con código $exit o no produjo un artefacto verificable. Las salidas anteriores se han conservado.";output=$log;path=$native;artifact=$artifact;titleId=$titleId;exitCode=$exit;diagnostics=@(@{severity='error';title='Compilación SharpProspero fallida';message='Revisa la salida de build-app.ps1 y la estructura de la plantilla usada.';location='Pipeline SharpProspero'})}
 }
 function InvokeSetup([string]$Action) {
-  if($Action -eq 'diagnose'){return @{ok=$true;message='Diagnóstico completado.';output=(ConvertTo-Json (GetStatus) -Depth 10)}}
-  $messages=@();$ok=$true
-  if($Action -in @('git','all')){if(!(Get-Command winget.exe -ErrorAction SilentlyContinue)){$messages+='winget no está disponible. Instala Git for Windows manualmente desde git-scm.com.';$ok=$false}else{$o=& winget install --id Git.Git --exact --accept-package-agreements --accept-source-agreements 2>&1;$ec=$LASTEXITCODE;$messages+=($o|ForEach-Object{$_.ToString()});if($ec -ne 0){$ok=$false}}}
-  if($Action -in @('dotnet','all')){if(!(Get-Command winget.exe -ErrorAction SilentlyContinue)){$messages+='winget no está disponible. Instala App Installer desde Microsoft Store.';$ok=$false}else{$o=& winget install --id Microsoft.DotNet.SDK.10 --exact --accept-package-agreements --accept-source-agreements 2>&1;$ec=$LASTEXITCODE;$messages+=($o|ForEach-Object{$_.ToString()});if($ec -ne 0){$ok=$false}}}
-  if($Action -in @('wsl','all')){if(!(Get-Command wsl.exe -ErrorAction SilentlyContinue)){$messages+='wsl.exe no está disponible en esta versión/instalación de Windows.';$ok=$false}else{$o=& wsl.exe --install -d Debian 2>&1;$ec=$LASTEXITCODE;$messages+=($o|ForEach-Object{$_.ToString()});if($ec -ne 0){$ok=$false}}}
-  return @{ok=$ok;message=$(if($ok){'Acción de configuración terminada; vuelve a comprobar el entorno.'}else{'La configuración necesita intervención. Consulta la salida.'});output=($messages -join "`r`n")}
+  if ($Action -eq 'diagnose') {
+    return @{ok=$true;message='Diagnóstico local completado; no se ha consultado Internet.';output=(ConvertTo-Json (GetStatus) -Depth 10)}
+  }
+  return @{
+    ok=$false
+    message='La instalación automática por red está desactivada. Homebrew Studio solo comprueba las herramientas ya instaladas y las fuentes versionadas en toolchains/. Instala manualmente los requisitos del sistema que falten y vuelve a ejecutar el diagnóstico.'
+    output=("Acción solicitada: " + $Action + [Environment]::NewLine + "No se ejecutó winget, no se instaló WSL y no se descargaron paquetes.")
+  }
 }
 function ServeStatic($C,[string]$UrlPath) {
   $relative=[Uri]::UnescapeDataString($UrlPath.TrimStart('/'));if(!$relative){$relative='index.html'}
