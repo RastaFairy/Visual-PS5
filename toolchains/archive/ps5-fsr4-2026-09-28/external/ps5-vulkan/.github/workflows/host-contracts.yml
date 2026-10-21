@@ -1,0 +1,107 @@
+name: Host contracts
+
+# Modified by BlackBearReloaded, 2026-09-26.
+# The inherited native/host recipe requires upstream private logging support.
+# Keep it manual until implementation-plan M0 supplies public dependencies.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  host-contracts:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out ps5-vulkan
+        uses: actions/checkout@v4
+        with:
+          path: homebrew_ps5/projects/ps5-vulkan
+
+      - name: Check out pinned graphics support
+        uses: actions/checkout@v4
+        with:
+          repository: mpereiraesaa/ps5-agc-gears
+          ref: 1ae1f9182abd2770c131b97419034fb85173c2dc
+          path: homebrew_ps5/projects/ps5-agc-gears
+
+      - name: Check out pinned telemetry support
+        uses: actions/checkout@v4
+        with:
+          repository: mpereiraesaa/ps5-homebrew-lab
+          ref: 62c63455b561ef4ab45d2d24923bdfadbc2200ce
+          path: lab-reference
+          # The lab repository is private; this read-only deploy key is
+          # scoped to it alone.
+          ssh-key: ${{ secrets.LAB_REFERENCE_SSH_KEY }}
+
+      - name: Link telemetry client
+        run: ln -s "$GITHUB_WORKSPACE/lab-reference/projects/logging_server" "$GITHUB_WORKSPACE/homebrew_ps5/projects/logging_server"
+
+      - name: Install host-test dependencies
+        working-directory: homebrew_ps5/projects/ps5-vulkan
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y glslang-tools
+          python3 -m pip install --disable-pip-version-check -r requirements-dev.txt
+
+      - name: Prepare pinned Vulkan headers
+        working-directory: homebrew_ps5/projects/ps5-vulkan
+        run: make vulkan-headers
+
+      - name: Run host contracts
+        working-directory: homebrew_ps5/projects/ps5-vulkan
+        run: make check
+
+  compiler-contracts:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out ps5-vulkan
+        uses: actions/checkout@v4
+        with:
+          path: homebrew_ps5/projects/ps5-vulkan
+
+      - name: Check out pinned graphics ABI support
+        uses: actions/checkout@v4
+        with:
+          repository: mpereiraesaa/ps5-agc-gears
+          ref: 1ae1f9182abd2770c131b97419034fb85173c2dc
+          path: homebrew_ps5/projects/ps5-agc-gears
+
+      - name: Install host-test dependencies
+        run: sudo apt-get update && sudo apt-get install -y glslang-tools
+
+      - name: Install Python host-test dependencies
+        working-directory: homebrew_ps5/projects/ps5-vulkan
+        run: python3 -m pip install --disable-pip-version-check -r requirements-dev.txt
+
+      - name: Prepare pinned Vulkan headers
+        working-directory: homebrew_ps5/projects/ps5-vulkan
+        run: make vulkan-headers
+
+      - name: Prepare pinned compiler dependencies
+        working-directory: homebrew_ps5/projects/ps5-vulkan
+        run: make compiler-deps
+
+      - name: Cache host compiler library
+        uses: actions/cache@v4
+        id: cache-libpsbc
+        with:
+          path: |
+            homebrew_ps5/projects/ps5-vulkan/build/libpsbc.host.a
+            homebrew_ps5/projects/ps5-vulkan/third_party/psbc-reference/**/*.host.o
+            homebrew_ps5/projects/ps5-vulkan/third_party/psbc-reference/**/*.host.cpp.o
+          key: libpsbc-host-${{ hashFiles('homebrew_ps5/projects/ps5-vulkan/tools/prepare_compiler_deps.py', 'homebrew_ps5/projects/ps5-vulkan/tools/Makefile.psbc-host') }}-v1
+
+      - name: Build host compiler library
+        if: steps.cache-libpsbc.outputs.cache-hit != 'true'
+        working-directory: homebrew_ps5/projects/ps5-vulkan
+        run: python3 tools/build_psbc.py --host
+
+      - name: Run runtime compiler tests
+        working-directory: homebrew_ps5/projects/ps5-vulkan
+        run: make test-compiler
+
+      - name: Check runtime graphics adapter with sanitizers
+        working-directory: homebrew_ps5/projects/ps5-vulkan
+        run: make test-runtime-graphics-compiler RUNTIME_HEADER_SANITIZERS=-fsanitize=address,undefined

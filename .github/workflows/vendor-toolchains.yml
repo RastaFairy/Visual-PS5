@@ -4,8 +4,11 @@ on:
   push:
     branches:
       - main
+      - toolchains-vendoring-audit-20261020
     paths:
       - '.github/scripts/vendor-toolchains.sh'
+      - '.github/scripts/recover-ps5-upstream-snapshots.sh'
+      - '.github/workflows/vendor-toolchains.yml'
   workflow_dispatch:
 
 permissions:
@@ -25,13 +28,18 @@ jobs:
       - name: Preparar herramientas
         run: |
           sudo apt-get update
-          sudo apt-get install -y git rsync python3
+          sudo apt-get install -y git rsync python3 curl
 
       - name: Validar sintaxis del script
-        run: bash -n .github/scripts/vendor-toolchains.sh
+        run: |
+          bash -n .github/scripts/vendor-toolchains.sh
+          bash -n .github/scripts/recover-ps5-upstream-snapshots.sh
 
       - name: Copiar fuentes en el propio repositorio
         run: bash .github/scripts/vendor-toolchains.sh
+
+      - name: Recuperar los submódulos y snapshots históricos FSR4/HelixSR
+        run: bash .github/scripts/recover-ps5-upstream-snapshots.sh
 
       - name: Guardar los snapshots
         env:
@@ -39,10 +47,21 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add toolchains
+          # Vendored source trees contain their own upstream .gitignore files.
+          # Force-stage the pinned checkout contents so upstream-tracked files that
+          # match those ignore patterns are not silently omitted from the snapshot.
+          # The workflow checks out a clean repo and the sync scripts copy clean
+          # Git trees, not build caches or local working files.
+          git add -f toolchains
           if git diff --cached --quiet; then
             echo "No hay cambios de toolchains para guardar."
             exit 0
           fi
           git commit -m "Vendorizar fuentes PS5 en toolchains [skip toolchain vendor]"
+          # Another agent or a parallel validation run may have advanced this
+          # branch while source snapshots were being prepared. Rebase our
+          # generated toolchain-only commit before pushing to avoid a needless
+          # non-fast-forward failure; conflicts still fail safely for review.
+          git fetch origin "${BRANCH_NAME}"
+          git rebase "origin/${BRANCH_NAME}"
           git push origin "HEAD:${BRANCH_NAME}"

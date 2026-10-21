@@ -1,0 +1,2329 @@
+#!/usr/bin/env python3
+"""Contract check for the frozen upstream CTS selection.
+
+Verifies that every case named in cts/upstream/manifest.json is actually
+produced by the pinned upstream sources, i.e. that the selection was not
+invented and that the case list has not drifted from the sources it cites.
+
+This is a host-side check: it never talks to the console and is safe to run in
+CI. When the pinned vk-gl-cts checkout is not present (third_party is ignored)
+the check reports that it was skipped instead of failing.
+"""
+import copy
+import functools
+import json
+from pathlib import Path
+import re
+import subprocess
+import sys
+
+ROOT = Path(__file__).resolve().parents[1]
+MANIFEST = ROOT / "cts/upstream/manifest.json"
+UPSTREAM = ROOT / "third_party/vk-gl-cts"
+# The integration supplies the package and its leading groups; upstream supplies
+# everything below them.
+INTEGRATION_SOURCE = ROOT / "cts/upstream/package_ps5.cpp"
+VOLATILE_ATOMIC_WRAPPER = ROOT / "cts/upstream/volatile_atomic_focus.cpp"
+BDA_BUILD_SOURCE = ROOT / "tools/build_upstream_cts.py"
+# The capabilities a selection is allowed to rely on come from the device's own
+# sources, not from the selection itself.
+DEVICE_SOURCE = ROOT / "src/vk_device.c"
+INTERNAL_HEADER = ROOT / "src/vk_internal.h"
+PLATFORM_SOURCE = ROOT / "native/platform_ps5.c"
+# The driver's own image-usage surfaces, and the pinned upstream helper that
+# builds the resources a selected family actually needs.
+IMAGE_USAGE_CREATE_SOURCE = ROOT / "src/vk_memory.c"
+IMAGE_USAGE_PREDICATE_SOURCE = ROOT / "src/texture_format.c"
+IMAGE_USAGE_QUERY_SOURCE = ROOT / "src/graphics_formats.h"
+MULTIVIEW_UTIL_SOURCE = ("external/vulkancts/modules/vulkan/multiview/"
+                         "vktMultiViewRenderUtil.cpp")
+MULTIVIEW_TEST_SOURCE = ("external/vulkancts/modules/vulkan/multiview/"
+                         "vktMultiViewRenderTests.cpp")
+# The shared draw utility that names the clipping module's clip_volume leaves.
+DRAW_UTIL_SOURCE = "external/vulkancts/modules/vulkan/util/vktDrawUtil.cpp"
+GATHER_TEST_SOURCE = ("external/vulkancts/modules/vulkan/shaderrender/"
+                     "vktShaderRenderTextureGatherTests.cpp")
+OCCLUSION_TEST_SOURCE = ("external/vulkancts/modules/vulkan/query_pool/"
+                         "vktQueryPoolOcclusionTests.cpp")
+# The exact execution requirements a contract must name. Every key is required
+# and must be a real boolean; anything else - a missing key, an unknown one, a
+# non-boolean value - fails closed rather than being ignored, because the
+# execution stage is derived from these values and nothing else.
+EXECUTION_REQUIREMENTS = ("descriptor_object_model", "descriptor_table_encoding",
+                          "compiler_lowering", "gpu_subpass_readback")
+# The exact, fail-closed hardware-evidence record a promoted resource stage must
+# carry. A physical-console claim with a missing, unknown, ill-typed or
+# unsuccessful field is not evidence, so no promotion can rest on one.
+HARDWARE_EVIDENCE_FIELDS = ("source_commit", "artifact_sha256", "run_id", "log_sha256",
+                            "firmware", "title",
+                            "query_result", "query_max_array_layers", "create_result",
+                            "bind_result", "allocation_bytes", "array_layers", "teardown")
+HARDWARE_EVIDENCE_REQUIRED_LAYERS = 6
+HEX_DIGEST = re.compile(r"[0-9a-f]{64}\Z")
+# A revision, not a digest: the exact commit the witnessed artifact was built
+# from, so the receipt ties the run to one source revision.
+COMMIT_ID = re.compile(r"[0-9a-f]{40}\Z")
+# VkSampleCountFlagBits values, so a derived branch name can be compared with the
+# number the fixture witnesses.
+SAMPLE_COUNT_FLAGS = {
+    "VK_SAMPLE_COUNT_1_BIT": 1, "VK_SAMPLE_COUNT_2_BIT": 2,
+    "VK_SAMPLE_COUNT_4_BIT": 4, "VK_SAMPLE_COUNT_8_BIT": 8,
+    "VK_SAMPLE_COUNT_16_BIT": 16, "VK_SAMPLE_COUNT_32_BIT": 32,
+    "VK_SAMPLE_COUNT_64_BIT": 64,
+}
+
+
+# The gate re-reads the same pinned CTS modules and re-runs the same bounded
+# recognizers for every cited case, and the regression tests run the whole gate
+# dozens of times. Source reads are cached on (path, mtime, size) so an edited
+# file is always re-read; the recognizers are pure functions of their text
+# arguments, so identical text gives the identical answer. Callers receive
+# copies, never the cached objects.
+@functools.lru_cache(maxsize=None)
+def _read_cached(path: Path, mtime_ns: int, size: int) -> str:
+    return path.read_text(encoding="utf-8", errors="replace")
+
+
+def _read_source(path: Path) -> str:
+    stat = path.stat()
+    return _read_cached(path, stat.st_mtime_ns, stat.st_size)
+
+
+@functools.lru_cache(maxsize=None)
+def _searchable_cached(integration_text: str, files: tuple) -> str:
+    tree_text = "\n".join(_read_cached(*entry) for entry in files)
+    return integration_text + "\n" + tree_text
+
+
+def _module_searchable(integration_text: str, module_root: Path) -> str:
+    files = []
+    for path in sorted(module_root.rglob("*.cpp")):
+        stat = path.stat()
+        files.append((path, stat.st_mtime_ns, stat.st_size))
+    return _searchable_cached(integration_text, tuple(files))
+
+
+@functools.lru_cache(maxsize=None)
+def _quoted_in(needle: str, haystack: str) -> bool:
+    return re.search(r'"' + re.escape(needle) + r'"', haystack) is not None
+
+
+@functools.lru_cache(maxsize=None)
+def _ubo_generated_paths(text: str) -> frozenset:
+    """Recognize the bounded std430 names composed by the pinned UBO factory."""
+    def factory_block(name: str) -> str:
+        marker = "// ubo." + name + "\n"
+        after = text.partition(marker)[2]
+        return after.partition("// ubo.")[0] if after else ""
+
+    if ('{"std430", LAYOUT_STD430}' not in text or
+            '{"per_block_buffer", UniformBlockCase::BUFFERMODE_PER_BLOCK}' not in text):
+        return frozenset()
+    paths = set()
+    basic_types = re.search(r"static const glu::DataType basicTypes\[\] = \{(.*?)\};",
+                            text, re.S)
+    basic_array = factory_block("single_basic_array")
+    if (basic_types and "glu::TYPE_FLOAT_MAT2" in basic_types.group(1) and
+            'new tcu::TestCaseGroup(m_testCtx, "single_basic_array")' in basic_array and
+            "glu::getDataTypeName(type)" in basic_array and
+            "createBlockBasicTypeCases(" in basic_array and
+            'new BlockBasicTypeCase(testCtx, "vertex"' in text):
+        paths.add("dEQP-VK.ubo.single_basic_array.std430.mat2.vertex")
+    for group, case_class in (("single_struct", "BlockSingleStructCase"),
+                              ("2_level_struct_array", "Block2LevelStructArrayCase")):
+        block = factory_block(group)
+        if (f'new tcu::TestCaseGroup(m_testCtx, "{group}")' in block and
+                case_class in block and 'baseName + "_vertex"' in block):
+            paths.add(f"dEQP-VK.ubo.{group}.per_block_buffer.std430_vertex")
+    return frozenset(paths)
+
+
+@functools.lru_cache(maxsize=None)
+def _format_segments(text: str) -> frozenset:
+    return frozenset(token[len("VK_FORMAT_"):].lower()
+                     for token in re.findall(r"\bVK_FORMAT_[A-Z0-9_]+\b", text))
+
+
+@functools.lru_cache(maxsize=None)
+def _volatile_atomic_leaf_names(text: str, integration: str, wrapper: str) -> frozenset:
+    """Derive the wrapper-registered VulkanKHR volatile atomic leaves.
+
+    The pinned factory composes its group name and registers case names through
+    macros, so neither final spelling is a quoted literal. Require its exact
+    volatile/storage-buffer branch and the package's focused registration.
+    """
+    if not all(part in text for part in (
+            'std::string groupName("opatomic")',
+            'groupName += "_storage_buffer"',
+            'groupName += "_volatile"',
+            'if (volatileAtomic)',
+            'spec.requestedVulkanFeatures.extVulkanMemoryModel.vulkanMemoryModel = true;',
+            'specializations["SCOPE"]     = "%five";')):
+        return frozenset()
+    if ('createOpAtomicGroup(testCtx, true, 65535, false, true)' not in wrapper or
+            'createFocusedVolatileAtomicComputeGroup(m_testCtx)' not in integration):
+        return frozenset()
+    factory = _source_function_at_line(text, 1472)
+    return frozenset(re.findall(r'ADD_OPATOMIC_CASE_(?:1|N)\(\s*([a-z]+)\s*,', factory))
+
+
+@functools.lru_cache(maxsize=None)
+def _focused_bda_leaf_paths(text: str, integration: str, builder: str) -> frozenset[str]:
+    """Recognize only the two original BDA leaves built by the focused copy."""
+    factory = _source_function_at_line(text, 1547)
+    if not factory or not all(part in factory for part in (
+            'tcu::TestCaseGroup(testCtx, "buffer_device_address")',
+            'caseName << stageCases[stageNdx].name;',
+            'caseName << "_offset_nonzero";',
+            'new BufferAddressTestCase(testCtx, caseName.str().c_str(), c)',
+            'c.memoryOffset == OFFSET_NONZERO && c.bufType != BT_SINGLE')):
+        return frozenset()
+    choices = {"setCases": "set0", "depthCases": "depth1",
+               "baseCases": "basessbo", "cvtCases": "load",
+               "storeCases": "nostore", "btCases": "single",
+               "layoutCases": "std140", "stageCases": "comp"}
+    for name, selected in choices.items():
+        array = re.search(r"TestGroupCase " + name +
+                          r"\[\] = \{(.*?)\n    \};", factory, re.DOTALL)
+        if not array or not re.search(r'\{\s*[^,{}]+,\s*"' + selected + r'"\s*\}',
+                                       array.group(1)):
+            return frozenset()
+    if not all(part in factory for part in (
+            '{OFFSET_ZERO, "offset_zero"}',
+            '{OFFSET_NONZERO, "offset_nonzero"}')):
+        return frozenset()
+    if ('createBufferDeviceAddressTests(m_testCtx)' not in integration or
+            'write_focused_bda_source(' not in builder or
+            'focused_sources / "vktBindingBufferDeviceAddressTests.cpp"' not in builder):
+        return frozenset()
+    prefix = ("dEQP-VK.binding_model.buffer_device_address."
+              "set0.depth1.basessbo.load.nostore.single.std140.")
+    return frozenset((prefix + "comp", prefix + "comp_offset_nonzero"))
+
+def _texture_gather_leaf_requirements(text: str) -> dict[str, list[str]]:
+    """Return only original gather leaves derived from the pinned factory.
+
+    The factory composes gather operation groups and wrap-pair case names from
+    fixed tables. Bind the recognition to those constructions and to the
+    factory's fixed texture/format/size tables, so unrelated literals in this
+    large shader module cannot make a fabricated path traceable.
+    """
+    required_fragments = (
+        'return "basic";', 'return "offset";', 'return "offset_dynamic";',
+        'return "offsets";',
+        'string() + wrapModes[wrapSNdx].name + "_" + wrapModes[wrapTNdx].name',
+        'const int wrapSNdx = wrapCaseNdx;',
+        'const int wrapTNdx = (wrapCaseNdx + 1) % DE_LENGTH_OF_ARRAY(wrapModes);',
+        '{"2d", TEXTURETYPE_2D}', '{"2d_array", TEXTURETYPE_2D_ARRAY}',
+        '{"cube", TEXTURETYPE_CUBE}',
+        '{"rgba8", tcu::TextureFormat(tcu::TextureFormat::RGBA, tcu::TextureFormat::UNORM_INT8)}',
+        '{"rgba8ui", tcu::TextureFormat(tcu::TextureFormat::RGBA, tcu::TextureFormat::UNSIGNED_INT8)}',
+        '{"rgba8i", tcu::TextureFormat(tcu::TextureFormat::RGBA, tcu::TextureFormat::SIGNED_INT8)}',
+        '{"depth32f", tcu::TextureFormat(tcu::TextureFormat::D, tcu::TextureFormat::FLOAT)}',
+        '{"size_pot", IVec3(64, 64, 3)}', '{"size_npot", IVec3(17, 23, 3)}',
+        'offsetSize == OFFSETSIZE_MINIMUM_REQUIRED ? "min_required_offset"',
+        'void TextureGather2DCase::checkSupport(Context &context) const\n{\n'
+        '    context.requireDeviceCoreFeature(DEVICE_CORE_FEATURE_SHADER_IMAGE_GATHER_EXTENDED);',
+        'void TextureGather2DArrayCase::checkSupport(Context &context) const\n{\n'
+        '    context.requireDeviceCoreFeature(DEVICE_CORE_FEATURE_SHADER_IMAGE_GATHER_EXTENDED);',
+        'void TextureGatherCubeCase::checkSupport(Context &context) const\n{\n'
+        '    context.requireDeviceCoreFeature(DEVICE_CORE_FEATURE_SHADER_IMAGE_GATHER_EXTENDED);',
+        'case tcu::Sampler::COMPAREMODE_LESS:\n        return "less";',
+        'string() + "compare_" + compareModeName(compareMode)',
+        'offsetSize == OFFSETSIZE_IMPLEMENTATION_MAXIMUM', '"implementation_offset"',
+    )
+    if not all(fragment in text for fragment in required_fragments):
+        return {}
+    wraps = re.search(r"wrapModes\[\]\s*=\s*\{(.*?);", text, re.DOTALL)
+    if not wraps:
+        return {}
+    wrap_names = re.findall(r'\{\s*"([a-z_]+)"\s*,\s*tcu::Sampler::[A-Z_]+\s*\}',
+                            wraps.group(1))
+    if wrap_names != ["clamp_to_edge", "repeat", "mirrored_repeat"]:
+        return {}
+    group_types = ("basic", "offset", "offset_dynamic", "offsets")
+    # Derive the measured 2D/2D-array RGBA8 shapes from the pinned dimension
+    # and size tables. Every recognized operation uses the same adjacent wrap
+    # pairs produced by the pinned three-element table.
+    wrap_pairs = [f"{wrap_names[index]}_{wrap_names[(index + 1) % len(wrap_names)]}"
+                  for index in range(len(wrap_names))]
+    result: dict[str, list[str]] = {}
+    for texture_type, sizes in (("2d", ("size_pot", "size_npot")),
+                                ("2d_array", ("size_pot",))):
+        for size in sizes:
+            for group in group_types:
+                for pair in wrap_pairs:
+                    intermediate = "" if group == "basic" else ".min_required_offset"
+                    path = ("dEQP-VK.shaderrender.texture_gather." + group + intermediate +
+                            f".{texture_type}.rgba8.{size}." + pair)
+                    result[path] = ["core:shaderImageGatherExtended"]
+                    if group != "basic":
+                        implementation_path = (
+                            "dEQP-VK.shaderrender.texture_gather." + group +
+                            f".implementation_offset.{texture_type}.rgba8.{size}." + pair)
+                        result[implementation_path] = ["core:shaderImageGatherExtended"]
+    # The pinned cube case is basic gather only and its checkSupport explicitly
+    # requires shaderImageGatherExtended. Keep this source-derived subset to
+    # the factory's RGBA8 power-of-two ordinary cube leaves.
+    for pair in wrap_pairs:
+        path = ("dEQP-VK.shaderrender.texture_gather.basic.cube.rgba8.size_pot." + pair)
+        result[path] = ["core:shaderImageGatherExtended"]
+
+    # The pinned format table also registers typed integer gather and Dref
+    # formats. Keep one power-of-two 2D case for each operation family and
+    # every wrap pair for UINT/SINT; these paths exercise the same original
+    # image-gather oracle with integer sampler/result types. Their resource
+    # profiles are tracked separately from the RGBA8_UNORM measurements.
+    for texture_format in ("rgba8ui", "rgba8i"):
+        for group in group_types:
+            intermediate = "" if group == "basic" else ".min_required_offset"
+            for pair in wrap_pairs:
+                path = ("dEQP-VK.shaderrender.texture_gather." + group + intermediate +
+                        f".2d.{texture_format}.size_pot." + pair)
+                result[path] = ["core:shaderImageGatherExtended"]
+
+    # Dref gather uses a shadow sampler and the factory places it beneath the
+    # generated compare_less group. Pin one original minimum-offset 2D leaf
+    # whose query reaches the depth sampled-image resource path.
+    result["dEQP-VK.shaderrender.texture_gather.offset.min_required_offset."
+           "2d.depth32f.size_pot.compare_less.clamp_to_edge_repeat"] = [
+               "core:shaderImageGatherExtended"]
+    return result
+
+
+def _texture_gather_generated_segments(text: str) -> set[str]:
+    """Return group names composed by the pinned gather factory."""
+    if ('string() + "compare_" + compareModeName(compareMode)' in text and
+            'case tcu::Sampler::COMPAREMODE_LESS:\n        return "less";' in text and
+            '{"depth32f", tcu::TextureFormat(tcu::TextureFormat::D, '
+            'tcu::TextureFormat::FLOAT)}' in text):
+        return {"compare_less"}
+    return set()
+
+
+def _precise_occlusion_leaf_requirements(text: str) -> dict[str, list[str]]:
+    """Recognize the original basic precise occlusion query case."""
+    construction = (
+        'new QueryPoolOcclusionTest<BasicOcclusionQueryTestInstance>' in text and
+        '"basic_precise", testVector' in text and
+        'testVector.queryControlFlags = vk::VK_QUERY_CONTROL_PRECISE_BIT;' in text and
+        ': TestCaseGroup(testCtx, "occlusion_query")' in text
+    )
+    if not construction:
+        return {}
+    return {"dEQP-VK.query_pool.occlusion_query.basic_precise":
+            ["core:occlusionQueryPrecise"]}
+
+
+def _memoized(function):
+    cached = functools.lru_cache(maxsize=None)(function)
+
+    @functools.wraps(function)
+    def wrapper(*args):
+        return copy.deepcopy(cached(*args))
+    wrapper.cache_clear = cached.cache_clear
+    return wrapper
+
+
+@_memoized
+def _source_function_at_line(text: str, line_number: int) -> str:
+    """Return the C++ function beginning at the cited source line.
+
+    Some upstream SPIR-V assembly factories build leaf names from two static
+    tables rather than spelling the final name as one literal.  Keep that
+    derivation bounded to the function cited by the manifest instead of
+    accepting unrelated tokens from the entire (very large) module.
+    """
+    lines = text.splitlines(keepends=True)
+    if line_number < 1 or line_number > len(lines):
+        return ""
+    start = sum(len(line) for line in lines[:line_number - 1])
+    open_brace = text.find("{", start)
+    if open_brace < 0:
+        return ""
+
+    depth = 0
+    in_string = False
+    escaped = False
+    for offset in range(open_brace, len(text)):
+        char = text[offset]
+        if in_string:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == '"':
+                in_string = False
+            continue
+        if char == '"':
+            in_string = True
+        elif char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0:
+                return text[start:offset + 1]
+    return ""
+
+
+@_memoized
+def _table_composed_leaf_names(text: str, function_text: str) -> set[str]:
+    """Derive leaves of the exact CAPABILITIES-name + cTypes-name form."""
+    if not re.search(
+        r"string\s*\(CAPABILITIES\[[^\]]+\]\.name\)\s*\+\s*\"_\"\s*\+\s*"
+        r"cTypes\[[^\]]+\](?:\[[^\]]+\])?\.name",
+        function_text,
+    ):
+        return set()
+
+    capabilities_match = re.search(
+        r"static\s+const\s+Capability\s+CAPABILITIES\s*\[\]\s*=\s*\{(.*?)\n\};",
+        text,
+        re.DOTALL,
+    )
+    if not capabilities_match:
+        return set()
+    capabilities = re.findall(r"\{\s*\"([a-z0-9_]+)\"\s*,", capabilities_match.group(1))
+
+    # The first field of every CompositeType initializer is its generated name.
+    # Restrict this to the cited function; shader assembly string literals do
+    # not match because they are not brace-initializer fields.
+    type_names = re.findall(r"\{+\s*\"([a-z0-9_]+)\"\s*,", function_text)
+    return {f"{capability}_{type_name}"
+            for capability in capabilities for type_name in type_names}
+
+
+def _multisample_factory(text: str) -> str:
+    """Return the body of the pinned multisample factory.
+
+    The module declares several `samples[]` tables (the fragment-mask and
+    interpolation factories carry their own), so every derivation below is
+    bounded to `createMultisampleTests` instead of the whole file.
+    """
+    match = re.search(r"tcu::TestCaseGroup \*createMultisampleTests\(", text)
+    if not match:
+        return ""
+    return _source_function_at_line(text, text.count("\n", 0, match.start()) + 1)
+
+
+def _multisample_generated_segments(text: str) -> set[str]:
+    """Group segments the multisample factory composes from its sample table.
+
+    `createMultisampleTests` names every sample-count group with
+    ``caseName << "samples_" << samples[samplesNdx]``, so the segment is the
+    numeric value of the flag rather than a string literal. Bounded to that
+    module's own samples array.
+    """
+    factory = _multisample_factory(text)
+    if not factory:
+        return set()
+    samples_match = re.search(
+        r"const VkSampleCountFlagBits samples\[\]\s*=\s*\{(.*?)\};",
+        factory,
+        re.DOTALL,
+    )
+    if not samples_match or not re.search(
+            r'caseName\s*<<\s*"samples_"\s*<<\s*samples\[samplesNdx\]', factory):
+        return set()
+    return {f"samples_{value}"
+            for value in re.findall(r"VK_SAMPLE_COUNT_([0-9]+)_BIT", samples_match.group(1))}
+
+
+def _min_sample_shading_leaf_names(text: str, path: str) -> set[str]:
+    """Leaves of the pipeline module that require sampleRateShading.
+
+    `MinSampleShadingTest::checkSupport` is the only
+    requireDeviceCoreFeature(DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING) call in
+    the pinned multisample module, and `createMultisampleTests` builds every
+    leaf of its three groups from three bounded tables in that file: the
+    sample-count array (whose names are the numeric flag value), the
+    minSampleShading value table, and the case literals each block passes to
+    `MinSampleShadingTest`. Membership is checked against exactly those tables
+    and registrations, per group, so a leaf moved between the enabled and
+    disabled groups - or a primitive the group does not register - stops
+    matching instead of being accepted by a literal that exists elsewhere.
+    Bounded to this one pinned module: the derived names carry the module's own
+    group and family segments, while the registered parents above them are the
+    integration gate's business.
+    """
+    if "DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING" not in text:
+        return set()
+    factory = _multisample_factory(text)
+    if not factory:
+        return set()
+    samples_match = re.search(
+        r"const VkSampleCountFlagBits samples\[\]\s*=\s*\{(.*?)\};",
+        factory,
+        re.DOTALL,
+    )
+    configs_match = re.search(
+        r"const TestConfig testConfigs\[\]\s*=\s*\{(.*?)\n\s*\};",
+        factory,
+        re.DOTALL,
+    )
+    if not (samples_match and configs_match):
+        return set()
+    if not re.search(r'caseName\s*<<\s*"samples_"\s*<<\s*samples\[samplesNdx\]', factory):
+        return set()
+    sample_counts = re.findall(r"VK_SAMPLE_COUNT_([0-9]+)_BIT", samples_match.group(1))
+    configs = re.findall(r'\{"(min_[0-9_]+)"\s*,', configs_match.group(1))
+    # Both tables are pinned: the six Vulkan counts in their declared order and
+    # the five minSampleShading values the family names.
+    if sample_counts != ["2", "4", "8", "16", "32", "64"]:
+        return set()
+    if configs != ["min_0_0", "min_0_25", "min_0_5", "min_0_75", "min_1_0"]:
+        return set()
+    markers = [(match.group(1), match.start()) for match in re.finditer(
+        r'new tcu::TestCaseGroup\(testCtx, "([a-z0-9_]+)"\)', factory)]
+    derived: set[str] = set()
+    for index, (name, start) in enumerate(markers):
+        if name not in ("min_sample_shading", "min_sample_shading_enabled",
+                        "min_sample_shading_disabled"):
+            continue
+        end = markers[index + 1][1] if index + 1 < len(markers) else len(factory)
+        block = factory[start:end]
+        cases = re.findall(
+            r"new MinSampleShadingTest\(\s*(?:\n\s*)?testCtx,\s*\"([a-z0-9_]+)\"", block)
+        if not cases:
+            return set()
+        for count in sample_counts:
+            for config in configs:
+                for case in cases:
+                    derived.add(f"{name}.{config}.samples_{count}.{case}")
+    if any(path.endswith("." + candidate) for candidate in derived):
+        return {path}
+    return set()
+
+
+def _dual_source_blend_leaf_names(text: str, leaf: str) -> set[str]:
+    """Leaves of the pipeline module's dual-source blend family.
+
+    `getBlendStateSetName` joins one fixed-length sequence of blend-state names
+    with "-", and `getBlendStateName` composes each of those from four derived
+    tables: the short factor spellings and the blend-operation names, both read
+    from the initializer in this file, around the color/alpha layout the
+    function prints. The combination space is far too large to enumerate, so
+    membership is checked structurally against exactly those tables and against
+    the registration that produces the family. Bounded to the exact
+    construction shapes in this one pinned module: a rewritten factory stops
+    matching instead of yielding invented names.
+    """
+    factor_match = re.search(
+        r"const char \*shortBlendFactorNames\[\]\s*=\s*\{(.*?)\n\s*\};",
+        text, re.DOTALL)
+    op_match = re.search(r"blendOpNames\[\]\s*=\s*\{(.*?)\n\s*\};",
+                         text, re.DOTALL)
+    if not (factor_match and op_match):
+        return set()
+    factors = re.findall(r'"([a-z0-9]+)"', factor_match.group(1))
+    ops = re.findall(r'"([a-z]+)"', op_match.group(1))
+    # Both tables are pinned: nineteen factor spellings and the five blend
+    # operations in their declared order.
+    if len(factors) != 19 or ops != ["add", "sub", "rsub", "min", "max"]:
+        return set()
+    if not re.search(r'name\s*<<\s*"-"\s*;', text):
+        return set()
+    if not re.search(r"blendStateTests->addChild\(new DualSourceBlendTest\(testCtx, "
+                     r"getBlendStateSetName\(", text):
+        return set()
+
+    def alternatives(tokens: list[str]) -> str:
+        return "|".join(sorted(map(re.escape, tokens), key=len, reverse=True))
+
+    factor = alternatives(factors)
+    operation = alternatives(ops)
+    state = re.compile(f"color_({factor})_({factor})_({operation})_"
+                       f"alpha_({factor})_({factor})_({operation})")
+    parts = leaf.split("-")
+    if len(parts) != 4 or not all(state.fullmatch(part) for part in parts):
+        return set()
+    return {leaf}
+
+
+def _two_attachment_write_mask_leaf_names(text: str, leaf: str) -> set[str]:
+    """Leaves of the render-pass module's two-attachment write-mask family.
+
+    `addAttachmentWriteMaskTests` is the only factory in the pinned tree whose
+    leaves declare DEVICE_CORE_FEATURE_INDEPENDENT_BLEND, and the DXVK262-T06
+    oracle is the pair that draws into exactly two colour attachments with a
+    different write mask each. Bounded to that factory's exact construction
+    expressions: the attachment counts it iterates, the "attachment_count_" and
+    "start_index_" naming, and the requirement entry. A rewritten factory stops
+    matching instead of yielding invented names.
+    """
+    factory = _attachment_write_mask_factory(text)
+    if "DEVICE_CORE_FEATURE_INDEPENDENT_BLEND" not in factory:
+        return set()
+    counts = re.search(r"attachmentCounts\[\]\s*=\s*\{([^}]*)\}", factory)
+    if not counts or "2" not in [part.strip() for part in counts.group(1).split(",")]:
+        return set()
+    if not re.search(r'"attachment_count_"\s*\+\s*de::toString\(attachmentCount\)', factory):
+        return set()
+    if not re.search(r'"start_index_"\s*\+\s*de::toString\(drawStartNdx\)', factory):
+        return set()
+    # `leaf` is this case's last path segment; the recognizer accepts exactly
+    # the two-attachment, two-start-index leaves of the two allocation groups.
+    return {leaf} if re.fullmatch(r"start_index_[01]", leaf) else set()
+
+
+@_memoized
+def _rasterization_culling_leaf_names(text: str, function_text: str) -> set[str]:
+    """Leaves of the rasterization module's culling family.
+
+    The factory composes every leaf name from four tables in the same function -
+    a cull-mode prefix, a primitive-type name, a front-face postfix and a
+    polygon-mode suffix - and omits the combinations that cull both faces while
+    asking for a polygon mode other than FILL. The recognizer reads those tables
+    and applies that one omission, and it refuses to derive anything unless the
+    construction it was written against is still there, so a rewritten factory
+    stops matching instead of yielding invented names. Bounded to the exact
+    initializer shapes in this one pinned module.
+    """
+    # The cited line is inside the registration loop, so the brace-matched slice
+    # starts after the tables; the module text is what carries them. The bound is
+    # the construction itself: every table shape and the one omission must be
+    # present, and the citation must still point at the registration.
+    if ("CullingTestCase" not in function_text or
+            not re.search(r"culling->addChild\(new CullingTestCase\(", text)):
+        return set()
+    if not re.search(
+            r"cullModes\[cullModeNdx\]\.mode\s*==\s*VK_CULL_MODE_FRONT_AND_BACK\s*&&\s*"
+            r"polygonModes\[polygonModeNdx\]\.mode\s*!=\s*VK_POLYGON_MODE_FILL",
+            text):
+        return set()
+
+    def entries(name: str) -> list[tuple[str, str]]:
+        match = re.search(rf"\b{name}\[\]\s*=\s*\{{(.*?)\n\s*\}};", text, re.DOTALL)
+        if not match:
+            return []
+        return re.findall(r"\{\s*(VK_[A-Z_]+)\s*,\s*\"([a-z_]*)\"\s*\}", match.group(1))
+
+    culls = entries("cullModes")
+    primitives = entries("primitiveTypes")
+    faces = entries("frontOrders")
+    modes = entries("polygonModes")
+    if not (culls and primitives and faces and modes):
+        return set()
+    both = [index for index, (token, _) in enumerate(culls)
+            if token == "VK_CULL_MODE_FRONT_AND_BACK"]
+    fill = [index for index, (token, _) in enumerate(modes)
+            if token == "VK_POLYGON_MODE_FILL"]
+    if len(both) != 1 or len(fill) != 1:
+        return set()
+    names: set[str] = set()
+    for cull_index, (_, prefix) in enumerate(culls):
+        for _, primitive in primitives:
+            for _, postfix in faces:
+                for mode_index, (_, suffix) in enumerate(modes):
+                    if cull_index == both[0] and mode_index != fill[0]:
+                        continue
+                    names.add(f"{prefix}{primitive}{postfix}{suffix}")
+    return names
+
+
+@_memoized
+def _fragment_ops_multi_viewport_leaf_names(text: str) -> set[str]:
+    """Leaf names of the fragment_ops module's scissor.multi_viewport family.
+
+    The factory names each leaf "scissor_" + de::toString(numViewports) for
+    numViewports 1..MIN_MAX_VIEWPORTS, so every name is a literal prefix plus a
+    loop index. Bounded to that exact construction - the prefix literal joined
+    to the loop variable, the loop with its inclusive bound and the constant the
+    bound names - so a renamed prefix or a different bound derives nothing.
+    """
+    prefix = re.search(r'"(scissor_)"\s*\+\s*de::toString\(numViewports\)', text)
+    loop = re.search(
+        r'for\s*\(\s*int\s+numViewports\s*=\s*1\s*;\s*numViewports\s*<=\s*MIN_MAX_VIEWPORTS\s*;',
+        text)
+    bound = re.search(r'\bMIN_MAX_VIEWPORTS\s*=\s*(\d+)', text)
+    if not prefix or not loop or not bound or int(bound.group(1)) > 32:
+        return set()
+    return {f"{prefix.group(1)}{n}" for n in range(1, int(bound.group(1)) + 1)}
+
+
+@_memoized
+def _clip_volume_topology_leaf_names(text: str, util_text: str) -> set[str]:
+    """Leaf names of the clipping module's clip_volume groups.
+
+    Each leaf is named by getPrimitiveTopologyShortName over the module's one
+    static topology table: the shared draw utility lowercases the enum name
+    without its 22-character VK_PRIMITIVE_TOPOLOGY_ prefix. Bounded to the
+    table, the call that names a leaf from it and the utility's exact
+    substring, so a different table or helper derives nothing.
+    """
+    if not re.search(r'getPrimitiveTopologyShortName\(cases\[caseNdx\]\)', text):
+        return set()
+    if 'return de::toLower(name.substr(22));' not in util_text:
+        return set()
+    tables = re.findall(
+        r'static const VkPrimitiveTopology cases\[\]\s*=\s*\{(.*?)\};', text, re.DOTALL)
+    if len(tables) != 1:
+        return set()
+    tokens = re.findall(r'\bVK_PRIMITIVE_TOPOLOGY_([A-Z_]+)\b', tables[0])
+    return {token.lower() for token in tokens}
+
+
+@_memoized
+def _draw_depth_clamp_leaf_names(text: str) -> set[str]:
+    """Leaf names of the draw module's depth_clamp family.
+
+    The factory names each leaf getFormatCaseName(format) + testNameSuffix: the
+    lowercased VK_FORMAT_ enum name without its 10-character prefix, followed by
+    one suffix per entry of the clear-value table. Bounded to the format table,
+    the suffix fields and the exact concatenation and helper.
+    """
+    if ('const auto testCaseName = formatCaseName + params.testNameSuffix;' not in text or
+            'return de::toLower(de::toString(getFormatStr(format)).substr(10));' not in text):
+        return set()
+    table = re.search(
+        r'const VkFormat depthStencilImageFormatsToTest\[\]\s*=\s*\{(.*?)\};', text, re.DOTALL)
+    if not table:
+        return set()
+    formats = re.findall(r'\bVK_FORMAT_([A-Z0-9_]+)\b', table.group(1))
+    suffixes = re.findall(r'"(_?[a-z0-9_]*)",\s*// testNameSuffix', text)
+    if not formats or not suffixes:
+        return set()
+    return {f"{fmt.lower()}{suffix}" for fmt in formats for suffix in suffixes}
+
+
+@_memoized
+def _mapping_group_segment(text: str, segment: str) -> bool:
+    """Recognize numeric mapping groups generated from fixed upstream tables."""
+    table = "allocationSizes"
+    value = segment
+    if segment.startswith("offset_"):
+        table, value = "offsets", segment.removeprefix("offset_")
+    elif segment.startswith("size_"):
+        table, value = "sizes", segment.removeprefix("size_")
+    if not value.isdigit():
+        return False
+    match = re.search(
+        rf"const\s+VkDeviceSize\s+{table}\[\]\s*=\s*\{{(.*?)\}};",
+        text, re.DOTALL)
+    if not match:
+        return False
+    # These focused cases intentionally use only decimal literals from the
+    # pinned arrays; expressions such as 1 * 1024 * 1024 + 1 are not guessed.
+    return int(value) in {int(token) for token in re.findall(r"\b\d+\b", match.group(1))}
+
+
+@_memoized
+def _multiview_leaf_requirements(text: str, function_text: str) -> dict[str, dict]:
+    """Derive every render-pass leaf of the pinned multiview module with its
+    complete upstream prerequisites.
+
+    The factory registers its leaves through createViewMasksName() over fixed
+    view-mask tables, two query names and a shader-family table whose order
+    matches the module's TestType enum, and it does that once per rendering type
+    (legacy, renderpass2, dynamic rendering). The four ViewIndex-in-stage
+    families hang under one extra "index" group; every other family sits
+    directly under the rendering-type group.
+
+    Each leaf carries the prerequisites its own upstream gate declares: the
+    "VK_KHR_multiview" functionality the factory always requires, the
+    rendering-type extension, the shader-multiview feature a geometry or
+    tessellation family needs, the core features two families need, and the
+    view extent, which the factory compares against the reported
+    maxMultiviewViewCount before it runs anything. Whole paths are returned, so
+    a real leaf hung under a family that does not own it cannot pass by naming
+    literals that exist elsewhere in the module, and any prerequisite that
+    cannot be derived returns nothing at all rather than a partial answer.
+    """
+    construction = (
+        '"renderpass2"' in text and
+        '"dynamic_rendering"' in text and
+        "createViewMasksName" in text and
+        '"max_multi_view_view_count"' in text and
+        '"get_query_pool_results"' in text and
+        '"cmd_copy_query_pool_results"' in text and
+        'new tcu::TestCaseGroup(testCtx, "index")' in text and
+        "const uint32_t minSupportedMultiviewViewCount" in text and
+        "groupViewIndex->addChild" in function_text and
+        "targetGroupPtr->addChild" in function_text and
+        "shaderName[testTypeNdx]" in function_text
+    )
+    if not construction:
+        return {}
+
+    enum_match = re.search(r"enum TestType\s*\{(.*?)\};", text, re.DOTALL)
+    families_match = re.search(
+        r"const string shaderName\[TEST_TYPE_LAST\]\s*=\s*\{(.*?)\n    \};",
+        function_text, re.DOTALL)
+    case_count = re.search(r"const uint32_t testCaseCount\s*=\s*(\d+)u;", function_text)
+    if not enum_match or not families_match or not case_count:
+        return {}
+    test_types = [name for name in re.findall(r"([A-Z][A-Z0-9_]+)", enum_match.group(1))
+                  if name != "TEST_TYPE_LAST"]
+    family_names = re.findall(r'"([a-z0-9_]+)"', families_match.group(1))
+    if len(test_types) != len(family_names):
+        return {}
+    # Every prerequisite below is derived from a named TestType arm. If upstream
+    # renames one, derive nothing rather than silently drop its requirement.
+    geometry_types = {"TEST_TYPE_VIEW_INDEX_IN_GEOMETRY",
+                      "TEST_TYPE_INPUT_ATTACHMENTS_GEOMETRY",
+                      "TEST_TYPE_SECONDARY_CMD_BUFFER_GEOMETRY"}
+    needed = geometry_types | {"TEST_TYPE_VIEW_INDEX_IN_TESELLATION", "TEST_TYPE_QUERIES",
+                               "TEST_TYPE_DEPTH_DIFFERENT_RANGES",
+                               "TEST_TYPE_NESTED_CMD_BUFFER"}
+    if not needed <= set(test_types):
+        return {}
+
+    # Which families the factory hangs under the "index" group: the cases whose
+    # switch arm calls groupViewIndex->addChild.
+    index_arm = re.search(
+        r"case (TEST_TYPE_VIEW_INDEX_IN_VERTEX):(.*?)default:", function_text, re.DOTALL)
+    if not index_arm or "groupViewIndex->addChild" not in index_arm.group(2):
+        return {}
+    index_types = {index_arm.group(1)} | set(
+        re.findall(r"case (TEST_TYPE_[A-Z0-9_]+):", index_arm.group(2)))
+    if not index_types:
+        return {}
+
+    # The view-mask leaves: the fixed tables, then the iteration table the
+    # factory fills one bit at a time up to its own supported view count.
+    mask_names: list[str] = []
+    tables = re.findall(r"viewMasks\[(\d+)\]\.push_back\((\d+)u\);", function_text)
+    by_index: dict[str, list[str]] = {}
+    for index, value in tables:
+        by_index.setdefault(index, []).append(value)
+    for index in sorted(by_index, key=int):
+        mask_names.append("_".join(by_index[index]))
+    supported = re.search(r"minSupportedMultiviewViewCount\s*=\s*(\d+)u", function_text)
+    if not supported:
+        return {}
+    mask_names.append("_".join(str(1 << bit) for bit in range(int(supported.group(1)))))
+    if len(mask_names) != int(case_count.group(1)):
+        return {}
+
+    # Each mask table is paired index by index with the extent its case renders.
+    extent_match = re.search(
+        r"const VkExtent3D extent3D\[testCaseCount\]\s*=\s*\{(.*?)\n    \};",
+        function_text, re.DOTALL)
+    incomplete_match = re.search(
+        r"const VkExtent3D incompleteExtent3D\s*=\s*\{\s*\d+u,\s*\d+u,\s*(\d+)u\s*\};",
+        function_text)
+    if not extent_match or not incomplete_match:
+        return {}
+    depths = [int(depth) for (_w, _h, depth) in re.findall(
+        r"\{\s*(\d+)u,\s*(\d+)u,\s*(\d+)u\s*\}", extent_match.group(1))]
+    if len(depths) != len(mask_names):
+        return {}
+    limit_leaf_depth = int(incomplete_match.group(1))
+
+    rendering_match = re.search(r"int numberOfRenderingTypes\s*=\s*(\d+);", function_text)
+    renderpass2_match = re.search(
+        r'new tcu::TestCaseGroup\(group->getTestContext\(\), "(renderpass2)"\)', function_text)
+    dynamic_match = re.search(
+        r'new tcu::TestCaseGroup\(group->getTestContext\(\), "(dynamic_rendering)"\)', function_text)
+    if not rendering_match or not renderpass2_match or not dynamic_match:
+        return {}
+    rendering_names = ["", renderpass2_match.group(1), dynamic_match.group(1)]
+    if int(rendering_match.group(1)) > len(rendering_names):
+        return {}
+
+    query_names = ("get_query_pool_results", "cmd_copy_query_pool_results")
+    if not all(f'"{query}"' in text for query in query_names):
+        return {}
+
+    def family_prerequisites(test_type: str) -> list[str]:
+        required = ["extension:VK_KHR_MULTIVIEW", "feature:multiview"]
+        if test_type in geometry_types:
+            required += ["core:geometryShader", "feature:multiviewGeometryShader"]
+        if test_type == "TEST_TYPE_VIEW_INDEX_IN_TESELLATION":
+            required.append("feature:multiviewTessellationShader")
+        if test_type == "TEST_TYPE_QUERIES":
+            required.append("core:occlusionQueryPrecise")
+        if test_type == "TEST_TYPE_DEPTH_DIFFERENT_RANGES":
+            required.append("extension:VK_EXT_DEPTH_RANGE_UNRESTRICTED")
+        if test_type == "TEST_TYPE_NESTED_CMD_BUFFER":
+            required.append("extension:VK_EXT_NESTED_COMMAND_BUFFER")
+        return required
+
+    leaves: dict[str, dict] = {}
+    for rendering_ndx, group_name in enumerate(rendering_names):
+        if rendering_ndx >= int(rendering_match.group(1)):
+            continue
+        prefix = "dEQP-VK.multiview." + (f"{group_name}." if group_name else "")
+        rendering_required: list[str] = []
+        if rendering_ndx == 1:
+            rendering_required = ["extension:VK_KHR_CREATE_RENDERPASS_2"]
+        elif rendering_ndx == 2:
+            rendering_required = ["extension:VK_KHR_DYNAMIC_RENDERING"]
+        for test_type, family in zip(test_types, family_names):
+            family_prefix = prefix + ("index." if test_type in index_types else "")
+            required = family_prerequisites(test_type) + rendering_required
+            for query in query_names:
+                for depth, mask in zip(depths, mask_names):
+                    leaves[f"{family_prefix}{family}.{query}.{mask}"] = {
+                        "required": list(required), "max_views": depth,
+                        "family": family, "test_type": test_type}
+                leaves[f"{family_prefix}{family}.{query}.max_multi_view_view_count"] = {
+                    "required": list(required), "max_views": limit_leaf_depth,
+                    "family": family, "test_type": test_type}
+    return leaves
+
+
+@_memoized
+def _clip_distance_generated_segments(text: str) -> set[str]:
+    """Group segments the pinned clipping factory composes at run time.
+
+    The user-defined distance factory registers each case group twice: under its
+    literal name and under that name with `_dynamic_index` appended for the
+    non-constant write. The suffixed names therefore never appear as literals in
+    the module, and accepting them requires the exact composition expression to
+    be present together with both literal group names.
+    """
+    if not ('const std::string mainGroupName =' in text and
+            'de::toString(caseGroups[groupNdx].groupName) + (dynamicIndexing ? "_dynamic_index" : "")'
+            in text and
+            '{"clip_distance", false},' in text and
+            '{"clip_cull_distance", true},' in text):
+        return set()
+    return {"clip_distance_dynamic_index", "clip_cull_distance_dynamic_index"}
+
+
+@_memoized
+def _geometry_adjacency_leaf_names(text: str) -> set[str]:
+    """Leaf names the pinned geometry input factory composes at run time.
+
+    The triangle-strip-adjacency group names each leaf after the vertex count it
+    iterates, so the name is a literal prefix plus the loop index. Bounded to that
+    factory's exact construction - the prefix literal, de::toString of the loop
+    variable, and the loop's inclusive bound - so a renamed prefix or a different
+    bound derives nothing rather than a wrong list.
+    """
+    match = re.search(
+        r'const string name\s*=\s*"([a-z_]+)"\s*\+\s*de::toString\(vertexCount\)', text)
+    loop = re.search(
+        r'for\s*\(\s*int\s+vertexCount\s*=\s*0\s*;\s*vertexCount\s*<=\s*(\d+)\s*;', text)
+    if not match or not loop or int(loop.group(1)) > 32:
+        return set()
+    return {f"{match.group(1)}{n}" for n in range(int(loop.group(1)) + 1)}
+
+
+@_memoized
+def _clip_distance_leaf_names(path: str, text: str) -> set[str]:
+    """Derive the user-defined clip/cull leaf names of the pinned clipping module.
+
+    The factory registers one leaf per clip count, named from the count and - in
+    the combined group - from the widest cull count that still fits the combined
+    ceiling: `numClipPlanes` plus, when the group uses cull distances,
+    `"_" + min(MAX_CULL_DISTANCES, MAX_COMBINED - numClipPlanes)`. Accept a name
+    only when the module still contains that exact construction, the group and
+    shader segments name the static-index vertex-only variants, and the ceiling
+    constants are the ones the module declares.
+    """
+    construction = (
+        'const std::string caseName =' in text and
+        'de::toString(numClipPlanes) +' in text and
+        'de::toString(numCullPlanes)' in text and
+        '{"clip_distance", false},' in text and
+        '{"clip_cull_distance", true},' in text and
+        'const uint32_t flagTessellation = 1u << 0;' in text and
+        'const uint32_t flagGeometry     = 1u << 1;' in text
+    )
+    if not construction:
+        return set()
+    def constant(name: str) -> int:
+        match = re.search(rf"\b{name}\s*=\s*(\d+)", text)
+        return int(match.group(1)) if match else 0
+    max_clip = constant("MAX_CLIP_DISTANCES")
+    max_cull = constant("MAX_CULL_DISTANCES")
+    max_combined = constant("MAX_COMBINED_CLIP_AND_CULL_DISTANCES")
+    if not max_clip or not max_cull or not max_combined:
+        return set()
+    # The same factory registers the leaves a second time under a
+    # `_dynamic_index` main group (the non-constant write) and appends
+    # `_fragmentshader_read` to the case name for the variant the fragment stage
+    # reads. Both constructions have to be present in the pinned module, exactly
+    # like the static one above, or neither suffix is accepted.
+    construction_reads = (
+        '{"", false}, {"_fragmentshader_read", true}};' in text and
+        'fragmentShaderReads[fragmentShaderReadNdx].name' in text and
+        'readInFragmentShader' in text
+    )
+    construction_dynamic = (
+        'const std::string mainGroupName =' in text and
+        'de::toString(caseGroups[groupNdx].groupName) + (dynamicIndexing ? "_dynamic_index" : "")' in text
+    )
+    segments = path.split(".")
+    if len(segments) != 6 or segments[1] != "clipping" or segments[2] != "user_defined":
+        return set()
+    group = segments[3]
+    shader = segments[4]
+    leaf = segments[5]
+    if shader != "vert":
+        return set()
+    read_suffix = ""
+    if leaf.endswith("_fragmentshader_read"):
+        if not construction_reads:
+            return set()
+        read_suffix = "_fragmentshader_read"
+        leaf = leaf[: -len(read_suffix)]
+    dynamic = False
+    if group.endswith("_dynamic_index"):
+        if not construction_dynamic:
+            return set()
+        dynamic = True
+        group = group[: -len("_dynamic_index")]
+    names: set[str] = set()
+    for clip in range(1, max_clip + 1):
+        # The combined group adds the widest cull count that still fits.
+        if group == "clip_cull_distance":
+            cull = min(max_cull, max_combined - clip)
+            names.add(f"{clip}_{cull}" if cull else str(clip))
+        elif group == "clip_distance":
+            names.add(str(clip))
+    # `dynamic` selects which main group the leaf belongs to; the name set is
+    # the same because the factory builds both groups from the same loop, and the
+    # read suffix is already reflected in `leaf`.
+    assert dynamic in (False, True)
+    return {name + read_suffix for name in names}
+
+
+@_memoized
+def _draw_shader_draw_parameters_leaf_names(text: str, function_text: str) -> set[str]:
+    """Derive the shader_draw_parameters leaf names of the pinned draw module.
+
+    The upstream factory names a leaf from the flags passed as its third
+    argument and ORs the group's preset flags in afterwards, so a preset flag
+    (INDIRECT|MULTIDRAW for the draw_index group, for example) never appears in
+    the leaf name. Accept a name only when the module still contains the exact
+    naming construction and the cited function is one of the group blocks that
+    registers calls through it.
+    """
+    construction = (
+        'name << "draw";' in text and
+        'if (flags & TEST_FLAG_INDEXED)' in text and
+        'name << "_indexed";' in text and
+        'if (flags & TEST_FLAG_INDIRECT)' in text and
+        'name << "_indirect";' in text and
+        'if (flags & TEST_FLAG_INSTANCED)' in text and
+        'name << "_instanced";' in text and
+        'if (flags & TEST_FLAG_FIRST_INSTANCE)' in text and
+        'name << "_first_instance";' in text and
+        "testSpec.flags |= flags;" in text
+    )
+    if not construction:
+        return set()
+    calls = re.findall(r"addDrawCase\(group\.get\(\), testSpec,([^;]*)\);",
+                       function_text)
+    if not calls:
+        return set()
+    leaves: set[str] = set()
+    for argument in calls:
+        name = "draw"
+        for token, suffix in (("TEST_FLAG_INDEXED", "_indexed"),
+                              ("TEST_FLAG_INDIRECT", "_indirect"),
+                              ("TEST_FLAG_INSTANCED", "_instanced"),
+                              ("TEST_FLAG_FIRST_INSTANCE", "_first_instance")):
+            if token in argument:
+                name += suffix
+        leaves.add(name)
+    return leaves
+
+
+@_memoized
+def _fill_update_generated_leaf_names(function_text: str) -> set[str]:
+    """Derive names constructed by createFillAndUpdateBufferTests.
+
+    The pinned upstream factory composes most leaves from fixed ``testName``
+    literals and two fixed prefixes. Its VK_WHOLE_SIZE loop composes the
+    remaining names from the four uint32 byte remainders and aligned offsets.
+    Keep this recognizer tied to the exact construction expressions so an
+    unrelated token elsewhere in the module cannot satisfy provenance.
+    """
+    leaves: set[str] = set()
+    if ('"fill_" + testName' in function_text and
+            '"update_" + testName' in function_text):
+        names = re.findall(
+            r'const\s+std::string\s+testName\s*\(\s*"([a-z0-9_]+)"\s*\)\s*;',
+            function_text,
+        )
+        leaves.update(prefix + name for name in names for prefix in ("fill_", "update_"))
+
+    whole_name = re.search(
+        r'"fill_buffer_vk_whole_size_"\s*\+\s*de::toString\(extraBytes\)\s*\+'
+        r'\s*"_extra_bytes_offset_"\s*\+\s*de::toString\(params\.dstOffset\)',
+        function_text,
+    )
+    fixed_loops = function_text.count(
+        "for (VkDeviceSize i = 0; i < sizeof(uint32_t); ++i)") == 1 and function_text.count(
+        "for (VkDeviceSize j = 0; j < sizeof(uint32_t); ++j)") == 1
+    offset_is_words = "params.dstOffset = j * sizeof(uint32_t);" in function_text
+    if whole_name and fixed_loops and offset_is_words:
+        leaves.update(
+            f"fill_buffer_vk_whole_size_{extra}_extra_bytes_offset_{word * 4}"
+            for extra in range(4) for word in range(4)
+        )
+    return leaves
+
+
+@_memoized
+def _dynamic_state_compute_generated_segments(text: str) -> set[str]:
+    """Derive brief state group names from the pinned compute factory.
+
+    These groups are generated by lowercasing VkDynamicState enum spellings and
+    removing their fixed prefix.  Require both the exact conversion body and
+    the factory's use of that conversion before accepting any derived segment.
+    """
+    conversion = (
+        'strlen("VK_DYNAMIC_STATE_")' in text and
+        "de::toLower(fullName.substr(prefixLen))" in text
+    )
+    factory_use = "getDynamicStateBriefName(state)" in text
+    state_list = re.search(
+        r"const\s+VkDynamicState\s+dynamicStateList\[\]\s*=\s*\{(.*?)\};",
+        text, re.DOTALL)
+    if not (conversion and factory_use and state_list):
+        return set()
+    return {
+        token.removeprefix("VK_DYNAMIC_STATE_").lower()
+        for token in re.findall(r"\bVK_DYNAMIC_STATE_[A-Z0-9_]+\b", state_list.group(1))
+    }
+
+
+def _attachment_write_mask_factory(text: str) -> str:
+    """The body of the pinned write-mask factory, and nothing else.
+
+    The module is a template-heavy file whose enclosing-function extractor
+    cannot recover this factory, so the recognizers below slice it by its own
+    definition: from the function signature to the next top-level definition.
+    """
+    start = text.find("void addAttachmentWriteMaskTests(")
+    if start < 0:
+        return ""
+    end = text.find("\nvoid ", start + 1)
+    return text[start:end if end > 0 else len(text)]
+
+
+def _attachment_write_mask_generated_segments(text: str) -> set[str]:
+    """Derive the write-mask factory's "attachment_count_<n>" group names.
+
+    `addAttachmentWriteMaskTests` composes one group per entry of its own
+    attachmentCounts[] table with `"attachment_count_" + de::toString(...)`, so
+    the segment is not a literal anywhere in the module. Accept the names only
+    while that exact construction and table are present.
+    """
+    factory = _attachment_write_mask_factory(text)
+    if not re.search(r'"attachment_count_"\s*\+\s*de::toString\(attachmentCount\)', factory):
+        return set()
+    counts = re.search(r"attachmentCounts\[\]\s*=\s*\{([^}]*)\}", factory)
+    if not counts:
+        return set()
+    names = set()
+    for part in counts.group(1).split(","):
+        part = part.strip()
+        if part.isdigit():
+            names.add(f"attachment_count_{part}")
+    return names
+
+
+def _factory_slice(text: str, signature: str) -> str:
+    """The body of one top-level factory, from its signature to the next one."""
+    start = text.find(signature)
+    if start < 0:
+        return ""
+    end = text.find("\ntcu::TestCaseGroup *", start + 1)
+    return text[start:end if end > 0 else len(text)]
+
+
+def _separate_layouts_format_segments(factory: str, table: str) -> set[str]:
+    """Format groups of the pipeline stencil and depth factories.
+
+    Both factories name one group per entry of their own format table with
+    getFormatCaseName(format), and a second "<format>_separate_layouts" group
+    for each format that has both a depth and a stencil aspect. The plain names
+    are already generated from the VK_FORMAT_ literals; this adds the combined
+    formats' "_separate_layouts" twins only while that exact construction and
+    table are present in the cited factory.
+    """
+    if '((useSeparateDepthStencilLayouts) ? "_separate_layouts" : "")' not in factory:
+        return set()
+    formats = re.search(rf"const VkFormat {table}\[\]\s*=\s*\{{([^}}]*)\}}", factory)
+    if not formats:
+        return set()
+    return {token[len("VK_FORMAT_"):].lower() + "_separate_layouts"
+            for token in re.findall(r"\bVK_FORMAT_[A-Z0-9_]+\b", formats.group(1))
+            if re.fullmatch(r"VK_FORMAT_D[0-9]+_[A-Z0-9_]*S8_UINT", token)}
+
+
+@_memoized
+def _stencil_generated_segments(text: str) -> set[str]:
+    """Derive the pinned stencil factory's generated group names.
+
+    createStencilTests names its op groups "fail_", "pass_" and "dfail_" plus
+    getShortName(op) for every entry of its stencil-op table (a full product,
+    so every combination exists), and its format groups from stencilFormats[].
+    Bounded to those exact construction expressions and to getShortName's own
+    return table.
+    """
+    factory = _factory_slice(text, "tcu::TestCaseGroup *createStencilTests(")
+    short = re.search(r"const char \*getShortName\(VkStencilOp stencilOp\)\s*\{(.*?)\n\}", text,
+                      re.DOTALL)
+    if not factory or not short:
+        return set()
+    names = set(re.findall(r'return "([a-z]+)";', short.group(1)))
+    segments = _separate_layouts_format_segments(factory, "stencilFormats")
+    for prefix, index in (("fail_", "failOpNdx"), ("pass_", "passOpNdx"),
+                          ("dfail_", "dFailOpNdx")):
+        if re.search(rf'std::string\("{prefix}"\)\s*\+\s*getShortName\(stencilOps\[{index}\]\)',
+                     factory):
+            segments |= {prefix + name for name in names}
+    return segments
+
+
+@_memoized
+def _depth_generated_segments(text: str) -> set[str]:
+    """The pinned depth factory's "<format>_separate_layouts" group names."""
+    return _separate_layouts_format_segments(
+        _factory_slice(text, "tcu::TestCaseGroup *createDepthTests("), "depthFormats")
+
+
+@_memoized
+def _depth_compare_ops_leaf_names(text: str) -> set[str]:
+    """Leaves of the pinned depth factory's compare_ops groups.
+
+    Each leaf is getTopologyName(topology) + "_" + getCompareOpsName(row): the
+    lowercased topology without its prefix, then the row's four compare ops
+    lowercased without "VK_COMPARE_OP_" and joined by "_". Derived from the
+    factory's own primitiveTopologies[] and depthOps[][] tables, and only while
+    that exact construction expression is present.
+    """
+    factory = _factory_slice(text, "tcu::TestCaseGroup *createDepthTests(")
+    if not re.search(r"topologyName\s*\+\s*getCompareOpsName\(depthOps\[opsNdx\]\)", factory):
+        return set()
+    if 'getTopologyName(primitiveTopologies[topologyNdx]) + "_"' not in factory:
+        return set()
+    topologies = re.search(r"const VkPrimitiveTopology primitiveTopologies\[\]\s*=\s*\{([^}]*)\}",
+                           factory)
+    ops = re.search(r"const VkCompareOp depthOps\[\]\[DepthTest::QUAD_COUNT\]\s*=\s*\{(.*?)\n\s*\};",
+                    factory, re.DOTALL)
+    if not topologies or not ops:
+        return set()
+    topology_names = [t.lower() for t in
+                      re.findall(r"\bVK_PRIMITIVE_TOPOLOGY_([A-Z_]+)\b", topologies.group(1))]
+    rows = ["_".join(op.lower() for op in re.findall(r"\bVK_COMPARE_OP_([A-Z_]+)\b", row))
+            for row in re.findall(r"\{([^{}]*)\}", ops.group(1))]
+    return {f"{topology}_{row}" for topology in topology_names for row in rows if row}
+
+
+@_memoized
+def _indirect_draw_generated_segments(text: str) -> set[str]:
+    """Derive the draw-type group names of the pinned indirect-draw factory.
+
+    The factory composes one group per draw type from a literal base
+    ("sequential" or "indexed"), an optional compute-generated-arguments
+    suffix and, for indexed draws only, the two 16-byte index-buffer offsets it
+    iterates (bind offset sizeof(uint32_t) * 4, allocation offset
+    sizeof(tcu::Vec4)). Accept a name only when the module still contains that
+    exact construction, and generate exactly the combinations it does.
+    """
+    construction = (
+        'drawTypeStr = "sequential";' in text and
+        'drawTypeStr = "indexed";' in text and
+        'drawTypeStr += "_data_from_compute";' in text and
+        'drawTypeStr += "_bind_offset_" + std::to_string(bindIndexBufferOffset);' in text and
+        'drawTypeStr += "_alloc_offset_" + std::to_string(indexBufferAllocOffset);' in text and
+        'static_cast<vk::VkDeviceSize>(sizeof(uint32_t) * 4u)' in text and
+        'static_cast<vk::VkDeviceSize>(sizeof(tcu::Vec4))' in text and
+        'if (nonZeroBindIndexBufferOffset && drawTypeIdx != DRAW_TYPE_INDEXED)' in text and
+        'if (nonZeroAllocOffset && drawTypeIdx != DRAW_TYPE_INDEXED)' in text
+    )
+    if not construction:
+        return set()
+    segments: set[str] = set()
+    for base in ("sequential", "indexed"):
+        for compute in ("", "_data_from_compute"):
+            offsets = [""]
+            if base == "indexed":
+                offsets = ["", "_bind_offset_16", "_alloc_offset_16",
+                           "_bind_offset_16_alloc_offset_16"]
+            for offset in offsets:
+                segments.add(base + compute + offset)
+    return segments
+
+
+@_memoized
+def _copy_and_blit_simple_image_leaf_names(function_text: str) -> set[str]:
+    """Derive the image-to-image simple-test leaves of the pinned copy module.
+
+    Those leaves are not written as literals: the factory composes each name
+    from three fixed tables in the same function.  Accept the cross product only
+    when the exact composition expression, the exact registration call and all
+    three table names are present, so an unrelated token elsewhere in the module
+    cannot satisfy provenance.
+    """
+    if not re.search(
+        r'"partial_image_"\s*\+\s*extent\.name\s*\+\s*"_"\s*\+\s*format\.name'
+        r'\s*\+\s*"_"\s*\+\s*clear\.name',
+        function_text,
+    ):
+        return set()
+    if "group->addChild(new CopyImageToImageTestCase(testCtx, testCaseName, params));" not in function_text:
+        return set()
+    formats = re.search(r"formats\[\]\s*=\s*\{(.*?)\n\s*\};", function_text, re.DOTALL)
+    clears = re.search(r"clears\[\]\s*=\s*\{(.*?)\};", function_text, re.DOTALL)
+    extents = re.search(r"extents\[\]\s*=\s*\{(.*?)\};", function_text, re.DOTALL)
+    if not (formats and clears and extents):
+        return set()
+    format_names = re.findall(r'\{\s*"([a-z0-9_]+)"\s*,\s*vk::VK_FORMAT_', formats.group(1))
+    clear_names = re.findall(r'\{\s*"([a-z0-9_]+)"\s*,\s*VK_(?:TRUE|FALSE)\s*\}', clears.group(1))
+    extent_names = re.findall(r'\{\s*"([a-z0-9_]+)"\s*,\s*\{', extents.group(1))
+    if not (format_names and clear_names and extent_names):
+        return set()
+    return {
+        f"partial_image_{extent}_{format_name}_{clear}"
+        for extent in extent_names
+        for format_name in format_names
+        for clear in clear_names
+    }
+
+
+def _format_array(text: str, name: str) -> set[str]:
+    """Read one terminated format table, without borrowing enums from neighbours."""
+    match = re.search(r"\b" + re.escape(name) +
+                      r"\[\]\s*=\s*\{(.*?)VK_FORMAT_UNDEFINED\s*\};",
+                      text, re.DOTALL)
+    return {token.lower() for token in re.findall(r"VK_FORMAT_([A-Z0-9_]+)",
+                                               match.group(1))} if match else set()
+
+
+@_memoized
+def _bc_compressed_sampling_paths(text: str) -> set[str]:
+    """Names generated by the compressed texture 2D factory."""
+    if not all(part in text for part in (
+            'nameBase + "_2d_" + sizes[sizeNdx].name + backingModes[backingNdx].name',
+            'compressedTextureTests->addChild(new TextureTestCase<Compressed2DTestInstance>(',
+            'const string nameBase  = de::toLower(formatStr.substr(10));',
+            '{"", TextureBinding::IMAGE_BACKING_MODE_REGULAR}')):
+        return set()
+    formats = re.search(r"\bformats\[\]\s*=\s*\{(.*?)\};", text, re.DOTALL)
+    sizes = re.search(r"\bsizes\[\]\s*=\s*\{(.*?)\};", text, re.DOTALL)
+    if not (formats and sizes):
+        return set()
+    bc_formats = re.findall(r"VK_FORMAT_(BC[A-Z0-9_]+)", formats.group(1))
+    size_names = re.findall(r'\{\s*\d+\s*,\s*\d+\s*,\s*\d+\s*,\s*(?:true|false)\s*,\s*"([a-z0-9_]+)"\s*\}',
+                            sizes.group(1))
+    return {f"dEQP-VK.texture.compressed.{fmt.lower()}_2d_{size}"
+            for fmt in bc_formats for size in size_names}
+
+
+@_memoized
+def _bc_image_copy_paths(text: str) -> set[str]:
+    """Compatible BC pairs and four layouts registered by the copy factory."""
+    layout_factory = _source_function_at_line(text, 9506)
+    if not all(part in layout_factory for part in (
+            'getImageLayoutCaseName(params.src.image.operationLayout) + "_" +',
+            'getImageLayoutCaseName(params.dst.image.operationLayout)',
+            'const VkImageLayout copySrcLayouts[] = {VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL};',
+            'const VkImageLayout copyDstLayouts[] = {VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL};',
+            'group->addChild(new CopyImageToImageTestCase(group->getTestContext(), testName, params));')):
+        return set()
+    if not all(part in text for part in (
+            'getFormatCaseName(dstFormat), addImageToImageAllFormatsColorSrcFormatDstFormatTests',
+            'addTestGroup(group, "all_formats", addImageToImageAllFormatsTests, testGroupParams);',
+            'new tcu::TestCaseGroup(group->getTestContext(), "2d_to_2d")')):
+        return set()
+    tables = re.search(r"\bcolorImageFormatsToTest\[\]\s*=\s*\{(.*?)\};", text, re.DOTALL)
+    if not tables:
+        return set()
+    paths = set()
+    for name in re.findall(r"\bcompatibleFormats[A-Za-z0-9]+\b", tables.group(1)):
+        formats = _format_array(text, name)
+        for src in formats:
+            if not src.startswith("bc"):
+                continue
+            for dst in formats:
+                if not dst.startswith("bc"):
+                    continue
+                for src_layout in ("optimal", "general"):
+                    for dst_layout in ("optimal", "general"):
+                        paths.add("dEQP-VK.api.copy_and_blit.core.image_to_image."
+                                  f"all_formats.color.2d_to_2d.{src}.{dst}."
+                                  f"{src_layout}_{dst_layout}")
+    return paths
+
+
+@_memoized
+def _bc_mip_copy_paths(text: str) -> set[str]:
+    """Compressed image-to-buffer mips from the pinned extent/layer loops."""
+    if not all(part in text for part in (
+            '"mip_copies_" + getFormatCaseName(format) + "_" + std::to_string(extent.width)',
+            'caseName.append("_" + std::to_string(numLayers) + "_layers")',
+            'caseName.append("_" + queueName)',
+            'for (const VkFormat *format = compressedFormatsFloats;',
+            'getCaseName(*format, params.src.image.extent, numLayers, "universal")',
+            'new CopyCompressedImageToBufferTestCase(',
+            'addTestGroup(group, "2d_images", add2dImageToBufferTests, testGroupParams)')):
+        return set()
+    extents = re.search(r"\bVkExtent3D extents\[\]\s*=\s*\{(.*?)\};", text, re.DOTALL)
+    layers = re.search(r"\buint32_t arrayLayers\[\]\s*=\s*\{(.*?)\};", text, re.DOTALL)
+    if not (extents and layers):
+        return set()
+    sizes = re.findall(r"\{\s*(\d+)\s*,\s*(\d+)\s*,\s*1\s*\}", extents.group(1))
+    layer_counts = [int(value) for value in re.findall(r"\b\d+\b", layers.group(1))]
+    return {"dEQP-VK.api.copy_and_blit.core.image_to_buffer.2d_images."
+            f"mip_copies_{fmt}_{width}x{height}"
+            f"{'_' + str(count) + '_layers' if count > 1 else ''}_universal"
+            for fmt in _format_array(text, "compressedFormatsFloats")
+            if fmt.startswith("bc")
+            for width, height in sizes for count in layer_counts}
+
+
+@_memoized
+def _bc_blit_paths(text: str) -> set[str]:
+    """Compressed-to-colour 2D blits for the source and destination tables."""
+    if not all(part in text for part in (
+            '{compressedFormatsFloats, compatibleFormatsFloats, false}',
+            '{compressedFormatsSrgb, compatibleFormatsSrgb, false}',
+            'addTestGroup(group, getFormatCaseName(testParams.params.dst.image.format),',
+            'addBlittingImageAllFormatsColorSrcFormatDstFormatTests, testParams)',
+            'new tcu::TestCaseGroup(group->getTestContext(), "2d")',
+            'getBlitImageTilingLayoutCaseName(testParams.params.src.image.tiling,',
+            'group->addChild(new BlitImageTestCase(testCtx, testName + "_nearest", testParams.params))',
+            'group->addChild(new BlitImageTestCase(testCtx, testName + "_linear", testParams.params))',
+            'const VkImageLayout blitSrcLayouts[] = {VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL};',
+            'const VkImageLayout blitDstLayouts[] = {VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL};')):
+        return set()
+    paths = set()
+    for src_name, dst_name in (("compressedFormatsFloats", "compatibleFormatsFloats"),
+                               ("compressedFormatsSrgb", "compatibleFormatsSrgb")):
+        for src in _format_array(text, src_name):
+            if not src.startswith("bc"):
+                continue
+            for dst in _format_array(text, dst_name):
+                for src_layout in ("optimal", "general"):
+                    for dst_layout in ("optimal", "general"):
+                        for filter_name in ("nearest", "linear"):
+                            paths.add("dEQP-VK.api.copy_and_blit.core.blit_image."
+                                      f"all_formats.color.2d.{src}.{dst}."
+                                      f"{src_layout}_{dst_layout}_{filter_name}")
+    return paths
+
+
+def _duplicate_selection_failures(manifest: dict) -> list[str]:
+    """Reject a selection that names the same upstream case more than once.
+
+    A repeated path is not a larger selection.  The packaged case list is
+    generated one line per manifest entry, so a duplicate would make the
+    payload execute the same leaf twice, inflate the reported case count and
+    could hide a case that was dropped in the same edit.  The invariant only
+    reads the manifest, so it is enforced even when the pinned upstream
+    checkout is unavailable.
+    """
+    failures = []
+    seen: dict[str, str] = {}
+    for label, key in (("acceptance", "cases"), ("diagnostic", "diagnostics")):
+        for case in manifest.get(key, []):
+            path = case["path"]
+            if path in seen:
+                failures.append(
+                    f"{path}: selected twice ({seen[path]} and {label})")
+            else:
+                seen[path] = label
+    return failures
+
+
+def _cts_revision_failures(manifest: dict) -> list[str]:
+    """Reject a selection that is not validated against the compiled revision.
+
+    tools/build_upstream_cts.py compiles the package from third_party/vk-gl-cts
+    and already refuses a checkout that is not the revision cts_pin records. The
+    same rule belongs here, at selection time, so a manifest edit cannot be
+    accepted against one revision while the packaging build uses another: the
+    leaf names, group segments and source anchors all belong to one revision.
+    The checkout is ignored by the lab repository and some environments vendor
+    it without its own metadata; a directory that is not its own git work tree
+    cannot be compared here and stays the build's check.
+    """
+    commit = manifest.get("cts_pin", {}).get("commit")
+    if not commit or not UPSTREAM.is_dir():
+        return []
+    try:
+        top = subprocess.check_output(
+            ["git", "-C", str(UPSTREAM), "rev-parse", "--show-toplevel"],
+            text=True, stderr=subprocess.DEVNULL).strip()
+        actual = subprocess.check_output(
+            ["git", "-C", str(UPSTREAM), "rev-parse", "HEAD"],
+            text=True, stderr=subprocess.DEVNULL).strip()
+    except (OSError, subprocess.CalledProcessError):
+        return []
+    if Path(top).resolve() != UPSTREAM.resolve():
+        return []
+    if actual != commit:
+        return [f"third_party/vk-gl-cts is at {actual}; the selection pins {commit}"]
+    return []
+
+
+def _advertised_capabilities() -> tuple[dict, list[str]]:
+    """Read the capabilities the device actually advertises from its sources.
+
+    Strict acceptance requires a leaf to pass, so an acceptance entry may only
+    rely on capabilities this device reports. The truth is taken from the
+    device's own code: the extension macros it enumerates, the multiview feature
+    flags it answers (including the ones it answers false) and the view-count
+    floor it publishes. A value that cannot be read is reported as a failure
+    rather than assumed, so a moved or renamed gate can never leave an
+    unsupported acceptance entry silently green.
+    """
+    failures: list[str] = []
+    device = DEVICE_SOURCE.read_text(encoding="utf-8", errors="replace")
+    header = INTERNAL_HEADER.read_text(encoding="utf-8", errors="replace")
+
+    enumeration = re.search(
+        r"vkEnumerateDeviceExtensionProperties\([^)]*\)\s*\n\{(.*?)\n\}",
+        device, re.DOTALL)
+    if not enumeration:
+        failures.append("cannot read the device extension list from src/vk_device.c")
+        extensions: set[str] = set()
+    else:
+        extensions = {f"VK_{macro}" for macro in re.findall(
+            r"\bVK_([A-Z0-9_]+)_EXTENSION_NAME\b", enumeration.group(1))}
+
+    features: dict[str, bool] = {}
+    for feature in ("multiview", "multiviewGeometryShader", "multiviewTessellationShader"):
+        literal = re.search(rf"features->{feature}\s*=\s*(VK_TRUE|VK_FALSE)\s*;", device)
+        if literal:
+            features[feature] = literal.group(1) == "VK_TRUE"
+        elif re.search(rf"features->{feature}\s*=\s*\(VkBool32\)\s*"
+                       r"ps5vk_platform_multiview_supported\(", device):
+            # The reported feature follows the platform capability that the
+            # measured hardware run establishes.
+            features[feature] = True
+        else:
+            failures.append(
+                f"cannot read the reported {feature} feature from src/vk_device.c")
+
+    core_body = re.search(r"static void get_core_features\(.*?\n\}", device, re.DOTALL)
+    # The core features are reported from a table of (member, platform bit)
+    # pairs: get_core_features zeroes the structure and assigns only the members
+    # the table names, each when the platform mask carries its bit. Both the
+    # table entries and any direct assignment inside the function count as
+    # advertisable; anything else in VkPhysicalDeviceFeatures is never reported.
+    core_table = re.search(r"core_feature_bits\[\]\s*=\s*\{(.*?)\n\};", device, re.DOTALL)
+    if not core_body:
+        failures.append("cannot read the core feature table from src/vk_device.c")
+        core_features: set[str] = set()
+    else:
+        core_features = set(re.findall(r"features->([A-Za-z0-9_]+)\s*=", core_body.group(0)))
+        if core_table:
+            core_features |= set(re.findall(
+                r"offsetof\(VkPhysicalDeviceFeatures,\s*([A-Za-z0-9_]+)\)", core_table.group(1)))
+        if not core_features:
+            failures.append("the core feature table in src/vk_device.c names no member")
+
+    floor = re.search(r"PS5VK_MULTIVIEW_VIEW_COUNT_FLOOR\s*=\s*(\d+)", header)
+    if not floor:
+        failures.append("cannot read PS5VK_MULTIVIEW_VIEW_COUNT_FLOOR from src/vk_internal.h")
+        max_views = 0
+    else:
+        max_views = int(floor.group(1))
+
+    return ({"extensions": extensions, "features": features, "core_features": core_features,
+             "max_multiview_view_count": max_views}, failures)
+
+
+def _unadvertised(required: list[str], capabilities: dict) -> list[str]:
+    """Return the prerequisites the device does not advertise."""
+    missing: list[str] = []
+    for token in required:
+        kind, _, name = token.partition(":")
+        if kind == "extension" and name not in capabilities["extensions"]:
+            missing.append(token)
+        elif kind == "feature" and not capabilities["features"].get(name):
+            missing.append(token)
+        elif kind == "core" and name not in capabilities["core_features"]:
+            missing.append(token)
+        elif kind not in ("extension", "feature", "core"):
+            missing.append(token)
+    return missing
+
+
+def _multiview_attachment_contract(util_text: str, tests_text: str,
+                                  family_types: dict) -> dict:
+    """Derive the attachment image the selected multiview families build.
+
+    A selection that only checks features and limits can still be unrunnable:
+    the upstream helper decides which image a family needs, and the driver has
+    to accept that exact resource. The derivation is bound to the factory
+    branches the selection actually uses - the default colour-format branch and
+    the non-multisample sample count - instead of matching tokens anywhere in
+    the module, and anything that does not match returns nothing so the caller
+    fails closed.
+    """
+    construction = (
+        "VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO" in util_text and
+        "VK_IMAGE_TILING_OPTIMAL" in util_text and
+        "VK_SHARING_MODE_EXCLUSIVE" in util_text and
+        "VK_IMAGE_LAYOUT_UNDEFINED" in util_text and
+        "{extent.width, extent.height, 1u}" in util_text and
+        "extent.depth" in util_text and
+        "ImageAttachment::ImageAttachment" in tests_text and
+        "imageUsageFlagsDependent" in tests_text and
+        "makeImageCreateInfo(VK_IMAGE_TYPE_2D, extent, colorFormat, imageUsageFlags, samples)"
+        in tests_text
+    )
+    if not construction or not family_types:
+        return {}
+    dependent = re.search(r"imageUsageFlagsDependent\s*=\s*(.*?);", tests_text, re.DOTALL)
+    usage_tail = re.search(
+        r"imageUsageFlags\s*=\s*imageUsageFlagsDependent\s*\|\s*(.*?);", tests_text, re.DOTALL)
+    if not dependent or not usage_tail:
+        return {}
+    dependent_bits = set(re.findall(r"(VK_IMAGE_USAGE_[A-Z_]+_BIT)", dependent.group(1)))
+    if dependent_bits != {"VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT",
+                          "VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT"}:
+        return {}
+    tail_bits = set(re.findall(r"(VK_IMAGE_USAGE_[A-Z_]+_BIT)", usage_tail.group(1)))
+    if not tail_bits:
+        return {}
+    # The factory's colour-format and sample-count branches: a selected family
+    # has to fall into the default colour branch and the non-multisample sample
+    # count, otherwise its attachment is a different resource that needs its own
+    # contract.
+    default_format = re.search(r"else\s+colorFormat\s*=\s*(VK_FORMAT_[A-Z0-9_]+)\s*;", tests_text)
+    samples_expr = re.search(
+        r"sampleCountFlags\s*=\s*\(testType == TEST_TYPE_MULTISAMPLE\)\s*\?\s*"
+        r"(VK_SAMPLE_COUNT_[A-Z0-9_]+)\s*:\s*(VK_SAMPLE_COUNT_[A-Z0-9_]+)\s*;", tests_text)
+    special_formats = set(re.findall(r"colorFormat\s*=\s*(VK_FORMAT_[A-Z0-9_]+)\s*;", tests_text))
+    if not default_format or not samples_expr or len(special_formats) < 2:
+        return {}
+    if any(test_type in ("TEST_TYPE_MULTISAMPLE", "TEST_TYPE_VIEW_MASK_ITERATION")
+           for test_type in family_types.values()):
+        return {}
+    samples = SAMPLE_COUNT_FLAGS.get(samples_expr.group(2))
+    if samples is None:
+        return {}
+    return {
+        "format": default_format.group(1),
+        "image_type": "VK_IMAGE_TYPE_2D",
+        "tiling": "VK_IMAGE_TILING_OPTIMAL",
+        "mip_levels": 1,
+        "samples": samples,
+        "array_layers": "extent.depth",
+        "usage": sorted({"VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT"} | tail_bits),
+    }
+
+
+def _resource_witness() -> tuple[dict, list[str]]:
+    """Run the real public-API fixture and read its measured contract witness.
+
+    A contract is about a resource this driver either can or cannot create, so
+    the answer comes from the driver itself: the fixture asks the public image-
+    format query and really creates the image, and this gate reads that output
+    instead of approximating the driver's accept/reject logic from its C text.
+    """
+    fixture = ROOT / "build/tests/dump_device_reporting"
+    if not fixture.is_file():
+        return {}, ["the resource witness fixture is missing; build it with make check"]
+    try:
+        completed = subprocess.run([str(fixture)], capture_output=True, text=True, timeout=300)
+    except (OSError, subprocess.SubprocessError) as error:
+        return {}, [f"cannot run the resource witness fixture: {error}"]
+    if completed.returncode != 0:
+        return {}, [f"the resource witness fixture exited {completed.returncode}"]
+    try:
+        document = json.loads(completed.stdout)
+    except json.JSONDecodeError as error:
+        return {}, [f"cannot parse the resource witness output: {error}"]
+    witness = document.get("resourceContractWitness")
+    if not isinstance(witness, dict) or not witness:
+        return {}, ["the resource witness output carries no contract witness"]
+    return witness, []
+
+
+def _contract_verdict(contract_id: str, contract: dict, witnessed: dict,
+                      required_layers: int) -> tuple[bool, list[str], str, str]:
+    """Compare one declared contract with the measured witness, field by field.
+
+    The witness is the public query/create answer for this host, i.e.
+    IMPLEMENTATION READINESS - not physical-console evidence. Promoting a
+    contract to resource_supported is a separate decision that needs a console
+    witness, so readiness without that declaration is a valid promotion-pending
+    state: it keeps every family diagnostic, it is reported rather than silently
+    ignored, and it can never make anything eligible for acceptance.
+
+    Readiness and the declared stages are all recomputed from primitives rather
+    than trusted: the witness summary must agree with its own numbers, the
+    execution stage derives from the requirement set, and the final state is the
+    DECLARED resource stage AND the derived execution stage. Returns the
+    eligibility for acceptance, the consistency failures, the note explaining a
+    non-eligible contract, and the promotion-pending state when there is one.
+    """
+    failures: list[str] = []
+    for field, measured in (("format", witnessed.get("formatName")),
+                            ("image_type", witnessed.get("imageTypeName")),
+                            ("tiling", witnessed.get("tilingName")),
+                            ("mip_levels", witnessed.get("mipLevels")),
+                            ("samples", witnessed.get("samples"))):
+        if contract.get(field) != measured:
+            failures.append(
+                f"resource contract {contract_id!r} declares {field}="
+                f"{contract.get(field)!r} while the measured witness says {measured!r}")
+    if witnessed.get("arrayLayers") != required_layers:
+        failures.append(
+            f"resource contract {contract_id!r} is witnessed at "
+            f"{witnessed.get('arrayLayers')} layers while the selection needs {required_layers}")
+    if sorted(contract.get("usage", [])) != sorted(witnessed.get("usageNames", [])):
+        failures.append(
+            f"resource contract {contract_id!r} declares usage "
+            f"{sorted(contract.get('usage', []))} while the measured witness used "
+            f"{sorted(witnessed.get('usageNames', []))}")
+
+    query_answered = witnessed.get("queryResult") == 0
+    sample_flags = witnessed.get("querySampleCounts", 0)
+    samples_ok = isinstance(sample_flags, int) and bool(sample_flags & int(contract.get("samples", 0)))
+    layers_ok = witnessed.get("queryMaxArrayLayers", 0) >= required_layers
+    mip_ok = witnessed.get("queryMaxMipLevels", 0) >= int(contract.get("mip_levels", 0))
+    query_covers = query_answered and samples_ok and layers_ok and mip_ok
+    create_ok = witnessed.get("createResult") == 0 and bool(witnessed.get("createSucceeded"))
+    host_ready = query_covers and create_ok
+    if bool(witnessed.get("queryCovers")) != query_covers or \
+            bool(witnessed.get("supported")) != host_ready:
+        failures.append(
+            f"resource contract {contract_id!r}: the witness summary disagrees with its own "
+            f"measurements (queryCovers={witnessed.get('queryCovers')}, "
+            f"supported={witnessed.get('supported')})")
+    if query_covers != create_ok:
+        failures.append(
+            f"resource contract {contract_id!r}: the image-format query and vkCreateImage "
+            f"disagree about this shape (queryCovers={query_covers}, createSucceeded={create_ok})")
+
+    # The declared resource stage is the hardware-evidence decision; the host
+    # witness above is readiness for it. Claiming the stage without readiness is
+    # an over-claim and fails closed; readiness without the stage is the
+    # promotion-pending state, reported but never promotable.
+    resource_declared = contract.get("resource_supported")
+    if "resource_supported" not in contract:
+        failures.append(f"resource contract {contract_id!r} declares no 'resource_supported' stage")
+        resource_declared = None
+    elif not isinstance(resource_declared, bool):
+        failures.append(
+            f"resource contract {contract_id!r} declares resource_supported="
+            f"{resource_declared!r}, which is not a boolean")
+        resource_declared = None
+    elif resource_declared and not host_ready:
+        failures.append(
+            f"resource contract {contract_id!r} declares resource_supported=true while the "
+            f"source query/create witness is not ready (queryCovers={query_covers}, "
+            f"createSucceeded={create_ok})")
+
+    # The resource stage is a physical-console claim, so it must carry the exact
+    # well-formed record a console witness produces. Nothing else can promote it,
+    # and evidence for an unpromoted stage fails closed in the other direction.
+    evidence = contract.get("hardware_evidence")
+    if resource_declared:
+        if not isinstance(evidence, dict):
+            failures.append(
+                f"resource contract {contract_id!r} declares resource_supported=true without a "
+                f"hardware_evidence object")
+        else:
+            unknown = sorted(set(evidence) - set(HARDWARE_EVIDENCE_FIELDS))
+            if unknown:
+                failures.append(
+                    f"resource contract {contract_id!r} hardware evidence carries unknown fields: "
+                    + ", ".join(unknown))
+            for field in HARDWARE_EVIDENCE_FIELDS:
+                if field not in evidence:
+                    failures.append(
+                        f"resource contract {contract_id!r} hardware evidence names no {field!r}")
+            if not isinstance(evidence.get("source_commit"), str) or \
+                    not COMMIT_ID.match(evidence.get("source_commit", "")):
+                failures.append(
+                    f"resource contract {contract_id!r} hardware evidence source_commit is not a "
+                    f"40-character lowercase hex commit id")
+            for field in ("artifact_sha256", "log_sha256"):
+                if not isinstance(evidence.get(field), str) or not HEX_DIGEST.match(evidence.get(field, "")):
+                    failures.append(
+                        f"resource contract {contract_id!r} hardware evidence {field} is not a "
+                        f"64-character lowercase hex digest")
+            for field in ("run_id", "firmware", "title"):
+                if not isinstance(evidence.get(field), str) or not evidence.get(field, "").strip():
+                    failures.append(
+                        f"resource contract {contract_id!r} hardware evidence {field} is empty")
+            for field in ("query_result", "create_result", "bind_result"):
+                if evidence.get(field) != "VK_SUCCESS":
+                    failures.append(
+                        f"resource contract {contract_id!r} hardware evidence {field} is not "
+                        f"VK_SUCCESS")
+            for field, minimum in (("query_max_array_layers", HARDWARE_EVIDENCE_REQUIRED_LAYERS),
+                                   ("array_layers", HARDWARE_EVIDENCE_REQUIRED_LAYERS)):
+                value = evidence.get(field)
+                if isinstance(value, bool) or not isinstance(value, int) or value < minimum:
+                    failures.append(
+                        f"resource contract {contract_id!r} hardware evidence {field} is not an "
+                        f"integer at or above {minimum}")
+            allocation = evidence.get("allocation_bytes")
+            if isinstance(allocation, bool) or not isinstance(allocation, int) or allocation <= 0:
+                failures.append(
+                    f"resource contract {contract_id!r} hardware evidence allocation_bytes is not "
+                    f"a positive integer")
+            if evidence.get("teardown") != "clean":
+                failures.append(
+                    f"resource contract {contract_id!r} hardware evidence teardown is not clean")
+    elif isinstance(evidence, dict):
+        failures.append(
+            f"resource contract {contract_id!r} carries hardware evidence while "
+            f"resource_supported is false")
+
+    requirements = contract.get("execution_requirements")
+    derived: dict[str, bool] = {}
+    if not isinstance(requirements, dict):
+        failures.append(
+            f"resource contract {contract_id!r} declares no execution_requirements object")
+    else:
+        unknown = sorted(set(requirements) - set(EXECUTION_REQUIREMENTS))
+        if unknown:
+            failures.append(
+                f"resource contract {contract_id!r} declares unknown execution requirements: "
+                + ", ".join(unknown))
+        for key in EXECUTION_REQUIREMENTS:
+            if key not in requirements:
+                failures.append(
+                    f"resource contract {contract_id!r} names no {key!r} execution requirement")
+            elif not isinstance(requirements[key], bool):
+                failures.append(
+                    f"resource contract {contract_id!r} declares execution requirement {key}="
+                    f"{requirements[key]!r}, which is not a boolean")
+            else:
+                derived[key] = requirements[key]
+    derived_execution = (len(derived) == len(EXECUTION_REQUIREMENTS) and all(derived.values()))
+    execution_declared = contract.get("execution_supported")
+    if "execution_supported" not in contract:
+        failures.append(f"resource contract {contract_id!r} declares no 'execution_supported' stage")
+        execution_declared = None
+    elif not isinstance(execution_declared, bool):
+        failures.append(
+            f"resource contract {contract_id!r} declares execution_supported="
+            f"{execution_declared!r}, which is not a boolean")
+        execution_declared = None
+    elif execution_declared != derived_execution:
+        failures.append(
+            f"resource contract {contract_id!r} declares execution_supported="
+            f"{execution_declared} while its execution requirements derive {derived_execution}")
+
+    # The final state is the DECLARED resource stage AND the derived execution
+    # stage. Host readiness never enters this expression, so no build can
+    # promote a family by implementing a path the console has not witnessed.
+    declared_supported = contract.get("supported")
+    expected_supported = None
+    if resource_declared is not None and execution_declared is not None:
+        expected_supported = bool(resource_declared and derived_execution)
+    if "supported" not in contract:
+        failures.append(f"resource contract {contract_id!r} declares no final 'supported' field")
+    elif not isinstance(declared_supported, bool):
+        failures.append(
+            f"resource contract {contract_id!r} declares supported="
+            f"{declared_supported!r}, which is not a boolean")
+    elif expected_supported is not None and declared_supported != expected_supported:
+        failures.append(
+            f"resource contract {contract_id!r} declares supported={declared_supported} while the "
+            f"declared resource stage is {resource_declared} and the derived execution stage is "
+            f"{derived_execution}")
+    eligible = bool(expected_supported) and bool(declared_supported)
+
+    host_reason = ""
+    if not host_ready:
+        details = []
+        if not query_answered:
+            details.append(f"the format query answers {witnessed.get('queryResult')}")
+        else:
+            if not layers_ok:
+                details.append(
+                    f"the query reports maxArrayLayers={witnessed.get('queryMaxArrayLayers')} "
+                    f"while the selection needs {required_layers}")
+            if not mip_ok:
+                details.append(
+                    f"the query reports maxMipLevels={witnessed.get('queryMaxMipLevels')} "
+                    f"while the contract needs {contract.get('mip_levels')}")
+            if not samples_ok:
+                details.append(
+                    f"the query reports sampleCounts={sample_flags} which does not cover "
+                    f"{contract.get('samples')}")
+        if not create_ok:
+            details.append(f"vkCreateImage answers {witnessed.get('createResult')}")
+        host_reason = "; ".join(details)
+
+    # A promotion-pending contract is reported, never silently ignored: the host
+    # can create the shape, but the stage that makes it acceptance is the
+    # hardware-evidence decision this build has not made.
+    pending = ""
+    if host_ready and not resource_declared:
+        pending = (f"resource contract {contract_id!r}: host readiness is true and "
+                   f"resource_supported is false - promotion awaits the physical-console witness, "
+                   f"so every family stays diagnostic")
+    note = ""
+    if not eligible:
+        reasons = []
+        if not host_ready:
+            reasons.append(host_reason)
+        if not resource_declared:
+            reasons.append("resource_supported is not promoted (host readiness is not "
+                           "physical-console evidence)")
+        if not derived_execution:
+            reasons.append("execution requirements are not all met")
+        note = "; ".join(reason for reason in reasons if reason)
+    return eligible, failures, note, pending
+
+
+def main() -> int:
+    manifest = json.loads(MANIFEST.read_text())
+    # Diagnostics are frozen upstream cases that are executed but are known not
+    # to pass yet; they are held to the same traceability rule as acceptance
+    # cases so that a failing case cannot be relabelled from an invented name.
+    cases = manifest["cases"] + manifest.get("diagnostics", [])
+
+    duplicate_failures = _duplicate_selection_failures(manifest)
+    revision_failures = _cts_revision_failures(manifest)
+
+    if not UPSTREAM.is_dir():
+        if duplicate_failures or revision_failures:
+            print("upstream selection check failed:", file=sys.stderr)
+            for failure in duplicate_failures + revision_failures:
+                print(f"  {failure}", file=sys.stderr)
+            return 1
+        print("upstream vk-gl-cts checkout not present; selection check skipped")
+        return 0
+
+    failures = list(duplicate_failures) + revision_failures
+    acceptance_paths = {case["path"] for case in manifest["cases"]}
+    capabilities, capability_failures = _advertised_capabilities()
+    failures.extend(capability_failures)
+    # The resource footprint a family needs is derived from the pinned helper
+    # that builds it, and a family may only be strict acceptance when this
+    # driver can create that exact resource: features, limits and extensions
+    # alone do not make a leaf runnable.
+    contracts = manifest.get("resource_contracts", {})
+    multiview_util_path = UPSTREAM / MULTIVIEW_UTIL_SOURCE
+    multiview_test_path = UPSTREAM / MULTIVIEW_TEST_SOURCE
+    multiview_derived: dict = {}
+    contract_support: dict[str, bool] = {}
+    contract_reasons: dict[str, str] = {}
+    contract_pending: list[str] = []
+    manifest_paths = {case["path"] for case in
+                      manifest["cases"] + manifest.get("diagnostics", [])}
+    if multiview_util_path.is_file() and multiview_test_path.is_file():
+        tests_text = multiview_test_path.read_text(encoding="utf-8", errors="replace")
+        util_text = multiview_util_path.read_text(encoding="utf-8", errors="replace")
+        leaves = _multiview_leaf_requirements(
+            tests_text, _source_function_at_line(tests_text, 4908))
+        all_family_types: dict[str, str] = {}
+        for leaf in leaves.values():
+            all_family_types.setdefault(leaf["family"], leaf["test_type"])
+        # Only the families the contracts claim are derived: a family the
+        # selection does not use (a multisampled or view-mask-iteration one, for
+        # example) builds a different attachment and must not decide this
+        # contract.
+        declared_families: set[str] = set()
+        for declared_contract in contracts.values():
+            declared_families.update(declared_contract.get("families", []))
+        unknown_families = sorted(declared_families - set(all_family_types))
+        for family in unknown_families:
+            failures.append(
+                f"resource contracts declare family {family!r}, which the pinned factory "
+                f"does not build")
+        family_types = {name: all_family_types[name] for name in sorted(declared_families)
+                        if name in all_family_types}
+        multiview_derived = _multiview_attachment_contract(util_text, tests_text, family_types)
+        if not multiview_derived:
+            failures.append(
+                "cannot derive the multiview attachment contract from the pinned sources")
+        witness, witness_failures = _resource_witness()
+        failures.extend(witness_failures)
+        for contract_id, declared in sorted(contracts.items()):
+            if declared.get("derive_from") != MULTIVIEW_TEST_SOURCE:
+                failures.append(
+                    f"resource contract {contract_id!r} names no derivation this gate can read")
+                continue
+            if multiview_derived:
+                for field in ("format", "image_type", "tiling", "mip_levels", "samples",
+                              "array_layers", "usage"):
+                    if declared.get(field) != multiview_derived.get(field):
+                        failures.append(
+                            f"resource contract {contract_id!r} field {field!r} does not match "
+                            f"the attachment the pinned helper builds "
+                            f"({multiview_derived.get(field)!r})")
+            evidenced = witness.get(contract_id)
+            if not isinstance(evidenced, dict):
+                failures.append(
+                    f"resource contract {contract_id!r} has no measured witness in the "
+                    f"public-API fixture")
+                continue
+            families = set(declared.get("families", []))
+            layers = [leaf["max_views"] for path, leaf in leaves.items()
+                      if leaf["family"] in families and path in manifest_paths]
+            required_layers = max(layers) if layers else 0
+            if not required_layers:
+                failures.append(
+                    f"resource contract {contract_id!r} covers no selected leaf, so its "
+                    f"ceiling cannot be checked")
+                continue
+            supported, verdict_failures, reason, pending = _contract_verdict(
+                contract_id, declared, evidenced, required_layers)
+            failures.extend(verdict_failures)
+            contract_support[contract_id] = supported
+            contract_reasons[contract_id] = reason
+            if pending:
+                contract_pending.append(pending)
+    manifest_families: set[str] = set()
+    manifest_contract_ids: set[str] = set()
+    integration_text = INTEGRATION_SOURCE.read_text(encoding="utf-8")
+    draw_util_path = UPSTREAM / DRAW_UTIL_SOURCE
+    draw_util_text = (draw_util_path.read_text(encoding="utf-8", errors="replace")
+                      if draw_util_path.is_file() else "")
+
+    for case in cases:
+        path = case["path"]
+        source_ref = case["source"]
+        source_parts = source_ref.rsplit(":", 1)
+        source_path = UPSTREAM / source_parts[0]
+        try:
+            source_line = int(source_parts[1]) if len(source_parts) == 2 else 1
+        except ValueError:
+            source_line = 1
+        segments = path.split(".")
+        leaf = segments[-1]
+
+        if not source_path.is_file():
+            failures.append(f"{path}: cited source {source_ref} does not exist")
+            continue
+
+        text = _read_source(source_path)
+
+        if source_path.name == "vktBindingBufferDeviceAddressTests.cpp" and \
+           path.startswith("dEQP-VK.binding_model.buffer_device_address."):
+            if (source_line != 1547 or path not in _focused_bda_leaf_paths(
+                    text, integration_text, _read_source(BDA_BUILD_SOURCE))):
+                failures.append(
+                    f"{path}: not produced by the pinned focused BDA factory {source_ref}")
+            continue
+
+        # Intermediate groups may come from the integration (package_ps5.cpp) or
+        # from the upstream module tree rooted at the cited file's directory.
+        module_root = source_path.parent
+        searchable = _module_searchable(integration_text, module_root)
+        generated_format_segments = _format_segments(text)
+        volatile_atomic_leaves = (
+            _volatile_atomic_leaf_names(text, integration_text,
+                VOLATILE_ATOMIC_WRAPPER.read_text(encoding="utf-8"))
+            if source_path.name == "vktSpvAsmInstructionTests.cpp" and
+               VOLATILE_ATOMIC_WRAPPER.is_file() else frozenset()
+        )
+        generated_segments = (
+            _dynamic_state_compute_generated_segments(text)
+            if source_path.name == "vktDynamicStateComputeTests.cpp" else
+            _indirect_draw_generated_segments(text)
+            if source_path.name == "vktDrawIndirectTest.cpp" else
+            _clip_distance_generated_segments(text)
+            if source_path.name == "vktClippingTests.cpp" else set()
+        )
+        if source_path.name == "vktPipelineMultisampleTests.cpp":
+            generated_segments |= _multisample_generated_segments(text)
+        if source_path.name == "vktRenderPassTests.cpp":
+            generated_segments |= _attachment_write_mask_generated_segments(text)
+        if source_path.name == "vktPipelineStencilTests.cpp":
+            generated_segments |= _stencil_generated_segments(text)
+        if source_path.name == "vktPipelineDepthTests.cpp":
+            generated_segments |= _depth_generated_segments(text)
+        if volatile_atomic_leaves:
+            generated_segments |= {"opatomic_storage_buffer_volatile"}
+        if source_path.name == "vktUniformBlockTests.cpp" and (
+                'new tcu::TestCaseGroup(m_testCtx, "single_basic_array")' in text and
+                "glu::TYPE_UINT" in text and
+                "glu::getDataTypeName(type)" in text):
+            # The pinned single_basic_array factory obtains this group name
+            # from glu::TYPE_UINT rather than a quoted string literal.
+            generated_segments.add("uint")
+        ubo_generated_paths = (_ubo_generated_paths(text)
+                               if source_path.name == "vktUniformBlockTests.cpp" else frozenset())
+        if source_path.as_posix().endswith(GATHER_TEST_SOURCE):
+            generated_segments |= _texture_gather_generated_segments(text)
+        for segment in segments[1:-1]:
+            if (not _quoted_in(segment, searchable) and
+                    segment not in generated_segments and
+                    segment not in generated_format_segments and
+                    not (path in ubo_generated_paths and segment == "mat2") and
+                    not (source_path.name == "vktMemoryMappingTests.cpp" and
+                         _mapping_group_segment(text, segment))):
+                failures.append(
+                    f"{path}: group segment {segment!r} not produced by the "
+                    f"integration or {module_root}")
+
+        function_text = _source_function_at_line(text, source_line)
+
+        if source_path.as_posix().endswith(GATHER_TEST_SOURCE):
+            derived_gather = _texture_gather_leaf_requirements(text).get(path)
+            if derived_gather is None:
+                failures.append(
+                    f"{path}: not produced by the pinned texture-gather factory {source_ref}")
+                continue
+            required = derived_gather
+            declared = case.get("features_required", [])
+            missing_metadata = sorted(set(required) - set(declared))
+            if missing_metadata:
+                failures.append(
+                    f"{path}: features_required omits source-derived "
+                    f"{', '.join(missing_metadata)}")
+            if path in acceptance_paths:
+                missing = _unadvertised(required, capabilities)
+                if missing:
+                    failures.append(
+                        f"{path}: acceptance requires {', '.join(missing)}, which "
+                        "this device does not advertise")
+            continue
+
+        if source_path.as_posix().endswith(OCCLUSION_TEST_SOURCE):
+            derived_query = _precise_occlusion_leaf_requirements(text).get(path)
+            if derived_query is None:
+                failures.append(
+                    f"{path}: not produced by the pinned precise-occlusion factory "
+                    f"{source_ref}")
+                continue
+            required = derived_query
+            declared = case.get("features_required", [])
+            missing_metadata = sorted(set(required) - set(declared))
+            if missing_metadata:
+                failures.append(
+                    f"{path}: features_required omits source-derived "
+                    f"{', '.join(missing_metadata)}")
+            if path in acceptance_paths:
+                missing = _unadvertised(required, capabilities)
+                if missing:
+                    failures.append(
+                        f"{path}: acceptance requires {', '.join(missing)}, which "
+                        "this device does not advertise")
+            continue
+
+        # The multiview render factory composes every leaf from the
+        # shader-family table, the two query names, the rendering types and the
+        # fixed view-mask tables, so membership is checked against the whole
+        # derived path: a real leaf moved under a family or query group that does
+        # not own it would otherwise pass by naming literals that exist elsewhere
+        # in the module. Acceptance additionally has to be runnable on the device
+        # this repository builds, which the factory decides from the rendering
+        # type, the shader-multiview features, the core features it names and the
+        # case's own view extent - so an acceptance entry may not require
+        # anything the device sources do not advertise. Diagnostics describe
+        # known gaps and are exempt from that last rule.
+        if source_path.name == "vktMultiViewRenderTests.cpp":
+            derived_leaf = _multiview_leaf_requirements(text, function_text).get(path)
+            if derived_leaf is None:
+                failures.append(
+                    f"{path}: not produced by the pinned multiview factory "
+                    f"{source_ref}")
+            elif path in acceptance_paths:
+                manifest_families.add(derived_leaf["family"])
+                contract_id = case.get("resource_contract")
+                if not contract_id:
+                    failures.append(
+                        f"{path}: acceptance builds its attachment through the pinned helper "
+                        f"but names no resource contract")
+                elif contract_id not in contracts:
+                    failures.append(
+                        f"{path}: acceptance names unknown resource contract {contract_id!r}")
+                    manifest_contract_ids.add(contract_id)
+                else:
+                    manifest_contract_ids.add(contract_id)
+                    if not contract_support.get(contract_id, False):
+                        failures.append(
+                            f"{path}: acceptance needs final support for resource contract "
+                            f"{contract_id!r} "
+                            f"({contract_reasons.get(contract_id) or 'no measured witness'})")
+                missing = _unadvertised(derived_leaf["required"], capabilities)
+                if missing and path in acceptance_paths:
+                    failures.append(
+                        f"{path}: acceptance requires {', '.join(missing)}, which "
+                        f"this device does not advertise")
+                elif (path in acceptance_paths and
+                      capabilities["max_multiview_view_count"] and
+                      derived_leaf["max_views"] > capabilities["max_multiview_view_count"]):
+                    failures.append(
+                        f"{path}: acceptance needs maxMultiviewViewCount >= "
+                        f"{derived_leaf['max_views']}; the reported floor is "
+                        f"{capabilities['max_multiview_view_count']}")
+            else:
+                manifest_families.add(derived_leaf["family"])
+                contract_id = case.get("resource_contract")
+                if contract_id:
+                    manifest_contract_ids.add(contract_id)
+                    if contract_id not in contracts:
+                        failures.append(
+                            f"{path}: names unknown resource contract {contract_id!r}")
+            continue
+
+        # These four BC factories compose their leaves from pinned format,
+        # extent, layout and filter tables. Compare the whole path so a token
+        # from another group in the same large module cannot pass this check.
+        bc_derived = {
+            "t07-bc-full-sampling": ("vktTextureCompressedFormatTests.cpp",
+                                     _bc_compressed_sampling_paths),
+            "t07-bc-original-image-copies": ("vktApiCopiesAndBlittingTests.cpp",
+                                               _bc_image_copy_paths),
+            "t07-bc-original-mip-copies": ("vktApiCopiesAndBlittingTests.cpp",
+                                             _bc_mip_copy_paths),
+            "t07-bc-original-blit": ("vktApiCopiesAndBlittingTests.cpp",
+                                     _bc_blit_paths),
+        }.get(case.get("category"))
+        if bc_derived and source_path.name == bc_derived[0]:
+            if path not in bc_derived[1](text):
+                failures.append(f"{path}: not produced by pinned BC factory {source_ref}")
+            continue
+
+        # The leaf must be a literal name in the cited function/file, a bounded
+        # table-derived name, or a number produced
+        # by an instance factory whose parent group is a literal in that file.
+        if _quoted_in(leaf, text):
+            continue
+        if (path.startswith("dEQP-VK.spirv_assembly.instruction.compute."
+                            "opatomic_storage_buffer_volatile.") and
+                leaf in volatile_atomic_leaves):
+            continue
+        if path in ubo_generated_paths:
+            continue
+        if leaf in _table_composed_leaf_names(text, function_text):
+            continue
+        # The rasterization module's culling family composes its names from four
+        # tables inside the cited factory, with one combination omitted. Bounded
+        # to that factory's exact construction expressions and to this module.
+        if (source_path.name == "vktRasterizationTests.cpp" and
+                leaf in _rasterization_culling_leaf_names(text, function_text)):
+            continue
+        # The dual-source blend family composes its leaf names from the short
+        # factor spellings and the blend-operation table inside the cited
+        # factory. Bounded to that module's exact initializer and joining
+        # expressions.
+        if (source_path.name == "vktPipelineBlendTests.cpp" and
+                leaf in _dual_source_blend_leaf_names(text, leaf)):
+            continue
+        # The multisample module's sampleRateShading leaves: the only class in
+        # the pinned tree the feature's own oracle gates on builds three groups
+        # from the sample-count and minSampleShading tables in that file.
+        # Membership is per group, so it is checked against the whole path.
+        if (source_path.name == "vktPipelineMultisampleTests.cpp" and
+                path in _min_sample_shading_leaf_names(text, path)):
+            continue
+        # The fragment_ops multi-viewport family, the clipping clip_volume groups
+        # and the draw depth_clamp family compose their names from a prefix or a
+        # format plus a bounded table; each recognizer is bound to its module.
+        if (source_path.name == "vktFragmentOperationsScissorMultiViewportTests.cpp" and
+                leaf in _fragment_ops_multi_viewport_leaf_names(text)):
+            continue
+        if (source_path.name == "vktClippingTests.cpp" and
+                leaf in _clip_volume_topology_leaf_names(text, draw_util_text)):
+            continue
+        if (source_path.name == "vktDrawDepthClampTests.cpp" and
+                leaf in _draw_depth_clamp_leaf_names(text)):
+            continue
+        # The render-pass module's write-mask family: the only upstream leaves
+        # that REQUIRE independentBlend, and the two-attachment pair is the
+        # DXVK262-T06 oracle for it.
+        if (source_path.name == "vktRenderPassTests.cpp" and
+                leaf in _two_attachment_write_mask_leaf_names(text, leaf)):
+            continue
+        # The depth factory's compare_ops leaves join the topology name and one
+        # row of its depthOps table. Bounded to that module's exact tables.
+        if (source_path.name == "vktPipelineDepthTests.cpp" and
+                leaf in _depth_compare_ops_leaf_names(text)):
+            continue
+        # The geometry input factory names its triangle-strip-adjacency leaves
+        # after the vertex count it iterates, so only the prefix is a literal.
+        # Bounded to that factory's exact construction expression.
+        if (source_path.name == "vktGeometryInputGeometryShaderTests.cpp" and
+                leaf in _geometry_adjacency_leaf_names(text)):
+            continue
+        # This factory's manifest citations point at individual registration
+        # blocks inside one function, so the generic forward-only extractor
+        # cannot recover the enclosing function. The recognizer itself is
+        # bounded to the factory's exact construction expressions; apply it to
+        # this one pinned source module only.
+        if (source_path.name == "vktApiFillBufferTests.cpp" and
+                leaf in _fill_update_generated_leaf_names(text)):
+            continue
+        # The copies/blits image-to-image factory composes its partial-image
+        # leaves from the extent, format and clear tables inside the cited
+        # function. Bounded to that factory's exact construction expressions.
+        if (source_path.name == "vktApiCopiesAndBlittingTests.cpp" and
+                leaf in _copy_and_blit_simple_image_leaf_names(function_text)):
+            continue
+        # The draw-parameter groups register their leaves through addDrawCase,
+        # whose name only shows the flags passed there while the group's preset
+        # flags are ORed in afterwards. Bounded to that factory's exact
+        # construction and to the cited group block. Applied to this one module.
+        if (source_path.name == "vktDrawShaderDrawParametersTests.cpp" and
+                leaf in _draw_shader_draw_parameters_leaf_names(text, function_text)):
+            continue
+        # The clip/cull distance factory composes its combined-group leaf names
+        # from the clip count and the widest cull count that fits the combined
+        # ceiling. Bounded to that factory's exact construction expressions.
+        if (source_path.name == "vktClippingTests.cpp" and
+                leaf in _clip_distance_leaf_names(path, text)):
+            continue
+        if leaf.isdigit():
+            continue
+        # Format sub-groups are not written as literals: the upstream factories
+        # register them with the lowercased format enum minus its "VK_FORMAT_"
+        # prefix, so "r32_uint" traces back to VK_FORMAT_R32_UINT in the file.
+        if leaf in {token[len("VK_FORMAT_"):].lower()
+                    for token in re.findall(r"\bVK_FORMAT_[A-Z0-9_]+\b", text)}:
+            continue
+        # Shader-stage sub-groups are generated the same way from stage bit
+        # literals (pipeline factories build names such as "compute_stage" or
+        # "vertex_stage_fragment_stage" with de::toString-style joins).
+        stages = set(re.findall(r"\bVK_SHADER_STAGE_([A-Z0-9_]+?)_BIT\b", text))
+        derived = []
+        if "COMPUTE" in stages:
+            derived.append("compute_stage")
+        if "VERTEX" in stages and "FRAGMENT" in stages:
+            middle = ""
+            if "GEOMETRY" in stages:
+                middle += "_geometry_stage"
+            if "TESSELLATION_CONTROL" in stages:
+                middle += "_tessellation_control_stage"
+            if "TESSELLATION_EVALUATION" in stages:
+                middle += "_tessellation_evaluation_stage"
+            derived.append("vertex_stage" + middle + "_fragment_stage")
+        if leaf in derived:
+            continue
+        failures.append(
+            f"{path}: leaf name {leaf!r} is not registered in {source_ref}")
+
+    # The declared contracts must cover exactly the families the selection
+    # contains. A family that appears without a contract would be a silent
+    # expansion nothing has vetted; a contract for a family that is no longer
+    # selected is stale. Both directions fail closed.
+    declared_families: set[str] = set()
+    for declared in contracts.values():
+        declared_families.update(declared.get("families", []))
+    if manifest_families or declared_families:
+        uncovered = sorted(manifest_families - declared_families)
+        stale = sorted(declared_families - manifest_families)
+        if uncovered:
+            failures.append(
+                "selected multiview families with no declared resource contract: "
+                + ", ".join(uncovered))
+        if stale:
+            failures.append(
+                "resource contracts declare families the selection does not contain: "
+                + ", ".join(stale))
+
+    if failures:
+        print("upstream selection check failed:", file=sys.stderr)
+        for failure in failures:
+            print(f"  {failure}", file=sys.stderr)
+        return 1
+
+    accepted = len(manifest["cases"])
+    diagnostics = len(manifest.get("diagnostics", []))
+    # A promotion-pending contract is reported, never silently ignored: the host
+    # can create the shape, but the stage that makes it acceptance is a
+    # hardware-evidence decision this build has not made.
+    for note in contract_pending:
+        print(f"pending: {note}")
+    print(f"Upstream selection check passed: {len(cases)} cases traceable to sources "
+          f"({accepted} acceptance, {diagnostics} diagnostic).")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

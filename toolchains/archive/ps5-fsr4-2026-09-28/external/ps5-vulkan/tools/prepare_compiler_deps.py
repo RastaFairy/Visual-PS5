@@ -1,0 +1,132 @@
+#!/usr/bin/env python3
+"""Fetch pinned compiler dependencies (opengnm-psbc and opengnm) into third_party/."""
+from pathlib import Path
+import argparse
+import subprocess
+import sys
+
+ROOT = Path(__file__).resolve().parents[1]
+
+DEPS = [
+    {
+        "name": "opengnm-psbc",
+        "dest": ROOT / "third_party/psbc-reference",
+        "url": "https://github.com/mpereiraesaa/opengnm-psbc.git",
+        # Metadata21 compiler contract: linked-stage resource/entrypoint identity,
+        # TES-fed geometry, merged LS/HS argument delivery, packed fragment
+        # distances and precise push-constant member ranges. The cache ABI
+        # and native loader must agree with this exact dependency.
+        # Published through opengnm-psbc PRs 22, 17 and 18. This combined
+        # compiler main retains the T04 linked tessellation contract and adds
+        # T05's geometry viewport-index export plus the packed fragment-distance
+        # register fix. The cache ABI and native loader must agree with it.
+        #
+        # DXVK262-T06 sampleRateShading, published through opengnm-psbc PR 23
+        # and merged on 2026-09-23: the standalone fragment compile lowers the
+        # fragment coordinate unconditionally (the abort fix), is told the
+        # pipeline's sample-shading state, and decides which coordinate the
+        # shader reads once, at compile time. The driver passes
+        # PsbcCompileOptions::sample_shading_enable, which does not exist before
+        # this revision, so the pin has to name it for the advertised
+        # sample-rate count envelope to build at all.
+        # T08 adds independent opt-in SPIR-V physical-address and Vulkan
+        # memory-model capability handling. Driver adapters still choose which
+        # options to enable for each negotiated logical-device feature.
+        # PR 25 fixes compute subgroup-ID lowering and the fixed wave32
+        # compiler contract. Public subgroup reporting remains disabled.
+        # PR 27 adds separate sampler, sampled image and storage texel buffer
+        # descriptors; PR 28 adds PsbcCompileOptions::robust_buffer_access2
+        # (VK_EXT_robustness2 load handling), which both driver compilers set.
+        # PR 29 lowers compute LocalInvocationIndex and NumSubgroups from the
+        # local invocation IDs: TG_SIZE, which ACO read them from, is not
+        # populated by the PS5 compute dispatch.
+        # PR 30 reserves the no-GDS geometry streamout ranges in primitive
+        # order (a ticket keyed on each workgroup's first primitive id, which
+        # the queue zeroes per draw) and returns each workgroup's unwritten
+        # reservation, so the transform feedback counter ends at the last
+        # whole primitive (DXVK262-T14).
+        # PR 31 bounds ACO's instruction arena at 256 KiB blocks and checks
+        # every block allocation: the console libc refused the 1 MiB block a
+        # 768-descriptor compute program needed, and isel wrote through NULL.
+        # PR 32 replaces its weak stage-hook symbol with psbc_set_stage_hook,
+        # so payloads that never set a hook link unchanged.
+        "pin": "4fe7264a0cab9feb531a156e8a810b3e39cfe42c",
+    },
+    {
+        "name": "opengnm",
+        "dest": ROOT / "third_party/opengnm",
+        "url": "https://github.com/PS4-OpenGNM/opengnm.git",
+        "pin": "4b295ca54c82c83acf308d1c646a2dfa9ae57350",
+    },
+]
+
+
+def git_cmd(dest, *args):
+    return subprocess.check_output(["git", "-C", str(dest), *args], text=True).strip()
+
+
+def prepare_dep(dep, check_only=False):
+    dest = dep["dest"]
+    url = dep["url"]
+    pin = dep["pin"]
+    name = dep["name"]
+
+    if dest.exists() and (dest / ".git").exists():
+        head = git_cmd(dest, "rev-parse", "HEAD")
+        if head != pin:
+            if check_only:
+                raise SystemExit(f"{name} checkout differs (at {head}, expected {pin})")
+            print(f"Updating {name} to pinned commit {pin}...")
+            subprocess.run(["git", "-C", str(dest), "fetch", "--depth=1", url, pin], check=True)
+            subprocess.run(["git", "-C", str(dest), "checkout", "--detach", "FETCH_HEAD"], check=True)
+    elif dest.exists() and not (dest / ".git").exists():
+        raise SystemExit(f"{dest} exists but is not a git repository")
+    else:
+        if check_only:
+            raise SystemExit(f"Pinned dependency {name} missing at {dest}")
+        print(f"Cloning {name} at pinned commit {pin}...")
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        subprocess.run(["git", "init", str(dest)], check=True)
+        git_cmd(dest, "remote", "add", "origin", url)
+        git_cmd(dest, "fetch", "--depth=1", "origin", pin)
+        git_cmd(dest, "checkout", "--detach", "FETCH_HEAD")
+
+    head = git_cmd(dest, "rev-parse", "HEAD")
+    if head != pin:
+        raise SystemExit(f"{name} commit mismatch: got {head}, expected {pin}")
+    print(f"{name} {pin}: {dest}")
+
+
+import shutil
+
+
+def main(check_only=False):
+    for dep in DEPS:
+        prepare_dep(dep, check_only)
+
+    # Ensure SPIRV-Headers compatibility link exists for psbc-reference codegen
+    spirv_dir = ROOT / "third_party/SPIRV-Headers/include/spirv"
+    spirv_dir.mkdir(parents=True, exist_ok=True)
+    xml_target = spirv_dir / "spir-v.xml"
+    src_xml = ROOT / "third_party/psbc-reference/src/compiler/spirv/spir-v.xml"
+    if not xml_target.exists() and src_xml.exists():
+        try:
+            xml_target.symlink_to(src_xml)
+        except OSError:
+            shutil.copyfile(src_xml, xml_target)
+
+    # Ensure Vulkan-Headers case-compatible link exists if needed
+    vh_link = ROOT / "third_party/Vulkan-Headers"
+    vh_dir = ROOT / "third_party/vulkan-headers"
+    if not vh_link.exists() and vh_dir.exists():
+        try:
+            vh_link.symlink_to(vh_dir)
+        except OSError:
+            pass
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--check", action="store_true", help="verify only; never fetch")
+    args = parser.parse_args()
+    main(args.check)

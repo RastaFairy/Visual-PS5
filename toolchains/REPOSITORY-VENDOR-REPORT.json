@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "repository": "RastaFairy/Visual-PS5",
-  "generatedAt": "2026-10-20T15:57:08Z",
+  "generatedAt": "2026-10-21T11:29:21Z",
   "policy": "Vendor source code and initialized submodules into this repository. Keep original license files. Do not rely on upstream .git folders at runtime.",
   "entries": [
     {
@@ -10,7 +10,7 @@
       "repository": "mihawk-99/PS5_VKHomebrewUI",
       "fetchedFrom": "mihawk-99/PS5_VKHomebrewUI",
       "ref": "main",
-      "commit": null,
+      "commit": "2188642afbcc8d84d36149124f3d9e39dc1b1a05",
       "detail": "El manifiesto existente coincide con la fuente; no se sobrescribe."
     },
     {
@@ -19,7 +19,7 @@
       "repository": "mpereiraesaa/ps5-vulkan",
       "fetchedFrom": "mpereiraesaa/ps5-vulkan",
       "ref": "main",
-      "commit": null,
+      "commit": "e6d3c3f82f3c8a574e28c174b15b287f9c0ecc6d",
       "detail": "El manifiesto existente coincide con la fuente; no se sobrescribe."
     },
     {
@@ -28,7 +28,7 @@
       "repository": "blackbearreloaded/ProsperoLight",
       "fetchedFrom": "LedyBacer/ProsperoLight",
       "ref": "main",
-      "commit": null,
+      "commit": "bb3d1d6b3c6986524e56307e7c570f9cd17718ce",
       "detail": "El manifiesto existente coincide con la fuente; no se sobrescribe."
     },
     {
@@ -37,7 +37,7 @@
       "repository": "Tiang-88/ProsperoEden0",
       "fetchedFrom": "Tiang-88/ProsperoEden0",
       "ref": "main",
-      "commit": null,
+      "commit": "a26ba788222465ec7fb94dc813958fc749734e07",
       "detail": "El manifiesto existente coincide con la fuente; no se sobrescribe."
     },
     {
@@ -46,7 +46,7 @@
       "repository": "Sp9nky/unofficial-stremio-ps5-port",
       "fetchedFrom": "Sp9nky/unofficial-stremio-ps5-port",
       "ref": "main",
-      "commit": null,
+      "commit": "b8444a661b0b304d1298463151065297840c15e9",
       "detail": "El manifiesto existente coincide con la fuente; no se sobrescribe."
     },
     {
@@ -55,7 +55,7 @@
       "repository": "Rufidj/Nativehbl",
       "fetchedFrom": "Rufidj/Nativehbl",
       "ref": "main",
-      "commit": null,
+      "commit": "e9488102399de9546d13dd496694c74142abe49f",
       "detail": "El manifiesto existente coincide con la fuente; no se sobrescribe."
     },
     {
@@ -64,7 +64,7 @@
       "repository": "Rufidj/ps5gl",
       "fetchedFrom": "Rufidj/ps5gl",
       "ref": "master",
-      "commit": null,
+      "commit": "5f22dcfe01209330f52207217a44becfbb491a6a",
       "detail": "El manifiesto existente coincide con la fuente; no se sobrescribe."
     },
     {
@@ -73,26 +73,26 @@
       "repository": "mihawk-99/ps5-opengl",
       "fetchedFrom": "mihawk-99/ps5-opengl",
       "ref": "main",
-      "commit": null,
+      "commit": "ec06d8c2da0359e274e409046f0a9586965e4010",
       "detail": "El manifiesto existente coincide con la fuente; no se sobrescribe."
     },
     {
       "folder": "ps5-fsr4",
-      "status": "vendored-source-only",
+      "status": "vendored-with-materialized-submodule",
       "repository": "blackbearreloaded/ps5-fsr4",
       "fetchedFrom": "manoma080/ps5-fsr4",
       "ref": "main",
       "commit": "4f931d8926cc25b2fdd78898cf08ee5c1999ea68",
-      "detail": "Fuentes copiadas; falta el submódulo externo external/ps5-vulkan@4bb0c8b1423698a7369efc22b829bf16a99e7128. No se marca como compilación autónoma."
+      "detail": "Root 4f931d8926cc25b2fdd78898cf08ee5c1999ea68; external/ps5-vulkan materialized and verified at 4bb0c8b1423698a7369efc22b829bf16a99e7128 (tree 90bc4a136c6830fdb28fd4fbdade33c1ad7b97f2)."
     },
     {
       "folder": "ps5-helixsr",
-      "status": "vendored-source-only",
+      "status": "vendored-with-materialized-submodule",
       "repository": "blackbearreloaded/ps5-helixsr",
       "fetchedFrom": "manoma080/ps5-helixsr",
       "ref": "main",
       "commit": "0673d91561c761b054449d30f2c2036fb6e0cf99",
-      "detail": "Fuentes copiadas; falta el submódulo externo external/ps5-vulkan@6875f21438b7e51a1377a30f2d7f77b3e0154cd6. No se marca como compilación autónoma."
+      "detail": "Root 0673d91561c761b054449d30f2c2036fb6e0cf99; external/ps5-vulkan materialized and verified at 6875f21438b7e51a1377a30f2d7f77b3e0154cd6 (tree de24817f1fb6d1afb0dd86e07301820fee4a9e9b)."
     },
     {
       "folder": "PS5_Sunshine",
@@ -100,7 +100,7 @@
       "repository": "griches/PS5_Sunshine",
       "fetchedFrom": "griches/PS5_Sunshine",
       "ref": "main",
-      "commit": null,
+      "commit": "e01f5db1702ac21f2683666abc10917ff9dd206b",
       "detail": "El manifiesto existente coincide con la fuente; no se sobrescribe."
     },
     {
@@ -109,7 +109,7 @@
       "repository": "griches/PS5_SwitchWaker",
       "fetchedFrom": "griches/PS5_SwitchWaker",
       "ref": "main",
-      "commit": null,
+      "commit": "3c0f213f2d4c17606ac8637eda2c5da6cbcc73b0",
       "detail": "El manifiesto existente coincide con la fuente; no se sobrescribe."
     },
     {
@@ -118,7 +118,7 @@
       "repository": "griches/PS5_Dusklight",
       "fetchedFrom": "griches/PS5_Dusklight",
       "ref": "main",
-      "commit": null,
+      "commit": "577c76212bec33198d69ca727433573ec00beb78",
       "detail": "El manifiesto existente coincide con la fuente; no se sobrescribe."
     },
     {
@@ -127,7 +127,7 @@
       "repository": "griches/PS5_Ghostship",
       "fetchedFrom": "griches/PS5_Ghostship",
       "ref": "main",
-      "commit": null,
+      "commit": "4cb586e7e5c722ba90fd86f66459569de564fc93",
       "detail": "El manifiesto existente coincide con la fuente; no se sobrescribe."
     },
     {
@@ -136,7 +136,7 @@
       "repository": "elripalda/Porpoise-Dolphin-Emulator-for-PS5",
       "fetchedFrom": "elripalda/Porpoise-Dolphin-Emulator-for-PS5",
       "ref": "Main",
-      "commit": null,
+      "commit": "2ed1ab5a06995aa198f7bccd4da0f90c3fc29d39",
       "detail": "El manifiesto existente coincide con la fuente; no se sobrescribe."
     },
     {
@@ -145,7 +145,7 @@
       "repository": "BrinooTk/PS5X360",
       "fetchedFrom": "BrinooTk/PS5X360",
       "ref": "main",
-      "commit": null,
+      "commit": "ad628f65ed460416c45103f4867053c5086eab1d",
       "detail": "El manifiesto existente coincide con la fuente; no se sobrescribe."
     },
     {
@@ -154,7 +154,7 @@
       "repository": "kvaps/syobon-action-ps5",
       "fetchedFrom": "kvaps/syobon-action-ps5",
       "ref": "main",
-      "commit": null,
+      "commit": "946936228f626412be6e962f563b10544cffe2be",
       "detail": "El manifiesto existente coincide con la fuente; no se sobrescribe."
     },
     {
@@ -163,7 +163,7 @@
       "repository": "encounter/aurora",
       "fetchedFrom": "encounter/aurora",
       "ref": "main",
-      "commit": null,
+      "commit": "8e356df6ea1882bbcd551d0b913ff4993cfab309",
       "detail": "El manifiesto existente coincide con la fuente; no se sobrescribe."
     },
     {
@@ -172,7 +172,7 @@
       "repository": "griches/PS5_Quake3e",
       "fetchedFrom": "griches/PS5_Quake3e",
       "ref": "main",
-      "commit": null,
+      "commit": "ed2d83946032ac6a01c859f689bc481116d78278",
       "detail": "El manifiesto existente coincide con la fuente; no se sobrescribe."
     },
     {
@@ -181,7 +181,7 @@
       "repository": "mihawk-99/PS5_RetroArch",
       "fetchedFrom": "mihawk-99/PS5_RetroArch",
       "ref": "main",
-      "commit": null,
+      "commit": "7268510b12fe7461342e0cc4497c87a0910c1055",
       "detail": "El manifiesto existente coincide con la fuente; no se sobrescribe."
     },
     {
@@ -190,7 +190,7 @@
       "repository": "polarco/X360PS5",
       "fetchedFrom": "polarco/X360PS5",
       "ref": "master",
-      "commit": null,
+      "commit": "21a1a707e09bf78445efda46858837d2659d7d3c",
       "detail": "El manifiesto existente coincide con la fuente; no se sobrescribe."
     },
     {
@@ -199,8 +199,40 @@
       "repository": "mihawk-99/PS5_PayloadSDK",
       "fetchedFrom": "mihawk-99/PS5_PayloadSDK",
       "ref": "b83202be73e930050e00de0f1b4d9ec46c0391bf",
-      "commit": null,
+      "commit": "b83202be73e930050e00de0f1b4d9ec46c0391bf",
       "detail": "El manifiesto existente coincide con la fuente; no se sobrescribe."
+    }
+  ],
+  "recoveredSubmodules": [
+    {
+      "path": "toolchains/ps5-fsr4/external/ps5-vulkan",
+      "repository": "mpereiraesaa/ps5-vulkan",
+      "commit": "4bb0c8b1423698a7369efc22b829bf16a99e7128",
+      "tree": "90bc4a136c6830fdb28fd4fbdade33c1ad7b97f2",
+      "verified": true
+    },
+    {
+      "path": "toolchains/ps5-helixsr/external/ps5-vulkan",
+      "repository": "mpereiraesaa/ps5-vulkan",
+      "commit": "6875f21438b7e51a1377a30f2d7f77b3e0154cd6",
+      "tree": "de24817f1fb6d1afb0dd86e07301820fee4a9e9b",
+      "verified": true
+    }
+  ],
+  "historicalSnapshots": [
+    {
+      "path": "toolchains/archive/ps5-fsr4-2026-09-28",
+      "repository": "manoma080/ps5-fsr4",
+      "rootCommit": "3789980ceba27568f2910a561483aa1cee383342",
+      "vulkanCommit": "6a0228bedebef949fd2dd90643eae4a5b711c23f",
+      "webArchive": "https://web.archive.org/web/20260928200623/https://github.com/blackbearreloaded/ps5-fsr4"
+    },
+    {
+      "path": "toolchains/archive/ps5-helixsr-2026-10-09",
+      "repository": "manoma080/ps5-helixsr",
+      "rootCommit": "028fcd7f737a95183cf688ee4bca8a9e48fe0c40",
+      "vulkanCommit": "6875f21438b7e51a1377a30f2d7f77b3e0154cd6",
+      "webArchive": "https://web.archive.org/web/20261009031258/https://github.com/blackbearreloaded/ps5-helixsr"
     }
   ]
 }

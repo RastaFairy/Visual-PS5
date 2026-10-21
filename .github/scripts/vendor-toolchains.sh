@@ -51,7 +51,17 @@ repositories = {
 raise SystemExit(0 if {declared.lower(), fetched.lower()} & repositories else 1)
 PY
     then
-      record "$folder" "already-present" "$declared_repo" "$actual_repo" "$ref" "" "El manifiesto existente coincide con la fuente; no se sobrescribe."
+      existing_commit="$(python3 - "$dest/.ps5hs-source.json" <<'PY'
+import json, sys
+try:
+    with open(sys.argv[1], encoding="utf-8") as f:
+        marker = json.load(f)
+    print(marker.get("sourceCommit") or marker.get("commit") or "")
+except Exception:
+    print("")
+PY
+)"
+      record "$folder" "already-present" "$declared_repo" "$actual_repo" "$ref" "$existing_commit" "El manifiesto existente coincide con la fuente; no se sobrescribe."
       continue
     fi
   fi

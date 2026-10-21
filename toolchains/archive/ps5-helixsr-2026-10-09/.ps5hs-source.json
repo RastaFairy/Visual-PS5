@@ -1,0 +1,42 @@
+{
+  "repository": "blackbearreloaded/ps5-helixsr",
+  "mirrorRepository": "manoma080/ps5-helixsr",
+  "branch": "archived",
+  "commit": "028fcd7f737a95183cf688ee4bca8a9e48fe0c40",
+  "sourceCommit": "028fcd7f737a95183cf688ee4bca8a9e48fe0c40",
+  "sourceTree": "962689603b7c85360347a038cff7525337b00624",
+  "sourceRef": "028fcd7f737a95183cf688ee4bca8a9e48fe0c40",
+  "method": "vendored-snapshot",
+  "vendoredSnapshot": true,
+  "vendorRepository": "RastaFairy/Visual-PS5",
+  "vendoredAt": "2026-10-20T17:11:28Z",
+  "historicalSnapshot": true,
+  "webArchiveSnapshot": "https://web.archive.org/web/20261009031258/https://github.com/blackbearreloaded/ps5-helixsr",
+  "archiveCapturedAt": "2026-10-09T03:12:58Z",
+  "submodulesMaterialized": true,
+  "sourceOnly": false,
+  "buildableWithoutExternalRepo": true,
+  "materializedSubmodules": [
+    {
+      "path": "external/ps5-vulkan",
+      "repository": "mpereiraesaa/ps5-vulkan",
+      "sourceUrl": "https://github.com/mpereiraesaa/ps5-vulkan",
+      "commit": "6875f21438b7e51a1377a30f2d7f77b3e0154cd6",
+      "tree": "de24817f1fb6d1afb0dd86e07301820fee4a9e9b",
+      "materializedAsFiles": true
+    }
+  ],
+  "submoduleRecovery": {
+    "status": "verified",
+    "method": "vendored-tree",
+    "completedAt": "2026-10-20T17:42:45Z",
+    "note": "The declared Vulkan Gitlink was replaced with the exact verified tree as ordinary files."
+  },
+  "buildVerified": false,
+  "buildStatus": "source-tree-verified; target build not yet run",
+  "buildNotes": [
+    "This manifest proves the pinned source tree is materialized locally; it does not claim a successful compile or console test.",
+    "Generic host build dependencies and precompiled SDK artifacts remain separate.",
+    "HelixSR still requires a legitimate user-supplied model DLL."
+  ]
+}

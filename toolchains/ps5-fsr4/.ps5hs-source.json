@@ -8,13 +8,41 @@
   "vendoredSnapshot": true,
   "vendorRepository": "RastaFairy/Visual-PS5",
   "vendoredAt": "2026-10-20T15:57:08Z",
-  "submodulesMaterialized": false,
-  "sourceOnly": true,
+  "submodulesMaterialized": true,
+  "sourceOnly": false,
   "mirrorRepository": "manoma080/ps5-fsr4",
-  "unresolvedSubmodules": [
-    "external/ps5-vulkan@4bb0c8b1423698a7369efc22b829bf16a99e7128"
-  ],
-  "buildableWithoutExternalRepo": false,
+  "buildableWithoutExternalRepo": true,
   "originalMethod": "vendored-snapshot",
-  "sourceRevisionRecorded": true
+  "sourceRevisionRecorded": true,
+  "materializedSubmodules": [
+    {
+      "path": "external/ps5-vulkan",
+      "repository": "mpereiraesaa/ps5-vulkan",
+      "sourceUrl": "https://github.com/mpereiraesaa/ps5-vulkan",
+      "commit": "4bb0c8b1423698a7369efc22b829bf16a99e7128",
+      "tree": "90bc4a136c6830fdb28fd4fbdade33c1ad7b97f2",
+      "materializedAsFiles": true
+    }
+  ],
+  "submoduleRecovery": {
+    "status": "verified",
+    "method": "vendored-tree",
+    "completedAt": "2026-10-20T17:42:45Z",
+    "note": "The declared Vulkan Gitlink was replaced with the exact verified tree as ordinary files."
+  },
+  "historicalSnapshots": [
+    {
+      "archiveCapturedAt": "2026-09-28T20:06:23Z",
+      "waybackSnapshot": "https://web.archive.org/web/20260928200623/https://github.com/blackbearreloaded/ps5-fsr4",
+      "rootCommit": "3789980ceba27568f2910a561483aa1cee383342",
+      "submoduleCommit": "6a0228bedebef949fd2dd90643eae4a5b711c23f",
+      "archivedPath": "toolchains/archive/ps5-fsr4-2026-09-28"
+    }
+  ],
+  "buildVerified": false,
+  "buildStatus": "source-tree-verified; target build not yet run",
+  "buildNotes": [
+    "This manifest proves the pinned source tree is materialized locally; it does not claim a successful compile or console test.",
+    "Generic host build dependencies and precompiled SDK artifacts remain separate."
+  ]
 }

@@ -203,6 +203,12 @@ function GetStatus {
     $category='backend';if($e.category){$category=[string]$e.category}
     $upstreamUnavailable=$null
     $mirrorAlternatives=@()
+    $buildVerified=$null
+    $buildStatus=''
+    if($localSource.sourceInfo -and $localSource.sourceInfo.PSObject.Properties['buildVerified']) {
+      $buildVerified=[bool]$localSource.sourceInfo.buildVerified
+      $buildStatus=[string]$localSource.sourceInfo.buildStatus
+    }
     if(!$localSource.bundled) {
       $upstreamUnavailable=GetPS5HSUpstreamUnavailable ([string]$e.repo)
       $mirrorAlternatives=GetPS5HSMirrorAlternatives ([string]$e.repo)
@@ -213,7 +219,8 @@ function GetStatus {
       href=('https://github.com/RastaFairy/Visual-PS5/tree/main/toolchains/'+$e.folder);
       sourceHref=('https://github.com/'+$e.repo);
       installed=$installed;bundled=[bool]$localSource.bundled;sourceOnly=$sourceOnly;
-      buildable=(!$sourceOnly);path=$p;sourceCommit=[string]$localSource.commit;
+      buildVerified=$buildVerified;buildStatus=$buildStatus;
+      buildable=([bool]$localSource.installed -and !$sourceOnly);path=$p;sourceCommit=[string]$localSource.commit;
       upstreamUnavailable=$upstreamUnavailable;mirrorAlternatives=$mirrorAlternatives
     }
   }
@@ -1550,7 +1557,8 @@ function BuildNativeProject([string]$ProjectPath,[bool]$CleanBeforeBuild=$false,
             $manifest=Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
             $manifestRepository=[string]$manifest.repository
             $manifestMirror=[string]$manifest.mirrorRepository
-            $hasSourceManifest=($manifestRepository -eq [string]$source.repository) -or ($manifestMirror -eq [string]$source.repository) -or [bool]$manifest.vendoredSnapshot -or ([string]$manifest.method -eq 'vendored-snapshot')
+            $manifestSource=[string]$manifest.sourceRepository
+            $hasSourceManifest=($manifestRepository -eq [string]$source.repository) -or ($manifestMirror -eq [string]$source.repository) -or ($manifestSource -eq [string]$source.repository)
           } catch { $hasSourceManifest=$false }
         }
         $missingFiles=@($source.files | Where-Object { !(Test-Path -LiteralPath (Join-Path $source.path $_) -PathType Leaf) })
