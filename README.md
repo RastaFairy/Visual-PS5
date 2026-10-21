@@ -104,7 +104,7 @@ La UI de esta versión todavía está en español; los manuales traducidos no re
 ## Cambios de 1.0.9
 
 - Kyty recibe la ruta de `eboot.bin` explícita y registra los argumentos de lanzamiento.
-- UltraPack se instala con un entorno Python aislado y dependencias CLI; se valida la ruta configurada.
+- UltraPack usa un entorno Python aislado y solo resuelve dependencias CLI desde wheels locales bajo `toolchains/ps5-ultrapack/wheels`; el gestor no ejecuta pip online.
 - El empaquetado `.pkg` detecta la ausencia del helper nativo de Windows antes de iniciar.
 
 ## Cambios de 1.0.8
@@ -179,7 +179,7 @@ node runtime/test-native-generator.js
 
 ## Requisitos y licencias
 
-- OpenGL: Windows + WSL/Linux, Git, Make, Clang/LLD, dependencias de `ps5-homebrew-ui` y el SDK `ps5-opengl` que prepara el upstream.
+- OpenGL: Windows + WSL/Linux, Git, Make, Clang/LLD, dependencias locales de `ps5-homebrew-ui` y el SDK `ps5-opengl` verificado que debe estar bajo `toolchains/toolchain-pack/`; el IDE no lo descarga.
 - Vulkan: WSL/Linux, Git/submódulos, CMake/Ninja, Clang/LLVM, Meson, rsync, PS5_Vulkan, PS5_Mesa y la revisión fijada de PS5_PayloadSDK.
 - Los títulos generados integran kits que mantienen licencias GPL. Revisa `LICENSE`, `THIRD_PARTY_NOTICES.md` y las licencias de cada recurso antes de redistribuir. No se incluyen firmware de PS5, claves, ROMs, BIOS, datos de juegos ni binarios propietarios de Sony/NVIDIA.
 - El IDE solo escucha en `127.0.0.1`. El workspace se guarda en `Documentos\PS5HomebrewStudio\Projects`; las toolchains quedan en la carpeta del proyecto IDE.
@@ -213,6 +213,12 @@ Consulta [la matriz de SDKs](docs/SDK_MATRIX.md), [el estudio del ecosistema](do
 ## Procedencia de IA
 
 La etiqueta **IA declarada** está reservada a declaraciones explícitas. Por ejemplo, [ProsperoEden0](https://github.com/Tiang-88/ProsperoEden0) declara asistencia de herramientas OpenAI/Anthropic; [X360PS5 de polarco](https://github.com/polarco/X360PS5) documenta uso activo de Codex, pero el propio README indica que no se ha probado en una PS5 y que aún no carga juegos Xbox 360. Estos casos son evidencia de asistencia declarada, no garantía de calidad o compatibilidad. Los proyectos con `AGENTS.md`/`CLAUDE.md` no se etiquetan automáticamente como generados por IA.
+
+## Resolución local de toolchains
+
+El gestor SDK/Proyectos y el servidor de compilación consultan las fuentes versionadas bajo `toolchains/` de este repositorio. No clonan repositorios externos, no descargan ZIP ni intentan mirrors durante el uso normal. Si falta una carpeta o un artefacto fijado, el IDE muestra la ruta esperada y detiene esa operación sin sustituir fuentes existentes. La sincronización por GitHub Actions es mantenimiento del propio repositorio, no un fallback de runtime.
+
+El SDK OpenGL precompilado solo se acepta bajo `toolchains/toolchain-pack/ps5-opengl-sdk/` después de validar su SHA-256. UltraPack solo resuelve paquetes Python desde wheels locales en `toolchains/ps5-ultrapack/wheels`. Los requisitos del sistema (por ejemplo, WSL, .NET, compiladores y paquetes Linux) continúan siendo responsabilidad del entorno; este cambio no implica que todas las toolchains puedan compilarse sin esos requisitos.
 
 ## Licencias, dependencias y artefactos externos
 
