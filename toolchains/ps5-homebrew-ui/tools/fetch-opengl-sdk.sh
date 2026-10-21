@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# ps5-homebrew-ui - Pinned ps5-opengl SDK download.
+# ps5-homebrew-ui - Resolve the pinned ps5-opengl SDK, cached first.
 # Copyright (C) 2026 BlackBearReloaded
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# Verifies a cached SDK or copies a pinned archive from toolchains/ps5-opengl-sdk.
-# IDE builds set PS5HS_LOCAL_TOOLCHAINS_ONLY=1 to forbid network fallback.
-# and prints the SDK prefix (the directory holding manifest.sha256).
+# Reuses a verified SDK already under toolchains/. If none exists, it can seed
+# one pinned official release archive (SHA-256 checked) into toolchains/ once.
+# All other native build dependencies remain subject to local-only policy.
 
 set -euo pipefail
 
@@ -13,72 +13,80 @@ root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 version=1.0.2
 archive_sha256=30d8e51dd062739b629346102be5932728ba714bc50b1bdcdf08306c8843d9a4
 manifest_sha256=0d432edc9d648d6e0cccb4d5eb3db8484f10ba4b075b5ccf23edda3251b66360
+archive_url="https://github.com/blackbearreloaded/ps5-opengl/releases/download/v${version}/ps5-opengl-sdk-${version}.tar.gz"
 
-cache="$root/.deps/ps5-opengl"
-archive="$cache/ps5-opengl-sdk-$version.tar.gz"
+toolchains_root="${PS5HS_TOOLCHAINS_ROOT:-$(dirname "$root")}"
+toolchains_root=$(cd -- "$toolchains_root" && pwd)
+cache="$toolchains_root/ps5-opengl-sdk/.cache"
+archive="$toolchains_root/ps5-opengl-sdk/ps5-opengl-sdk-$version.tar.gz"
 extracted="$cache/ps5-opengl-sdk-$version"
 prefix="$extracted/sdk"
-mkdir -p "$cache"
+mkdir -p "$cache" "$(dirname "$archive")"
 
-# The IDE must never fetch this SDK from a release URL. It must already exist
-# under the repository's toolchains/ tree and match the pinned SHA-256.
-toolchains_root="${PS5HS_TOOLCHAINS_ROOT:-$(dirname "$root")}"
-local_archive="$toolchains_root/ps5-opengl-sdk/ps5-opengl-sdk-$version.tar.gz"
+verify_prefix() {
+    local candidate=$1 actual
+    [[ -f $candidate/manifest.sha256 ]] || return 1
+    (cd "$candidate" && sha256sum --check --strict --quiet manifest.sha256) || return 1
+    actual=$(sha256sum "$candidate/manifest.sha256" | cut -d' ' -f1)
+    [[ $actual == "$manifest_sha256" ]]
+}
+
+# Existing extracted SDKs are accepted only if the files and manifest match the
+# pinned release identity. No unverified directory is used as a compiler prefix.
 local_prefixes=(
+    "$prefix"
     "$toolchains_root/ps5-opengl-sdk/ps5-opengl-sdk-$version/sdk"
     "$toolchains_root/ps5-opengl-sdk/sdk"
     "$toolchains_root/ps5-opengl/build/sdk/ps5-opengl-gl46"
     "$toolchains_root/ps5-opengl-mihawk/build/sdk/ps5-opengl-gl46"
 )
-
-# Accept an already-extracted local SDK only if every file passes its manifest
-# and the manifest itself matches the exact pinned release identity.
-if [[ ! -f $prefix/manifest.sha256 ]]; then
-    for candidate in "${local_prefixes[@]}"; do
-        [[ -f $candidate/manifest.sha256 ]] || continue
-        (cd "$candidate" && sha256sum --check --strict --quiet manifest.sha256) || continue
-        actual_candidate_manifest=$(sha256sum "$candidate/manifest.sha256" | cut -d' ' -f1)
-        [[ $actual_candidate_manifest == "$manifest_sha256" ]] || continue
-        printf '%s\\n' "$candidate"
+for candidate in "${local_prefixes[@]}"; do
+    if verify_prefix "$candidate"; then
+        printf '%s\n' "$candidate"
         exit 0
-    done
-fi
-
-if [[ ! -f $prefix/manifest.sha256 ]]; then
-    # A previously extracted SDK is reusable only via the manifest checks below.
-    # A cached archive is reusable only if it matches the pinned digest. Otherwise,
-    # seed it from the versioned toolchains tree; never use HTTP fallbacks.
-    if [[ ! -f $archive ]] || ! sha256sum --check --status <<<"$archive_sha256  $archive"; then
-        [[ -f $local_archive ]] || {
-            echo "local-only: falta el tarball fijado o un SDK $version ya extraído y verificado dentro de toolchains/; no se consulta Internet" >&2
-            exit 2
-        }
-        sha256sum --check --strict <<<"$archive_sha256  $local_archive" || {
-            echo "ps5-opengl SDK archive checksum mismatch in toolchains/: $local_archive" >&2
-            exit 2
-        }
-        cp -- "$local_archive" "$archive.part"
-        mv -- "$archive.part" "$archive"
     fi
-    sha256sum --check --status <<<"$archive_sha256  $archive" || {
-        echo "ps5-opengl SDK archive checksum mismatch" >&2
+done
+
+# An existing archive with the wrong hash is an explicit integrity failure;
+# never replace or extract it silently.
+if [[ -f $archive ]]; then
+    if ! printf '%s  %s\n' "$archive_sha256" "$archive" | sha256sum --check --strict --status; then
+        echo "ps5-opengl SDK archive checksum mismatch: $archive" >&2
+        exit 2
+    fi
+else
+    [[ ${PS5HS_ALLOW_PINNED_SDK_DOWNLOAD:-0} == 1 ]] || {
+        echo "local-only: falta el tarball fijado o un SDK $version ya extraído y verificado dentro de toolchains/; la descarga del SDK oficial no está autorizada" >&2
         exit 2
     }
-    rm -rf -- "$extracted"
-    # Only the compiled SDK and the license texts are needed to build.
-    tar -xzf "$archive" -C "$cache" "ps5-opengl-sdk-$version/sdk" \
-        "ps5-opengl-sdk-$version/LICENSE" "ps5-opengl-sdk-$version/LICENSES" \
-        "ps5-opengl-sdk-$version/THIRD_PARTY_NOTICES.md"
-    rm -f -- "$archive"
+    download_tmp="$archive.download.$$"
+    trap 'rm -f -- "$download_tmp"' EXIT
+    echo "SDK OpenGL $version ausente localmente; recuperando release oficial con SHA-256 fijado." >&2
+    if command -v curl >/dev/null 2>&1; then
+        curl --fail --location --silent --show-error --retry 3 --connect-timeout 20 --max-time 1800 "$archive_url" --output "$download_tmp"
+    elif command -v wget >/dev/null 2>&1; then
+        wget --quiet --tries=3 --timeout=30 --output-document="$download_tmp" "$archive_url"
+    else
+        echo "No hay curl ni wget para obtener el SDK OpenGL fijado." >&2
+        exit 2
+    fi
+    if ! printf '%s  %s\n' "$archive_sha256" "$download_tmp" | sha256sum --check --strict --status; then
+        echo "ps5-opengl SDK downloaded archive checksum mismatch; it was discarded." >&2
+        exit 2
+    fi
+    mv -- "$download_tmp" "$archive"
+    trap - EXIT
 fi
 
-(cd "$prefix" && sha256sum --check --strict --quiet manifest.sha256) || {
+# Extract only the compiled SDK and its license/notice files into a shared local
+# cache. The large verified archive is retained once under toolchains/ for reuse.
+rm -rf -- "$extracted"
+tar -xzf "$archive" -C "$cache" "ps5-opengl-sdk-$version/sdk" \
+    "ps5-opengl-sdk-$version/LICENSE" "ps5-opengl-sdk-$version/LICENSES" \
+    "ps5-opengl-sdk-$version/THIRD_PARTY_NOTICES.md"
+
+verify_prefix "$prefix" || {
     echo "ps5-opengl SDK manifest verification failed: $prefix" >&2
-    exit 2
-}
-actual=$(sha256sum "$prefix/manifest.sha256" | cut -d' ' -f1)
-[[ $actual == "$manifest_sha256" ]] || {
-    echo "unexpected ps5-opengl SDK manifest: $actual" >&2
     exit 2
 }
 printf '%s\n' "$prefix"
