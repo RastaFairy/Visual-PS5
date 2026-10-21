@@ -9,81 +9,73 @@ const policyJs = fs.readFileSync(path.join(__dirname, 'native-modification-polic
 const app = fs.readFileSync(path.join(root, 'app.js'), 'utf8');
 const packer = fs.readFileSync(path.join(__dirname, 'Build-ToolchainPack.ps1'), 'utf8');
 const pins = JSON.parse(fs.readFileSync(path.join(__dirname, 'toolchain-pins.json'), 'utf8'));
+const sdkFetch = fs.readFileSync(path.join(root, 'toolchains/ps5-homebrew-ui/tools/fetch-opengl-sdk.sh'), 'utf8');
 
-// Manifiesto de pins.
-assert.equal(pins.schema, 'ps5hs-toolchain-pins', 'toolchain-pins.json debe declarar su esquema');
-assert.equal(pins.version, 1, 'la version del manifiesto de pins debe ser 1');
-assert.ok(pins.mirrors, 'el manifiesto debe declarar mirrors');
-assert.ok(pins.artifacts && pins.artifacts['ps5-opengl-sdk'], 'el manifiesto debe fijar el artefacto ps5-opengl-sdk');
+// Pins: source and SDK artifacts are all local-only.
+assert.equal(pins.schema, 'ps5hs-toolchain-pins');
+assert.equal(pins.version, 1);
+assert.ok(!pins.mirrors, 'the pin manifest must not advertise external fallbacks');
+assert.ok(!JSON.stringify(pins).includes('https://'), 'the pin manifest must not contain download URLs');
+const sdkPin = pins.artifacts && pins.artifacts['ps5-opengl-sdk'];
+assert.ok(sdkPin, 'the OpenGL SDK pin must remain available');
+assert.match(String(sdkPin.version), /^1\.\d+\.\d+$/);
+assert.match(sdkPin.archive.sha256, /^[0-9a-f]{64}$/);
+assert.match(sdkPin.sdkManifest.sha256, /^[0-9a-f]{64}$/);
+assert.equal(sdkPin.localPath, 'toolchains/ps5-opengl-sdk/ps5-opengl-sdk-1.0.2.tar.gz');
+assert.ok(!sdkPin.urls, 'the SDK pin must not contain remote URLs');
 
-const sha256Hex = /^[0-9a-f]{64}$/;
-const sdkPin = pins.artifacts['ps5-opengl-sdk'];
-assert.match(String(sdkPin.version), /^1\.\d+\.\d+$/, 'la version del SDK debe ser semver');
-assert.match(sdkPin.archive.sha256, sha256Hex, 'el pin del tarball debe ser un SHA-256 en minusculas');
-assert.match(sdkPin.sdkManifest.sha256, sha256Hex, 'el pin del manifest interno debe ser un SHA-256');
-assert.ok(Number.isInteger(sdkPin.bytes) && sdkPin.bytes > 0, 'el pin debe declarar el tamano en bytes');
-assert.ok(Array.isArray(sdkPin.urls) && sdkPin.urls.length >= 3, 'la cadena de descarga debe incluir upstream y al menos dos mirrors');
-assert.ok(sdkPin.urls[0].includes('blackbearreloaded/ps5-opengl'), 'el upstream original debe ser la primera URL de la cadena');
-assert.ok(sdkPin.urls.some(u => u.includes('LedyBacer/ps5-opengl')), 'la cadena debe incluir el mirror verificado LedyBacer');
-assert.ok(new Set(sdkPin.urls).size === sdkPin.urls.length, 'las URLs de la cadena no deben repetirse');
-for (const url of sdkPin.urls) {
-  assert.match(url, /^https:\/\/github\.com\/[\w.-]+\/ps5-opengl\/releases\/download\/v1\.0\.2\/ps5-opengl-sdk-1\.0\.2\.tar\.gz$/, 'cada URL debe apuntar al mismo asset v1.0.2 del SDK');
-}
+// Local source resolver: no remote clone, archive download, or online pip fallback.
+const installStart = server.indexOf('function InstallRepo($Entry) {');
+const installEnd = server.indexOf('function BashQuote([string]$Text)', installStart);
+assert.ok(installStart >= 0 && installEnd > installStart, 'InstallRepo must exist');
+const installBlock = server.slice(installStart, installEnd);
+assert.match(installBlock, /Dependencia local no disponible/);
+assert.match(installBlock, /GetPS5HSBundledToolchainInfo/);
+assert.match(installBlock, /No se descargará ni sobrescribirá/);
+assert.doesNotMatch(installBlock, /\bgit clone\b|Invoke-WebRequest|Invoke-RestMethod|codeload\.github|pip install|winget install|https?:\/\//i);
+assert.match(server, /function GetPS5HSLocalSdkRoot/);
+assert.match(server, /Join-Path \$script:Toolchains 'ps5-opengl-sdk'/);
+assert.match(server, /function SeedProjectOpenGlSdkCache/);
+assert.doesNotMatch(server, /function GetPS5HSMirrorAlternatives|function GetPS5HSUpstreamUnavailable|function GetPS5HSSdkMirrorUrls/);
 
-// Mirrors declarados: repos conocidos y sin auto-referencia.
-for (const [repo, info] of Object.entries(pins.mirrors)) {
-  assert.match(repo, /^[\w.-]+\/[\w.-]+$/, 'cada mirror key debe ser un repo GitHub');
-  assert.equal(info.status, 'unavailable', 'solo se declaran upstreams no disponibles');
-  assert.ok(Array.isArray(info.alternatives), 'las alternativas deben ser una lista');
-  assert.ok(!info.alternatives.includes(repo), 'un upstream caido no puede ser su propio mirror');
-  for (const alt of info.alternatives) {
-    assert.match(alt, /^[\w.-]+\/[\w.-]+$/, 'cada alternativa debe ser un repo GitHub');
-    assert.ok(repo !== alt, 'la alternativa debe differir del original');
-    assert.ok(!Object.keys(pins.mirrors).includes(alt), 'la alternativa no debe ser a su vez un upstream declarado caido');
-  }
-}
-assert.ok(pins.mirrors['blackbearreloaded/ps5-opengl'].alternatives.length >= 2, 'ps5-opengl necesita al menos dos mirrors porque el SDK binario solo existe en releases');
-assert.ok(pins.mirrors['blackbearreloaded/ps5-homebrew-ui'].alternatives.includes('LedyBacer/ps5-homebrew-ui'), 'la plantilla hui-gl debe tener mirror');
+// Setup is diagnosis-only; Windows tools must not be fetched by the IDE.
+const setupStart = server.indexOf('function InvokeSetup([string]$Action) {');
+const setupEnd = server.indexOf('function ServeStatic(', setupStart);
+assert.ok(setupStart >= 0 && setupEnd > setupStart);
+const setupBlock = server.slice(setupStart, setupEnd);
+assert.match(setupBlock, /Diagnóstico local completado/);
+assert.doesNotMatch(setupBlock, /winget install|wsl\.exe --install|Invoke-WebRequest|Start-BitsTransfer/i);
 
-// server.ps1: helpers, fallback y hooks.
-assert.match(server, /function GetPS5HSMirrorAlternatives\(/, 'server.ps1 debe resolver mirrors del pin');
-assert.match(server, /function SeedProjectOpenGlSdkCache\(/, 'server.ps1 debe sembrar el cache offline del SDK');
-assert.match(server, /function GetPS5HSToolchainPackSdkArchive\b/, 'server.ps1 debe inspeccionar el pack local');
-assert.match(server, /\$candidateRepos=@\(\[string\]\$Entry\.repo\)\+\(GetPS5HSMirrorAlternatives/, 'el clon git debe intentar el upstream y luego los mirrors');
-assert.match(server, /mirrorRepository=\$usedRepo/, 'el clon con mirror debe registrar la fuente usada');
-assert.match(server, /toolchainHealth/, 'GetStatus debe exponer la salud de toolchains');
-assert.match(server, /buildVerified=\$buildVerified;buildStatus=\$buildStatus/, 'GetStatus debe exponer la verificación de compilación por separado del estado de la fuente');
-assert.match(server, /buildable=\(\[bool\]\$localSource\.installed\s+-and\s+!\$sourceOnly\)/, 'una toolchain ausente o marcada source-only no debe exponerse como compilable');
-assert.match(server, /\$manifestSource=\[string\]\$manifest\.sourceRepository[\s\S]*?\$hasSourceManifest=\(\$manifestRepository -eq \[string\]\$source\.repository\) -or \(\$manifestMirror -eq \[string\]\$source\.repository\) -or \(\$manifestSource -eq \[string\]\$source\.repository\)/, 'el build debe validar la identidad del repositorio y no confiar solo en la bandera vendoredSnapshot');
-assert.match(server, /\$upstreamUnavailable=\$null[\s\S]*?if\(!\$localSource\.bundled\)\s*\{\s*\$upstreamUnavailable=GetPS5HSUpstreamUnavailable\s+\(\[string\]\$e\.repo\)/, 'el estado solo debe comprobar disponibilidad upstream si no existe una copia local agrupada');
-assert.match(server, /\$mirrorAlternatives=GetPS5HSMirrorAlternatives\s+\(\[string\]\$e\.repo\)/, 'el estado debe seguir mostrando mirrors si la fuente no está agrupada');
-assert.ok(
-  server.includes("ApplyPS5HSSdkMirrorChainPatch -ProjectRoot $projectRoot -Policy $policy -Backend $backend") &&
-  server.includes("ApplyPS5HSSdkMirrorChainPatch -ProjectRoot $projectRoot -Policy $policy -Backend 'opengl-ui'"),
-  'el parche de mirrors debe engancharse tanto en la creacion como en el build de un proyecto existente');
-assert.match(server, /SeedProjectOpenGlSdkCache \$projectRoot/, 'la siembra offline debe ejecutarse antes de compilar');
+// OpenGL's source fetcher is offline-only and keeps both archive and internal manifest checksums.
+assert.match(sdkFetch, /PS5HS_LOCAL_ONLY/);
+assert.match(sdkFetch, /caché local/);
+assert.match(sdkFetch, /archive_sha256/);
+assert.match(sdkFetch, /manifest_sha256/);
+assert.doesNotMatch(sdkFetch, /\bcurl\b|\bwget\b|https?:\/\//i);
 
-// Politica de modificaciones: nueva clave y funcion, con registro de auditoria.
-assert.match(policy, /'allowUpstreamSdkMirrorPatch',/, 'la politica PowerShell debe registrar la clave del parche de mirrors');
-assert.match(policy, /function ApplyPS5HSSdkMirrorChainPatch\b/, 'la politica debe implementar el parche');
-assert.match(policy, /'apply-sdk-mirror-chain'/, 'el parche debe grabar su operacion en la auditoria');
-assert.match(policy, /PS5HS_MIRROR_CHAIN/, 'el parche debe marcar el script modificado para idempotencia');
-assert.match(policyJs, /key:'allowUpstreamSdkMirrorPatch'/, 'el catalogo cliente debe exponer la nueva clave');
-assert.match(policyJs, /backends:\['opengl-ui','hui-gl'\]/, 'la clave aplica a los flujos OpenGL');
-assert.ok(!/required:\s*true/.test(policyJs.match(/key:'allowUpstreamSdkMirrorPatch'[^}]+/)[0]), 'el parche de mirrors es opcional, no un requisito del pipeline');
+// The project-specific guard is mandatory, auditable, and does not add network fallbacks.
+assert.match(policy, /function ApplyPS5HSSdkLocalOnlyPatch/);
+assert.match(policy, /allowLocalSdkCachePatch/);
+assert.match(policy, /enforce-sdk-local-only/);
+assert.match(policy, /PS5HS_LOCAL_ONLY/);
+assert.doesNotMatch(policy, /function ApplyPS5HSSdkMirrorChainPatch/);
+assert.match(policyJs, /key:'allowLocalSdkCachePatch'[^}]+required:true/);
+assert.doesNotMatch(policyJs, /allowUpstreamSdkMirrorPatch/);
 
-// app.js: UI de salud y consentimiento.
-assert.match(app, /MIRROR DISPONIBLE/, 'el panel SDK debe mostrar mirrors disponibles');
-assert.match(app, /BUILD SIN VERIFICAR/, 'la UI no debe presentar una fuente como compilada si no hay una prueba de build');
-assert.match(app, /PACK SDK/, 'el dock debe mostrar el estado del pack local');
-assert.match(app, /allowUpstreamSdkMirrorPatch/, 'el flujo de build hui-gl debe ofrecer el nuevo permiso');
-assert.match(app, /toolchain-pins\.json/, 'la UI debe documentar el manifiesto de pins');
+// The SDK panel and installer describe a local verification, not cloning/downloading.
+assert.match(app, /verifica fuentes locales versionadas en toolchains\//);
+assert.match(app, /Verificar toolchains locales/);
+assert.match(app, /Buscar en toolchains\//);
+assert.match(app, /FALTA EN toolchains\//);
+assert.match(app, /allowLocalSdkCachePatch/);
+assert.doesNotMatch(app, /MIRROR DISPONIBLE|Clonar desde GitHub|Descargar todos los SDK|allowUpstreamSdkMirrorPatch/);
+assert.match(app, /No se instalarán herramientas por Internet/);
 
-// Packer: debe verificar el pin y respetar el manifiesto.
-assert.match(packer, /Get-FileHash -LiteralPath \$Path -Algorithm SHA256/, 'el packer debe verificar SHA-256');
-assert.match(packer, /toolchain-pins\.json/, 'el packer debe leer el manifiesto de pins');
-assert.match(packer, /manifest\.json/, 'el packer debe emitir un manifiesto del pack');
-assert.match(packer, /Compress-Archive/, 'el packer debe poder crear el respaldo ZIP opcional');
-assert.doesNotMatch(packer, /Remove-Item.*toolchains/, 'el packer jamas debe borrar toolchains');
+// The SDK packer validates local files and emits a manifest, with no download path.
+assert.match(packer, /Get-FileHash -LiteralPath \$Path -Algorithm SHA256/);
+assert.match(packer, /networkAccess = \$false/);
+assert.match(packer, /toolchains\\ps5-opengl-sdk/);
+assert.match(packer, /Compress-Archive/);
+assert.doesNotMatch(packer, /Invoke-WebRequest|https?:\/\/|\.urls\b|toolchain-pack/i);
 
-console.log('PASS toolchain pins: manifest, mirrors, server hooks, policy key, UI and packer contracts.');
+console.log('PASS local-only toolchains: resolver, setup, SDK script, UI, policy and packer contracts.');
