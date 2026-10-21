@@ -24,7 +24,7 @@ layer (`skills/ps5-release/references/licensing.md`).
 
 | File | What it does |
 | --- | --- |
-| `setup-kit.sh` | exports the pinned PS5_VKHomebrewUI revision into `.deps/hui` (from `../PS5_VKHomebrewUI`, or GitHub) |
+| `setup-kit.sh` | copies the pinned PS5_VKHomebrewUI files from the local `toolchains/PS5_VKHomebrewUI` snapshot into `.deps/hui`; it has no GitHub fallback |
 | `ui.cmake` | included by `ps5/CMakeLists.txt` when this folder exists: compiles the kit (not its OpenGL backend or its own console layer) into the title, defines `PS5_UI`, and tells `build-assets.py` to lay the kit's assets into `/app0/assets/hui/` |
 | `kit.hpp`, `kit.cpp` | `ps5ui::Kit` (the renderer, the six fonts, the mixer on the console's audio output, the cues, the music, the pad as the kit's input frames, the sample covers) and `ps5ui::KitExample`, the base class a program that draws with the kit derives from |
 | `hui_platform.cpp` | the kit's five system calls (`hui::sys::log`, the clock...) on the template's `platform.h` |
