@@ -20,24 +20,26 @@ extracted="$cache/ps5-opengl-sdk-$version"
 prefix="$extracted/sdk"
 mkdir -p "$cache"
 
-# The IDE must never fetch this SDK from a release URL. If the SDK is already
-# extracted and verified in the project cache, reuse it. Otherwise require a pinned
-# local archive from toolchains/; there is deliberately no network fallback.
+# The IDE must never fetch this SDK from a release URL. Reuse a verified
+# project-cache archive or the extracted SDK first; otherwise require a pinned
+# archive from toolchains/. There is deliberately no network fallback.
 if [[ ! -f $prefix/manifest.sha256 ]]; then
-    toolchains_root="${PS5HS_TOOLCHAINS_ROOT:-$(dirname "$root")}"
-    local_archive="$toolchains_root/ps5-opengl-sdk/ps5-opengl-sdk-$version.tar.gz"
-    [[ -f $local_archive ]] || {
-        echo "local-only: falta toolchains/ps5-opengl-sdk/ps5-opengl-sdk-$version.tar.gz y no hay SDK verificado en la caché; no se consulta Internet" >&2
-        exit 2
-    }
-    sha256sum --check --strict <<<"$archive_sha256  $local_archive" || {
-        echo "ps5-opengl SDK archive checksum mismatch in toolchains/: $local_archive" >&2
-        exit 2
-    }
-    cp -- "$local_archive" "$archive.part"
-    mv -- "$archive.part" "$archive"
+    if [[ ! -f $archive ]] || ! sha256sum --check --status <<<"$archive_sha256  $archive"; then
+        toolchains_root="${PS5HS_TOOLCHAINS_ROOT:-$(dirname "$root")}"
+        local_archive="$toolchains_root/ps5-opengl-sdk/ps5-opengl-sdk-$version.tar.gz"
+        [[ -f $local_archive ]] || {
+            echo "local-only: falta el SDK en caché y toolchains/ps5-opengl-sdk/ps5-opengl-sdk-$version.tar.gz; no se consulta Internet" >&2
+            exit 2
+        }
+        sha256sum --check --strict <<<"$archive_sha256  $local_archive" || {
+            echo "ps5-opengl SDK archive checksum mismatch in toolchains/: $local_archive" >&2
+            exit 2
+        }
+        cp -- "$local_archive" "$archive.part"
+        mv -- "$archive.part" "$archive"
+    fi
     sha256sum --check --status <<<"$archive_sha256  $archive" || {
-        echo "ps5-opengl SDK archive checksum mismatch after local copy" >&2
+        echo "ps5-opengl SDK archive checksum mismatch" >&2
         exit 2
     }
     rm -rf -- "$extracted"
