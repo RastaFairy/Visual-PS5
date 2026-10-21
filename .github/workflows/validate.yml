@@ -97,14 +97,38 @@ jobs:
         if: github.event_name == 'pull_request' && github.head_ref == 'offline-build-recovery-20261021'
         shell: pwsh
         env:
-          SDK_URL: https://github.com/blackbearreloaded/ps5-opengl/releases/download/v1.0.2/ps5-opengl-sdk-1.0.2.tar.gz
+          SDK_TAG: v1.0.2
           SDK_SHA256: 30d8e51dd062739b629346102be5932728ba714bc50b1bdcdf08306c8843d9a4
         run: |
           $ErrorActionPreference = 'Stop'
+          $api = "https://api.github.com/repos/blackbearreloaded/ps5-opengl/releases/tags/$env:SDK_TAG"
+          $release = Invoke-RestMethod -Uri $api -Headers @{ Accept = 'application/vnd.github+json'; 'User-Agent' = 'Visual-PS5-build' }
+          $assets = @($release.assets | Where-Object { $_.name -like 'ps5-opengl-sdk-*.tar.gz' })
+          if ($assets.Count -eq 0) {
+            $names = ($release.assets | ForEach-Object { $_.name }) -join ', '
+            throw "Release $env:SDK_TAG no contiene tarball del SDK. Assets publicados: $names"
+          }
           $archive = Join-Path $env:RUNNER_TEMP 'ps5-opengl-sdk-1.0.2.tar.gz'
-          Invoke-WebRequest -Uri $env:SDK_URL -OutFile $archive | Out-Null
-          $actual = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant()
-          if ($actual -ne $env:SDK_SHA256) { throw "OpenGL SDK SHA-256 mismatch: $actual" }
+          $verified = $false
+          foreach ($asset in $assets) {
+            $candidate = Join-Path $env:RUNNER_TEMP ('sdk-candidate-' + $asset.name)
+            try {
+              Write-Host "Checking official SDK asset: $($asset.name)"
+              Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $candidate | Out-Null
+              $actual = (Get-FileHash -LiteralPath $candidate -Algorithm SHA256).Hash.ToLowerInvariant()
+              if ($actual -eq $env:SDK_SHA256) {
+                Move-Item -LiteralPath $candidate -Destination $archive -Force
+                $verified = $true
+                break
+              }
+              Write-Warning "SHA-256 mismatch on $($asset.name): $actual; discarded."
+              Remove-Item -LiteralPath $candidate -Force
+            } catch {
+              Write-Warning "Cannot download $($asset.name): $($_.Exception.Message)"
+              Remove-Item -LiteralPath $candidate -Force -ErrorAction SilentlyContinue
+            }
+          }
+          if (-not $verified) { throw "No asset in release $env:SDK_TAG matches pinned SHA-256 $env:SDK_SHA256." }
           $sourceZip = Join-Path $env:RUNNER_TEMP 'PS5-Homebrew-Studio-source.zip'
           git archive --format=zip --prefix=PS5-Homebrew-Studio/ --output=$sourceZip HEAD^
           if ($LASTEXITCODE -ne 0) { throw "git archive failed: $LASTEXITCODE" }
@@ -120,7 +144,7 @@ jobs:
             $output = $entry.Open()
             try { $input.CopyTo($output) } finally { $output.Dispose(); $input.Dispose() }
           } finally { $zip.Dispose() }
-          Write-Host "Offline bundle staged; SDK SHA-256 verified: $actual"
+          Write-Host "Offline bundle staged; SDK SHA-256 verified: $env:SDK_SHA256"
       - name: Upload offline SDK bundle
         if: github.event_name == 'pull_request' && github.head_ref == 'offline-build-recovery-20261021'
         uses: actions/upload-artifact@v7.0.2
