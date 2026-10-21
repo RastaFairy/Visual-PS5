@@ -71,7 +71,7 @@ else
     if command -v curl >/dev/null 2>&1; then
         if curl --fail --location --silent --show-error --retry 2 --connect-timeout 20 --max-time 1800 \
             "$direct_url" --output "$download_tmp"; then
-            if printf '%s  %s\\n' "$archive_sha256" "$download_tmp" | sha256sum --check --strict --status; then
+            if printf '%s  %s\n' "$archive_sha256" "$download_tmp" | sha256sum --check --strict --status; then
                 mv -- "$download_tmp" "$archive"
                 verified=true
             else
@@ -84,7 +84,7 @@ else
         fi
     elif command -v wget >/dev/null 2>&1; then
         if wget --quiet --tries=2 --timeout=30 --output-document="$download_tmp" "$direct_url"; then
-            if printf '%s  %s\\n' "$archive_sha256" "$download_tmp" | sha256sum --check --strict --status; then
+            if printf '%s  %s\n' "$archive_sha256" "$download_tmp" | sha256sum --check --strict --status; then
                 mv -- "$download_tmp" "$archive"
                 verified=true
             else
@@ -107,6 +107,7 @@ else
         echo "Consultando API de GitHub para enumerar los assets del release v$version." >&2
         release_api="https://api.github.com/repos/blackbearreloaded/ps5-opengl/releases/tags/v$version"
         release_json="$cache/release-v$version.json"
+        rm -f -- "$release_json"
         if command -v curl >/dev/null 2>&1; then
             if ! curl --fail --location --silent --show-error --retry 2 --connect-timeout 20 --max-time 90 \
                 -H 'Accept: application/vnd.github+json' "$release_api" --output "$release_json"; then
@@ -147,7 +148,7 @@ PY
                 else
                     wget --quiet --tries=2 --timeout=30 --output-document="$download_tmp" "$asset_url" || continue
                 fi
-                if printf '%s  %s\\n' "$archive_sha256" "$download_tmp" | sha256sum --check --strict --status; then
+                if printf '%s  %s\n' "$archive_sha256" "$download_tmp" | sha256sum --check --strict --status; then
                     mv -- "$download_tmp" "$archive"
                     verified=true
                     break
