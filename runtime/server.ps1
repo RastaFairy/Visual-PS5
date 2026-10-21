@@ -1488,23 +1488,6 @@ function BuildNativeProject([string]$ProjectPath,[bool]$CleanBeforeBuild=$false,
       }
       WriteBuildJobLog $script:ActiveBuildLogPath ('SDK OpenGL fijado y manifiesto verificado: ' + $openglPrefix)
       $nativeWsl = ConvertToWslPath $nativeDir
-        $sdkGlPattern = BashQuote '^[[:space:]]*sdk-gl46[[:space:]]*:'
-        $sdkPattern = BashQuote '^[[:space:]]*sdk[[:space:]]*:'
-        $toolchainsWsl = ConvertToWslPath $script:Toolchains
-        $sdkCmd = 'cd ' + (BashQuote $openglWsl) + ' && export PS5_NATIVE_APP_TEMPLATE=' + (BashQuote $nativeWsl) + ' PS5HS_LOCAL_TOOLCHAINS_ONLY=1 PS5HS_TOOLCHAINS_ROOT=' + (BashQuote $toolchainsWsl) + ' && if make -qp 2>/dev/null | grep -qE ' + $sdkGlPattern + '; then make sdk-gl46; elif make -qp 2>/dev/null | grep -qE ' + $sdkPattern + '; then make sdk; else echo "No hay target SDK compatible (sdk-gl46/sdk)."; exit 72; fi'
-        WriteBuildJobLog $script:ActiveBuildLogPath 'Compilando el SDK OpenGL usando solo entradas locales; se omite make source-fetch para no recuperar dependencias externas.'
-        $sdkOutput = @(& $wsl.path -d $dist --exec bash -lc $sdkCmd 2>&1 | ForEach-Object { $line=$_.ToString(); WriteBuildJobLog $script:ActiveBuildLogPath $line; $line })
-        $sdkExit = $LASTEXITCODE
-        if ($sdkExit -ne 0 -or !(Test-Path -LiteralPath $openglSdkDir -PathType Container)) {
-          $sdkLogText = ($sdkOutput | ForEach-Object { [string]$_ }) -join [Environment]::NewLine
-          if ($sdkLogText -match 'chmod on .+\.git/config\.lock failed: Operation not permitted|could not set .core\.filemode.') {
-            throw (GetWslPermissionRepairInstructions $dist $openglDir)
-          }
-          throw "No se pudo generar PS5 OpenGL SDK (código $sdkExit). Revisa el log anterior."
-        }
-      }
-      $openglPrefix = ConvertToWslPath $openglSdkDir
-      $nativeWsl = ConvertToWslPath $nativeDir
       $toolchainsWslForProject = ConvertToWslPath $script:Toolchains
       $cmd = 'cd ' + (BashQuote $projectWsl) + ' && export PS5_NATIVE_APP_TEMPLATE=' + (BashQuote $nativeWsl) + ' PS5_OPENGL_PREFIX=' + (BashQuote $openglPrefix) + ' PS5HS_LOCAL_TOOLCHAINS_ONLY=1 PS5HS_TOOLCHAINS_ROOT=' + (BashQuote $toolchainsWslForProject) + ' USE_CCACHE=' + $ccacheValue + ' && make opengl && '
       if (Test-Path -LiteralPath (Join-Path $projectRoot 'tools/bake-fonts.sh') -PathType Leaf) { $cmd += 'bash tools/bake-fonts.sh && ' }
