@@ -366,18 +366,29 @@ function ApplyPS5HSSdkLocalOnlyPatch {
   $null = AssertPS5HSNativeModificationManifestWritable -ProjectRoot $ProjectRoot
   $original = [IO.File]::ReadAllText($path)
   if ($original.Contains('# PS5HS_LOCAL_ONLY')) {
-    if ($original -match '(?m)^[ \t]*(curl|wget)[ \t]+' -or $original -match '(?m)^url="https?://') {
-      throw 'El marcador PS5HS_LOCAL_ONLY está presente, pero el script todavía contiene un descargador remoto. No se ejecutará.'
+    if ($original -match '(?m)^[ \t]*(curl|wget)[ \t]+' -or
+        $original -match '(?m)^url="https?://' -or
+        $original -match '(?m)^urls=\(' -or
+        $original -match '(?m)^[ \t]*for url in ') {
+      throw 'El marcador PS5HS_LOCAL_ONLY está presente, pero el script todavía contiene un descargador o una lista de URLs. No se ejecutará.'
     }
     return @{ok=$true;changed=$false;alreadyPatched=$true;files=@()}
   }
-  if ($original -notmatch 'archive_sha256=' -or $original -notmatch 'manifest_sha256=' -or $original -notmatch '(?m)^url="https://github\.com/[^"]+/ps5-opengl/releases/download/v\$version/ps5-opengl-sdk-\$version\.tar\.gz"') {
+  $hasPinnedUrl = $original -match '(?m)^url="https://github\.com/[^"]+/ps5-opengl/releases/download/v\$version/ps5-opengl-sdk-\$version\.tar\.gz"'
+  $hasLegacyMirrorList = $original.Contains('# PS5HS_MIRROR_CHAIN') -and $original -match '(?m)^urls=\('
+  if ($original -notmatch 'archive_sha256=' -or $original -notmatch 'manifest_sha256=' -or (!$hasPinnedUrl -and !$hasLegacyMirrorList)) {
     throw 'No se reconoce el script fijado del SDK OpenGL. Se detiene sin modificar la plantilla.'
   }
+
   $nl = [Environment]::NewLine
-  $urlPattern = '(?m)^url="https://github\.com/[^/"]+/ps5-opengl/releases/download/v\$version/ps5-opengl-sdk-\$version\.tar\.gz"[ \t]*\r?\n?'
+  $urlPattern = '(?m)^url="https://github\.com/[^"]+/ps5-opengl/releases/download/v\$version/ps5-opengl-sdk-\$version\.tar\.gz"[ \t]*\r?\n?'
   $updated = [regex]::new($urlPattern).Replace($original,'',1)
-  $downloadPattern = '(?m)^[ \t]{4}if \[\[ ! -f \$archive \]\] \|\| ! sha256sum --check --status <<<"\$archive_sha256  \$archive"; then\r?\n[\s\S]*?^[ \t]{4}fi\r?\n'
+  $legacyUrlListPattern = '(?ms)^urls=\(\r?\n.*?^\)\r?\n?'
+  $updated = [regex]::new($legacyUrlListPattern).Replace($updated,'',1)
+
+  # Bound the replacement by the following independent archive checksum so nested
+  # if/fi blocks inside an older mirror loop cannot leave an unmatched fi.
+  $downloadPattern = '(?ms)^[ \t]{4}if \[\[ ! -f \$archive \]\][^\r\n]*; then\r?\n[\s\S]*?(?=^[ \t]{4}sha256sum --check --status <<<"\$archive_sha256  \$archive" \|\| \{)'
   $matches = [regex]::Matches($updated,$downloadPattern)
   if ($matches.Count -ne 1) {
     throw 'No se reconoce exactamente el bloque de adquisición del SDK. Se detiene sin modificar el proyecto.'
@@ -392,7 +403,10 @@ function ApplyPS5HSSdkLocalOnlyPatch {
   $updated = [regex]::new($downloadPattern).Replace($updated,($downloadBlock + $nl),1)
   $updated = [regex]::new('(?m)^#!/usr/bin/env bash\r?\n').Replace($updated,('#!/usr/bin/env bash' + $nl + '# PS5HS_LOCAL_ONLY: SDK acquisition is restricted to the local toolchain cache.' + $nl),1)
   if ($updated -notmatch 'archive_sha256=' -or $updated -notmatch 'manifest_sha256=' -or
-      $updated -match '(?m)^[ \t]*(curl|wget)[ \t]+' -or $updated -match '(?m)^url="https?://') {
+      $updated -match '(?m)^[ \t]*(curl|wget)[ \t]+' -or
+      $updated -match '(?m)^url="https?://' -or
+      $updated -match '(?m)^urls=\(' -or
+      $updated -match '(?m)^[ \t]*for url in ') {
     throw 'La adaptación local no conserva los pins o deja una descarga remota activa. No se modificará el proyecto.'
   }
   if ($updated -cne $original) {
@@ -404,7 +418,8 @@ function ApplyPS5HSSdkLocalOnlyPatch {
     return @{ok=$true;changed=$true;files=@($relative);audit=$record}
   }
   return @{ok=$true;changed=$false;files=@()}
-}function NormalizeNativeBuildFilesWithAudit {
+}
+function NormalizeNativeBuildFilesWithAudit {
   param([Parameter(Mandatory=$true)][string]$ProjectRoot,$Policy,[string]$Backend,[string]$SourceRepository='', [string]$SourceCommit='')
   $approved = NormalizePS5HSNativeModificationPolicy $Policy
   if (!$approved.normalizeBuildFiles) {
