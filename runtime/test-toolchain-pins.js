@@ -66,6 +66,9 @@ assert.match(server, /PS5HS_ALLOW_PINNED_SDK_DOWNLOAD=1/, 'solo la recuperación
 assert.match(server, /PS5_OPENGL_PREFIX=' \+ \(BashQuote \$openglPrefix\)/, 'el pipeline debe inyectar explícitamente el prefijo SDK al Makefile del título');
 assert.ok(server.includes('$legacyRequiredFiles') && server.includes('$legacyParam.titleId') && server.includes('Proyecto antiguo sin manifiesto') && server.includes('Move-Item -LiteralPath $targetCandidate -Destination $replacementBackupPath'), 'legacy visual projects must be identity-checked and backed up before regeneration');
 assert.match(openglSdkFetcher, /toolchains_root/, 'el SDK OpenGL debe resolver toolchains/ de forma explícita');
+assert.match(openglSdkFetcher, /direct_url="https:\/\/github\.com\/blackbearreloaded\/ps5-opengl\/releases\/download\/v\$version\/ps5-opengl-sdk-\$version\.tar\.gz"/, 'el SDK debe probar primero la URL directa del asset fijado para no depender de la API');
+assert.ok(openglSdkFetcher.indexOf('direct_url=') < openglSdkFetcher.indexOf('release_api='), 'la descarga debe intentar el asset fijado antes de consultar la API que puede devolver 404');
+assert.match(openglSdkFetcher, /El asset de URL fija no respondió correctamente/, 'si el asset directo no existe debe registrarse el fallo y probar la alternativa');
 assert.match(openglSdkFetcher, /api\.github\.com\/repos\/blackbearreloaded\/ps5-opengl\/releases\/tags\/v\$version/, 'el SDK debe descubrir sus assets en la API del release oficial fijado');
 assert.match(openglSdkFetcher, /name\.startswith\("ps5-opengl-sdk-"\) and name\.endswith\("\.tar\.gz"\)/, 'el resolver debe inspeccionar los nombres reales de los assets, no asumir uno');
 assert.match(openglSdkFetcher, /browser_download_url/, 'cada candidato debe venir de la metadata oficial del release');
