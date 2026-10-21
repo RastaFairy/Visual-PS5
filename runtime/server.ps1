@@ -31,7 +31,7 @@ function GetPS5HSToolchainPackRoot { return (Join-Path $script:Toolchains 'ps5-o
 function GetPS5HSToolchainPackSdkArchive {
   $pin = GetPS5HSSdkArtifactPin
   if (!$pin) { return @{present=$false;verified=$false;path='';version='';sha256='';bytes=0} }
-  $candidate = Join-Path (GetPS5HSToolchainPackRoot) (Join-Path 'ps5-opengl-sdk' ([string]$pin.file))
+  $candidate = Join-Path (GetPS5HSToolchainPackRoot) ([string]$pin.file)
   $present = (Test-Path -LiteralPath $candidate -PathType Leaf)
   $verified = $false
   $bytes = 0
@@ -390,7 +390,7 @@ function NewNativeTitle([string]$Name,[string]$TitleId,[string]$Category,[string
   $entry=$script:Catalog | Where-Object id -eq $TemplateId | Select-Object -First 1
   if(!$entry) { return @{ok=$false;message='No se encontró la plantilla en el catálogo.';output=$TemplateId} }
   try { $cloneResult = InstallRepo $entry; if(!$cloneResult.ok) { return @{ok=$false;message=$cloneResult.message;output=$cloneResult.path} } }
-  catch { return @{ok=$false;message='No se pudo descargar la plantilla upstream.';output=$_.Exception.Message} }
+  catch { return @{ok=$false;message='No se pudo validar o preparar la plantilla local.';output=$_.Exception.Message} }
   $src=Join-Path $script:Toolchains $entry.folder
   $expected=@('Makefile','src/main.cpp')
   foreach($rel in $expected) { if(!(Test-Path (Join-Path $src $rel))) { return @{ok=$false;message="La plantilla upstream está incompleta: falta $rel. Vuelve a clonar $($entry.repo).";output=$src} } }
@@ -418,14 +418,15 @@ function NewNativeTitle([string]$Name,[string]$TitleId,[string]$Category,[string
     $initializer=Join-Path $target 'tools/init-project.sh'
     $paramPath=Join-Path $target 'sce_sys/param.json'
     $targetWsl=ConvertToWslPath $target
+    $toolchainsWsl=ConvertToWslPath $script:Toolchains
     $wsl=CmdInfo 'wsl.exe'
     if(!$wsl.ok) { throw 'wsl.exe no está disponible.' }
     if ((Test-Path -LiteralPath $initializer -PathType Leaf) -and (Test-Path -LiteralPath $paramPath -PathType Leaf)) {
       $initWsl=ConvertToWslPath $initializer
       $paramWsl=ConvertToWslPath $paramPath
-      $cmd='cd '+(BashQuote $targetWsl)+' && TITLE_ID='+(BashQuote $TitleId)+' APP_NAME='+(BashQuote $Name)+' APP_CATEGORY='+(BashQuote $Category)+' CONTENT_SUFFIX='+(BashQuote $suffix)+' bash '+(BashQuote $initWsl)+' '+(BashQuote $paramWsl)
+      $cmd='cd '+(BashQuote $targetWsl)+' && export PS5HS_LOCAL_TOOLCHAINS_ONLY=1 PS5HS_TOOLCHAINS_ROOT='+(BashQuote $toolchainsWsl)+' && TITLE_ID='+(BashQuote $TitleId)+' APP_NAME='+(BashQuote $Name)+' APP_CATEGORY='+(BashQuote $Category)+' CONTENT_SUFFIX='+(BashQuote $suffix)+' bash '+(BashQuote $initWsl)+' '+(BashQuote $paramWsl)
     } else {
-      $cmd='cd '+(BashQuote $targetWsl)+' && make init TITLE_ID='+(BashQuote $TitleId)+' APP_NAME='+(BashQuote $Name)+' APP_CATEGORY='+(BashQuote $Category)
+      $cmd='cd '+(BashQuote $targetWsl)+' && export PS5HS_LOCAL_TOOLCHAINS_ONLY=1 PS5HS_TOOLCHAINS_ROOT='+(BashQuote $toolchainsWsl)+' && make init TITLE_ID='+(BashQuote $TitleId)+' APP_NAME='+(BashQuote $Name)+' APP_CATEGORY='+(BashQuote $Category)
     }
     $initInvocation = InvokePS5HSNativeTreeModificationWithAudit -ProjectRoot $target -Backend $TemplateId -Operation 'run-upstream-native-project-initializer' -PermissionKey 'allowExecuteUpstreamGenerationTools' -Policy $policy -SourceRepository $entry.repo -Action {
       $initOutput = @(& $wsl.path -d $dist --exec bash -lc $cmd 2>&1)
@@ -457,17 +458,17 @@ function NewVulkanTitle([string]$Name,[string]$TitleId,[string]$Design,$Policy=$
   $entry=$script:Catalog|Where-Object id -eq 'vulkan-template'|Select-Object -First 1
   if(!$entry) { return @{ok=$false;message='No está registrada la plantilla Vulkan.';output='vulkan-template'} }
   try { $cloneResult = InstallRepo $entry; if(!$cloneResult.ok) { return @{ok=$false;message=$cloneResult.message;output=$cloneResult.path} } }
-  catch { return @{ok=$false;message='No se pudo descargar PS5 Vulkan Template.';output=$_.Exception.Message} }
+  catch { return @{ok=$false;message='No se pudo validar la plantilla Vulkan local.';output=$_.Exception.Message} }
   $repo=Join-Path $script:Toolchains $entry.folder;$generator=Join-Path $repo 'ps5/tools/new-title.py'
-  if(!(Test-Path $generator)){return @{ok=$false;message='El checkout de PS5 Vulkan Template no contiene ps5/tools/new-title.py.';output=$repo}}
+  if(!(Test-Path $generator)){return @{ok=$false;message='La copia local de PS5 Vulkan Template no contiene ps5/tools/new-title.py.';output=$repo}}
   $st=GetStatus;if(!$st.prerequisites.wsl){return @{ok=$false;message='No hay distribución WSL inicializada.';output='Configura WSL + Debian desde Configurar entorno y realiza su primer arranque.'}}
   if(!$st.prerequisites.wslGitPython){return @{ok=$false;message='Faltan Git o Python 3 dentro de WSL.';output='Abre la distribución WSL y ejecuta la instalación de git y python3 conforme a BUILD.md/README upstream.'}}
   $dist=[string]$st.wslDistribution
   $slug=Slug $Name;$target=Join-Path $script:Workspace ($slug+'-Vulkan')
   if(Test-Path $target){return @{ok=$false;message='Ya existe la carpeta de destino. Cambia el nombre del proyecto para no sobrescribirlo.';output=$target;path=$target}}
   try {
-    $repoWsl=ConvertToWslPath $repo;$targetWsl=ConvertToWslPath $target;$generatorWsl=ConvertToWslPath $generator
-    $cmd='python3 '+(BashQuote $generatorWsl)+' '+(BashQuote $targetWsl)+' --title-id '+(BashQuote $TitleId)+' --name '+(BashQuote $Name)
+    $repoWsl=ConvertToWslPath $repo;$targetWsl=ConvertToWslPath $target;$generatorWsl=ConvertToWslPath $generator;$toolchainsWsl=ConvertToWslPath $script:Toolchains
+    $cmd='export PS5HS_LOCAL_TOOLCHAINS_ONLY=1 PS5HS_TOOLCHAINS_ROOT='+(BashQuote $toolchainsWsl)+' && python3 '+(BashQuote $generatorWsl)+' '+(BashQuote $targetWsl)+' --title-id '+(BashQuote $TitleId)+' --name '+(BashQuote $Name)
     if($Design -ne 'starter'){$cmd+=' --ui '+(BashQuote $Design)}
     $wsl=CmdInfo 'wsl.exe';if(!$wsl.ok){throw 'wsl.exe no está disponible.'}
     $generation = InvokePS5HSNativeTreeModificationWithAudit -ProjectRoot $target -Backend 'vulkan-template' -Operation 'run-vulkan-upstream-title-generator' -PermissionKey 'allowExecuteUpstreamGenerationTools' -Policy $policy -SourceRepository $entry.repo -Action {
@@ -2425,12 +2426,18 @@ function BuildSharp($P,[string]$Code,[string]$Backend,[string]$RequestedOutput='
   return @{ok=$false;message="SharpProspero terminó con código $exit o no produjo un artefacto verificable. Las salidas anteriores se han conservado.";output=$log;path=$native;artifact=$artifact;titleId=$titleId;exitCode=$exit;diagnostics=@(@{severity='error';title='Compilación SharpProspero fallida';message='Revisa la salida de build-app.ps1 y la estructura de la plantilla usada.';location='Pipeline SharpProspero'})}
 }
 function InvokeSetup([string]$Action) {
-  if($Action -eq 'diagnose'){return @{ok=$true;message='Diagnóstico completado.';output=(ConvertTo-Json (GetStatus) -Depth 10)}}
-  $messages=@();$ok=$true
-  if($Action -in @('git','all')){if(!(Get-Command winget.exe -ErrorAction SilentlyContinue)){$messages+='winget no está disponible. Instala Git for Windows manualmente desde git-scm.com.';$ok=$false}else{$o=& winget install --id Git.Git --exact --accept-package-agreements --accept-source-agreements 2>&1;$ec=$LASTEXITCODE;$messages+=($o|ForEach-Object{$_.ToString()});if($ec -ne 0){$ok=$false}}}
-  if($Action -in @('dotnet','all')){if(!(Get-Command winget.exe -ErrorAction SilentlyContinue)){$messages+='winget no está disponible. Instala App Installer desde Microsoft Store.';$ok=$false}else{$o=& winget install --id Microsoft.DotNet.SDK.10 --exact --accept-package-agreements --accept-source-agreements 2>&1;$ec=$LASTEXITCODE;$messages+=($o|ForEach-Object{$_.ToString()});if($ec -ne 0){$ok=$false}}}
-  if($Action -in @('wsl','all')){if(!(Get-Command wsl.exe -ErrorAction SilentlyContinue)){$messages+='wsl.exe no está disponible en esta versión/instalación de Windows.';$ok=$false}else{$o=& wsl.exe --install -d Debian 2>&1;$ec=$LASTEXITCODE;$messages+=($o|ForEach-Object{$_.ToString()});if($ec -ne 0){$ok=$false}}}
-  return @{ok=$ok;message=$(if($ok){'Acción de configuración terminada; vuelve a comprobar el entorno.'}else{'La configuración necesita intervención. Consulta la salida.'});output=($messages -join "`r`n")}
+  if ($Action -ne 'diagnose') {
+    return @{
+      ok = $false
+      message = 'Homebrew Studio solo diagnostica herramientas ya instaladas. No instala Git, .NET, WSL ni paquetes por Internet.'
+      output = 'Instala los requisitos del sistema manualmente fuera del IDE y vuelve a ejecutar el diagnóstico.'
+    }
+  }
+  return @{
+    ok = $true
+    message = 'Diagnóstico local completado. No se han instalado herramientas ni consultado servicios externos.'
+    output = (ConvertTo-Json (GetStatus) -Depth 10)
+  }
 }
 function ServeStatic($C,[string]$UrlPath) {
   $relative=[Uri]::UnescapeDataString($UrlPath.TrimStart('/'));if(!$relative){$relative='index.html'}
