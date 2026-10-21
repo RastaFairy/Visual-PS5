@@ -1379,11 +1379,11 @@ function BuildNativeProject([string]$ProjectPath,[bool]$CleanBeforeBuild=$false,
     } catch { return @{ok=$false;message=$_.Exception.Message;output=$_.Exception.Message;path=$projectRoot;templateId=$template} }
   } elseif ($template -eq 'hui-gl' -and $script:ActiveBuildLogPath) { WriteBuildJobLog $script:ActiveBuildLogPath 'Atlas tipográfico europeo omitido por política; se conserva la configuración upstream.' }
   if ($template -eq 'hui-gl') {
-    $mirrorPatch = ApplyPS5HSSdkLocalOnlyPatch -ProjectRoot $projectRoot -Policy $policy -Backend 'opengl-ui' -SourceRepository ([string]$profile.repository)
-    if (!$mirrorPatch.ok) { throw [string]$mirrorPatch.message }
-    if ($mirrorPatch.changed -and $script:ActiveBuildLogPath) { WriteBuildJobLog $script:ActiveBuildLogPath 'Cadena de mirrors del SDK OpenGL aplicada antes de compilar.' }
+    $localSdkPatch = ApplyPS5HSSdkLocalOnlyPatch -ProjectRoot $projectRoot -Policy $policy -Backend 'opengl-ui' -SourceRepository ([string]$profile.repository)
+    if (!$localSdkPatch.ok) { throw [string]$localSdkPatch.message }
+    if ($localSdkPatch.changed -and $script:ActiveBuildLogPath) { WriteBuildJobLog $script:ActiveBuildLogPath 'Control local-only del SDK OpenGL aplicado antes de compilar.' }
     $sdkSeed = SeedProjectOpenGlSdkCache $projectRoot
-    if ($sdkSeed.seeded -and $script:ActiveBuildLogPath) { WriteBuildJobLog $script:ActiveBuildLogPath 'SDK ps5-opengl sembrado desde el pack local en .deps/ps5-opengl (SHA-256 verificado); el build no necesitará red para el SDK.' }
+    if ($sdkSeed.seeded -and $script:ActiveBuildLogPath) { WriteBuildJobLog $script:ActiveBuildLogPath 'SDK OpenGL copiado desde toolchains/ps5-opengl-sdk a .deps/ps5-opengl y verificado con SHA-256.' }
   }
   try { $null = NormalizeNativeBuildFilesWithAudit -ProjectRoot $projectRoot -Policy $policy -Backend $template -SourceRepository ([string]$profile.repository) }
   catch { return @{ok=$false;message='No se pudieron normalizar los finales de línea de los archivos nativos con la política actual.';output=$_.Exception.Message;templateId=$template} }
@@ -2050,13 +2050,10 @@ function BuildNativeVisualProject($Body) {
     }
 
     if ($backend -eq 'opengl-ui') {
-      $mirrorPatch = ApplyPS5HSSdkLocalOnlyPatch -ProjectRoot $projectRoot -Policy $policy -Backend $backend
-      if (!$mirrorPatch.ok) { throw [string]$mirrorPatch.message } -SourceRepository 'blackbearreloaded/ps5-homebrew-ui'
-      if ($mirrorPatch.changed -and $script:ActiveBuildLogPath) { WriteBuildJobLog $script:ActiveBuildLogPath 'Cadena de mirrors del SDK OpenGL aplicada al crear el proyecto.' }
       $sdkSeed = SeedProjectOpenGlSdkCache $projectRoot
-      if ($sdkSeed.seeded -and $script:ActiveBuildLogPath) { WriteBuildJobLog $script:ActiveBuildLogPath 'SDK ps5-opengl sembrado desde el pack local en .deps/ps5-opengl (SHA-256 verificado); el build no necesitará red para el SDK.' }
+      if ($sdkSeed.seeded -and $script:ActiveBuildLogPath) { WriteBuildJobLog $script:ActiveBuildLogPath 'SDK OpenGL copiado desde toolchains/ps5-opengl-sdk y verificado con SHA-256.' }
+      elseif ($sdkSeed.reason -and $script:ActiveBuildLogPath) { WriteBuildJobLog $script:ActiveBuildLogPath ('SDK OpenGL local no preparado: ' + [string]$sdkSeed.reason) }
     }
-
     if ($backend -eq 'opengl-ui') {
       $sourcePath = Join-Path $projectRoot 'src/concepts/ps5hs_generated.cpp'
       $headerPath = Join-Path $projectRoot 'src/concepts/concepts.hpp'
