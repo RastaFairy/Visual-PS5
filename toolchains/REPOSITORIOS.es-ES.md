@@ -5,7 +5,7 @@ Repositorio que conservará las copias: [RastaFairy/Visual-PS5](https://github.c
 
 ## Regla de mantenimiento
 
-Los repositorios de esta lista se guardan como **copias de código versionadas dentro de este repositorio**, no como submódulos Git. Los archivos `.ps5hs-source.json` registran procedencia y revisión; el IDE debe utilizar primero la copia local y no exigir una carpeta `.git` anidada ni volver a clonar el upstream.
+Los repositorios de esta lista se guardan como **copias de código versionadas dentro de este repositorio**, no como submódulos Git. Los archivos `.ps5hs-source.json` registran procedencia y revisión. En tiempo de ejecución, el IDE busca únicamente bajo `toolchains/`: no clona upstream, no descarga ZIP y no intenta mirrors. El workflow de sincronización de GitHub Actions es una tarea de mantenimiento separada.
 
 Las nuevas copias se preparan con `.github/workflows/vendor-toolchains.yml` y `.github/scripts/vendor-toolchains.sh`. El resultado de cada ejecución se registra en `REPOSITORY-VENDOR-REPORT.json`. La automatización no debe sustituir una carpeta de destino que ya exista pero no tenga un manifiesto válido.
 
@@ -73,7 +73,7 @@ Las revisiones archivadas corresponden a las capturas fechadas; no hay que confu
 
 - `PS5_VulkanTemplate/.gitmodules` declara GLM y Vulkan-Assets. Sus archivos se encuentran dentro del árbol versionado bajo `PS5_VulkanTemplate/external/glm` y `PS5_VulkanTemplate/assets`; se deben conservar como archivos ordinarios, no como submódulos externos.
 - El build Vulkan usa el commit exacto `b83202be73e930050e00de0f1b4d9ec46c0391bf` de `PS5_PayloadSDK`. El snapshot dedicado evita requerir el historial Git de la carpeta ordinaria.
-- El build OpenGL usa el código local de `ps5-opengl`, pero su SDK precompilado y varias dependencias de compilación se descargan/generan aparte. El error HTTP 404 observado en la versión 1.1.19 demuestra que una release no se debe considerar disponible solo porque el repositorio fuente exista.
+- El build OpenGL usa las fuentes locales de `ps5-homebrew-ui`; el SDK precompilado debe estar bajo `toolchains/toolchain-pack/ps5-opengl-sdk/` y coincidir con el SHA-256 fijado. Si falta, el IDE detiene el build sin descargarlo. Los requisitos genéricos de Windows/WSL/Linux siguen siendo dependencias del entorno y no se presentan como fuentes vendorizadas.
 - Los archivos de licencia y avisos de terceros de cada repositorio deben permanecer al lado de su código. No se deben agregar firmware, claves privadas, juegos, ROMs, BIOS ni DLL propietarias.
 
 ## D. Criterios de aceptación de la sincronización
