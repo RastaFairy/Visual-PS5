@@ -1,17 +1,16 @@
 Fuentes y toolchains comunitarios de PS5
 
-Esta carpeta se rellena desde los paneles SDKs y Proyectos. El panel Proyectos clona los repositorios originales de GitHub con Git, historial shallow y submódulos recursivos cuando los hay; se guarda un manifiesto local de repositorio/commit. El panel SDKs mantiene el flujo específico de cada backend, incluidos ZIP de fuentes cuando es apropiado y dependencias separadas cuando el ZIP upstream no contiene submódulos.
+Las carpetas versionadas bajo toolchains/ son la única fuente de código que usa el IDE en tiempo de ejecución. El panel SDKs/Proyectos comprueba esas copias locales y no clona upstreams, no descarga ZIP y no intenta mirrors. Si falta una carpeta o una dependencia, el IDE informa de la ruta local que falta y conserva los archivos existentes.
 
-Las plantillas creadas por el IDE se copian a Documentos\PS5HomebrewStudio\Projects y ejecutan inicializadores/generadores upstream. La carpeta original toolchains no se modifica a propósito. No se incluyen firmware, claves, binarios propietarios de Sony, ROMs, BIOS ni recursos de juegos.
+Los repositorios y snapshots se versionan como archivos ordinarios; no exigen un .git anidado. Los archivos .ps5hs-source.json registran procedencia y revisión. La sincronización mediante GitHub Actions es una tarea de mantenimiento separada y no la invoca el IDE durante su uso normal.
 
-Antes de reutilizar/redistribuir, revisa la licencia, THIRD_PARTY_NOTICES, dependencias, requisitos del build y compatibilidad de firmware de la revisión exacta. El editor visual genera código para SharpProspero; las plantillas C++/OpenGL/Vulkan se generan como proyectos independientes y no son transpiladores automáticos del lienzo.
+El SDK OpenGL precompilado debe existir localmente bajo toolchains/toolchain-pack/ps5-opengl-sdk/ y verificarse por SHA-256. El script de build no lo descargará. Si falta, el build se detiene con un diagnóstico explícito. UltraPack solo puede resolver módulos Python desde wheels locales bajo toolchains/ps5-ultrapack/wheels, con pip --no-index.
+
+El modo local-only para fuentes y artefactos de toolchains no instala requisitos del sistema. WSL, compiladores, .NET y paquetes de Linux siguen siendo requisitos del entorno que deben instalarse por separado. La acción explícita de configuración del sistema es independiente del gestor de fuentes locales.
+
+No se incluyen firmware, claves, binarios propietarios de Sony, ROMs, BIOS ni recursos de juegos. Revisa licencias, THIRD_PARTY_NOTICES, requisitos del build y compatibilidad de firmware antes de reutilizar fuentes.
 
 Inventario de procedencia y estado: REPOSITORIOS.es-ES.md.
-Las carpetas fuente se guardan como snapshots ordinarios versionados en el repositorio principal; no exigen un .git anidado. El sincronizador registra cada resultado en REPOSITORY-VENDOR-REPORT.json y no sobrescribe carpetas con procedencia no coincidente.
+Las dependencias genéricas indicadas por los Makefile/scripts pueden requerir herramientas del entorno que no son código fuente del IDE. La detección local no debe presentar una fuente source-only ni una carpeta ausente como compilable.
 
-Esta copia elimina la dependencia de la cuenta upstream para las fuentes incorporadas, pero no hace offline todas las dependencias genéricas de compilación (paquetes WSL/Linux, herramientas del compilador, zlib y SDKs precompilados). Todo source-only o submódulo no disponible queda marcado explícitamente; nunca se debe confundir con un backend compilable.
-
-Los snapshots exactos recuperados de Web Archive se conservan en toolchains/archive/, separados de las entradas actuales del catálogo. Los módulos external/ps5-vulkan de FSR4 y HelixSR se incluyen como archivos normales y sus manifiestos registran el SHA y el SHA del árbol verificado. Esto no incluye DLL propietarias ni sustituye los requisitos genéricos de compilación.
-
-
-Estado de compilación: `buildableWithoutExternalRepo: true` en un manifiesto solo indica que el Gitlink de código fuente correspondiente está materializado como archivos locales y que no hace falta recuperar esa carpeta desde el upstream desaparecido. **No significa que se haya demostrado una compilación correcta.** Los manifiestos de FSR4 y HelixSR registran `buildVerified: false` mientras no se hayan ejecutado builds reales en el entorno de destino. Las dependencias genéricas, SDKs precompilados y la DLL legítima aportada por el usuario que HelixSR necesita siguen siendo requisitos separados.
+Estado de compilación: buildVerified: false significa que no consta una compilación verificada en el entorno de destino. Materializar un submódulo como archivos locales elimina la necesidad de recuperar esa carpeta desde upstream, pero no demuestra que el backend compile o funcione en hardware.
