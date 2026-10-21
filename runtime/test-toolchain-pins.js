@@ -59,6 +59,9 @@ assert.match(server, /function GetMissingProjectDependencies[\s\S]*?GetPS5HSBund
 assert.doesNotMatch(server, /make source-fetch\s*&&/, 'el IDE no debe ejecutar source-fetch durante la preparación OpenGL');
 assert.doesNotMatch(server, /&& make deps &&/, 'el IDE no debe ejecutar un target deps que recupere paquetes externos');
 assert.match(server, /PS5HS_LOCAL_TOOLCHAINS_ONLY=1/, 'el flag local-only debe propagarse al build');
+assert.doesNotMatch(server, /A Homebrew Studio OpenGL project has its own supported Windows entry point/, 'el build visual no debe saltarse la preparación compartida de dependencias solo por existir build.ps1');
+assert.match(server, /Compilando el SDK OpenGL usando solo entradas locales/, 'el pipeline debe preparar o validar el SDK compartido antes de compilar el título');
+assert.match(server, /PS5_OPENGL_PREFIX=' \+ \(BashQuote \$openglPrefix\)/, 'el pipeline debe inyectar explícitamente el prefijo SDK al Makefile del título');
 assert.ok(server.includes('$legacyRequiredFiles') && server.includes('$legacyParam.titleId') && server.includes('Proyecto antiguo sin manifiesto') && server.includes('Move-Item -LiteralPath $targetCandidate -Destination $replacementBackupPath'), 'legacy visual projects must be identity-checked and backed up before regeneration');
 assert.match(openglSdkFetcher, /toolchains_root/, 'el SDK OpenGL debe resolver toolchains/ de forma explícita');
 assert.equal(openglSdkFetcher.includes('curl'), false, 'el SDK OpenGL no debe contener un cliente HTTP');
