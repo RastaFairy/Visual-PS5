@@ -15,7 +15,7 @@
 # El pack resultante:
 #   toolchains\toolchain-pack\ps5-opengl-sdk\ps5-opengl-sdk-1.0.2.tar.gz  (binario verificado)
 #   toolchains\toolchain-pack\manifest.json                                   (inventario + origenes)
-# El IDE detecta toolchain-pack\ automaticamente: siembra el tarball en .deps\
+# El IDE detecta toolchains\toolchain-pack\ automaticamente: siembra el tarball en .deps\
 # de cada proyecto OpenGL antes de compilar y asi el build no necesita red.
 param(
   [string]$SdkTarball = '',
