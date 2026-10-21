@@ -10,7 +10,3 @@ Root source is restored from mirrors that retain the historical commits. Each Vu
 The current toolchain paths toolchains/ps5-fsr4 and toolchains/ps5-helixsr remain on later/current root revisions: FSR4 uses pin 4bb0c8b1423698a7369efc22b829bf16a99e7128; HelixSR uses 6875f21438b7e51a1377a30f2d7f77b3e0154cd6. Do not substitute one version's pin into another without updating its manifest.
 
 The external/ps5-vulkan folders are ordinary tracked files, not nested Git submodules. No proprietary DLLs, firmware, keys, games, ROMs, or BIOS are included. Build dependencies and the legitimate user-supplied DLL that HelixSR requires remain separate.
-
-## Build status
-
-The four source trees and their Vulkan subtrees are verified against the recorded Git tree SHAs. This is an integrity check, not a build result. Their manifests intentionally set `buildVerified: false` until the toolchains have been built and tested in a suitable Windows/WSL and PS5 environment. HelixSR also needs a legitimate user-supplied model DLL; it is not distributed here.
