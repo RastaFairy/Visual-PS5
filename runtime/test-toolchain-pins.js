@@ -48,7 +48,9 @@ assert.match(server, /function GetMissingProjectDependencies[\s\S]*?GetPS5HSBund
 assert.doesNotMatch(server, /make source-fetch\s*&&/, 'el IDE no debe ejecutar source-fetch durante la preparación OpenGL');
 assert.doesNotMatch(server, /&& make deps &&/, 'el IDE no debe ejecutar un target deps que recupere paquetes externos');
 assert.match(server, /PS5HS_LOCAL_TOOLCHAINS_ONLY=1/, 'el flag local-only debe propagarse al build');
-assert.match(openglSdkFetcher, /PS5HS_LOCAL_TOOLCHAINS_ONLY:-0/, 'el SDK OpenGL debe respetar el modo local-only');
+assert.match(openglSdkFetcher, /toolchains_root/, 'el SDK OpenGL debe resolver toolchains/ de forma explícita');
+assert.equal(openglSdkFetcher.includes('curl'), false, 'el SDK OpenGL no debe contener un cliente HTTP');
+assert.equal(openglSdkFetcher.includes('wget'), false, 'el SDK OpenGL no debe usar wget');
 assert.match(openglSdkFetcher, /toolchains\/ps5-opengl-sdk\/ps5-opengl-sdk-\$version\.tar\.gz/, 'el tarball del SDK solo se busca en el árbol toolchains');
 for (const [name, script] of [['OpenGL native', openGlNativeDeps], ['Native C++', nativeCppDeps], ['Vulkan', vulkanDeps]]) {
   assert.match(script, /PS5HS_LOCAL_TOOLCHAINS_ONLY:-0/, name + ' debe respetar el modo local-only');
