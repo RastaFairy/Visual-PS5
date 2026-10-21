@@ -66,8 +66,17 @@ actual_marker=""
 if [[ $actual_marker != "$expected_marker" || ! -d $sysroot/user/homebrew/lib ]]; then
     if [[ ! -f $archive ]] || ! printf '%s  %s\n' "$hash" "$archive" | sha256sum --check --strict >/dev/null 2>&1; then
         temporary="$archive.download"
-        echo "==> [pacbrew] Downloading $version prebuilt ports (about 346 MB)" >&2
-        wget -q "$url" -O "$temporary"
+        if [[ ${PS5HS_LOCAL_TOOLCHAINS_ONLY:-0} == 1 ]]; then
+            local_archive="${PS5HS_TOOLCHAINS_ROOT:-}/artifacts/ps5-payload-dev-$version.tar.gz"
+            [[ -n ${PS5HS_TOOLCHAINS_ROOT:-} && -f $local_archive ]] || {
+                echo "local-only: missing toolchains/artifacts/ps5-payload-dev-$version.tar.gz (pinned SHA-256 required)" >&2
+                exit 2
+            }
+            cp -- "$local_archive" "$temporary"
+        else
+            echo "==> [pacbrew] Downloading $version prebuilt ports (about 346 MB)" >&2
+            wget -q "$url" -O "$temporary"
+        fi
         printf '%s  %s\n' "$hash" "$temporary" | sha256sum --check --strict >&2
         mv "$temporary" "$archive"
     fi
