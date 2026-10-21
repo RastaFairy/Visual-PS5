@@ -8,6 +8,7 @@ on:
     paths:
       - '.github/scripts/vendor-toolchains.sh'
       - '.github/scripts/recover-ps5-upstream-snapshots.sh'
+      - '.github/workflows/vendor-toolchains.yml'
   workflow_dispatch:
 
 permissions:
@@ -57,4 +58,10 @@ jobs:
             exit 0
           fi
           git commit -m "Vendorizar fuentes PS5 en toolchains [skip toolchain vendor]"
+          # Another agent or a parallel validation run may have advanced this
+          # branch while source snapshots were being prepared. Rebase our
+          # generated toolchain-only commit before pushing to avoid a needless
+          # non-fast-forward failure; conflicts still fail safely for review.
+          git fetch origin "${BRANCH_NAME}"
+          git rebase "origin/${BRANCH_NAME}"
           git push origin "HEAD:${BRANCH_NAME}"
