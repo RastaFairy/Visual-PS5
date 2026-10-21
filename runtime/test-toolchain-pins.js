@@ -9,6 +9,13 @@ const policyJs = fs.readFileSync(path.join(__dirname, 'native-modification-polic
 const app = fs.readFileSync(path.join(root, 'app.js'), 'utf8');
 const packer = fs.readFileSync(path.join(__dirname, 'Build-ToolchainPack.ps1'), 'utf8');
 const pins = JSON.parse(fs.readFileSync(path.join(__dirname, 'toolchain-pins.json'), 'utf8'));
+const openglSdkFetcher = fs.readFileSync(path.join(root, 'toolchains', 'ps5-homebrew-ui', 'tools', 'fetch-opengl-sdk.sh'), 'utf8');
+const openGlNativeDeps = fs.readFileSync(path.join(root, 'toolchains', 'ps5-homebrew-ui', 'tools', 'setup-native-dependencies.sh'), 'utf8');
+const nativeCppDeps = fs.readFileSync(path.join(root, 'toolchains', 'ps5-native-app-boilerplate', 'tools', 'setup-native-dependencies.sh'), 'utf8');
+const vulkanDeps = fs.readFileSync(path.join(root, 'toolchains', 'PS5_Vulkan', 'tools', 'setup-native-dependencies.sh'), 'utf8');
+const pacbrewDeps = fs.readFileSync(path.join(root, 'toolchains', 'ps5-homebrew-ui', 'tools', 'setup-pacbrew-dependencies.sh'), 'utf8');
+const testDeps = fs.readFileSync(path.join(root, 'toolchains', 'ps5-homebrew-ui', 'tools', 'setup-test-dependencies.sh'), 'utf8');
+const openGlSources = fs.readFileSync(path.join(root, 'toolchains', 'ps5-opengl', 'tools', 'fetch-sources.py'), 'utf8');
 
 // Manifiesto de integridad: se conserva para verificar artefactos colocados localmente.
 assert.equal(pins.schema, 'ps5hs-toolchain-pins', 'toolchain-pins.json debe declarar su esquema');
@@ -40,6 +47,20 @@ assert.match(server, /function GetMissingProjectDependencies[\s\S]*?GetPS5HSBund
 assert.doesNotMatch(server, /make source-fetch\s*&&/, 'el IDE no debe ejecutar source-fetch durante la preparación OpenGL');
 assert.doesNotMatch(server, /&& make deps &&/, 'el IDE no debe ejecutar un target deps que recupere paquetes externos');
 assert.match(server, /PS5HS_LOCAL_TOOLCHAINS_ONLY=1/, 'el flag local-only debe propagarse al build');
+assert.match(openglSdkFetcher, /PS5HS_LOCAL_TOOLCHAINS_ONLY:-0/, 'el SDK OpenGL debe respetar el modo local-only');
+assert.match(openglSdkFetcher, /toolchains\/ps5-opengl-sdk\/ps5-opengl-sdk-\$version\.tar\.gz/, 'el tarball del SDK solo se busca en el árbol toolchains');
+for (const [name, script] of [['OpenGL native', openGlNativeDeps], ['Native C++', nativeCppDeps], ['Vulkan', vulkanDeps]]) {
+  assert.match(script, /PS5HS_LOCAL_TOOLCHAINS_ONLY:-0/, name + ' debe respetar el modo local-only');
+  assert.match(script, /toolchains\/artifacts\/zlib-\$zlib_version\.tar\.gz/, name + ' debe pedir zlib local si falta la caché');
+}
+assert.match(openGlNativeDeps, /toolchains\/artifacts\/ps5-payload-sdk\.zip/, 'OpenGL debe pedir el SDK fijado en toolchains/artifacts');
+assert.match(nativeCppDeps, /toolchains\/artifacts\/ps5-payload-sdk\.zip/, 'Native C++ debe pedir el SDK fijado localmente');
+assert.match(pacbrewDeps, /PS5HS_LOCAL_TOOLCHAINS_ONLY:-0/, 'PacBrew debe detenerse si falta su artefacto local');
+assert.match(pacbrewDeps, /toolchains\/artifacts\/ps5-payload-dev-\$version\.tar\.gz/, 'PacBrew debe buscar su archivo solo en toolchains/artifacts');
+assert.match(testDeps, /PS5HS_LOCAL_TOOLCHAINS_ONLY:-0/, 'GoogleTest debe respetar el modo local-only');
+assert.match(testDeps, /toolchains\/artifacts\/googletest-\$version\.tar\.gz/, 'GoogleTest debe buscar su archivo solo en toolchains/artifacts');
+assert.match(openGlSources, /PS5HS_LOCAL_TOOLCHAINS_ONLY/, 'el sincronizador de fuentes OpenGL debe bloquear recuperación de red en modo local');
+
 
 // The obsolete permission to rewrite an upstream downloader must disappear from both policies.
 assert.doesNotMatch(policy, /ApplyPS5HSSdkMirrorChainPatch|allowUpstreamSdkMirrorPatch/, 'PowerShell policy must not offer mirror patching');
