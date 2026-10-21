@@ -110,6 +110,16 @@ try {
   Assert-Condition (!$treeSnapshot.ContainsKey('build/compiler-output.bin')) 'El snapshot debe excluir artefactos de build regenerables.'
   Assert-Condition (!$treeSnapshot.ContainsKey('out-123456/title.pkg')) 'El snapshot debe excluir carpetas de salida para no hashear paquetes grandes.'
 
+  # Project paths may be nested and not exist before generation starts. The audit
+  # preflight must walk to an existing ancestor instead of requiring the immediate parent.
+  $nestedRoot = Join-Path $root 'not-created-yet/nested/generated-project'
+  $null = InvokePS5HSNativeTreeModificationWithAudit -ProjectRoot $nestedRoot -Backend 'nativecpp' -Operation 'test-nested-tree-generator' -PermissionKey 'allowExecuteUpstreamGenerationTools' -Policy $generationConsent -Action {
+    [IO.Directory]::CreateDirectory((Join-Path $nestedRoot 'src')) | Out-Null
+    [IO.File]::WriteAllText((Join-Path $nestedRoot 'src/generated.cpp'),'generated',$utf8)
+  }
+  $nestedManifest = Get-Content -LiteralPath (Join-Path $nestedRoot '.ps5hs-modifications.json') -Raw | ConvertFrom-Json
+  Assert-Condition ($nestedManifest.records.Count -eq 1) 'El preflight de auditoría debe aceptar nuevas rutas con más de un directorio padre inexistente.'
+
   # A newly generated project must record files created by the upstream generator.
   $treeRoot = Join-Path $root 'generated-project'
   $generationConsent = [pscustomobject]@{allowExecuteUpstreamGenerationTools=$true}
