@@ -3,7 +3,7 @@
 # Copyright (C) 2026 BlackBearReloaded
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# Fetches the public PS5 payload SDK and static zlib into the ignored cache.
+# Uses cached artifacts or pinned local artifacts; IDE builds must not fetch remotely.
 
 set -euo pipefail
 
@@ -50,7 +50,16 @@ mkdir -p "$cache"
 if ! $skip_sdk && [[ ! -x "$sdk/bin/prospero-lld" ]]; then
     archive="$cache/ps5-payload-sdk.zip"
     temporary="$archive.download"
-    wget -q "$sdk_url" -O "$temporary"
+    if [[ ${PS5HS_LOCAL_TOOLCHAINS_ONLY:-0} == 1 ]]; then
+        local_archive="${PS5HS_TOOLCHAINS_ROOT:-}/artifacts/ps5-payload-sdk.zip"
+        [[ -n ${PS5HS_TOOLCHAINS_ROOT:-} && -f $local_archive ]] || {
+            echo "local-only: missing toolchains/artifacts/ps5-payload-sdk.zip (pinned SHA-256 required)" >&2
+            exit 2
+        }
+        cp -- "$local_archive" "$temporary"
+    else
+        wget -q "$sdk_url" -O "$temporary"
+    fi
     printf '%s  %s\n' "$sdk_hash" "$temporary" | sha256sum --check --strict
     mv "$temporary" "$archive"
     unzip -q -o "$archive" -d "$cache"
@@ -70,23 +79,33 @@ if [[ -z $zlib_library || ! -f $zlib_root/usr/include/zlib.h ||
             sha256sum --check --strict >/dev/null 2>&1; then
         rm -f -- "$zlib_archive"
     fi
-    # Two official sources of the same archive: a mirror that answers with
-    # something else (a block page, a truncated file) is skipped, not trusted.
-    for url in "${zlib_urls[@]}"; do
-        [[ ! -f $zlib_archive ]] || break
-        if wget -q "$url" -O "$zlib_archive.download" &&
-            printf '%s  %s\n' "$zlib_hash" "$zlib_archive.download" |
-            sha256sum --check --strict >/dev/null 2>&1; then
-            mv "$zlib_archive.download" "$zlib_archive"
-        else
-            echo "==> [deps] $url did not deliver the pinned archive" >&2
-            rm -f -- "$zlib_archive.download"
+    if [[ ${PS5HS_LOCAL_TOOLCHAINS_ONLY:-0} == 1 ]]; then
+        local_archive="${PS5HS_TOOLCHAINS_ROOT:-}/artifacts/zlib-$zlib_version.tar.gz"
+        if [[ ! -f $zlib_archive ]]; then
+            [[ -n ${PS5HS_TOOLCHAINS_ROOT:-} && -f $local_archive ]] || {
+                echo "local-only: missing toolchains/artifacts/zlib-$zlib_version.tar.gz (pinned SHA-256 required)" >&2
+                exit 2
+            }
+            cp -- "$local_archive" "$zlib_archive"
         fi
-    done
-    [[ -f $zlib_archive ]] || {
-        echo "zlib $zlib_version could not be downloaded" >&2
-        exit 2
-    }
+    else
+        # The network-backed bootstrap remains available only when invoked outside the IDE.
+        for url in "${zlib_urls[@]}"; do
+            [[ ! -f $zlib_archive ]] || break
+            if wget -q "$url" -O "$zlib_archive.download" &&
+                printf '%s  %s\n' "$zlib_hash" "$zlib_archive.download" |
+                sha256sum --check --strict >/dev/null 2>&1; then
+                mv "$zlib_archive.download" "$zlib_archive"
+            else
+                echo "==> [deps] $url did not deliver the pinned archive" >&2
+                rm -f -- "$zlib_archive.download"
+            fi
+        done
+        [[ -f $zlib_archive ]] || {
+            echo "zlib $zlib_version could not be downloaded" >&2
+            exit 2
+        }
+    fi
     printf '%s  %s\n' "$zlib_hash" "$zlib_archive" | sha256sum --check --strict >/dev/null
     rm -rf -- "$zlib_source" "$zlib_root"
     tar -xzf "$zlib_archive" -C "$zlib_directory"
