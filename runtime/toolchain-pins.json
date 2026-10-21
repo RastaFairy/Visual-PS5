@@ -2,7 +2,7 @@
   "schema": "ps5hs-toolchain-pins",
   "version": 1,
   "updated": "2026-10-21",
-  "notes": "Resolución local-only: el IDE consulta snapshots y artefactos ya presentes bajo toolchains/ de RastaFairy/Visual-PS5. No clona repositorios, no descarga ZIP/releases/mirrors y no instala paquetes por Internet. Los hashes de artifacts validan los ficheros locales.",
+  "notes": "Resolución local-first: el IDE reutiliza snapshots, archives y SDKs bajo toolchains/. Para el SDK OpenGL 1.0.2 exclusivamente, si falta una copia válida, el build puede recuperar el release oficial fijado bajo autorización explícita PS5HS_ALLOW_PINNED_SDK_DOWNLOAD=1 y verificar SHA-256 antes de extraerlo. Las demás dependencias no tienen fallback de red.",
   "artifacts": {
     "ps5-opengl-sdk": {
       "usedBy": "tools/fetch-opengl-sdk.sh de los proyectos hui-gl generados",
@@ -17,7 +17,8 @@
         "sha256": "0d432edc9d648d6e0cccb4d5eb3db8484f10ba4b075b5ccf23edda3251b66360"
       },
       "localPath": "toolchains/ps5-opengl-sdk/ps5-opengl-sdk-1.0.2.tar.gz",
-      "notes": "El SDK solo se acepta desde la ruta versionada local y debe coincidir con ambos SHA-256. No hay descarga ni fallback de red."
+      "notes": "Se reutiliza el tarball local o un SDK extraído cuyo manifiesto coincide con el pin. Solo si falta ambos y PS5HS_ALLOW_PINNED_SDK_DOWNLOAD=1, se obtiene el release oficial desde url y se valida el SHA-256 30d8e51dd062739b629346102be5932728ba714bc50b1bdcdf08306c8843d9a4 antes de extraer. La excepción afecta únicamente a este SDK.",
+      "url": "https://github.com/blackbearreloaded/ps5-opengl/releases/download/v1.0.2/ps5-opengl-sdk-1.0.2.tar.gz"
     }
   }
 }
