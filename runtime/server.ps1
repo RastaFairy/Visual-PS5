@@ -1464,14 +1464,30 @@ function BuildNativeProject([string]$ProjectPath,[bool]$CleanBeforeBuild=$false,
       }
       $nativeDir = Join-Path $script:Toolchains $nativeEntry.folder
       $openglDir = Join-Path $script:Toolchains $openglEntry.folder
-      $openglSdkDir = Join-Path $openglDir 'build/sdk/ps5-opengl-gl46'
-      if (!(Test-Path -LiteralPath $openglSdkDir -PathType Container)) {
-        $mountState = GetWslDrvFsMetadataState $dist $openglDir
-        if ($mountState.applicable -and !$mountState.metadata) {
-          throw (GetWslPermissionRepairInstructions $dist $openglDir)
-        }
-        $openglWsl = ConvertToWslPath $openglDir
-        $nativeWsl = ConvertToWslPath $nativeDir
+      # The source snapshot intentionally excludes third_party/ and cannot rebuild Mesa/PSBC
+      # offline from a clean checkout. Resolve the verified 1.0.2 release SDK instead of running
+      # make sdk-gl46 against incomplete sources. Only this pinned archive can use network fallback;
+      # all native/title dependency bootstrapping remains local-only.
+      $uiEntry = $script:Catalog | Where-Object id -eq 'hui-gl' | Select-Object -First 1
+      if (!$uiEntry) { throw 'No está registrada la plantilla PS5 Homebrew UI para resolver su SDK OpenGL fijado.' }
+      $uiDir = Join-Path $script:Toolchains $uiEntry.folder
+      $sdkFetcher = Join-Path $uiDir 'tools/fetch-opengl-sdk.sh'
+      if (!(Test-Path -LiteralPath $sdkFetcher -PathType Leaf)) {
+        throw "Falta el resolvedor local del SDK OpenGL fijado: $sdkFetcher"
+      }
+      $sdkFetcherWsl = ConvertToWslPath $sdkFetcher
+      $toolchainsWsl = ConvertToWslPath $script:Toolchains
+      $sdkCmd = 'export PS5HS_LOCAL_TOOLCHAINS_ONLY=1 PS5HS_ALLOW_PINNED_SDK_DOWNLOAD=1 PS5HS_TOOLCHAINS_ROOT=' + (BashQuote $toolchainsWsl) + ' && bash ' + (BashQuote $sdkFetcherWsl)
+      WriteBuildJobLog $script:ActiveBuildLogPath 'Resolviendo SDK OpenGL 1.0.2: reutilización local verificada o recuperación única del release oficial con SHA-256 fijado; las demás dependencias siguen en modo local-only.'
+      $sdkOutput = @(& $wsl.path -d $dist --exec bash -lc $sdkCmd 2>&1 | ForEach-Object { $line=$_.ToString(); WriteBuildJobLog $script:ActiveBuildLogPath $line; $line })
+      $sdkExit = $LASTEXITCODE
+      $openglPrefix = ([string](@($sdkOutput | Select-Object -Last 1)[0])).Trim()
+      if ($sdkExit -ne 0 -or [string]::IsNullOrWhiteSpace($openglPrefix) -or $openglPrefix -notmatch '^/') {
+        $sdkLogText = ($sdkOutput | ForEach-Object { [string]$_ }) -join [Environment]::NewLine
+        throw "No se pudo resolver el SDK OpenGL 1.0.2 verificado (código $sdkExit). $sdkLogText"
+      }
+      WriteBuildJobLog $script:ActiveBuildLogPath ('SDK OpenGL fijado y manifiesto verificado: ' + $openglPrefix)
+      $nativeWsl = ConvertToWslPath $nativeDir
         $sdkGlPattern = BashQuote '^[[:space:]]*sdk-gl46[[:space:]]*:'
         $sdkPattern = BashQuote '^[[:space:]]*sdk[[:space:]]*:'
         $toolchainsWsl = ConvertToWslPath $script:Toolchains
