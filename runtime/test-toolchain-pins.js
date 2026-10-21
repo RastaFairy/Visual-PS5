@@ -63,6 +63,9 @@ assert.ok(server.includes('$legacyRequiredFiles') && server.includes('$legacyPar
 assert.match(openglSdkFetcher, /toolchains_root/, 'el SDK OpenGL debe resolver toolchains/ de forma explícita');
 assert.equal(openglSdkFetcher.includes('curl'), false, 'el SDK OpenGL no debe contener un cliente HTTP');
 assert.equal(openglSdkFetcher.includes('wget'), false, 'el SDK OpenGL no debe usar wget');
+assert.match(openglSdkFetcher, /local_prefixes=\(/, 'el SDK debe buscar una copia ya extraída dentro de toolchains/');
+assert.match(openglSdkFetcher, /actual_candidate_manifest/, 'el SDK extraído debe verificarse contra la identidad fijada');
+assert.match(openglSdkFetcher, /falta el tarball fijado o un SDK/, 'si no hay tarball ni copia extraída válida, el error debe explicitar el bloqueo offline');
 assert.match(openglSdkFetcher, /toolchains\/ps5-opengl-sdk\/ps5-opengl-sdk-\$version\.tar\.gz/, 'el tarball del SDK solo se busca en el árbol toolchains');
 for (const [name, script] of [['OpenGL native', openGlNativeDeps], ['Native C++', nativeCppDeps], ['Vulkan', vulkanDeps]]) {
   assert.match(script, /PS5HS_LOCAL_TOOLCHAINS_ONLY:-0/, name + ' debe respetar el modo local-only');
