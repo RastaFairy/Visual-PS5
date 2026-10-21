@@ -130,7 +130,7 @@ jobs:
           }
           if (-not $verified) { throw "No asset in release $env:SDK_TAG matches pinned SHA-256 $env:SDK_SHA256." }
           $sourceZip = Join-Path $env:RUNNER_TEMP 'PS5-Homebrew-Studio-source.zip'
-          git archive --format=zip --prefix=PS5-Homebrew-Studio/ --output=$sourceZip HEAD^
+          git archive --format=zip --prefix=PS5-Homebrew-Studio/ --output=$sourceZip HEAD
           if ($LASTEXITCODE -ne 0) { throw "git archive failed: $LASTEXITCODE" }
           $bundle = Join-Path $PWD 'PS5-Homebrew-Studio-offline-bundle.zip'
           Copy-Item -LiteralPath $sourceZip -Destination $bundle
