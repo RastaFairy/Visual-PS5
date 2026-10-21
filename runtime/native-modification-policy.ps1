@@ -12,7 +12,7 @@ $script:PS5HSNativeModificationKeys = @(
   'allowOpenGlRuntimeProfile',
   'allowOpenGlEuropeanAtlas',
   'allowWindowsBuildEntrypointPatch',
-  'allowUpstreamSdkMirrorPatch',
+  'allowLocalSdkCachePatch',
   'allowVulkanTemplateIntegration',
   'allowVulkanBuildHelperRestore',
   'normalizeBuildFiles',
@@ -348,82 +348,64 @@ function ApplyPS5HSWindowsBuildEntrypointPatch {
   return @{ok=$true;changed=$false;files=@()}
 }
 
-function ApplyPS5HSSdkMirrorChainPatch {
+function ApplyPS5HSSdkLocalOnlyPatch {
   param(
     [Parameter(Mandatory=$true)][string]$ProjectRoot,
     $Policy,
     [string]$Backend='opengl-ui',
-    [string]$SourceRepository='',
-    [string[]]$MirrorUrls=@()
+    [string]$SourceRepository=''
   )
   $approved = NormalizePS5HSNativeModificationPolicy $Policy
-  if (!$approved.allowUpstreamSdkMirrorPatch) {
-    if ($script:ActiveBuildLogPath) { WriteBuildJobLog $script:ActiveBuildLogPath 'Cadena de mirrors del SDK OpenGL omitida por política: si el upstream sigue caído, tools/fetch-opengl-sdk.sh devolvera 404 y el build se detendra sin modificar fuentes.' }
-    return @{ok=$true;changed=$false;skipped=$true;files=@()}
+  if (!$approved.allowLocalSdkCachePatch) {
+    $message = 'Compilación detenida: no se autorizó aplicar el control SDK LOCAL-ONLY. No se permitirá que tools/fetch-opengl-sdk.sh descargue desde Internet.'
+    if ($script:ActiveBuildLogPath) { WriteBuildJobLog $script:ActiveBuildLogPath $message }
+    return @{ok=$false;changed=$false;skipped=$true;message=$message;files=@()}
   }
   $path = Join-Path $ProjectRoot 'tools/fetch-opengl-sdk.sh'
   if (!(Test-Path -LiteralPath $path -PathType Leaf)) {
-    if ($script:ActiveBuildLogPath) { WriteBuildJobLog $script:ActiveBuildLogPath 'Parche de mirrors del SDK omitido: el proyecto no contiene tools/fetch-opengl-sdk.sh.' }
-    return @{ok=$true;changed=$false;skipped=$true;reason='fetch-opengl-sdk.sh no existe';files=@()}
-  }
-  $urls = @($MirrorUrls | Where-Object { ![string]::IsNullOrWhiteSpace($_) })
-  if ($urls.Count -lt 2) {
-    $urls = @(
-      'https://github.com/blackbearreloaded/ps5-opengl/releases/download/v1.0.2/ps5-opengl-sdk-1.0.2.tar.gz',
-      'https://github.com/LedyBacer/ps5-opengl/releases/download/v1.0.2/ps5-opengl-sdk-1.0.2.tar.gz',
-      'https://github.com/darkxex/ps5-opengl/releases/download/v1.0.2/ps5-opengl-sdk-1.0.2.tar.gz'
-    )
+    $message = 'Falta tools/fetch-opengl-sdk.sh; no se puede verificar el SDK local y se detiene la operación.'
+    if ($script:ActiveBuildLogPath) { WriteBuildJobLog $script:ActiveBuildLogPath $message }
+    return @{ok=$false;changed=$false;skipped=$true;message=$message;files=@()}
   }
   $null = AssertPS5HSNativeModificationManifestWritable -ProjectRoot $ProjectRoot
   $original = [IO.File]::ReadAllText($path)
-  if ($original.Contains('# PS5HS_MIRROR_CHAIN')) {
+  if ($original.Contains('# PS5HS_LOCAL_ONLY')) {
     return @{ok=$true;changed=$false;alreadyPatched=$true;files=@()}
   }
+  if ($original -notmatch '(?m)^archive_sha256=' -or $original -notmatch '(?m)^manifest_sha256=') {
+    throw 'No se reconocen los pins SHA-256 del SDK OpenGL; no se modifica la plantilla ni se permite una descarga alternativa.'
+  }
   $updated = $original
-  $nl = "`n"
-  if ($original -match "`r`n") { $nl = "`r`n" }
-  $urlPattern = '(?m)^url="https://github\.com/[^/"]+/ps5-opengl/releases/download/v\$version/ps5-opengl-sdk-\$version\.tar\.gz"\s*$'
-  $chainLines = @('# PS5HS_MIRROR_CHAIN: upstream primero, mirrors verificados despues. Los pins de integridad no cambian.')
-  foreach ($u in $urls) { $chainLines += ('  "' + $u + '"') }
-  $chainBlock = 'urls=(' + $nl + (($chainLines) -join $nl) + $nl + ')'
+  $nl = [Environment]::NewLine
+  if ($original.Contains([char]13 + [char]10)) { $nl = [char]13 + [char]10 }
+  $urlPattern = '(?m)^url="https://github\.com/[^/"]+/ps5-opengl/releases/download/v\$version/ps5-opengl-sdk-\$version\.tar\.gz"\s*\r?$'
   if ([regex]::IsMatch($updated,$urlPattern)) {
-    $urlRegex = [regex]::new($urlPattern)
-    $updated = $urlRegex.Replace($updated,{ param($m) $chainBlock },1)
-  } elseif ($updated -notmatch '(?m)^urls=\(') {
-    throw 'No se reconoce la linea url= del pin del SDK en tools/fetch-opengl-sdk.sh. Se detiene sin modificar la plantilla.'
+    $updated = [regex]::Replace($updated,$urlPattern,'# PS5HS_LOCAL_ONLY: no se configuran URLs de descarga externas.',1)
+  } elseif ($updated -notmatch '(?m)^# PS5HS_LOCAL_ONLY:') {
+    throw 'No se reconoce la URL del SDK fijado en tools/fetch-opengl-sdk.sh; se detiene para evitar una descarga implícita.'
   }
-  $curlPattern = '(?m)^([ \t]*)curl -fL --retry 3 -o "\$archive\.part" "\$url"[ \t]*$'
-  $curlTemplate = @(
-    '@@I@@ok=0',
-    '@@I@@for url in "${urls[@]}"; do',
-    '@@I@@    rm -f -- "$archive.part"',
-    '@@I@@    if curl -fL --retry 3 -o "$archive.part" "$url"; then ok=1; break; fi',
-    '@@I@@    printf ''==> [opengl] Mirror no disponible, probando el siguiente: %s\n'' "$url" >&2',
-    '@@I@@    rm -f -- "$archive.part"',
-    '@@I@@done',
-    '@@I@@if [[ $ok -ne 1 ]]; then',
-    '@@I@@    echo ''ps5-opengl SDK: todos los mirrors fijados fallaron'' >&2',
-    '@@I@@    exit 2',
-    '@@I@@fi'
-  )
-  $curlMatches = [regex]::Matches($updated,$curlPattern)
-  if ($curlMatches.Count -eq 1) {
-    $indent = $curlMatches[0].Groups[1].Value
-    $replacement = (($curlTemplate | ForEach-Object { $_.Replace('@@I@@',$indent) }) -join $nl)
-    $curlRegex = [regex]::new($curlPattern)
-    $updated = $curlRegex.Replace($updated,{ param($m) $replacement },1)
-  } elseif ($updated -notmatch '(?m)^[ \t]*for url in "\$\{urls\[@\]\}"') {
-    throw 'No se reconoce la invocacion curl de descarga del SDK en tools/fetch-opengl-sdk.sh. Se detiene sin modificar la plantilla.'
+  $downloadPattern = '(?ms)^    if \[\[ ! -f \$archive \]\] \|\| ! sha256sum --check --status <<<"\$archive_sha256  \$archive"; then\r?\n.*?^    fi\r?\n'
+  $downloadReplacement = @(
+    '    if [[ ! -f $archive ]]; then',
+    '        echo "ps5-opengl SDK ausente del caché local; Homebrew Studio no descarga dependencias." >&2',
+    '        echo "Copia el archivo verificado a toolchains/ps5-opengl-sdk/ para que el IDE lo prepare." >&2',
+    '        exit 2',
+    '    fi'
+  ) -join $nl
+  if ([regex]::IsMatch($updated,$downloadPattern)) {
+    $updated = [regex]::Replace($updated,$downloadPattern,[System.Text.RegularExpressions.MatchEvaluator]{ param($m) $downloadReplacement },1)
+  } elseif ($updated -notmatch '(?m)^\s{4}echo "ps5-opengl SDK ausente del caché local;') {
+    throw 'No se reconoce el bloque de descarga del SDK; se detiene sin modificar fuentes.'
   }
-  if ($updated -notmatch 'archive_sha256=' -or $updated -notmatch 'manifest_sha256=') {
-    throw 'El script del SDK ya no declara sus pins de integridad; no se aplica la cadena de mirrors sin poder verificar el archivo.'
+  if ($updated -match '(?m)^\s*curl\s' -or $updated -match '(?m)^\s*wget\s' -or $updated -match 'https?://') {
+    throw 'El control local-only no pudo eliminar todos los accesos HTTP del script de SDK; se cancela la modificación.'
   }
   if ($updated -cne $original) {
     $relative = 'tools/fetch-opengl-sdk.sh'
     $before = GetPS5HSNativeFileHashes -ProjectRoot $ProjectRoot -RelativePaths @($relative)
     [IO.File]::WriteAllText($path,$updated,(New-Object System.Text.UTF8Encoding($false)))
-    $record = AddPS5HSNativeModificationRecord -ProjectRoot $ProjectRoot -Backend $Backend -Operation 'apply-sdk-mirror-chain' -PermissionKey 'allowUpstreamSdkMirrorPatch' -RelativePaths @($relative) -BeforeHashes $before -Policy $approved -SourceRepository $SourceRepository
-    if ($script:ActiveBuildLogPath) { WriteBuildJobLog $script:ActiveBuildLogPath ('Modificacion autorizada y auditada: tools/fetch-opengl-sdk.sh usa la cadena de mirrors verificada (' + $urls.Count + ' URLs; pins SHA-256 intactos).') }
+    $record = AddPS5HSNativeModificationRecord -ProjectRoot $ProjectRoot -Backend $Backend -Operation 'enforce-sdk-local-only' -PermissionKey 'allowLocalSdkCachePatch' -RelativePaths @($relative) -BeforeHashes $before -Policy $approved -SourceRepository $SourceRepository
+    if ($script:ActiveBuildLogPath) { WriteBuildJobLog $script:ActiveBuildLogPath 'Modificación autorizada y auditada: el SDK OpenGL solo usa el caché local y verifica SHA-256; no hay descarga externa.' }
     return @{ok=$true;changed=$true;files=@($relative);audit=$record}
   }
   return @{ok=$true;changed=$false;files=@()}
