@@ -34,7 +34,8 @@ assert.match(server, /function GetPS5HSBundledToolchainInfo\(/, 'el servidor deb
 assert.match(server, /\$sourceInfo\.vendoredSnapshot/, 'la copia debe declarar vendoredSnapshot');
 assert.match(server, /\$sourceInfo\.vendorRepository/, 'el manifiesto debe identificar al repositorio que versiona la copia');
 assert.match(server, /function InstallRepo\(\$Entry\)/, 'el instalador debe usar la resolución local');
-assert.match(server, /No se ha consultado GitHub, probado mirrors ni descargado nada/, 'si falta una copia, se debe explicar que no hay fallback de red');
+assert.match(server, /No se ha consultado GitHub, probado mirrors ni descargado/, 'si falta una copia, se debe explicar que no hay fallback de red');
+assert.doesNotMatch(server, /winget install|--install -d Debian/, 'el asistente solo puede diagnosticar; no instala requisitos por Internet');
 const installerStart = server.indexOf('function InstallRepo($Entry) {');
 const installerEnd = server.indexOf('function BashQuote([string]$Text) {', installerStart);
 assert.ok(installerStart >= 0 && installerEnd > installerStart, 'el instalador local debe estar delimitado');
@@ -76,6 +77,11 @@ assert.match(packer, /Get-FileHash -LiteralPath \$Path -Algorithm SHA256/, 'the 
 assert.match(packer, /toolchain-pins\.json/, 'the packer must read the pin manifest');
 assert.match(packer, /manifest\.json/, 'the packer must emit a pack manifest');
 assert.match(packer, /Compress-Archive/, 'the packer must support its optional ZIP backup');
+assert.match(packer, /networkAccess = \$false/, 'the packer must declare that it does not access the network');
+assert.match(packer, /toolchains\\ps5-opengl-sdk/, 'the SDK must be read from toolchains/');
+assert.equal(packer.includes('Invoke-WebRequest'), false, 'the packer must not download archives');
+assert.equal(packer.includes('https://'), false, 'the packer must not contain remote URLs');
+assert.equal(packer.includes('.urls'), false, 'the packer must not iterate remote URL lists');
 assert.doesNotMatch(packer, /Remove-Item.*toolchains/, 'the packer must never delete toolchains');
 
 console.log('PASS toolchain pins: local-only source resolution, vendor manifests, integrity pins, policy and packer contracts.');
