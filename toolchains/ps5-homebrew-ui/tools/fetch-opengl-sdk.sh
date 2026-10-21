@@ -60,19 +60,65 @@ else
     }
     download_tmp="$archive.download.$$"
     trap 'rm -f -- "$download_tmp"' EXIT
-    echo "SDK OpenGL $version ausente localmente; consultando assets del release oficial y comparando SHA-256." >&2
-    release_api="https://api.github.com/repos/blackbearreloaded/ps5-opengl/releases/tags/v$version"
-    release_json="$cache/release-v$version.json"
+    direct_url="https://github.com/blackbearreloaded/ps5-opengl/releases/download/v$version/ps5-opengl-sdk-$version.tar.gz"
+    verified=false
+
+    # Prefer the deterministic, pinned release URL. The GitHub API endpoint has
+    # returned 404 in some environments even while release/CDN links are indexed;
+    # resolve the known archive first, then verify bytes before using them.
+    echo "SDK OpenGL $version ausente localmente; intentando el asset fijado del release oficial." >&2
+    rm -f -- "$download_tmp"
     if command -v curl >/dev/null 2>&1; then
-        curl --fail --location --silent --show-error --retry 3 --connect-timeout 20 --max-time 90 \
-            -H 'Accept: application/vnd.github+json' "$release_api" --output "$release_json"
+        if curl --fail --location --silent --show-error --retry 2 --connect-timeout 20 --max-time 1800 \
+            "$direct_url" --output "$download_tmp"; then
+            if printf '%s  %s\\n' "$archive_sha256" "$download_tmp" | sha256sum --check --strict --status; then
+                mv -- "$download_tmp" "$archive"
+                verified=true
+            else
+                echo "El asset de URL fija no coincide con el SHA-256 esperado; se descarta." >&2
+                rm -f -- "$download_tmp"
+            fi
+        else
+            rm -f -- "$download_tmp"
+            echo "El asset de URL fija no respondió correctamente; se probará la API del release como alternativa." >&2
+        fi
     elif command -v wget >/dev/null 2>&1; then
-        wget --quiet --tries=3 --timeout=30 --output-document="$release_json" "$release_api"
+        if wget --quiet --tries=2 --timeout=30 --output-document="$download_tmp" "$direct_url"; then
+            if printf '%s  %s\\n' "$archive_sha256" "$download_tmp" | sha256sum --check --strict --status; then
+                mv -- "$download_tmp" "$archive"
+                verified=true
+            else
+                echo "El asset de URL fija no coincide con el SHA-256 esperado; se descarta." >&2
+                rm -f -- "$download_tmp"
+            fi
+        else
+            rm -f -- "$download_tmp"
+            echo "El asset de URL fija no respondió correctamente; se probará la API del release como alternativa." >&2
+        fi
     else
-        echo "No hay curl ni wget para consultar el release fijado del SDK OpenGL." >&2
+        echo "No hay curl ni wget para descargar el SDK OpenGL fijado." >&2
         exit 2
     fi
-    mapfile -t archive_urls < <(python3 - "$release_json" <<'PY'
+
+    # Some deployments or mirrors may rename the archive; only then use the API
+    # to discover the release asset URL. The downloaded file must still match the
+    # exact SHA-256 pin, so a different/renamed release is never accepted.
+    if [[ $verified != true ]]; then
+        echo "Consultando API de GitHub para enumerar los assets del release v$version." >&2
+        release_api="https://api.github.com/repos/blackbearreloaded/ps5-opengl/releases/tags/v$version"
+        release_json="$cache/release-v$version.json"
+        if command -v curl >/dev/null 2>&1; then
+            if ! curl --fail --location --silent --show-error --retry 2 --connect-timeout 20 --max-time 90 \
+                -H 'Accept: application/vnd.github+json' "$release_api" --output "$release_json"; then
+                echo "La API del release no está disponible; la URL fija tampoco entregó el SDK." >&2
+            fi
+        elif command -v wget >/dev/null 2>&1; then
+            if ! wget --quiet --tries=2 --timeout=30 --output-document="$release_json" "$release_api"; then
+                echo "La API del release no está disponible; la URL fija tampoco entregó el SDK." >&2
+            fi
+        fi
+        if [[ -s $release_json ]]; then
+            mapfile -t archive_urls < <(python3 - "$release_json" <<'PY'
 import json, sys
 with open(sys.argv[1], encoding="utf-8") as source:
     release = json.load(source)
@@ -83,35 +129,36 @@ for asset in release.get("assets", []):
         print(url)
 PY
 )
-    if (( ${#archive_urls[@]} == 0 )); then
-        echo "El release v$version no publica ningún asset ps5-opengl-sdk-*.tar.gz." >&2
-        python3 - "$release_json" >&2 <<'PY'
+            if (( ${#archive_urls[@]} == 0 )); then
+                echo "El release v$version no publica ningún asset ps5-opengl-sdk-*.tar.gz." >&2
+                python3 - "$release_json" >&2 <<'PY'
 import json, sys
 with open(sys.argv[1], encoding="utf-8") as source:
     release = json.load(source)
 print("Assets disponibles: " + ", ".join(a.get("name", "<sin nombre>") for a in release.get("assets", [])))
 PY
-        exit 2
+            fi
+            for asset_url in "${archive_urls[@]}"; do
+                rm -f -- "$download_tmp"
+                echo "Verificando asset oficial alternativo: ${asset_url##*/}" >&2
+                if command -v curl >/dev/null 2>&1; then
+                    curl --fail --location --silent --show-error --retry 2 --connect-timeout 20 --max-time 1800 \
+                        "$asset_url" --output "$download_tmp" || continue
+                else
+                    wget --quiet --tries=2 --timeout=30 --output-document="$download_tmp" "$asset_url" || continue
+                fi
+                if printf '%s  %s\\n' "$archive_sha256" "$download_tmp" | sha256sum --check --strict --status; then
+                    mv -- "$download_tmp" "$archive"
+                    verified=true
+                    break
+                fi
+                echo "SHA-256 distinto; se descarta este asset sin extraerlo." >&2
+            done
+        fi
     fi
-    verified=false
-    for asset_url in "${archive_urls[@]}"; do
-        rm -f -- "$download_tmp"
-        echo "Verificando asset oficial: ${asset_url##*/}" >&2
-        if command -v curl >/dev/null 2>&1; then
-            curl --fail --location --silent --show-error --retry 3 --connect-timeout 20 --max-time 1800 \
-                "$asset_url" --output "$download_tmp" || continue
-        else
-            wget --quiet --tries=3 --timeout=30 --output-document="$download_tmp" "$asset_url" || continue
-        fi
-        if printf '%s  %s\n' "$archive_sha256" "$download_tmp" | sha256sum --check --strict --status; then
-            mv -- "$download_tmp" "$archive"
-            verified=true
-            break
-        fi
-        echo "SHA-256 distinto; se descarta este asset sin extraerlo." >&2
-    done
+
     if [[ $verified != true ]]; then
-        echo "No se encontró un asset del release v$version con SHA-256 $archive_sha256." >&2
+        echo "No se pudo obtener ningún asset del release v$version con SHA-256 $archive_sha256." >&2
         rm -f -- "$download_tmp"
         exit 2
     fi
