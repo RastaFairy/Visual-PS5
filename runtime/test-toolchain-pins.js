@@ -71,7 +71,7 @@ assert.match(openglSdkFetcher, /archive_sha256=30d8e51dd062739b629346102be593272
 assert.match(openglSdkFetcher, /PS5HS_ALLOW_PINNED_SDK_DOWNLOAD:-0/, 'la descarga se activa mediante un permiso explícito');
 assert.match(openglSdkFetcher, /sha256sum --check --strict --status/, 'el archivo se debe verificar antes de extraerlo o promoverlo');
 assert.match(openglSdkFetcher, /local_prefixes=\(/, 'el SDK debe buscar una copia ya extraída dentro de toolchains/');
-assert.match(openglSdkFetcher, /function verify_prefix\(\)/, 'el SDK extraído debe verificarse contra la identidad fijada');
+assert.match(openglSdkFetcher, /verify_prefix\(\) \{/, 'el SDK extraído debe verificarse contra la identidad fijada');
 assert.match(openglSdkFetcher, /manifest_sha256=0d432edc9d648d6e0cccb4d5eb3db8484f10ba4b075b5ccf23edda3251b66360/, 'el manifiesto del SDK debe coincidir con el pin exacto');
 assert.match(openglSdkFetcher, /falta el tarball fijado o un SDK/, 'si no hay tarball ni copia extraída válida, el error debe explicitar el bloqueo offline');
 assert.match(openglSdkFetcher, /archive="\$toolchains_root\/ps5-opengl-sdk\/ps5-opengl-sdk-\$version\.tar\.gz"/, 'el tarball del SDK se guarda una sola vez bajo la raíz local toolchains configurada');
