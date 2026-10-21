@@ -1477,8 +1477,8 @@ function BuildNativeProject([string]$ProjectPath,[bool]$CleanBeforeBuild=$false,
       }
       $sdkFetcherWsl = ConvertToWslPath $sdkFetcher
       $toolchainsWsl = ConvertToWslPath $script:Toolchains
-      $sdkCmd = 'export PS5HS_LOCAL_TOOLCHAINS_ONLY=1 PS5HS_ALLOW_PINNED_SDK_DOWNLOAD=1 PS5HS_TOOLCHAINS_ROOT=' + (BashQuote $toolchainsWsl) + ' && bash ' + (BashQuote $sdkFetcherWsl)
-      WriteBuildJobLog $script:ActiveBuildLogPath 'Resolviendo SDK OpenGL 1.0.2: reutilización local verificada o recuperación única del release oficial con SHA-256 fijado; las demás dependencias siguen en modo local-only.'
+      $sdkCmd = 'export PS5HS_LOCAL_TOOLCHAINS_ONLY=1 PS5HS_TOOLCHAINS_ROOT=' + (BashQuote $toolchainsWsl) + ' && bash ' + (BashQuote $sdkFetcherWsl)
+      WriteBuildJobLog $script:ActiveBuildLogPath 'Resolviendo SDK OpenGL 1.0.2 desde el archivo local empaquetado; se verifica SHA-256 del archivo y manifiesto interno. No se consulta Internet.'
       $sdkOutput = @(& $wsl.path -d $dist --exec bash -lc $sdkCmd 2>&1 | ForEach-Object { $line=$_.ToString(); WriteBuildJobLog $script:ActiveBuildLogPath $line; $line })
       $sdkExit = $LASTEXITCODE
       $openglPrefix = ([string](@($sdkOutput | Select-Object -Last 1)[0])).Trim()
