@@ -17,6 +17,17 @@ const pacbrewDeps = fs.readFileSync(path.join(root, 'toolchains', 'ps5-homebrew-
 const testDeps = fs.readFileSync(path.join(root, 'toolchains', 'ps5-homebrew-ui', 'tools', 'setup-test-dependencies.sh'), 'utf8');
 const openGlSources = fs.readFileSync(path.join(root, 'toolchains', 'ps5-opengl', 'tools', 'fetch-sources.py'), 'utf8');
 
+const windowsZipSafeFreeBsdHeaders = [
+  '_semaphore.h', 'aio.h', 'errno.h', 'fcntl.h', 'float.h',
+  'floatingpoint.h', 'linker_set.h', 'ncurses.h', 'poll.h', 'sched.h',
+  'stdarg.h', 'stdatomic.h', 'stdint.h', 'syslog.h', 'ucontext.h'
+];
+const freebsdIncludeDir = path.join(root, 'toolchains', 'PS5_PayloadSDK-pinned-b83202be', 'include', 'freebsd');
+for (const name of windowsZipSafeFreeBsdHeaders) {
+  const header = fs.readFileSync(path.join(freebsdIncludeDir, name), 'utf8');
+  assert.ok(header.length > 100, `Windows source ZIP must contain the actual ${name} header, not a symbolic-link placeholder`);
+}
+
 // Manifiesto de integridad: se conserva para verificar artefactos colocados localmente.
 assert.equal(pins.schema, 'ps5hs-toolchain-pins', 'toolchain-pins.json debe declarar su esquema');
 assert.equal(pins.version, 1, 'la version del manifiesto debe ser 1');
@@ -48,6 +59,7 @@ assert.match(server, /function GetMissingProjectDependencies[\s\S]*?GetPS5HSBund
 assert.doesNotMatch(server, /make source-fetch\s*&&/, 'el IDE no debe ejecutar source-fetch durante la preparación OpenGL');
 assert.doesNotMatch(server, /&& make deps &&/, 'el IDE no debe ejecutar un target deps que recupere paquetes externos');
 assert.match(server, /PS5HS_LOCAL_TOOLCHAINS_ONLY=1/, 'el flag local-only debe propagarse al build');
+assert.ok(server.includes('$legacyRequiredFiles') && server.includes('$legacyParam.titleId') && server.includes('Proyecto antiguo sin manifiesto') && server.includes('Move-Item -LiteralPath $targetCandidate -Destination $replacementBackupPath'), 'legacy visual projects must be identity-checked and backed up before regeneration');
 assert.match(openglSdkFetcher, /toolchains_root/, 'el SDK OpenGL debe resolver toolchains/ de forma explícita');
 assert.equal(openglSdkFetcher.includes('curl'), false, 'el SDK OpenGL no debe contener un cliente HTTP');
 assert.equal(openglSdkFetcher.includes('wget'), false, 'el SDK OpenGL no debe usar wget');

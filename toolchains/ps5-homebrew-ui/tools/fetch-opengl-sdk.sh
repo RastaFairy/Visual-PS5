@@ -24,20 +24,25 @@ mkdir -p "$cache"
 # under the repository's toolchains/ tree and match the pinned SHA-256.
 toolchains_root="${PS5HS_TOOLCHAINS_ROOT:-$(dirname "$root")}"
 local_archive="$toolchains_root/ps5-opengl-sdk/ps5-opengl-sdk-$version.tar.gz"
-[[ -f $local_archive ]] || {
-    echo "local-only: falta toolchains/ps5-opengl-sdk/ps5-opengl-sdk-$version.tar.gz; no se consulta Internet" >&2
-    exit 2
-}
-sha256sum --check --strict <<<"$archive_sha256  $local_archive" || {
-    echo "ps5-opengl SDK archive checksum mismatch in toolchains/: $local_archive" >&2
-    exit 2
-}
 
 if [[ ! -f $prefix/manifest.sha256 ]]; then
-    cp -- "$local_archive" "$archive.part"
-    mv -- "$archive.part" "$archive"
+    # A previously extracted SDK is reusable only via the manifest checks below.
+    # A cached archive is reusable only if it matches the pinned digest. Otherwise,
+    # seed it from the versioned toolchains tree; never use HTTP fallbacks.
+    if [[ ! -f $archive ]] || ! sha256sum --check --status <<<"$archive_sha256  $archive"; then
+        [[ -f $local_archive ]] || {
+            echo "local-only: falta toolchains/ps5-opengl-sdk/ps5-opengl-sdk-$version.tar.gz; no se consulta Internet" >&2
+            exit 2
+        }
+        sha256sum --check --strict <<<"$archive_sha256  $local_archive" || {
+            echo "ps5-opengl SDK archive checksum mismatch in toolchains/: $local_archive" >&2
+            exit 2
+        }
+        cp -- "$local_archive" "$archive.part"
+        mv -- "$archive.part" "$archive"
+    fi
     sha256sum --check --status <<<"$archive_sha256  $archive" || {
-        echo "ps5-opengl SDK archive checksum mismatch after local copy" >&2
+        echo "ps5-opengl SDK archive checksum mismatch" >&2
         exit 2
     }
     rm -rf -- "$extracted"
