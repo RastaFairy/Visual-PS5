@@ -220,7 +220,7 @@ function GetStatus {
       sourceHref=('https://github.com/'+$e.repo);
       installed=$installed;bundled=[bool]$localSource.bundled;sourceOnly=$sourceOnly;
       buildVerified=$buildVerified;buildStatus=$buildStatus;
-      buildable=(!$sourceOnly);path=$p;sourceCommit=[string]$localSource.commit;
+      buildable=([bool]$localSource.installed -and !$sourceOnly);path=$p;sourceCommit=[string]$localSource.commit;
       upstreamUnavailable=$upstreamUnavailable;mirrorAlternatives=$mirrorAlternatives
     }
   }
