@@ -17,8 +17,8 @@
         "sha256": "0d432edc9d648d6e0cccb4d5eb3db8484f10ba4b075b5ccf23edda3251b66360"
       },
       "localPath": "toolchains/ps5-opengl-sdk/ps5-opengl-sdk-1.0.2.tar.gz",
-      "notes": "Se reutiliza el tarball local o un SDK extraído cuyo manifiesto coincide con el pin. Solo si falta ambos y PS5HS_ALLOW_PINNED_SDK_DOWNLOAD=1, se obtiene el release oficial desde url y se valida el SHA-256 30d8e51dd062739b629346102be5932728ba714bc50b1bdcdf08306c8843d9a4 antes de extraer. La excepción afecta únicamente a este SDK.",
-      "url": "https://github.com/blackbearreloaded/ps5-opengl/releases/download/v1.0.2/ps5-opengl-sdk-1.0.2.tar.gz"
+      "notes": "Se reutiliza el tarball local o un SDK extraído cuyo manifiesto coincide con el pin. Solo si falta ambos y PS5HS_ALLOW_PINNED_SDK_DOWNLOAD=1, se consulta releaseApi para enumerar los assets reales, descargando solo candidatos ps5-opengl-sdk-*.tar.gz. Ningún candidato se acepta hasta que su SHA-256 coincida con 30d8e51dd062739b629346102be5932728ba714bc50b1bdcdf08306c8843d9a4. La excepción afecta únicamente a este SDK.",
+      "releaseApi": "https://api.github.com/repos/blackbearreloaded/ps5-opengl/releases/tags/v1.0.2"
     }
   }
 }
