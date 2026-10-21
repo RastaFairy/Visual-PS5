@@ -13,7 +13,6 @@ root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 version=1.0.2
 archive_sha256=30d8e51dd062739b629346102be5932728ba714bc50b1bdcdf08306c8843d9a4
 manifest_sha256=0d432edc9d648d6e0cccb4d5eb3db8484f10ba4b075b5ccf23edda3251b66360
-archive_url="https://github.com/blackbearreloaded/ps5-opengl/releases/download/v${version}/ps5-opengl-sdk-${version}.tar.gz"
 
 toolchains_root="${PS5HS_TOOLCHAINS_ROOT:-$(dirname "$root")}"
 toolchains_root=$(cd -- "$toolchains_root" && pwd)
@@ -61,20 +60,61 @@ else
     }
     download_tmp="$archive.download.$$"
     trap 'rm -f -- "$download_tmp"' EXIT
-    echo "SDK OpenGL $version ausente localmente; recuperando release oficial con SHA-256 fijado." >&2
+    echo "SDK OpenGL $version ausente localmente; consultando assets del release oficial y comparando SHA-256." >&2
+    release_api="https://api.github.com/repos/blackbearreloaded/ps5-opengl/releases/tags/v$version"
+    release_json="$cache/release-v$version.json"
     if command -v curl >/dev/null 2>&1; then
-        curl --fail --location --silent --show-error --retry 3 --connect-timeout 20 --max-time 1800 "$archive_url" --output "$download_tmp"
+        curl --fail --location --silent --show-error --retry 3 --connect-timeout 20 --max-time 90 \
+            -H 'Accept: application/vnd.github+json' "$release_api" --output "$release_json"
     elif command -v wget >/dev/null 2>&1; then
-        wget --quiet --tries=3 --timeout=30 --output-document="$download_tmp" "$archive_url"
+        wget --quiet --tries=3 --timeout=30 --output-document="$release_json" "$release_api"
     else
-        echo "No hay curl ni wget para obtener el SDK OpenGL fijado." >&2
+        echo "No hay curl ni wget para consultar el release fijado del SDK OpenGL." >&2
         exit 2
     fi
-    if ! printf '%s  %s\n' "$archive_sha256" "$download_tmp" | sha256sum --check --strict --status; then
-        echo "ps5-opengl SDK downloaded archive checksum mismatch; it was discarded." >&2
+    mapfile -t archive_urls < <(python3 - "$release_json" <<'PY'
+import json, sys
+with open(sys.argv[1], encoding="utf-8") as source:
+    release = json.load(source)
+for asset in release.get("assets", []):
+    name = asset.get("name", "")
+    url = asset.get("browser_download_url", "")
+    if name.startswith("ps5-opengl-sdk-") and name.endswith(".tar.gz") and url:
+        print(url)
+PY
+)
+    if (( ${#archive_urls[@]} == 0 )); then
+        echo "El release v$version no publica ningún asset ps5-opengl-sdk-*.tar.gz." >&2
+        python3 - "$release_json" >&2 <<'PY'
+import json, sys
+with open(sys.argv[1], encoding="utf-8") as source:
+    release = json.load(source)
+print("Assets disponibles: " + ", ".join(a.get("name", "<sin nombre>") for a in release.get("assets", [])))
+PY
         exit 2
     fi
-    mv -- "$download_tmp" "$archive"
+    verified=false
+    for asset_url in "${archive_urls[@]}"; do
+        rm -f -- "$download_tmp"
+        echo "Verificando asset oficial: ${asset_url##*/}" >&2
+        if command -v curl >/dev/null 2>&1; then
+            curl --fail --location --silent --show-error --retry 3 --connect-timeout 20 --max-time 1800 \
+                "$asset_url" --output "$download_tmp" || continue
+        else
+            wget --quiet --tries=3 --timeout=30 --output-document="$download_tmp" "$asset_url" || continue
+        fi
+        if printf '%s  %s\n' "$archive_sha256" "$download_tmp" | sha256sum --check --strict --status; then
+            mv -- "$download_tmp" "$archive"
+            verified=true
+            break
+        fi
+        echo "SHA-256 distinto; se descarta este asset sin extraerlo." >&2
+    done
+    if [[ $verified != true ]]; then
+        echo "No se encontró un asset del release v$version con SHA-256 $archive_sha256." >&2
+        rm -f -- "$download_tmp"
+        exit 2
+    fi
     trap - EXIT
 fi
 
