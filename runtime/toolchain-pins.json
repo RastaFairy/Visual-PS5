@@ -1,55 +1,8 @@
 {
   "schema": "ps5hs-toolchain-pins",
   "version": 1,
-  "updated": "2026-10-20",
-  "notes": "Manifiesto de integridad y procedencia. La resolución de fuentes del IDE es exclusivamente local: solo se leen snapshots y manifiestos dentro de toolchains/ de RastaFairy/Visual-PS5; no se clonan repositorios ni se descargan releases, mirrors o paquetes. La sección mirrors queda como referencia histórica, no como fallback ejecutable. Los hashes de artifacts permiten verificar un archivo del SDK si ya se ha incorporado manualmente a toolchains/ps5-opengl-sdk/.",
-  "mirrors": {
-    "blackbearreloaded/ps5-opengl": {
-      "status": "unavailable",
-      "observedAt": "2026-10-20",
-      "alternatives": [
-        "LedyBacer/ps5-opengl",
-        "darkxex/ps5-opengl"
-      ],
-      "note": "La cuenta original desapareció de GitHub. Ambos mirrors publican el release v1.0.2 con el asset del SDK; el tarball de LedyBacer se verificó byte a byte contra el pin archive.sha256."
-    },
-    "blackbearreloaded/ps5-native-app-boilerplate": {
-      "status": "unavailable",
-      "observedAt": "2026-10-20",
-      "alternatives": [
-        "LedyBacer/ps5-native-app-boilerplate"
-      ],
-      "note": "Fork vivo del boilerplate usado por la plantilla nativecpp."
-    },
-    "blackbearreloaded/ps5-homebrew-ui": {
-      "status": "unavailable",
-      "observedAt": "2026-10-20",
-      "alternatives": [
-        "LedyBacer/ps5-homebrew-ui"
-      ],
-      "note": "Fork vivo del kit UI OpenGL usado por la plantilla hui-gl de los proyectos visuales."
-    },
-    "blackbearreloaded/ProsperoLight": {
-      "status": "unavailable",
-      "observedAt": "2026-10-20",
-      "alternatives": [
-        "LedyBacer/ProsperoLight"
-      ],
-      "note": "Fork vivo de la app de referencia Moonlight."
-    },
-    "blackbearreloaded/ps5-fsr4": {
-      "status": "unavailable",
-      "observedAt": "2026-10-20",
-      "alternatives": [],
-      "note": "Sin mirror comunitario conocido a la fecha. Una copia local bajo toolchains/ps5-fsr4 es la única fuente disponible."
-    },
-    "blackbearreloaded/ps5-helixsr": {
-      "status": "unavailable",
-      "observedAt": "2026-10-20",
-      "alternatives": [],
-      "note": "Sin mirror comunitario conocido a la fecha. Una copia local bajo toolchains/ps5-helixsr es la única fuente disponible."
-    }
-  },
+  "updated": "2026-10-21",
+  "notes": "Resolución local-only: el IDE consulta snapshots y artefactos ya presentes bajo toolchains/ de RastaFairy/Visual-PS5. No clona repositorios, no descarga ZIP/releases/mirrors y no instala paquetes por Internet. Los hashes de artifacts validan los ficheros locales.",
   "artifacts": {
     "ps5-opengl-sdk": {
       "usedBy": "tools/fetch-opengl-sdk.sh de los proyectos hui-gl generados",
@@ -63,12 +16,8 @@
         "path": "sdk/manifest.sha256",
         "sha256": "0d432edc9d648d6e0cccb4d5eb3db8484f10ba4b075b5ccf23edda3251b66360"
       },
-      "urls": [
-        "https://github.com/blackbearreloaded/ps5-opengl/releases/download/v1.0.2/ps5-opengl-sdk-1.0.2.tar.gz",
-        "https://github.com/LedyBacer/ps5-opengl/releases/download/v1.0.2/ps5-opengl-sdk-1.0.2.tar.gz",
-        "https://github.com/darkxex/ps5-opengl/releases/download/v1.0.2/ps5-opengl-sdk-1.0.2.tar.gz"
-      ],
-      "urlsNote": "Cadena de descarga ordenada: upstream primero, mirrors después. El script de fetch sigue verificando archive.sha256 y sdkManifest.sha256 del pin original, así que cualquier mirror que sirva un archivo distinto queda rechazado."
+      "localPath": "toolchains/ps5-opengl-sdk/ps5-opengl-sdk-1.0.2.tar.gz",
+      "notes": "El SDK solo se acepta desde la ruta versionada local y debe coincidir con ambos SHA-256. No hay descarga ni fallback de red."
     }
   }
 }
