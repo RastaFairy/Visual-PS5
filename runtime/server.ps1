@@ -1557,7 +1557,8 @@ function BuildNativeProject([string]$ProjectPath,[bool]$CleanBeforeBuild=$false,
             $manifest=Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
             $manifestRepository=[string]$manifest.repository
             $manifestMirror=[string]$manifest.mirrorRepository
-            $hasSourceManifest=($manifestRepository -eq [string]$source.repository) -or ($manifestMirror -eq [string]$source.repository) -or [bool]$manifest.vendoredSnapshot -or ([string]$manifest.method -eq 'vendored-snapshot')
+            $manifestSource=[string]$manifest.sourceRepository
+            $hasSourceManifest=($manifestRepository -eq [string]$source.repository) -or ($manifestMirror -eq [string]$source.repository) -or ($manifestSource -eq [string]$source.repository)
           } catch { $hasSourceManifest=$false }
         }
         $missingFiles=@($source.files | Where-Object { !(Test-Path -LiteralPath (Join-Path $source.path $_) -PathType Leaf) })
