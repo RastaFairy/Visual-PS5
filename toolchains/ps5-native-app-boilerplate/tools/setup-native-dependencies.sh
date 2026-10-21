@@ -3,7 +3,7 @@
 # Copyright (C) 2026 BlackBearReloaded
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# Fetches the public PS5 payload SDK and static zlib into the ignored cache.
+# Uses cached artifacts or pinned local artifacts; IDE builds must not fetch remotely.
 
 set -euo pipefail
 
@@ -47,7 +47,16 @@ mkdir -p "$cache"
 if ! $skip_sdk && [[ ! -x "$sdk/bin/prospero-lld" ]]; then
     archive="$cache/ps5-payload-sdk.zip"
     temporary="$archive.download"
-    wget -q "$sdk_url" -O "$temporary"
+    if [[ ${PS5HS_LOCAL_TOOLCHAINS_ONLY:-0} == 1 ]]; then
+        local_archive="${PS5HS_TOOLCHAINS_ROOT:-}/artifacts/ps5-payload-sdk.zip"
+        [[ -n ${PS5HS_TOOLCHAINS_ROOT:-} && -f $local_archive ]] || {
+            echo "local-only: missing toolchains/artifacts/ps5-payload-sdk.zip (pinned SHA-256 required)" >&2
+            exit 2
+        }
+        cp -- "$local_archive" "$temporary"
+    else
+        wget -q "$sdk_url" -O "$temporary"
+    fi
     printf '%s  %s\n' "$sdk_hash" "$temporary" | sha256sum --check --strict
     mv "$temporary" "$archive"
     unzip -q -o "$archive" -d "$cache"
@@ -68,8 +77,17 @@ if [[ -z $zlib_library || ! -f $zlib_root/usr/include/zlib.h ||
         rm -f -- "$zlib_archive"
     fi
     if [[ ! -f $zlib_archive ]]; then
-        wget -q "$zlib_url" -O "$zlib_archive.download"
-        mv "$zlib_archive.download" "$zlib_archive"
+        if [[ ${PS5HS_LOCAL_TOOLCHAINS_ONLY:-0} == 1 ]]; then
+            local_archive="${PS5HS_TOOLCHAINS_ROOT:-}/artifacts/zlib-$zlib_version.tar.gz"
+            [[ -n ${PS5HS_TOOLCHAINS_ROOT:-} && -f $local_archive ]] || {
+                echo "local-only: missing toolchains/artifacts/zlib-$zlib_version.tar.gz (pinned SHA-256 required)" >&2
+                exit 2
+            }
+            cp -- "$local_archive" "$zlib_archive"
+        else
+            wget -q "$zlib_url" -O "$zlib_archive.download"
+            mv "$zlib_archive.download" "$zlib_archive"
+        fi
     fi
     printf '%s  %s\n' "$zlib_hash" "$zlib_archive" | sha256sum --check --strict >/dev/null
     rm -rf -- "$zlib_source" "$zlib_root"
