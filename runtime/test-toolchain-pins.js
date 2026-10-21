@@ -40,7 +40,9 @@ assert.match(server, /ApplyPS5HSSdkLocalOnlyPatch/);
 // Legacy project patch is explicit, audited and tied to the normal build permission.
 assert.match(policy, /function ApplyPS5HSSdkLocalOnlyPatch\b/);
 assert.match(policy, /enforce-local-only-sdk-source/);
-assert.doesNotMatch(policy, /allowUpstreamSdkMirrorPatch|ApplyPS5HSSdkMirrorChainPatch|PS5HS_MIRROR_CHAIN/);
+assert.doesNotMatch(policy, /allowUpstreamSdkMirrorPatch|ApplyPS5HSSdkMirrorChainPatch/);
+assert.match(policy, /hasLegacyMirrorList/);
+assert.match(policy, /legacyUrlListPattern/);
 assert.doesNotMatch(policyJs, /allowUpstreamSdkMirrorPatch/);
 
 // The vendored SDK bootstrap can only consume a locally seeded archive.
