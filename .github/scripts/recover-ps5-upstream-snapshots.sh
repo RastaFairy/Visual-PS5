@@ -107,9 +107,9 @@ if ("helixsr" in path.lower() or str(data.get("repository", "")).lower().endswit
     notes.append("HelixSR still requires a legitimate user-supplied model DLL.")
     changed = True
 if changed:
-    with open(path, "w", encoding="utf-8", newline="\\n") as f:
+    with open(path, "w", encoding="utf-8", newline="\n") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
-        f.write("\\n")
+        f.write("\n")
 PY
 }
 
