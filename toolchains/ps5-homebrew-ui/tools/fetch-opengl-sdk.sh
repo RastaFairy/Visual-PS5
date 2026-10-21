@@ -13,7 +13,6 @@ root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 version=1.0.2
 archive_sha256=30d8e51dd062739b629346102be5932728ba714bc50b1bdcdf08306c8843d9a4
 manifest_sha256=0d432edc9d648d6e0cccb4d5eb3db8484f10ba4b075b5ccf23edda3251b66360
-url="https://github.com/blackbearreloaded/ps5-opengl/releases/download/v$version/ps5-opengl-sdk-$version.tar.gz"
 
 cache="$root/.deps/ps5-opengl"
 archive="$cache/ps5-opengl-sdk-$version.tar.gz"
@@ -21,23 +20,24 @@ extracted="$cache/ps5-opengl-sdk-$version"
 prefix="$extracted/sdk"
 mkdir -p "$cache"
 
+# The IDE must never fetch this SDK from a release URL. It must already exist
+# under the repository's toolchains/ tree and match the pinned SHA-256.
+toolchains_root="${PS5HS_TOOLCHAINS_ROOT:-$(dirname "$root")}"
+local_archive="$toolchains_root/ps5-opengl-sdk/ps5-opengl-sdk-$version.tar.gz"
+[[ -f $local_archive ]] || {
+    echo "local-only: falta toolchains/ps5-opengl-sdk/ps5-opengl-sdk-$version.tar.gz; no se consulta Internet" >&2
+    exit 2
+}
+sha256sum --check --strict <<<"$archive_sha256  $local_archive" || {
+    echo "ps5-opengl SDK archive checksum mismatch in toolchains/: $local_archive" >&2
+    exit 2
+}
+
 if [[ ! -f $prefix/manifest.sha256 ]]; then
-    if [[ ! -f $archive ]] || ! sha256sum --check --status <<<"$archive_sha256  $archive"; then
-        if [[ ${PS5HS_LOCAL_TOOLCHAINS_ONLY:-0} == 1 ]]; then
-            local_archive="${PS5HS_TOOLCHAINS_ROOT:-}/ps5-opengl-sdk/ps5-opengl-sdk-$version.tar.gz"
-            [[ -n ${PS5HS_TOOLCHAINS_ROOT:-} && -f $local_archive ]] || {
-                echo "local-only: missing pinned SDK archive at toolchains/ps5-opengl-sdk/ps5-opengl-sdk-$version.tar.gz" >&2
-                exit 2
-            }
-            cp -- "$local_archive" "$archive.part"
-        else
-            printf '==> [opengl] Downloading ps5-opengl SDK %s\n' "$version" >&2
-            curl -fL --retry 3 -o "$archive.part" "$url"
-        fi
-        mv -- "$archive.part" "$archive"
-    fi
+    cp -- "$local_archive" "$archive.part"
+    mv -- "$archive.part" "$archive"
     sha256sum --check --status <<<"$archive_sha256  $archive" || {
-        echo "ps5-opengl SDK archive checksum mismatch" >&2
+        echo "ps5-opengl SDK archive checksum mismatch after local copy" >&2
         exit 2
     }
     rm -rf -- "$extracted"
