@@ -113,7 +113,8 @@ try {
   # Project paths may be nested and not exist before generation starts. The audit
   # preflight must walk to an existing ancestor instead of requiring the immediate parent.
   $nestedRoot = Join-Path $root 'not-created-yet/nested/generated-project'
-  $null = InvokePS5HSNativeTreeModificationWithAudit -ProjectRoot $nestedRoot -Backend 'nativecpp' -Operation 'test-nested-tree-generator' -PermissionKey 'allowExecuteUpstreamGenerationTools' -Policy $generationConsent -Action {
+  $nestedGenerationConsent = [pscustomobject]@{allowExecuteUpstreamGenerationTools=$true}
+  $null = InvokePS5HSNativeTreeModificationWithAudit -ProjectRoot $nestedRoot -Backend 'nativecpp' -Operation 'test-nested-tree-generator' -PermissionKey 'allowExecuteUpstreamGenerationTools' -Policy $nestedGenerationConsent -Action {
     [IO.Directory]::CreateDirectory((Join-Path $nestedRoot 'src')) | Out-Null
     [IO.File]::WriteAllText((Join-Path $nestedRoot 'src/generated.cpp'),'generated',$utf8)
   }
