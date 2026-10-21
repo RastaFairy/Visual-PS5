@@ -37,13 +37,11 @@ SPDX-License-Identifier: MIT
 
 import argparse
 import datetime
-import io
 import json
 import re
 import shutil
 import subprocess
 import sys
-import tarfile
 from pathlib import Path
 
 PS5 = Path(__file__).resolve().parent.parent
@@ -143,20 +141,38 @@ def icon(path, name):
 
 
 def export(target, ui):
-    """The foundation's files at this repository's last commit, and glm (a submodule) at its own."""
-    archive = subprocess.run(["git", "-C", str(ROOT), "archive", "HEAD", *FOUNDATION, *STARTERS[ui]],
-                             capture_output=True, check=True).stdout
-    with tarfile.open(fileobj=io.BytesIO(archive)) as tar:
-        members = [m for m in tar.getmembers()
-                   if not LEFT_OUT.match(m.name) and (ui or not UI_ONLY.match(m.name))]
-        tar.extractall(target, members=members, filter="data")
-    glm = subprocess.run(["git", "-C", str(ROOT / "external/glm"), "archive", "--prefix=external/glm/", "HEAD"],
-                         capture_output=True, check=True).stdout
-    with tarfile.open(fileobj=io.BytesIO(glm)) as tar:
-        tar.extractall(target, filter="data")
-    return subprocess.run(["git", "-C", str(ROOT), "rev-parse", "HEAD"], capture_output=True, text=True,
-                          check=True).stdout.strip()
+    """Copy this vendored source tree without requiring Git metadata or network access."""
+    target.mkdir(parents=True, exist_ok=True)
+    entries = list(dict.fromkeys(FOUNDATION + STARTERS[ui]))
+    for entry in entries:
+        source = ROOT / entry
+        if not source.exists():
+            sys.exit(f"required local source missing under toolchains/: {source}")
+        candidates = [source] if source.is_file() else sorted(source.rglob("*"))
+        for item in candidates:
+            if item.is_dir():
+                continue
+            relative = item.relative_to(ROOT).as_posix()
+            # Avoid copying metadata/build output even if the vendor pack contains it.
+            if ".git" in item.parts or "__pycache__" in item.parts:
+                continue
+            if LEFT_OUT.match(relative) or (not ui and UI_ONLY.match(relative)):
+                continue
+            destination = target / relative
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(item, destination)
 
+    # The vendored snapshot manifest is authoritative only when it records a full SHA.
+    # Recovery snapshots intentionally have an empty commit field: don't invent one.
+    revision = "vendored-snapshot"
+    try:
+        metadata = json.loads((ROOT / ".ps5hs-source.json").read_text(encoding="utf-8"))
+        candidate = metadata.get("commit") or metadata.get("sourceCommit") or ""
+        if re.fullmatch(r"[0-9a-fA-F]{40}", candidate):
+            revision = candidate.lower()
+    except (OSError, json.JSONDecodeError):
+        pass
+    return revision
 
 def kit_designs(kit):
     """The kit's designs a title can start from: one file each (the component
@@ -249,9 +265,12 @@ def main():
         sys.exit(f"{args.title_id} is {TAKEN[args.title_id]}'s title id; pick another")
     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9 ._-]{0,39}", args.name):
         sys.exit("--name: 1 to 40 letters, digits, spaces, '.', '_' or '-'")
-    if subprocess.run(["git", "-C", str(ROOT), "status", "--porcelain", "--", *FOUNDATION, *STARTERS[ui]],
-                      capture_output=True, text=True).stdout.strip():
-        print("note: the foundation has uncommitted changes; the new title gets its last commit")
+    # Only consult Git status when this is a real local checkout. The shipped
+    # toolchains/ snapshot deliberately has no nested .git directory.
+    if ( (ROOT / ".git").is_dir() and
+         subprocess.run(["git", "-C", str(ROOT), "status", "--porcelain", "--", *FOUNDATION, *STARTERS[ui]],
+                        capture_output=True, text=True).stdout.strip() ):
+        print("note: the foundation has local changes; the new title uses the vendored files")
     target = args.directory.resolve()
     if target.exists() and any(target.iterdir()):
         sys.exit(f"{target} exists and is not empty")
