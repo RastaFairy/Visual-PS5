@@ -1,0 +1,3 @@
+# Local-only compiled SDK archive (approximately 226 MB); keep its manifest and sources trackable.
+toolchains/toolchain-pack/ps5-opengl-sdk/*.tar.gz
+toolchains/toolchain-pack/ps5-opengl-sdk/*.part
