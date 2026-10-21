@@ -3,8 +3,8 @@
 # Copyright (C) 2026 BlackBearReloaded
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# Downloads and verifies the pinned ps5-opengl release into .deps/ps5-opengl
-# and prints the SDK prefix (the directory holding manifest.sha256).
+# Uses and verifies only the pinned SDK archive seeded from toolchains/toolchain-pack.
+# No network access is performed by this script.
 
 set -euo pipefail
 
@@ -12,7 +12,6 @@ root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 version=1.0.2
 archive_sha256=30d8e51dd062739b629346102be5932728ba714bc50b1bdcdf08306c8843d9a4
 manifest_sha256=0d432edc9d648d6e0cccb4d5eb3db8484f10ba4b075b5ccf23edda3251b66360
-url="https://github.com/blackbearreloaded/ps5-opengl/releases/download/v$version/ps5-opengl-sdk-$version.tar.gz"
 
 cache="$root/.deps/ps5-opengl"
 archive="$cache/ps5-opengl-sdk-$version.tar.gz"
@@ -21,10 +20,10 @@ prefix="$extracted/sdk"
 mkdir -p "$cache"
 
 if [[ ! -f $prefix/manifest.sha256 ]]; then
-    if [[ ! -f $archive ]] || ! sha256sum --check --status <<<"$archive_sha256  $archive"; then
-        printf '==> [opengl] Downloading ps5-opengl SDK %s\n' "$version" >&2
-        curl -fL --retry 3 -o "$archive.part" "$url"
-        mv -- "$archive.part" "$archive"
+    if [[ ! -f $archive ]]; then
+        printf '==> [opengl] Local SDK archive missing: %s\n' "$archive" >&2
+        printf 'Add the verified tarball under toolchains/toolchain-pack/ps5-opengl-sdk/; the IDE seeds this cache before build.\n' >&2
+        exit 2
     fi
     sha256sum --check --status <<<"$archive_sha256  $archive" || {
         echo "ps5-opengl SDK archive checksum mismatch" >&2
