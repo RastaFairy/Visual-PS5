@@ -3,7 +3,8 @@
 # Copyright (C) 2026 BlackBearReloaded
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# Downloads and verifies the pinned ps5-opengl release into .deps/ps5-opengl
+# Verifies a cached SDK or copies a pinned archive from toolchains/ps5-opengl-sdk.
+# IDE builds set PS5HS_LOCAL_TOOLCHAINS_ONLY=1 to forbid network fallback.
 # and prints the SDK prefix (the directory holding manifest.sha256).
 
 set -euo pipefail
@@ -22,8 +23,17 @@ mkdir -p "$cache"
 
 if [[ ! -f $prefix/manifest.sha256 ]]; then
     if [[ ! -f $archive ]] || ! sha256sum --check --status <<<"$archive_sha256  $archive"; then
-        printf '==> [opengl] Downloading ps5-opengl SDK %s\n' "$version" >&2
-        curl -fL --retry 3 -o "$archive.part" "$url"
+        if [[ ${PS5HS_LOCAL_TOOLCHAINS_ONLY:-0} == 1 ]]; then
+            local_archive="${PS5HS_TOOLCHAINS_ROOT:-}/ps5-opengl-sdk/ps5-opengl-sdk-$version.tar.gz"
+            [[ -n ${PS5HS_TOOLCHAINS_ROOT:-} && -f $local_archive ]] || {
+                echo "local-only: missing pinned SDK archive at toolchains/ps5-opengl-sdk/ps5-opengl-sdk-$version.tar.gz" >&2
+                exit 2
+            }
+            cp -- "$local_archive" "$archive.part"
+        else
+            printf '==> [opengl] Downloading ps5-opengl SDK %s\n' "$version" >&2
+            curl -fL --retry 3 -o "$archive.part" "$url"
+        fi
         mv -- "$archive.part" "$archive"
     fi
     sha256sum --check --status <<<"$archive_sha256  $archive" || {
