@@ -1,0 +1,105 @@
+name: Rebuild pinned OpenGL SDK from vendored source
+on:
+  push:
+    branches:
+      - offline-build-recovery-20261021
+    paths:
+      - .github/workflows/build-recovered-opengl-sdk.yml
+permissions:
+  contents: write
+jobs:
+  sdk:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    env:
+      LLVM_CONFIG: /usr/bin/llvm-config-21
+      CCACHE_DIR: ${{ github.workspace }}/.ccache
+      CCACHE_MAXSIZE: 2G
+      CCACHE_COMPILERCHECK: content
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Install host tools and LLVM 21
+        run: |
+          curl --fail --location --retry 3 https://apt.llvm.org/llvm-snapshot.gpg.key -o "$RUNNER_TEMP/llvm.asc"
+          test "$(gpg --show-keys --with-colons "$RUNNER_TEMP/llvm.asc" | awk -F: '$1 == "fpr" {print $10; exit}')" = 6084F3CF814B57C1CF12EFD515CF4D18AF4F7421
+          sudo install -m 0644 "$RUNNER_TEMP/llvm.asc" /usr/share/keyrings/llvm.asc
+          echo 'deb [signed-by=/usr/share/keyrings/llvm.asc] https://apt.llvm.org/noble/ llvm-toolchain-noble-21 main' | sudo tee /etc/apt/sources.list.d/llvm21.list
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y build-essential ccache clang-18 lld-18 clang-21 lld-21 llvm-21-dev cmake ninja-build pkg-config python3-venv glslang-tools spirv-tools bison flex unzip libasan8 libubsan1 libegl-dev libgl-dev libegl-mesa0 libgl1-mesa-dri libglx-mesa0
+          python3 -m venv "$RUNNER_TEMP/build-tools"
+          "$RUNNER_TEMP/build-tools/bin/pip" install meson==1.10.1 Mako==1.3.10 PyYAML==6.0.2 packaging==25.0
+          echo "$RUNNER_TEMP/build-tools/bin" >> "$GITHUB_PATH"
+      - name: Fetch checksum-pinned PS5 payload SDK
+        run: |
+          curl --fail --location --retry 3 https://github.com/ps5-payload-dev/sdk/releases/download/v0.42/ps5-payload-sdk.zip -o "$RUNNER_TEMP/payload-sdk.zip"
+          SDK_HASH=$(python3 -c 'import json; print(json.load(open("toolchains/ps5-opengl/dependencies.json"))["native_boilerplate"]["payload_sdk_archive_sha256"])')
+          printf '%s  %s\n' "$SDK_HASH" "$RUNNER_TEMP/payload-sdk.zip" | sha256sum --check
+          unzip -q "$RUNNER_TEMP/payload-sdk.zip" -d "$RUNNER_TEMP/payload"
+          SDK_DIR="$RUNNER_TEMP/payload/ps5-payload-sdk"
+          "$SDK_DIR/bin/prospero-clang" --version
+          echo "PS5_PAYLOAD_SDK=$SDK_DIR" >> "$GITHUB_ENV"
+      - name: Fetch source dependencies at pinned revisions
+        working-directory: toolchains/ps5-opengl
+        run: python3 tools/fetch-sources.py --sokol-samples
+      - name: Run OpenGL host regression suite
+        working-directory: toolchains/ps5-opengl
+        run: make test
+      - name: Build and install OpenGL 4.6 SDK from the versioned source snapshot
+        working-directory: toolchains/ps5-opengl
+        env:
+          PS5_GPU_PRESENT_BATCH: '1'
+          PS5_DRAW_PROFILE: '1'
+          PS5_MULTIDRAW_BATCH: '1'
+          PS5_DEFERRED_DRAW_BATCH: '1'
+          PS5_SCANOUT_HEIGHT: '2160'
+          PS5_SCANOUT_FPS: '120'
+          PS5_DYNAMIC_SCANOUT: '1'
+        run: |
+          make sdk-gl46
+          test -f build/sdk/ps5-opengl-gl46/manifest.sha256
+          (cd build/sdk/ps5-opengl-gl46 && sha256sum --check --strict --quiet manifest.sha256)
+      - name: Package a pinned SDK archive with original folder layout
+        working-directory: toolchains/ps5-opengl
+        run: |
+          version=1.0.2
+          stage="$RUNNER_TEMP/sdk-package"
+          name="ps5-opengl-sdk-$version"
+          mkdir -p "$stage/$name"
+          cp -a build/sdk/ps5-opengl-gl46 "$stage/$name/sdk"
+          cp -a LICENSE LICENSES THIRD_PARTY_NOTICES.md "$stage/$name/"
+          (cd "$stage" && tar -czf "$RUNNER_TEMP/$name.tar.gz" "$name")
+          (cd "$RUNNER_TEMP" && sha256sum "$name.tar.gz" > "$name.tar.gz.sha256")
+          echo "SDK_MANIFEST_SHA256=$(sha256sum build/sdk/ps5-opengl-gl46/manifest.sha256 | cut -d' ' -f1)" >> "$GITHUB_ENV"
+          echo "SDK_ARCHIVE_SHA256=$(sha256sum "$RUNNER_TEMP/$name.tar.gz" | cut -d' ' -f1)" >> "$GITHUB_ENV"
+          echo "SDK_ARCHIVE_BYTES=$(wc -c < "$RUNNER_TEMP/$name.tar.gz" | tr -d ' ')" >> "$GITHUB_ENV"
+          echo "SDK_ARCHIVE=$RUNNER_TEMP/$name.tar.gz" >> "$GITHUB_ENV"
+          echo "SDK_CHECKSUM=$RUNNER_TEMP/$name.tar.gz.sha256" >> "$GITHUB_ENV"
+          echo "Expected manifest SHA-256: 0d432edc9d648d6e0cccb4d5eb3db8484f10ba4b075b5ccf23edda3251b66360"
+          echo "Built manifest SHA-256: $SDK_MANIFEST_SHA256"
+          echo "Built archive SHA-256: $SDK_ARCHIVE_SHA256"
+          echo "Built archive bytes: $SDK_ARCHIVE_BYTES"
+      - name: Publish the verified SDK on this repository so IDE builds no longer depend on the dead upstream release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag=ps5hs-opengl-sdk-cache-v1.0.2
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$tag" "$SDK_ARCHIVE" "$SDK_CHECKSUM" --clobber --repo "$GITHUB_REPOSITORY"
+          else
+            gh release create "$tag" "$SDK_ARCHIVE" "$SDK_CHECKSUM" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+              --title "Pinned PS5 OpenGL SDK 1.0.2 (rebuilt from vendored source)" \
+              --notes "SDK rebuilt from the versioned PS5 OpenGL source snapshot in RastaFairy/Visual-PS5. SHA-256 and the SDK's internal manifest are verified by the IDE before use. Built by GitHub Actions; not independently run on a PS5."
+          fi
+      - name: Keep SDK package available as a workflow artifact
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: recovered-ps5-opengl-sdk
+          path: |
+            ${{ runner.temp }}/ps5-opengl-sdk-1.0.2.tar.gz
+            ${{ runner.temp }}/ps5-opengl-sdk-1.0.2.tar.gz.sha256
+          if-no-files-found: ignore
+          compression-level: 0
+          retention-days: 14
