@@ -1546,7 +1546,8 @@ function BuildNativeProject([string]$ProjectPath,[bool]$CleanBeforeBuild=$false,
       if (Test-Path -LiteralPath (Join-Path $projectRoot 'tools/bake-fonts.sh') -PathType Leaf) { $cmd += 'bash tools/bake-fonts.sh && ' }
       $cmd += $cleanCommand + 'USE_CCACHE=' + $ccacheValue + ' make'
     } elseif ($template -eq 'nativecpp') {
-      $cmd = 'cd ' + (BashQuote $projectWsl) + ' && ' + $cleanCommand + 'USE_CCACHE=' + $ccacheValue + ' make'
+      $toolchainsWslForNative = ConvertToWslPath $script:Toolchains
+      $cmd = 'cd ' + (BashQuote $projectWsl) + ' && export PS5HS_LOCAL_TOOLCHAINS_ONLY=1 PS5HS_TOOLCHAINS_ROOT=' + (BashQuote $toolchainsWslForNative) + ' && ' + $cleanCommand + 'USE_CCACHE=' + $ccacheValue + ' make'
     } else {
       $vulkanWsl = ConvertToWslPath $vulkanDir
       $payloadSdkWsl = ConvertToWslPath $payloadSdkDir
@@ -1556,7 +1557,8 @@ function BuildNativeProject([string]$ProjectPath,[bool]$CleanBeforeBuild=$false,
       # runtime and SDK caches produced by PS5_Vulkan's own scripts. Keep its SDK
       # cache separate from the title's later pin (they intentionally use distinct revisions).
       $refreshNotices = 'python3 ps5/tools/build-assets.py --notices'
-      $bootstrap = 'cd ' + (BashQuote $projectWsl) + ' && ' + $refreshNotices + ' && cd ' + (BashQuote $vulkanWsl) +
+      $toolchainsWslForVulkan = ConvertToWslPath $script:Toolchains
+      $bootstrap = 'cd ' + (BashQuote $projectWsl) + ' && export PS5HS_LOCAL_TOOLCHAINS_ONLY=1 PS5HS_TOOLCHAINS_ROOT=' + (BashQuote $toolchainsWslForVulkan) + ' && ' + $refreshNotices + ' && cd ' + (BashQuote $vulkanWsl) +
         ' && USE_CCACHE=' + $ccacheValue + ' PS5_PAYLOAD_SDK_FORK=' + (BashQuote $payloadSdkWsl) + ' bash tools/setup-native-dependencies.sh' +
         ' && USE_CCACHE=' + $ccacheValue + ' bash tools/build-host-tools.sh' +
         ' && PS5_PAYLOAD_SDK_FORK=' + (BashQuote $payloadSdkWsl) + ' bash tools/rebuild-libc.sh' +
