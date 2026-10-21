@@ -122,10 +122,10 @@ try {
   Assert-Condition ($treeManifest.records[0].permission -eq 'allowExecuteUpstreamGenerationTools') 'El registro debe identificar el consentimiento utilizado.'
   Assert-Condition (@($treeManifest.records[0].changedFiles | Where-Object { $_.path -eq 'src/generated.cpp' -and $null -eq $_.originalSha256 -and $_.resultSha256 }).Count -eq 1) 'El registro debe identificar los archivos creados por el generador.'
 
-  # Cadena de mirrors del SDK OpenGL: consentimiento, parche e idempotencia.
-  $mirrorRoot = Join-Path $root 'mirror-project'
-  [IO.Directory]::CreateDirectory((Join-Path $mirrorRoot 'tools')) | Out-Null
-  $fetchPath = Join-Path $mirrorRoot 'tools/fetch-opengl-sdk.sh'
+  # SDK OpenGL local-only: autorización, pins, auditoría e idempotencia.
+  $localSdkRoot = Join-Path $root 'local-sdk-project'
+  [IO.Directory]::CreateDirectory((Join-Path $localSdkRoot 'tools')) | Out-Null
+  $fetchPath = Join-Path $localSdkRoot 'tools/fetch-opengl-sdk.sh'
   $pristineFetch = @'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -142,35 +142,34 @@ if [[ ! -f $prefix/manifest.sha256 ]]; then
     fi
 fi
 '@
-  [IO.File]::WriteAllText($fetchPath,$pristineFetch.Replace("`r`n","`n"),$utf8)
+  [IO.File]::WriteAllText($fetchPath,$pristineFetch.Replace([Environment]::NewLine,[string][char]10),$utf8)
 
-  $deniedPatch = ApplyPS5HSSdkMirrorChainPatch -ProjectRoot $mirrorRoot -Policy $null -Backend 'opengl-ui'
-  Assert-Condition ($deniedPatch.skipped -and !$deniedPatch.changed) 'Sin permiso, el parche de mirrors debe omitirse sin tocar el script.'
-  Assert-Condition ([IO.File]::ReadAllText($fetchPath) -ceq $pristineFetch.Replace("`r`n","`n")) 'El script del SDK debe quedar intacto sin consentimiento.'
+  $deniedPatch = $false
+  try { ApplyPS5HSSdkLocalOnlyPatch -ProjectRoot $localSdkRoot -Policy $null -Backend 'opengl-ui' | Out-Null } catch { $deniedPatch = $true }
+  Assert-Condition $deniedPatch 'Sin autorización de build, el parche local-only debe fallar cerrado.'
+  Assert-Condition ([IO.File]::ReadAllText($fetchPath) -ceq $pristineFetch.Replace([Environment]::NewLine,[string][char]10)) 'Sin autorización, el script del SDK debe permanecer intacto.'
 
-  $mirrorConsent = [pscustomobject]@{allowUpstreamSdkMirrorPatch=$true}
-  $mirrorUrls = @('https://github.com/blackbearreloaded/ps5-opengl/releases/download/v1.0.2/ps5-opengl-sdk-1.0.2.tar.gz','https://github.com/LedyBacer/ps5-opengl/releases/download/v1.0.2/ps5-opengl-sdk-1.0.2.tar.gz')
-  $appliedPatch = ApplyPS5HSSdkMirrorChainPatch -ProjectRoot $mirrorRoot -Policy $mirrorConsent -Backend 'opengl-ui' -MirrorUrls $mirrorUrls
-  Assert-Condition ($appliedPatch.changed) 'Con permiso, el parche debe reescribir el script con la cadena de mirrors.'
+  $buildConsent = [pscustomobject]@{allowExecuteUpstreamBuildTools=$true}
+  $appliedPatch = ApplyPS5HSSdkLocalOnlyPatch -ProjectRoot $localSdkRoot -Policy $buildConsent -Backend 'opengl-ui'
+  Assert-Condition ($appliedPatch.changed) 'Con autorización de build, el script antiguo debe pasar a modo local-only.'
   $patchedFetch = [IO.File]::ReadAllText($fetchPath)
-  Assert-Condition ($patchedFetch.Contains('# PS5HS_MIRROR_CHAIN')) 'El script parcheado debe declarar la marca de cadena de mirrors.'
-  Assert-Condition ($patchedFetch.Contains('urls=(')) 'El script parcheado debe declarar la cadena urls=().'
-  Assert-Condition ($patchedFetch.Contains('LedyBacer/ps5-opengl')) 'El script parcheado debe incluir el mirror verificado.'
-  Assert-Condition ($patchedFetch.Contains('for url in "${urls[@]}"')) 'El script parcheado debe iterar la cadena de mirrors.'
-  Assert-Condition ($patchedFetch.Contains('archive_sha256=') -and $patchedFetch.Contains('manifest_sha256=')) 'El parche debe conservar los pins de integridad del SDK.'
-  Assert-Condition (!$patchedFetch.Contains('url="https://github.com/blackbearreloaded')) 'La URL unica del upstream caido no debe permanecer activa.'
-  $mirrorManifest = Get-Content -LiteralPath (Join-Path $mirrorRoot '.ps5hs-modifications.json') -Raw | ConvertFrom-Json
-  Assert-Condition (@($mirrorManifest.records | Where-Object { $_.operation -eq 'apply-sdk-mirror-chain' }).Count -ge 1) 'El parche debe registrar su auditoria SHA-256.'
+  Assert-Condition ($patchedFetch.Contains('# PS5HS_LOCAL_ONLY')) 'El script actualizado debe declarar el modo local-only.'
+  Assert-Condition (!$patchedFetch.Contains('curl -fL') -and !$patchedFetch.Contains('wget ')) 'El script actualizado no debe contener descargadores.'
+  Assert-Condition (!$patchedFetch.Contains('url="https://github.com')) 'El script actualizado no debe conservar una URL activa de descarga.'
+  Assert-Condition ($patchedFetch.Contains('archive_sha256=') -and $patchedFetch.Contains('manifest_sha256=')) 'Los pins de integridad deben permanecer intactos.'
+  Assert-Condition ($patchedFetch.Contains('toolchains/toolchain-pack/ps5-opengl-sdk/')) 'El error de SDK ausente debe indicar la ruta local esperada.'
+  $localManifest = Get-Content -LiteralPath (Join-Path $localSdkRoot '.ps5hs-modifications.json') -Raw | ConvertFrom-Json
+  Assert-Condition (@($localManifest.records | Where-Object { $_.operation -eq 'enforce-local-only-sdk-source' -and $_.permission -eq 'allowExecuteUpstreamBuildTools' }).Count -ge 1) 'La adaptación local debe registrar la auditoría SHA-256 con permiso de build.'
 
-  $idempotentPatch = ApplyPS5HSSdkMirrorChainPatch -ProjectRoot $mirrorRoot -Policy $mirrorConsent -Backend 'opengl-ui' -MirrorUrls $mirrorUrls
-  Assert-Condition (!$idempotentPatch.changed -and $idempotentPatch.alreadyPatched) 'El parche debe ser idempotente sobre un script ya parcheado.'
-  Assert-Condition ([IO.File]::ReadAllText($fetchPath) -ceq $patchedFetch) 'La reejecucion no debe alterar el script ya parcheado.'
+  $idempotentPatch = ApplyPS5HSSdkLocalOnlyPatch -ProjectRoot $localSdkRoot -Policy $buildConsent -Backend 'opengl-ui'
+  Assert-Condition (!$idempotentPatch.changed -and $idempotentPatch.alreadyPatched) 'El parche debe ser idempotente sobre un script ya fijado a fuente local.'
+  Assert-Condition ([IO.File]::ReadAllText($fetchPath) -ceq $patchedFetch) 'La reejecución no debe alterar el script ya parcheado.'
 
-  [IO.File]::WriteAllText($fetchPath,'#!/usr/bin/env bash' + "`n" + 'echo unrecognizable' + "`n",$utf8)
+  [IO.File]::WriteAllText($fetchPath,'#!/usr/bin/env bash' + [Environment]::NewLine + 'echo unrecognizable' + [Environment]::NewLine,$utf8)
   $unrecognized = $false
-  try { ApplyPS5HSSdkMirrorChainPatch -ProjectRoot $mirrorRoot -Policy $mirrorConsent -Backend 'opengl-ui' | Out-Null } catch { $unrecognized = $true }
+  try { ApplyPS5HSSdkLocalOnlyPatch -ProjectRoot $localSdkRoot -Policy $buildConsent -Backend 'opengl-ui' | Out-Null } catch { $unrecognized = $true }
   Assert-Condition $unrecognized 'Un script de SDK irreconocible debe abortar el parche sin modificaciones parciales.'
 } finally {
   Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction SilentlyContinue
 }
-Write-Output 'PASS native modification policy: deny-by-default, fail-closed checks, mutation guards, SHA-256 audit and SDK mirror chain.'
+Write-Output 'PASS native modification policy: deny-by-default, fail-closed checks, mutation guards, SHA-256 audit and local-only SDK.'
