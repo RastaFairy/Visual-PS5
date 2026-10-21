@@ -2089,8 +2089,6 @@ function BuildNativeVisualProject($Body) {
     }
 
     if ($backend -eq 'opengl-ui') {
-      $localOnlySdkPatch = ApplyPS5HSSdkLocalOnlyPatch -ProjectRoot $projectRoot -Policy $policy -Backend $backend -SourceRepository 'blackbearreloaded/ps5-homebrew-ui'
-      if ($mirrorPatch.changed -and $script:ActiveBuildLogPath) { WriteBuildJobLog $script:ActiveBuildLogPath 'Cadena de mirrors del SDK OpenGL aplicada al crear el proyecto.' }
       $sdkSeed = SeedProjectOpenGlSdkCache $projectRoot
       if ($sdkSeed.seeded -and $script:ActiveBuildLogPath) { WriteBuildJobLog $script:ActiveBuildLogPath 'SDK ps5-opengl sembrado desde el pack local en .deps/ps5-opengl (SHA-256 verificado); el build no necesitará red para el SDK.' }
     }
