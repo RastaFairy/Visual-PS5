@@ -13,6 +13,8 @@ jobs:
     steps:
       - name: Check out source
         uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 2
       - name: Set up Node.js
         uses: actions/setup-node@v7.1.0
         with:
@@ -91,6 +93,41 @@ jobs:
       - name: Test native modification permissions and audit trail
         shell: pwsh
         run: ./runtime/test-native-modification-policy.ps1
+      - name: Prepare offline SDK bundle for the recovery branch
+        if: github.event_name == 'pull_request' && github.head_ref == 'offline-build-recovery-20261021'
+        shell: pwsh
+        env:
+          SDK_URL: https://github.com/blackbearreloaded/ps5-opengl/releases/download/v1.0.2/ps5-opengl-sdk-1.0.2.tar.gz
+          SDK_SHA256: 30d8e51dd062739b629346102be5932728ba714bc50b1bdcdf08306c8843d9a4
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $archive = Join-Path $env:RUNNER_TEMP 'ps5-opengl-sdk-1.0.2.tar.gz'
+          Invoke-WebRequest -Uri $env:SDK_URL -OutFile $archive
+          $actual = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actual -ne $env:SDK_SHA256) { throw "OpenGL SDK SHA-256 mismatch: $actual" }
+          $sourceZip = Join-Path $env:RUNNER_TEMP 'PS5-Homebrew-Studio-source.zip'
+          git archive --format=zip --prefix=PS5-Homebrew-Studio/ --output=$sourceZip HEAD^
+          if ($LASTEXITCODE -ne 0) { throw "git archive failed: $LASTEXITCODE" }
+          $bundle = Join-Path $PWD 'PS5-Homebrew-Studio-offline-bundle.zip'
+          Copy-Item -LiteralPath $sourceZip -Destination $bundle
+          Add-Type -AssemblyName System.IO.Compression
+          $zip = [System.IO.Compression.ZipFile]::Open($bundle, [System.IO.Compression.ZipArchiveMode]::Update)
+          try {
+            $entryName = 'PS5-Homebrew-Studio/toolchains/ps5-opengl-sdk/ps5-opengl-sdk-1.0.2.tar.gz'
+            $entry = $zip.CreateEntry($entryName, [System.IO.Compression.CompressionLevel]::NoCompression)
+            $input = [System.IO.File]::OpenRead($archive)
+            $output = $entry.Open()
+            try { $input.CopyTo($output) } finally { $output.Dispose(); $input.Dispose() }
+          } finally { $zip.Dispose() }
+          Write-Host "Offline bundle staged; SDK SHA-256 verified: $actual"
+      - name: Upload offline SDK bundle
+        if: github.event_name == 'pull_request' && github.head_ref == 'offline-build-recovery-20261021'
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: PS5-Homebrew-Studio-offline-bundle
+          path: PS5-Homebrew-Studio-offline-bundle.zip
+          if-no-files-found: error
+          retention-days: 30
       - name: Package versioned source ZIP
         if: github.event_name != 'pull_request'
         shell: pwsh
