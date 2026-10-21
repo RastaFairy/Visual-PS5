@@ -2,7 +2,7 @@
   "schema": "ps5hs-toolchain-pins",
   "version": 1,
   "updated": "2026-10-20",
-  "notes": "Pins de integridad y cadenas de mirrors mantenidos por PS5 Homebrew Studio. 'mirrors' declara repositorios upstream cuyo original no está disponible y las copias comunitarias verificadas que el IDE puede usar en su lugar; el IDE siempre intenta primero el repositorio original y registra en .ps5hs-source.json qué fuente se usó. 'artifacts' fija versiones y SHA-256 de binarios precompilados que los proyectos generados descargan; los mirrors listados sirven el MISMO archivo verificable por checksum. Las copias locales bajo toolchains/ y toolchain-pack/ siempre tienen prioridad sobre cualquier descarga.",
+  "notes": "Manifiesto de integridad y procedencia. La resolución de fuentes del IDE es exclusivamente local: solo se leen snapshots y manifiestos dentro de toolchains/ de RastaFairy/Visual-PS5; no se clonan repositorios ni se descargan releases, mirrors o paquetes. La sección mirrors queda como referencia histórica, no como fallback ejecutable. Los hashes de artifacts permiten verificar un archivo del SDK si ya se ha incorporado manualmente a toolchains/ps5-opengl-sdk/.",
   "mirrors": {
     "blackbearreloaded/ps5-opengl": {
       "status": "unavailable",
