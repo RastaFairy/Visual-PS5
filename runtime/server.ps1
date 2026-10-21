@@ -1096,7 +1096,7 @@ function PackageNativeProjectWithUltraPack($Body) {
     throw 'No se ha configurado Python. En Herramientas, indica python.exe (Python 3.10 o posterior).'
   }
   if (!$cli -or !(Test-Path -LiteralPath $cli -PathType Leaf)) {
-    throw "No se ha encontrado backend\cli.py de UltraPack. Usa 'Descargar UltraPack (fuente)' en Herramientas o indica su ruta manualmente. Repositorio: https://github.com/knutwurst/ps5-ultrapack"
+    throw "No se ha encontrado backend\cli.py de UltraPack. Usa 'Verificar UltraPack local' en Herramientas o indica su ruta manualmente. Repositorio: https://github.com/knutwurst/ps5-ultrapack"
   }
   if ($format -eq 'pkg') {
     $backendRoot = Split-Path -Parent $cli
