@@ -506,7 +506,7 @@ function NewVulkanTitle([string]$Name,[string]$TitleId,[string]$Design,$Policy=$
   $entry=$script:Catalog|Where-Object id -eq 'vulkan-template'|Select-Object -First 1
   if(!$entry) { return @{ok=$false;message='No está registrada la plantilla Vulkan.';output='vulkan-template'} }
   try { $cloneResult = InstallRepo $entry; if(!$cloneResult.ok) { return @{ok=$false;message=$cloneResult.message;output=$cloneResult.path} } }
-  catch { return @{ok=$false;message='No se pudo descargar PS5 Vulkan Template.';output=$_.Exception.Message} }
+  catch { return @{ok=$false;message='No se pudo resolver la plantilla PS5 Vulkan Template local desde toolchains/.';output=$_.Exception.Message} }
   $repo=Join-Path $script:Toolchains $entry.folder;$generator=Join-Path $repo 'ps5/tools/new-title.py'
   if(!(Test-Path $generator)){return @{ok=$false;message='El checkout de PS5 Vulkan Template no contiene ps5/tools/new-title.py.';output=$repo}}
   $st=GetStatus;if(!$st.prerequisites.wsl){return @{ok=$false;message='No hay distribución WSL inicializada.';output='Configura WSL + Debian desde Configurar entorno y realiza su primer arranque.'}}
