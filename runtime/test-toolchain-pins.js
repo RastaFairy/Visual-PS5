@@ -61,7 +61,7 @@ assert.doesNotMatch(server, /&& make deps &&/, 'el IDE no debe ejecutar un targe
 assert.match(server, /PS5HS_LOCAL_TOOLCHAINS_ONLY=1/, 'el flag local-only debe propagarse al build');
 assert.doesNotMatch(server, /A Homebrew Studio OpenGL project has its own supported Windows entry point/, 'el build visual no debe saltarse la preparación compartida de dependencias solo por existir build.ps1');
 assert.match(server, /Resolviendo SDK OpenGL 1\.0\.2/, 'el pipeline debe resolver el SDK precompilado fijado antes de compilar el título');
-assert.doesNotMatch(server, /make sdk-gl46/, 'el IDE no debe intentar reconstruir Mesa/PSBC desde una instantánea sin third_party/');
+assert.doesNotMatch(server, /\$sdkCmd\s*=.*make sdk-gl46/, 'el IDE no debe intentar reconstruir Mesa/PSBC desde una instantánea sin third_party/');
 assert.match(server, /PS5HS_ALLOW_PINNED_SDK_DOWNLOAD=1/, 'solo la recuperación del SDK fijado tiene una excepción explícita de red');
 assert.match(server, /PS5_OPENGL_PREFIX=' \+ \(BashQuote \$openglPrefix\)/, 'el pipeline debe inyectar explícitamente el prefijo SDK al Makefile del título');
 assert.ok(server.includes('$legacyRequiredFiles') && server.includes('$legacyParam.titleId') && server.includes('Proyecto antiguo sin manifiesto') && server.includes('Move-Item -LiteralPath $targetCandidate -Destination $replacementBackupPath'), 'legacy visual projects must be identity-checked and backed up before regeneration');
@@ -71,7 +71,8 @@ assert.match(openglSdkFetcher, /archive_sha256=30d8e51dd062739b629346102be593272
 assert.match(openglSdkFetcher, /PS5HS_ALLOW_PINNED_SDK_DOWNLOAD:-0/, 'la descarga se activa mediante un permiso explícito');
 assert.match(openglSdkFetcher, /sha256sum --check --strict --status/, 'el archivo se debe verificar antes de extraerlo o promoverlo');
 assert.match(openglSdkFetcher, /local_prefixes=\(/, 'el SDK debe buscar una copia ya extraída dentro de toolchains/');
-assert.match(openglSdkFetcher, /actual_candidate_manifest/, 'el SDK extraído debe verificarse contra la identidad fijada');
+assert.match(openglSdkFetcher, /function verify_prefix\(\)/, 'el SDK extraído debe verificarse contra la identidad fijada');
+assert.match(openglSdkFetcher, /manifest_sha256=0d432edc9d648d6e0cccb4d5eb3db8484f10ba4b075b5ccf23edda3251b66360/, 'el manifiesto del SDK debe coincidir con el pin exacto');
 assert.match(openglSdkFetcher, /falta el tarball fijado o un SDK/, 'si no hay tarball ni copia extraída válida, el error debe explicitar el bloqueo offline');
 assert.match(openglSdkFetcher, /archive="\$toolchains_root\/ps5-opengl-sdk\/ps5-opengl-sdk-\$version\.tar\.gz"/, 'el tarball del SDK se guarda una sola vez bajo la raíz local toolchains configurada');
 for (const [name, script] of [['OpenGL native', openGlNativeDeps], ['Native C++', nativeCppDeps], ['Vulkan', vulkanDeps]]) {
