@@ -1,0 +1,79 @@
+name: Package self-contained Visual PS5 IDE
+on:
+  push:
+    branches:
+      - offline-build-recovery-20261021
+    paths:
+      - .github/workflows/package-self-contained-ide.yml
+      - runtime/server.ps1
+      - runtime/toolchain-pins.json
+      - runtime/test-toolchain-pins.js
+      - toolchains/ps5-homebrew-ui/tools/fetch-opengl-sdk.sh
+permissions:
+  contents: read
+  actions: read
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Download the SDK archive built and verified from pinned source
+        uses: d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: recovered-ps5-opengl-sdk
+          path: ${{ runner.temp }}/sdk-artifact
+          repository: ${{ github.repository }}
+          run-id: 39670367714
+          github-token: ${{ github.token }}
+      - name: Verify SDK archive and its internal manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          stage="$RUNNER_TEMP/sdk-artifact"
+          archive="$stage/ps5-opengl-sdk-1.0.2.tar.gz"
+          checksum="$stage/ps5-opengl-sdk-1.0.2.tar.gz.sha256"
+          test -s "$archive"
+          test -s "$checksum"
+          printf '%s  %s\n' '8e6cf43c03f210b5cf31e232a16a16c4154163059eaf33f00de836bf003a8818' "$archive" | sha256sum --check --strict
+          mkdir "$RUNNER_TEMP/sdk-verify"
+          tar -xzf "$archive" -C "$RUNNER_TEMP/sdk-verify"
+          sdk="$RUNNER_TEMP/sdk-verify/ps5-opengl-sdk-1.0.2/sdk"
+          test "$(sha256sum "$sdk/manifest.sha256" | cut -d' ' -f1)" = '700493a187604fa33b90b94416cb6faf702a4852de03e072eb79154faabd8d88'
+          (cd "$sdk" && sha256sum --check --strict --quiet manifest.sha256)
+          echo "Verified SDK SHA-256: $(sha256sum "$archive" | cut -d' ' -f1)"
+          echo "Verified manifest SHA-256: $(sha256sum "$sdk/manifest.sha256" | cut -d' ' -f1)"
+      - name: Build a clean archive of the tracked IDE tree with the SDK included
+        shell: bash
+        run: |
+          set -euo pipefail
+          stage="$RUNNER_TEMP/Visual-PS5-offline-build-recovery-20261021-with-opengl-sdk"
+          mkdir -p "$stage"
+          git archive --format=tar HEAD | tar -xf - -C "$stage"
+          mkdir -p "$stage/toolchains/ps5-opengl-sdk"
+          cp "$RUNNER_TEMP/sdk-artifact/ps5-opengl-sdk-1.0.2.tar.gz" "$stage/toolchains/ps5-opengl-sdk/"
+          cp "$RUNNER_TEMP/sdk-artifact/ps5-opengl-sdk-1.0.2.tar.gz.sha256" "$stage/toolchains/ps5-opengl-sdk/"
+          cat > "$stage/toolchains/ps5-opengl-sdk/README.txt" <<'TXT'
+          PS5 OpenGL SDK 1.0.2 - local verified package
+          Archive: ps5-opengl-sdk-1.0.2.tar.gz
+          SHA-256: 8e6cf43c03f210b5cf31e232a16a16c4154163059eaf33f00de836bf003a8818
+          Internal sdk/manifest.sha256 SHA-256: 700493a187604fa33b90b94416cb6faf702a4852de03e072eb79154faabd8d88
+          This SDK was rebuilt from the pinned sources vendored in toolchains/ps5-opengl.
+          The IDE verifies the archive and internal manifest before using it. No remote release is needed.
+          It has not been independently tested on a physical PS5.
+          TXT
+          output="$RUNNER_TEMP/Visual-PS5-offline-build-recovery-20261021-with-opengl-sdk.zip"
+          (cd "$stage" && zip -qr "$output" .)
+          sha256sum "$output" > "$output.sha256"
+          ls -lh "$output" "$output.sha256"
+      - name: Upload self-contained IDE package
+        uses: ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: Visual-PS5-offline-build-recovery-with-opengl-sdk
+          path: |
+            ${{ runner.temp }}/Visual-PS5-offline-build-recovery-20261021-with-opengl-sdk.zip
+            ${{ runner.temp }}/Visual-PS5-offline-build-recovery-20261021-with-opengl-sdk.zip.sha256
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
