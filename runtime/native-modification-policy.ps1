@@ -376,11 +376,12 @@ function ApplyPS5HSSdkLocalOnlyPatch {
     throw 'No se reconocen los pins SHA-256 del SDK OpenGL; no se modifica la plantilla ni se permite una descarga alternativa.'
   }
   $updated = $original
-  $nl = [Environment]::NewLine
-  if ($original.Contains([char]13 + [char]10)) { $nl = [char]13 + [char]10 }
+  $nl = [string][char]10
+  $crlf = ([string][char]13) + ([string][char]10)
+  if ($original.Contains($crlf)) { $nl = $crlf }
   $urlPattern = '(?m)^url="https://github\.com/[^/"]+/ps5-opengl/releases/download/v\$version/ps5-opengl-sdk-\$version\.tar\.gz"\s*\r?$'
   if ([regex]::IsMatch($updated,$urlPattern)) {
-    $updated = [regex]::Replace($updated,$urlPattern,'# PS5HS_LOCAL_ONLY: no se configuran URLs de descarga externas.',1)
+    $updated = ([regex]::new($urlPattern)).Replace($updated,'# PS5HS_LOCAL_ONLY: no se configuran URLs de descarga externas.',1)
   } elseif ($updated -notmatch '(?m)^# PS5HS_LOCAL_ONLY:') {
     throw 'No se reconoce la URL del SDK fijado en tools/fetch-opengl-sdk.sh; se detiene para evitar una descarga implícita.'
   }
@@ -393,7 +394,7 @@ function ApplyPS5HSSdkLocalOnlyPatch {
     '    fi'
   ) -join $nl
   if ([regex]::IsMatch($updated,$downloadPattern)) {
-    $updated = [regex]::Replace($updated,$downloadPattern,[System.Text.RegularExpressions.MatchEvaluator]{ param($m) $downloadReplacement },1)
+    $updated = ([regex]::new($downloadPattern)).Replace($updated,[System.Text.RegularExpressions.MatchEvaluator]{ param($m) $downloadReplacement },1)
   } elseif ($updated -notmatch '(?m)^\s{4}echo "ps5-opengl SDK ausente del caché local;') {
     throw 'No se reconoce el bloque de descarga del SDK; se detiene sin modificar fuentes.'
   }
