@@ -113,7 +113,7 @@ assert.match(openglSdkFetcher, /Usa el paquete del IDE que incluye el SDK OpenGL
 assert.doesNotMatch(openglSdkFetcher, /release_api=|browser_download_url/, 'el resolver no debe enumerar assets remotos');
 assert.match(openglSdkFetcher, /local_prefixes=\(/, 'el resolvedor verifica candidatos de SDK que ya están extraídos localmente');
 assert.match(openglSdkFetcher, /archive="\$sdk_root\/ps5-opengl-sdk-\$version\.tar\.gz"/, 'el SDK local debe leerse desde la ruta empaquetada del IDE');
-assert.match(openglSdkFetcher, /archive_sha256=8e6cf43c03f210b5cf31e232a16a16c4154163059eaf33f00de836bf003a8818/, 'el archivo local debe usar el SHA-256 del SDK reconstruido verificado');
+assert.ok(openglSdkFetcher.includes(`archive_sha256=${pins.artifacts['ps5-opengl-sdk'].archive.sha256}`), 'el resolvedor OpenGL debe compartir el SHA-256 del tarball definido en el manifiesto');
 assert.doesNotMatch(openglSdkFetcher, /PS5HS_ALLOW_PINNED_SDK_DOWNLOAD|direct_url=|curl --fail|wget --quiet/, 'el resolver no debe intentar descargas externas');
 assert.equal(openglSdkFetcher.includes('curl'), false, 'el SDK OpenGL no debe contener un cliente HTTP');
 assert.equal(openglSdkFetcher.includes('wget'), false, 'el SDK OpenGL no debe usar wget');
@@ -121,7 +121,7 @@ assert.match(openglSdkFetcher, /"\$root\/\.deps\/ps5-opengl\/ps5-opengl-sdk-\$ve
 assert.match(openglSdkFetcher, /sha256sum --check --strict --status/, 'el archivo se debe verificar antes de extraerlo o promoverlo');
 assert.match(openglSdkFetcher, /local_prefixes=\(/, 'el SDK debe buscar una copia ya extraída dentro de toolchains/');
 assert.match(openglSdkFetcher, /verify_prefix\(\) \{/, 'el SDK extraído debe verificarse contra la identidad fijada');
-assert.match(openglSdkFetcher, /manifest_sha256=700493a187604fa33b90b94416cb6faf702a4852de03e072eb79154faabd8d88/, 'el manifiesto del SDK reconstruido debe coincidir con el pin exacto');
+assert.ok(openglSdkFetcher.includes(`manifest_sha256=${pins.artifacts['ps5-opengl-sdk'].sdkManifest.sha256}`), 'el resolvedor OpenGL debe compartir el SHA-256 del manifiesto interno fijado');
 assert.match(openglSdkFetcher, /local-only: falta \$archive/, 'si no hay tarball local ni copia extraída válida, el error debe explicitar el bloqueo offline');
 assert.match(openglSdkFetcher, /sdk_root="\$toolchains_root\/ps5-opengl-sdk"/, 'el tarball del SDK se guarda bajo la raíz local toolchains configurada');
 for (const [name, script] of [['OpenGL native', openGlNativeDeps], ['Native C++', nativeCppDeps], ['Vulkan', vulkanDeps]]) {

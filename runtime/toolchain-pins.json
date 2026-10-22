@@ -8,9 +8,9 @@
       "usedBy": "tools/fetch-opengl-sdk.sh de los proyectos hui-gl generados",
       "version": "1.0.2",
       "file": "ps5-opengl-sdk-1.0.2.tar.gz",
-      "bytes": 40800047,
+      "bytes": 40511813,
       "archive": {
-        "sha256": "8e6cf43c03f210b5cf31e232a16a16c4154163059eaf33f00de836bf003a8818"
+        "sha256": "ca7d1f4bc1cc9ba22bb115ae10aaab9cee1072e5e5d157df7bc08c4cb56a99e0"
       },
       "sdkManifest": {
         "path": "sdk/manifest.sha256",

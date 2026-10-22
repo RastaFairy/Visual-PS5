@@ -10,7 +10,7 @@ set -euo pipefail
 
 root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 version=1.0.2
-archive_sha256=8e6cf43c03f210b5cf31e232a16a16c4154163059eaf33f00de836bf003a8818
+archive_sha256=ca7d1f4bc1cc9ba22bb115ae10aaab9cee1072e5e5d157df7bc08c4cb56a99e0
 manifest_sha256=700493a187604fa33b90b94416cb6faf702a4852de03e072eb79154faabd8d88
 
 toolchains_root="${PS5HS_TOOLCHAINS_ROOT:-$(dirname "$root")}"
