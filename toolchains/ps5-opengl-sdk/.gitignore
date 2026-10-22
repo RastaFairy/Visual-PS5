@@ -1,2 +1,1 @@
-*.tar.gz
-/.cache/
+# The prepared SDK and source archive are intentionally tracked.
