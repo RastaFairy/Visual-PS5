@@ -48,7 +48,7 @@ done
 # The self-contained IDE ZIP includes this file. Do not hit obsolete upstream
 # release URLs or attempt a large source rebuild when the file is missing.
 [[ -f $archive ]] || {
-    echo "local-only: falta $archive. Usa el paquete del IDE que incluye el SDK OpenGL 1.0.2; no se consulta Internet." >&2
+    echo "local-only: falta $archive. Usa el paquete del IDE que incluye el SDK OpenGL 1.0.2; No se consulta Internet." >&2
     exit 2
 }
 printf '%s  %s\n' "$archive_sha256" "$archive" | sha256sum --check --strict --status || {
