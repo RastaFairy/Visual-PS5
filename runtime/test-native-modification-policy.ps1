@@ -115,6 +115,8 @@ try {
   Assert-Condition ($treeSnapshot.ContainsKey('.deps/hui/dependency.cpp')) 'El snapshot debe incluir dependencias embebidas, porque también pueden modificarse.'
   Assert-Condition ($treeSnapshot.ContainsKey('.deps/ps5-opengl/current')) 'El alias generado current debe quedar representado en el hash de auditoría.'
   Assert-Condition (!$treeSnapshot.ContainsKey('.deps/ps5-opengl/current/sdk-cache.txt')) 'El auditor debe registrar el alias como metadatos y nunca seguir el enlace.'
+  $linkOnlyHash = GetPS5HSNativeFileHashes -ProjectRoot $root -RelativePaths @('.deps/ps5-opengl/current')
+  Assert-Condition ($linkOnlyHash['.deps/ps5-opengl/current'] -ceq $treeSnapshot['.deps/ps5-opengl/current']) 'El snapshot completo y el registro de cambios deben hashear el mismo metadato del enlace.'
   Assert-Condition (!$treeSnapshot.ContainsKey('.git/objects/ignored')) 'El snapshot no debe recorrer ni auditar internals Git.'
 
   # Only the exact upstream-generated OpenGL alias is accepted; arbitrary links stay denied.

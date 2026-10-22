@@ -92,6 +92,27 @@ function AssertPS5HSNativePathNoReparsePoints {
   return $fullPath
 }
 
+function GetPS5HSNativeOpenGlCurrentLinkFingerprint {
+  param([Parameter(Mandatory=$true)]$LinkItem)
+  $linkTarget = ''
+  if ($LinkItem.PSObject.Properties['Target']) {
+    $linkTarget = (@($LinkItem.Target) | ForEach-Object { [string]$_ }) -join '|'
+  }
+  if ([string]::IsNullOrWhiteSpace($linkTarget) -and $LinkItem.PSObject.Properties['LinkTarget']) {
+    $linkTarget = [string]$LinkItem.LinkTarget
+  }
+  if ([string]::IsNullOrWhiteSpace($linkTarget)) {
+    throw 'No se pudo registrar de forma segura el destino del enlace generado de OpenGL.'
+  }
+  $fingerprint = [Text.Encoding]::UTF8.GetBytes("PS5HS-OPENGL-CURRENT-LINK`n" + $linkTarget)
+  $sha = [Security.Cryptography.SHA256]::Create()
+  try {
+    return ([BitConverter]::ToString($sha.ComputeHash($fingerprint))).Replace('-','').ToLowerInvariant()
+  } finally {
+    $sha.Dispose()
+  }
+}
+
 function GetPS5HSNativeFileHashes {
   param([Parameter(Mandatory=$true)][string]$ProjectRoot,[Parameter(Mandatory=$true)][string[]]$RelativePaths)
   $result = @{}
@@ -109,14 +130,23 @@ function GetPS5HSNativeFileHashes {
     $path = Join-Path $root ($relative.Replace('/',[IO.Path]::DirectorySeparatorChar))
     $current = $root
     $segments = @(([string]$relative -split '[\\/]') | Where-Object { $_ -and $_ -ne '.' })
+    $linkFingerprint = $null
     foreach ($segment in $segments) {
       $current = Join-Path $current $segment
       if (Test-Path -LiteralPath $current) {
         $currentItem = Get-Item -LiteralPath $current -Force
         if (($currentItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+          if ($relative -ieq '.deps/ps5-opengl/current' -and $current -ieq $path) {
+            $linkFingerprint = GetPS5HSNativeOpenGlCurrentLinkFingerprint -LinkItem $currentItem
+            break
+          }
           throw "No se modificará ni auditará una ruta a través de un enlace: $relative"
         }
       } else { break }
+    }
+    if ($null -ne $linkFingerprint) {
+      $result[$relative] = $linkFingerprint
+      continue
     }
     if (Test-Path -LiteralPath $path -PathType Leaf) {
       $item = Get-Item -LiteralPath $path -Force
@@ -246,23 +276,7 @@ function GetPS5HSNativeTreeHashes {
         # Upstream OpenGL creates this one SDK alias while preparing its link group.
         # Hash link metadata only: never traverse or read the target through the alias.
         if ($relativeDirectory -ieq '.deps/ps5-opengl/current') {
-          $linkTarget = ''
-          if ($directoryItem.PSObject.Properties['Target']) {
-            $linkTarget = (@($directoryItem.Target) | ForEach-Object { [string]$_ }) -join '|'
-          }
-          if ([string]::IsNullOrWhiteSpace($linkTarget) -and $directoryItem.PSObject.Properties['LinkTarget']) {
-            $linkTarget = [string]$directoryItem.LinkTarget
-          }
-          if ([string]::IsNullOrWhiteSpace($linkTarget)) {
-            throw ('No se pudo registrar de forma segura el destino del enlace generado de OpenGL: ' + $subdirectory)
-          }
-          $fingerprint = [Text.Encoding]::UTF8.GetBytes("PS5HS-OPENGL-CURRENT-LINK`n" + $linkTarget)
-          $sha = [Security.Cryptography.SHA256]::Create()
-          try {
-            $hashes[$relativeDirectory] = ([BitConverter]::ToString($sha.ComputeHash($fingerprint))).Replace('-','').ToLowerInvariant()
-          } finally {
-            $sha.Dispose()
-          }
+          $hashes[$relativeDirectory] = GetPS5HSNativeOpenGlCurrentLinkFingerprint -LinkItem $directoryItem
           continue
         }
         throw ("Se ha encontrado una carpeta enlazada dentro del árbol nativo; se cancela para evitar escrituras fuera del proyecto: " + $subdirectory)
