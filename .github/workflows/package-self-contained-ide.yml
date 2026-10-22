@@ -35,7 +35,19 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          runs_json="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/build-recovered-opengl-sdk.yml/runs?branch=$GITHUB_REF_NAME&per_page=50")"
+          # Do not package against an older SDK artifact while a new build on this branch is still running.
+          deadline=$((SECONDS + 7200))
+          while true; do
+            runs_json="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/build-recovered-opengl-sdk.yml/runs?branch=$GITHUB_REF_NAME&per_page=50")"
+            active_run="$(jq -r '[.workflow_runs[] | select(.status != "completed")] | first | .id // empty' <<< "$runs_json")"
+            [[ -n "$active_run" ]] || break
+            if (( SECONDS >= deadline )); then
+              echo "Timed out waiting for SDK workflow run $active_run to finish." >&2
+              exit 1
+            fi
+            echo "SDK workflow run $active_run is not complete yet; waiting before selecting a pinned artifact."
+            sleep 15
+          done
           run_id=""
           while IFS= read -r candidate; do
             [[ -n "$candidate" ]] || continue
@@ -44,12 +56,12 @@ jobs:
               run_id="$candidate"
               break
             fi
-          done < <(jq -r '.workflow_runs[] | select(.status == "completed") | .id' <<< "$runs_json")
+          done < <(jq -r '.workflow_runs[] | select(.status == "completed" and .conclusion == "success") | .id' <<< "$runs_json")
           [[ -n "$run_id" ]] || {
-            echo "No completed SDK workflow run with a retained recovered-ps5-opengl-sdk artifact." >&2
+            echo "No successful completed SDK workflow run with a retained recovered-ps5-opengl-sdk artifact." >&2
             exit 1
           }
-          echo "Using SDK artifact from workflow run $run_id; the archive hash is verified next."
+          echo "Using SDK artifact from successful workflow run $run_id; archive and manifest hashes will be verified."
           echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
 
       - name: Download the OpenGL SDK build artifact
