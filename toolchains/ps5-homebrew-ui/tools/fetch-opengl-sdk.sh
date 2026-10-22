@@ -33,6 +33,7 @@ verify_prefix() {
 # Prefer a verified SDK directory; never use an unverified build cache.
 local_prefixes=(
     "$prefix"
+    "$root/.deps/ps5-opengl/ps5-opengl-sdk-$version/sdk"
     "$sdk_root/ps5-opengl-sdk-$version/sdk"
     "$sdk_root/sdk"
     "$toolchains_root/ps5-opengl/build/sdk/ps5-opengl-gl46"
