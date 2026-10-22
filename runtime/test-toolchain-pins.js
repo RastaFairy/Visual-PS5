@@ -107,6 +107,9 @@ assert.match(openglSdkFetcher, /local_prefixes=\(/, 'el resolvedor verifica cand
 assert.match(openglSdkFetcher, /archive="\$sdk_root\/ps5-opengl-sdk-\$version\.tar\.gz"/, 'el SDK local debe leerse desde la ruta empaquetada del IDE');
 assert.match(openglSdkFetcher, /archive_sha256=8e6cf43c03f210b5cf31e232a16a16c4154163059eaf33f00de836bf003a8818/, 'el archivo local debe usar el SHA-256 del SDK reconstruido verificado');
 assert.doesNotMatch(openglSdkFetcher, /PS5HS_ALLOW_PINNED_SDK_DOWNLOAD|direct_url=|curl --fail|wget --quiet/, 'el resolver no debe intentar descargas externas');
+assert.equal(openglSdkFetcher.includes('curl'), false, 'el SDK OpenGL no debe contener un cliente HTTP');
+assert.equal(openglSdkFetcher.includes('wget'), false, 'el SDK OpenGL no debe usar wget');
+assert.match(openglSdkFetcher, /"\$root\/\.deps\/ps5-opengl\/ps5-opengl-sdk-\$version\/sdk"/, 'se puede reutilizar la caché local anterior solo si verify_prefix confirma el manifiesto exacto');
 assert.match(openglSdkFetcher, /sha256sum --check --strict --status/, 'el archivo se debe verificar antes de extraerlo o promoverlo');
 assert.match(openglSdkFetcher, /local_prefixes=\(/, 'el SDK debe buscar una copia ya extraída dentro de toolchains/');
 assert.match(openglSdkFetcher, /verify_prefix\(\) \{/, 'el SDK extraído debe verificarse contra la identidad fijada');
