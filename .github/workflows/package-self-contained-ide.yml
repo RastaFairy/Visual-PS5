@@ -5,8 +5,15 @@ on:
     branches: [offline-build-recovery-20261021]
     paths:
       - .github/workflows/package-self-contained-ide.yml
+      - .github/workflows/build-recovered-opengl-sdk.yml
       - runtime/**
       - toolchains/ps5-homebrew-ui/tools/fetch-opengl-sdk.sh
+      - toolchains/ps5-homebrew-ui/tools/setup-native-dependencies.sh
+      - toolchains/ps5-homebrew-ui/tools/setup-pacbrew-dependencies.sh
+      - toolchains/ps5-homebrew-ui/tools/setup-test-dependencies.sh
+      - toolchains/ps5-native-app-boilerplate/tools/setup-native-dependencies.sh
+      - toolchains/PS5_Vulkan/tools/setup-native-dependencies.sh
+      - toolchains/ps5-opengl/tools/fetch-sources.py
 
 permissions:
   actions: read
@@ -21,13 +28,37 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Locate the latest completed OpenGL SDK artifact
+        id: sdk-run
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          runs_json="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/build-recovered-opengl-sdk.yml/runs?branch=$GITHUB_REF_NAME&per_page=50")"
+          run_id=""
+          while IFS= read -r candidate; do
+            [[ -n "$candidate" ]] || continue
+            artifacts_json="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$candidate/artifacts")"
+            if jq -e '.artifacts[]? | select(.name == "recovered-ps5-opengl-sdk" and .expired == false)' <<< "$artifacts_json" >/dev/null; then
+              run_id="$candidate"
+              break
+            fi
+          done < <(jq -r '.workflow_runs[] | select(.status == "completed") | .id' <<< "$runs_json")
+          [[ -n "$run_id" ]] || {
+            echo "No completed SDK workflow run with a retained recovered-ps5-opengl-sdk artifact." >&2
+            exit 1
+          }
+          echo "Using verified SDK artifact from workflow run $run_id"
+          echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
+
       - name: Download the verified OpenGL SDK archive
         uses: actions/download-artifact@v4
         with:
           name: recovered-ps5-opengl-sdk
           path: ${{ runner.temp }}/sdk-artifact
           repository: ${{ github.repository }}
-          run-id: 39670367714
+          run-id: ${{ steps.sdk-run.outputs.run_id }}
           github-token: ${{ github.token }}
 
       - name: Verify SDK pins
@@ -42,6 +73,76 @@ jobs:
           sdk="$RUNNER_TEMP/sdk-verify/ps5-opengl-sdk-1.0.2/sdk"
           test "$(sha256sum "$sdk/manifest.sha256" | cut -d' ' -f1)" = '700493a187604fa33b90b94416cb6faf702a4852de03e072eb79154faabd8d88'
           (cd "$sdk" && sha256sum --check --strict --quiet manifest.sha256)
+
+      - name: Download and verify all remaining offline runtime dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/runtime-artifacts"
+          python3 - "$RUNNER_TEMP/runtime-artifact-pins.tsv" <<'PY'
+          import json, sys
+          with open("runtime/toolchain-pins.json", encoding="utf-8") as stream:
+              manifest = json.load(stream)
+          names = ("ps5-payload-sdk", "zlib", "pacbrew", "googletest")
+          with open(sys.argv[1], "w", encoding="utf-8", newline="\n") as output:
+              for name in names:
+                  entry = manifest["artifacts"][name]
+                  required = (entry.get("file"), entry.get("localPath"), entry.get("sourceUrl"), entry.get("archive", {}).get("sha256"))
+                  if not all(required) or len(required[3]) != 64:
+                      raise SystemExit(f"Incomplete local artifact pin: {name}")
+                  if entry["localPath"] != "toolchains/artifacts/" + entry["file"]:
+                      raise SystemExit(f"Unexpected target path for {name}: {entry['localPath']}")
+                  print(name, entry["sourceUrl"], entry["file"], required[3], sep="\t", file=output)
+          PY
+          while IFS=        shell: bash
+        run: |
+          set -euo pipefail
+          stage="$RUNNER_TEMP/Visual-PS5-offline-build-recovery-20261021-with-runtime-deps"
+          mkdir -p "$stage"
+          git archive --format=tar HEAD | tar -xf - -C "$stage"
+          mkdir -p "$stage/toolchains/ps5-opengl-sdk"
+          cp "$RUNNER_TEMP/sdk-artifact/ps5-opengl-sdk-1.0.2.tar.gz" "$stage/toolchains/ps5-opengl-sdk/"
+          cp "$RUNNER_TEMP/sdk-artifact/ps5-opengl-sdk-1.0.2.tar.gz.sha256" "$stage/toolchains/ps5-opengl-sdk/"
+          mkdir -p "$stage/toolchains/artifacts"
+          cp "$RUNNER_TEMP/runtime-artifacts/." "$stage/toolchains/artifacts/"
+          printf '%s\n' \
+            'Runtime build dependencies bundled for offline/local-only use.' \
+            'All archive hashes were checked against runtime/toolchain-pins.json during packaging.' \
+            'Network access is permitted only during this CI packaging step; IDE builds must use these local files.' > "$stage/toolchains/artifacts/README.txt"
+          printf '%s\n' \
+            'PS5 OpenGL SDK 1.0.2 - local verified package' \
+            'Archive SHA-256: 8e6cf43c03f210b5cf31e232a16a16c4154163059eaf33f00de836bf003a8818' \
+            'SDK manifest SHA-256: 700493a187604fa33b90b94416cb6faf702a4852de03e072eb79154faabd8d88' \
+            'Rebuilt from the pinned source snapshot in toolchains/ps5-opengl.' \
+            'IDE verifies archive and manifest before use. No remote release is needed.' \
+            'Payload SDK, zlib, PacBrew and GoogleTest archives are bundled under toolchains/artifacts/.' \
+            'Not independently tested on a physical PS5.' > "$stage/toolchains/ps5-opengl-sdk/README.txt"
+          output="$RUNNER_TEMP/Visual-PS5-offline-build-recovery-20261021-with-runtime-deps.zip"
+          (cd "$stage" && zip -qr "$output" .)
+          sha256sum "$output" > "$output.sha256"
+          ls -lh "$output" "$output.sha256"
+
+      - name: Upload the self-contained IDE package
+        uses: actions/upload-artifact@v4
+        with:
+          name: Visual-PS5-offline-build-recovery-with-opengl-sdk
+          path: |
+            ${{ runner.temp }}/Visual-PS5-offline-build-recovery-20261021-with-opengl-sdk.zip
+            ${{ runner.temp }}/Visual-PS5-offline-build-recovery-20261021-with-opengl-sdk.zip.sha256
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+\t' read -r name url filename expected_sha; do
+            [[ -n "$name" && -n "$url" && -n "$filename" && -n "$expected_sha" ]] || {
+              echo "Invalid runtime artifact pin row: $name" >&2
+              exit 1
+            }
+            destination="$RUNNER_TEMP/runtime-artifacts/$filename"
+            echo "Fetching pinned packaging input: $name ($filename)"
+            curl --fail --location --retry 3 --retry-all-errors --connect-timeout 30 --max-time 900 "$url" -o "$destination"
+            printf '%s  %s\n' "$expected_sha" "$destination" | sha256sum --check --strict
+            printf '%s  %s\n' "$expected_sha" "$filename" > "$destination.sha256"
+          done < "$RUNNER_TEMP/runtime-artifact-pins.tsv"
 
       - name: Pack the tracked IDE with its SDK archive
         shell: bash
