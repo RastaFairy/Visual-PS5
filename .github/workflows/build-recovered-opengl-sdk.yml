@@ -5,8 +5,11 @@ on:
       - offline-build-recovery-20261021
     paths:
       - .github/workflows/build-recovered-opengl-sdk.yml
+      - toolchains/ps5-opengl/**
+      - toolchains/ps5-payload-sdk/**
+      - toolchains/PS5_PayloadSDK-pinned-*/**
 permissions:
-  contents: write
+  contents: read
 jobs:
   sdk:
     runs-on: ubuntu-24.04
@@ -76,22 +79,10 @@ jobs:
           echo "SDK_ARCHIVE_BYTES=$(wc -c < "$RUNNER_TEMP/$name.tar.gz" | tr -d ' ')" >> "$GITHUB_ENV"
           echo "SDK_ARCHIVE=$RUNNER_TEMP/$name.tar.gz" >> "$GITHUB_ENV"
           echo "SDK_CHECKSUM=$RUNNER_TEMP/$name.tar.gz.sha256" >> "$GITHUB_ENV"
-          echo "Expected manifest SHA-256: 0d432edc9d648d6e0cccb4d5eb3db8484f10ba4b075b5ccf23edda3251b66360"
+          echo "Expected manifest SHA-256: 700493a187604fa33b90b94416cb6faf702a4852de03e072eb79154faabd8d88"
           echo "Built manifest SHA-256: $SDK_MANIFEST_SHA256"
           echo "Built archive SHA-256: $SDK_ARCHIVE_SHA256"
           echo "Built archive bytes: $SDK_ARCHIVE_BYTES"
-      - name: Publish the verified SDK on this repository so IDE builds no longer depend on the dead upstream release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          tag=ps5hs-opengl-sdk-cache-v1.0.2
-          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            gh release upload "$tag" "$SDK_ARCHIVE" "$SDK_CHECKSUM" --clobber --repo "$GITHUB_REPOSITORY"
-          else
-            gh release create "$tag" "$SDK_ARCHIVE" "$SDK_CHECKSUM" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
-              --title "Pinned PS5 OpenGL SDK 1.0.2 (rebuilt from vendored source)" \
-              --notes "SDK rebuilt from the versioned PS5 OpenGL source snapshot in RastaFairy/Visual-PS5. SHA-256 and the SDK's internal manifest are verified by the IDE before use. Built by GitHub Actions; not independently run on a PS5."
-          fi
       - name: Keep SDK package available as a workflow artifact
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
