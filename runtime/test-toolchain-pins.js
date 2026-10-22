@@ -17,6 +17,7 @@ const pacbrewDeps = fs.readFileSync(path.join(root, 'toolchains', 'ps5-homebrew-
 const testDeps = fs.readFileSync(path.join(root, 'toolchains', 'ps5-homebrew-ui', 'tools', 'setup-test-dependencies.sh'), 'utf8');
 const openGlSources = fs.readFileSync(path.join(root, 'toolchains', 'ps5-opengl', 'tools', 'fetch-sources.py'), 'utf8');
 const packageWorkflow = fs.readFileSync(path.join(root, '.github', 'workflows', 'package-self-contained-ide.yml'), 'utf8');
+const sdkBuildWorkflow = fs.readFileSync(path.join(root, '.github', 'workflows', 'build-recovered-opengl-sdk.yml'), 'utf8');
 
 const windowsZipSafeFreeBsdHeaders = [
   '_semaphore.h', 'aio.h', 'errno.h', 'fcntl.h', 'float.h',
@@ -66,6 +67,10 @@ for (const [name] of bundledRuntimeArtifacts) {
 assert.ok(packageWorkflow.includes('sha256sum --check --strict'), 'cada archivo runtime descargado en CI debe verificarse contra su hash');
 assert.ok(packageWorkflow.includes('Visual-PS5-offline-build-recovery-20261021-with-runtime-deps.zip'), 'el paquete generado debe identificarse como la edición con dependencias runtime');
 assert.doesNotMatch(packageWorkflow, /run-id:\s*\d+/, 'el empaquetado no debe depender de un ID fijo de ejecución que pueda caducar');
+assert.ok(sdkBuildWorkflow.includes('tar --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner -cf -'), 'el archivo SDK debe normalizar orden, fecha y propiedad para obtener un SHA-256 reproducible');
+assert.ok(sdkBuildWorkflow.includes('gzip -n -9'), 'el empaquetado SDK debe quitar fecha/nombre variables de la cabecera gzip');
+assert.ok(sdkBuildWorkflow.includes('cmp --silent "$RUNNER_TEMP/$name.tar.gz" "$RUNNER_TEMP/$name.repeat.tar.gz"'), 'el workflow debe verificar que dos empaquetados consecutivos sean idénticos');
+assert.ok(sdkBuildWorkflow.includes('test "$manifest_sha" = "$expected_manifest_sha"'), 'el workflow debe fallar si el manifiesto interno no coincide con el pin');
 
 
 
