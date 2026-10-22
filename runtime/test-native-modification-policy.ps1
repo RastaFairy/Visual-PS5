@@ -104,9 +104,26 @@ try {
   [IO.Directory]::CreateDirectory((Join-Path $root 'out-123456')) | Out-Null
   [IO.File]::WriteAllText((Join-Path $root 'build/compiler-output.bin'),'binary output',$utf8)
   [IO.File]::WriteAllText((Join-Path $root 'out-123456/title.pkg'),'binary output',$utf8)
+  $openGlDepsRoot = Join-Path $root '.deps/ps5-opengl'
+  $openGlSdkTarget = Join-Path $openGlDepsRoot 'sdk-1.0.2'
+  [IO.Directory]::CreateDirectory($openGlSdkTarget) | Out-Null
+  [IO.File]::WriteAllText((Join-Path $openGlSdkTarget 'sdk-cache.txt'),'verified-sdk-cache',$utf8)
+  $openGlCurrentLink = Join-Path $openGlDepsRoot 'current'
+  New-Item -ItemType SymbolicLink -Path $openGlCurrentLink -Target $openGlSdkTarget | Out-Null
+
   $treeSnapshot = GetPS5HSNativeTreeHashes -ProjectRoot $root
   Assert-Condition ($treeSnapshot.ContainsKey('.deps/hui/dependency.cpp')) 'El snapshot debe incluir dependencias embebidas, porque también pueden modificarse.'
+  Assert-Condition ($treeSnapshot.ContainsKey('.deps/ps5-opengl/current')) 'El alias generado current debe quedar representado en el hash de auditoría.'
+  Assert-Condition (!$treeSnapshot.ContainsKey('.deps/ps5-opengl/current/sdk-cache.txt')) 'El auditor debe registrar el alias como metadatos y nunca seguir el enlace.'
   Assert-Condition (!$treeSnapshot.ContainsKey('.git/objects/ignored')) 'El snapshot no debe recorrer ni auditar internals Git.'
+
+  # Only the exact upstream-generated OpenGL alias is accepted; arbitrary links stay denied.
+  $unexpectedLink = Join-Path $root 'src/untrusted-link'
+  New-Item -ItemType SymbolicLink -Path $unexpectedLink -Target $openGlSdkTarget | Out-Null
+  $unexpectedLinkDenied = $false
+  try { $null = GetPS5HSNativeTreeHashes -ProjectRoot $root } catch { $unexpectedLinkDenied = $true }
+  Assert-Condition $unexpectedLinkDenied 'El auditor debe seguir rechazando enlaces distintos del alias current del SDK OpenGL.'
+  Remove-Item -LiteralPath $unexpectedLink -Force
   Assert-Condition (!$treeSnapshot.ContainsKey('build/compiler-output.bin')) 'El snapshot debe excluir artefactos de build regenerables.'
   Assert-Condition (!$treeSnapshot.ContainsKey('out-123456/title.pkg')) 'El snapshot debe excluir carpetas de salida para no hashear paquetes grandes.'
 

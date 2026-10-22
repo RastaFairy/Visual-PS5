@@ -240,7 +240,31 @@ function GetPS5HSNativeTreeHashes {
     foreach ($subdirectory in [IO.Directory]::EnumerateDirectories($directory)) {
       $directoryName = [IO.Path]::GetFileName($subdirectory)
       $directoryItem = Get-Item -LiteralPath $subdirectory -Force
+      $relativeDirectory = $subdirectory.Substring($root.TrimEnd([IO.Path]::DirectorySeparatorChar,[IO.Path]::AltDirectorySeparatorChar).Length).TrimStart([IO.Path]::DirectorySeparatorChar,[IO.Path]::AltDirectorySeparatorChar)
+      $relativeDirectory = $relativeDirectory.Replace([IO.Path]::DirectorySeparatorChar,'/').Replace([IO.Path]::AltDirectorySeparatorChar,'/')
       if (($directoryItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+        # Upstream OpenGL creates this one SDK alias while preparing its link group.
+        # Hash link metadata only: never traverse or read the target through the alias.
+        if ($relativeDirectory -ieq '.deps/ps5-opengl/current') {
+          $linkTarget = ''
+          if ($directoryItem.PSObject.Properties['Target']) {
+            $linkTarget = (@($directoryItem.Target) | ForEach-Object { [string]$_ }) -join '|'
+          }
+          if ([string]::IsNullOrWhiteSpace($linkTarget) -and $directoryItem.PSObject.Properties['LinkTarget']) {
+            $linkTarget = [string]$directoryItem.LinkTarget
+          }
+          if ([string]::IsNullOrWhiteSpace($linkTarget)) {
+            throw ('No se pudo registrar de forma segura el destino del enlace generado de OpenGL: ' + $subdirectory)
+          }
+          $fingerprint = [Text.Encoding]::UTF8.GetBytes("PS5HS-OPENGL-CURRENT-LINK`n" + $linkTarget)
+          $sha = [Security.Cryptography.SHA256]::Create()
+          try {
+            $hashes[$relativeDirectory] = ([BitConverter]::ToString($sha.ComputeHash($fingerprint))).Replace('-','').ToLowerInvariant()
+          } finally {
+            $sha.Dispose()
+          }
+          continue
+        }
         throw ("Se ha encontrado una carpeta enlazada dentro del árbol nativo; se cancela para evitar escrituras fuera del proyecto: " + $subdirectory)
       }
       if ($directoryName -in $excludedDirectoryNames -or $directoryName -match '^out-[A-Za-z0-9-]+$') { continue }
