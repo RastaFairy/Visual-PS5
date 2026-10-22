@@ -72,17 +72,33 @@ jobs:
           mkdir -p "$stage/$name"
           cp -a build/sdk/ps5-opengl-gl46 "$stage/$name/sdk"
           cp -a LICENSE LICENSES THIRD_PARTY_NOTICES.md "$stage/$name/"
-          (cd "$stage" && tar -czf "$RUNNER_TEMP/$name.tar.gz" "$name")
+          set -euo pipefail
+          # Normalize archive order, timestamps, ownership and gzip metadata so the pinned SHA-256 is reproducible.
+          make_archive() {
+            (
+              cd "$stage"
+              tar --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner -cf - "$name"
+            ) | gzip -n -9 > "$1"
+          }
+          make_archive "$RUNNER_TEMP/$name.tar.gz"
+          make_archive "$RUNNER_TEMP/$name.repeat.tar.gz"
+          cmp --silent "$RUNNER_TEMP/$name.tar.gz" "$RUNNER_TEMP/$name.repeat.tar.gz"
+          rm "$RUNNER_TEMP/$name.repeat.tar.gz"
           (cd "$RUNNER_TEMP" && sha256sum "$name.tar.gz" > "$name.tar.gz.sha256")
-          echo "SDK_MANIFEST_SHA256=$(sha256sum build/sdk/ps5-opengl-gl46/manifest.sha256 | cut -d' ' -f1)" >> "$GITHUB_ENV"
-          echo "SDK_ARCHIVE_SHA256=$(sha256sum "$RUNNER_TEMP/$name.tar.gz" | cut -d' ' -f1)" >> "$GITHUB_ENV"
-          echo "SDK_ARCHIVE_BYTES=$(wc -c < "$RUNNER_TEMP/$name.tar.gz" | tr -d ' ')" >> "$GITHUB_ENV"
+          manifest_sha="$(sha256sum build/sdk/ps5-opengl-gl46/manifest.sha256 | cut -d' ' -f1)"
+          expected_manifest_sha="700493a187604fa33b90b94416cb6faf702a4852de03e072eb79154faabd8d88"
+          test "$manifest_sha" = "$expected_manifest_sha"
+          archive_sha="$(sha256sum "$RUNNER_TEMP/$name.tar.gz" | cut -d' ' -f1)"
+          archive_bytes="$(wc -c < "$RUNNER_TEMP/$name.tar.gz" | tr -d ' ')"
+          echo "SDK_MANIFEST_SHA256=$manifest_sha" >> "$GITHUB_ENV"
+          echo "SDK_ARCHIVE_SHA256=$archive_sha" >> "$GITHUB_ENV"
+          echo "SDK_ARCHIVE_BYTES=$archive_bytes" >> "$GITHUB_ENV"
           echo "SDK_ARCHIVE=$RUNNER_TEMP/$name.tar.gz" >> "$GITHUB_ENV"
           echo "SDK_CHECKSUM=$RUNNER_TEMP/$name.tar.gz.sha256" >> "$GITHUB_ENV"
-          echo "Expected manifest SHA-256: 700493a187604fa33b90b94416cb6faf702a4852de03e072eb79154faabd8d88"
-          echo "Built manifest SHA-256: $SDK_MANIFEST_SHA256"
-          echo "Built archive SHA-256: $SDK_ARCHIVE_SHA256"
-          echo "Built archive bytes: $SDK_ARCHIVE_BYTES"
+          echo "Expected manifest SHA-256: $expected_manifest_sha"
+          echo "Built manifest SHA-256: $manifest_sha"
+          echo "Built archive SHA-256: $archive_sha"
+          echo "Built archive bytes: $archive_bytes"
       - name: Keep SDK package available as a workflow artifact
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
