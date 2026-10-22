@@ -1,8 +1,8 @@
 {
   "schema": "ps5hs-toolchain-pins",
   "version": 1,
-  "updated": "2026-10-21",
-  "notes": "Resolución completamente local: el IDE incluye y valida los artefactos bajo toolchains/. El SDK OpenGL 1.0.2 se reconstruyó desde las fuentes fijadas de toolchains/ps5-opengl porque el release upstream y su endpoint de API devuelven HTTP 404. No hay fallback de red durante la compilación.",
+  "updated": "2026-10-22",
+  "notes": "Resolución completamente local: el IDE incluye y valida los artefactos bajo toolchains/. El SDK OpenGL 1.0.2 se reconstruyó desde las fuentes fijadas de toolchains/ps5-opengl porque el release upstream y su endpoint de API devuelven HTTP 404. No hay fallback de red durante la compilación. El paquete autocontenido debe incorporar también el SDK payload, zlib, PacBrew y GoogleTest con los hashes fijados; el proceso de build no descargará estos archivos.",
   "artifacts": {
     "ps5-opengl-sdk": {
       "usedBy": "tools/fetch-opengl-sdk.sh de los proyectos hui-gl generados",
@@ -18,6 +18,46 @@
       },
       "localPath": "toolchains/ps5-opengl-sdk/ps5-opengl-sdk-1.0.2.tar.gz",
       "notes": "Archivo regenerado por GitHub Actions desde las fuentes versionadas y dependencias fijadas en toolchains/ps5-opengl. Se valida el SHA-256 del tarball y el manifiesto SHA-256 de todos los archivos del SDK antes de usarlo. No se considera validación en hardware PS5."
+    },
+    "ps5-payload-sdk": {
+      "usedBy": "toolchains/ps5-homebrew-ui/tools/setup-native-dependencies.sh y ps5-native-app-boilerplate",
+      "version": "v0.42",
+      "file": "ps5-payload-sdk.zip",
+      "archive": {
+        "sha256": "8cfbc7cd5811e719eb4f0c47eea668d3dc7b40bc8ab11c4a5031d40c23ec02da"
+      },
+      "localPath": "toolchains/artifacts/ps5-payload-sdk.zip",
+      "sourceUrl": "https://github.com/ps5-payload-dev/sdk/releases/download/v0.42/ps5-payload-sdk.zip"
+    },
+    "zlib": {
+      "usedBy": "bootstrap nativo OpenGL, Native C++ y Vulkan",
+      "version": "1.3.2",
+      "file": "zlib-1.3.2.tar.gz",
+      "archive": {
+        "sha256": "bb329a0a2cd0274d05519d61c667c062e06990d72e125ee2dfa8de64f0119d16"
+      },
+      "localPath": "toolchains/artifacts/zlib-1.3.2.tar.gz",
+      "sourceUrl": "https://github.com/madler/zlib/releases/download/v1.3.2/zlib-1.3.2.tar.gz"
+    },
+    "pacbrew": {
+      "usedBy": "toolchains/ps5-homebrew-ui/tools/setup-pacbrew-dependencies.sh",
+      "version": "v0.40.2",
+      "file": "ps5-payload-dev-v0.40.2.tar.gz",
+      "archive": {
+        "sha256": "a85f65de418a8e6a898c6c3e3c870d50fff7618a200e4dd59ea9692af6ecec4d"
+      },
+      "localPath": "toolchains/artifacts/ps5-payload-dev-v0.40.2.tar.gz",
+      "sourceUrl": "https://github.com/ps5-payload-dev/pacbrew-repo/releases/download/v0.40.2/ps5-payload-dev.tar.gz"
+    },
+    "googletest": {
+      "usedBy": "toolchains/ps5-homebrew-ui/tools/setup-test-dependencies.sh",
+      "version": "1.17.0",
+      "file": "googletest-1.17.0.tar.gz",
+      "archive": {
+        "sha256": "65fab701d9829d38cb77c14acdc431d2108bfdbf8979e40eb8ae567edf10b27c"
+      },
+      "localPath": "toolchains/artifacts/googletest-1.17.0.tar.gz",
+      "sourceUrl": "https://github.com/google/googletest/archive/refs/tags/v1.17.0.tar.gz"
     }
   }
 }
