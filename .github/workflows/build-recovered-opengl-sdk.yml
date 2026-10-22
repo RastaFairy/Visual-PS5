@@ -2,6 +2,7 @@ name: Rebuild pinned OpenGL SDK from vendored source
 on:
   push:
     branches:
+      - main
       - offline-build-recovery-20261021
     paths:
       - .github/workflows/build-recovered-opengl-sdk.yml
