@@ -58,10 +58,10 @@ for (const [name, script] of [['OpenGL native', openGlNativeDeps], ['Native C++'
 assert.ok(pacbrewDeps.includes(`hash=${pins.artifacts.pacbrew.archive.sha256}`), 'PacBrew debe usar el hash del manifiesto');
 assert.ok(testDeps.includes(`hash="${pins.artifacts.googletest.archive.sha256}"`), 'GoogleTest debe usar el hash del manifiesto');
 assert.ok(packageWorkflow.includes('run-id: ${{ steps.sdk-run.outputs.run_id }}'), 'el empaquetado debe elegir dinámicamente el artefacto SDK y no fijar un run ID efímero');
-assert.ok(packageWorkflow.includes('runtime/artifact-pins.tsv'), 'el empaquetado debe leer los pins de artefactos desde el manifiesto');
+assert.ok(packageWorkflow.includes('runtime-artifact-pins.tsv'), 'el empaquetado debe leer los pins de artefactos desde el manifiesto');
 assert.ok(packageWorkflow.includes('toolchains/artifacts'), 'el ZIP debe incluir los artefactos runtime bajo toolchains/artifacts');
-for (const filename of bundledRuntimeArtifacts.map(([, localPath]) => path.basename(localPath))) {
-  assert.ok(packageWorkflow.includes(filename), `el empaquetado debe incluir la dependencia ${filename}`);
+for (const [name] of bundledRuntimeArtifacts) {
+  assert.ok(packageWorkflow.includes(name), `el empaquetado debe incluir la dependencia fijada ${name}`);
 }
 assert.ok(packageWorkflow.includes('sha256sum --check --strict'), 'cada archivo runtime descargado en CI debe verificarse contra su hash');
 assert.ok(packageWorkflow.includes('Visual-PS5-offline-build-recovery-20261021-with-runtime-deps.zip'), 'el paquete generado debe identificarse como la edición con dependencias runtime');
