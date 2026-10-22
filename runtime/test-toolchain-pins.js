@@ -158,4 +158,17 @@ assert.equal(packer.includes('https://'), false, 'the packer must not contain re
 assert.equal(packer.includes('.urls'), false, 'the packer must not iterate remote URL lists');
 assert.doesNotMatch(packer, /Remove-Item.*toolchains/, 'the packer must never delete toolchains');
 
+
+
+// ZIP -> checkout helper: only pinned files, SHA-256 verification, no network, no clobbering.
+const artifactImporter = fs.readFileSync(path.join(__dirname, 'Import-PackagedToolchainArtifacts.ps1'), 'utf8');
+assert.ok(artifactImporter.includes("@('ps5-opengl-sdk', 'ps5-payload-sdk', 'zlib', 'pacbrew', 'googletest')"), 'the importer must cover all five locally pinned runtime archives');
+assert.match(artifactImporter, /toolchain-pins\.json/, 'the importer must read the same pin manifest used by the build');
+assert.match(artifactImporter, /OpenRead/, 'the importer must read directly from the provided distribution ZIP');
+assert.match(artifactImporter, /GetEntry\(\$entryName\)/, 'the importer must address only exact pinned ZIP entries');
+assert.match(artifactImporter, /Get-FileHash -LiteralPath \$stagedPath -Algorithm SHA256/, 'the importer must verify each staged archive');
+assert.match(artifactImporter, /No se sobrescribe el archivo existente/, 'the importer must refuse to replace mismatched local files');
+assert.match(artifactImporter, /\[IO\.File\]::Move/, 'the importer must promote verified copies atomically');
+assert.doesNotMatch(artifactImporter, /Invoke-WebRequest|Invoke-RestMethod|\bcurl\b|\bwget\b|git clone/i, 'the importer must be strictly local-only');
+
 console.log('PASS toolchain pins: local-only source resolution, vendor manifests, integrity pins, policy and packer contracts.');

@@ -51,6 +51,17 @@ toolchain-pack/
 
 Uso desde la carpeta del IDE: `powershell -ExecutionPolicy Bypass -File runtime\Build-ToolchainPack.ps1`. Opciones: `-SdkTarball <ruta>` para aportar un tarball ya descargado, `-OutputZip <ruta>` para un respaldo completo (toolchains + pack), `-Include <lista>` para acotar las carpetas. Si no hay tarball local, lo descarga probando la cadena de mirrors del pin y rechaza cualquier archivo que no verifique.
 
+
+## Sincronizar artefactos empaquetados a un checkout de main
+
+La distribución autocontenida y el árbol Git no son idénticos. El workflow .github/workflows/package-self-contained-ide.yml añade cinco archivos binarios verificados después de archivar el árbol de main: el tarball de OpenGL 1.0.2 y los archivos locales del SDK payload, zlib, PacBrew y GoogleTest. Por eso un checkout limpio de main puede tener las carpetas fuente y aun así fallar con el mensaje "local-only: missing toolchains/artifacts/ps5-payload-sdk.zip". No se deben sustituir esos archivos por archivos vacíos ni saltarse sus pins.
+
+Para poblar un checkout ya existente a partir del ZIP autocontenido, ejecuta desde la raíz del repositorio:
+
+    pwsh -ExecutionPolicy Bypass -File .\runtime\Import-PackagedToolchainArtifacts.ps1 -PackageZip "C:\ruta\Visual-PS5-offline-build-recovery-20261021-with-runtime-deps.zip"
+
+El importador toma únicamente las cinco entradas fijadas en runtime/toolchain-pins.json, las verifica primero todas contra SHA-256 y solo entonces copia las que faltan. No descarga nada, no toca los árboles fuente y rechaza sobrescribir cualquier archivo local cuyo hash no coincida. Conserva el ZIP original hasta que la compilación vuelva a superar la validación del artefacto.
+
 ## Licencias
 
 El IDE es MIT; los toolchains vendorizados son GPL-3.0-or-later (u otras). El vendoring es íntegro y no modificado: los árboles conservan sus `LICENSE`, `LICENSES/` y `THIRD_PARTY_NOTICES.md`, los orígenes quedan en `.ps5hs-source.json`, y cualquier ajuste del IDE a fuentes upstream pasa por la maquinaria de consentimiento y auditoría (`.ps5hs-modifications.json`) en lugar de parchear las copias canónicas. No se redistribuyen binarios de Sony ni firmware; componentes como `libc.prx` siguen siendo responsabilidad del usuario.
