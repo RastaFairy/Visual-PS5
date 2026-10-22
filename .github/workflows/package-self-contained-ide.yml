@@ -1,0 +1,163 @@
+name: Package self-contained Visual PS5 IDE
+
+on:
+  push:
+    branches: [offline-build-recovery-20261021]
+    paths:
+      - .github/workflows/package-self-contained-ide.yml
+      - .github/workflows/build-recovered-opengl-sdk.yml
+      - runtime/**
+      - toolchains/ps5-homebrew-ui/tools/fetch-opengl-sdk.sh
+      - toolchains/ps5-homebrew-ui/tools/setup-native-dependencies.sh
+      - toolchains/ps5-homebrew-ui/tools/setup-pacbrew-dependencies.sh
+      - toolchains/ps5-homebrew-ui/tools/setup-test-dependencies.sh
+      - toolchains/ps5-native-app-boilerplate/tools/setup-native-dependencies.sh
+      - toolchains/PS5_Vulkan/tools/setup-native-dependencies.sh
+      - toolchains/ps5-opengl/tools/fetch-sources.py
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out IDE source
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Locate a completed OpenGL SDK build artifact
+        id: sdk-run
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Do not package against an older SDK artifact while a new build on this branch is still running.
+          deadline=$((SECONDS + 7200))
+          while true; do
+            runs_json="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/build-recovered-opengl-sdk.yml/runs?branch=$GITHUB_REF_NAME&per_page=50")"
+            active_run="$(jq -r '[.workflow_runs[] | select(.status != "completed")] | first | .id // empty' <<< "$runs_json")"
+            [[ -n "$active_run" ]] || break
+            if (( SECONDS >= deadline )); then
+              echo "Timed out waiting for SDK workflow run $active_run to finish." >&2
+              exit 1
+            fi
+            echo "SDK workflow run $active_run is not complete yet; waiting before selecting a pinned artifact."
+            sleep 15
+          done
+          run_id=""
+          while IFS= read -r candidate; do
+            [[ -n "$candidate" ]] || continue
+            artifacts_json="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$candidate/artifacts")"
+            if jq -e '.artifacts[]? | select(.name == "recovered-ps5-opengl-sdk" and .expired == false)' <<< "$artifacts_json" >/dev/null; then
+              run_id="$candidate"
+              break
+            fi
+          done < <(jq -r '.workflow_runs[] | select(.status == "completed" and .conclusion == "success") | .id' <<< "$runs_json")
+          [[ -n "$run_id" ]] || {
+            echo "No successful completed SDK workflow run with a retained recovered-ps5-opengl-sdk artifact." >&2
+            exit 1
+          }
+          echo "Using SDK artifact from successful workflow run $run_id; archive and manifest hashes will be verified."
+          echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
+
+      - name: Download the OpenGL SDK build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: recovered-ps5-opengl-sdk
+          path: ${{ runner.temp }}/sdk-artifact
+          repository: ${{ github.repository }}
+          run-id: ${{ steps.sdk-run.outputs.run_id }}
+          github-token: ${{ github.token }}
+
+      - name: Verify the OpenGL SDK archive and manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          archive="$RUNNER_TEMP/sdk-artifact/ps5-opengl-sdk-1.0.2.tar.gz"
+          test -s "$archive"
+          archive_sha="$(python3 -c 'import json; print(json.load(open("runtime/toolchain-pins.json"))["artifacts"]["ps5-opengl-sdk"]["archive"]["sha256"])')"
+          manifest_sha="$(python3 -c 'import json; print(json.load(open("runtime/toolchain-pins.json"))["artifacts"]["ps5-opengl-sdk"]["sdkManifest"]["sha256"])')"
+          printf '%s  %s\n' "$archive_sha" "$archive" | sha256sum --check --strict
+          mkdir "$RUNNER_TEMP/sdk-verify"
+          tar -xzf "$archive" -C "$RUNNER_TEMP/sdk-verify"
+          sdk="$RUNNER_TEMP/sdk-verify/ps5-opengl-sdk-1.0.2/sdk"
+          test "$(sha256sum "$sdk/manifest.sha256" | cut -d' ' -f1)" = "$manifest_sha"
+          (cd "$sdk" && sha256sum --check --strict --quiet manifest.sha256)
+
+      - name: Download and verify other pinned runtime archives
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/runtime-artifacts"
+          python3 - "$RUNNER_TEMP/runtime-artifact-pins.tsv" <<'PY'
+          import json, sys
+          with open("runtime/toolchain-pins.json", encoding="utf-8") as stream:
+              manifest = json.load(stream)
+          names = ("ps5-payload-sdk", "zlib", "pacbrew", "googletest")
+          with open(sys.argv[1], "w", encoding="utf-8", newline="\n") as output:
+              for name in names:
+                  entry = manifest["artifacts"][name]
+                  file_name = entry.get("file")
+                  local_path = entry.get("localPath")
+                  url = entry.get("sourceUrl")
+                  sha = entry.get("archive", {}).get("sha256")
+                  if not file_name or not url or not sha or len(sha) != 64:
+                      raise SystemExit(f"Incomplete local artifact pin: {name}")
+                  if local_path != "toolchains/artifacts/" + file_name:
+                      raise SystemExit(f"Unexpected target path for {name}: {local_path}")
+                  print(name, url, file_name, sha, sep="\t", file=output)
+          PY
+          while IFS=$'\t' read -r name url filename expected_sha; do
+            [[ -n "$name" && -n "$url" && -n "$filename" && -n "$expected_sha" ]] || {
+              echo "Invalid runtime artifact pin row: $name" >&2
+              exit 1
+            }
+            destination="$RUNNER_TEMP/runtime-artifacts/$filename"
+            echo "Fetching packaging input $name ($filename)"
+            curl --fail --location --retry 3 --retry-all-errors --connect-timeout 30 --max-time 900 "$url" -o "$destination"
+            printf '%s  %s\n' "$expected_sha" "$destination" | sha256sum --check --strict
+            printf '%s  %s\n' "$expected_sha" "$filename" > "$destination.sha256"
+          done < "$RUNNER_TEMP/runtime-artifact-pins.tsv"
+
+      - name: Package the IDE with verified local runtime dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          stage="$RUNNER_TEMP/Visual-PS5-offline-build-recovery-20261021-with-runtime-deps"
+          mkdir -p "$stage"
+          git archive --format=tar HEAD | tar -xf - -C "$stage"
+          mkdir -p "$stage/toolchains/ps5-opengl-sdk"
+          cp "$RUNNER_TEMP/sdk-artifact/ps5-opengl-sdk-1.0.2.tar.gz" "$stage/toolchains/ps5-opengl-sdk/"
+          cp "$RUNNER_TEMP/sdk-artifact/ps5-opengl-sdk-1.0.2.tar.gz.sha256" "$stage/toolchains/ps5-opengl-sdk/"
+          mkdir -p "$stage/toolchains/artifacts"
+          cp -a "$RUNNER_TEMP/runtime-artifacts/." "$stage/toolchains/artifacts/"
+          printf '%s\n' \
+            'Verified runtime archives for local-only dependency resolution.' \
+            'SHA-256 values are recorded in runtime/toolchain-pins.json and verified during packaging.' \
+            'CI may access source URLs during packaging; installed IDE builds must use these local files.' \
+            'WSL/Linux compiler and system-package prerequisites still need to be installed on the host.' > "$stage/toolchains/artifacts/README.txt"
+          printf '%s\n' \
+            'PS5 OpenGL SDK 1.0.2 - locally verified package' \
+            'Archive SHA-256 is pinned in runtime/toolchain-pins.json.' \
+            'The SDK manifest is validated before use.' \
+            'Payload SDK, zlib, PacBrew and GoogleTest archives are bundled under toolchains/artifacts/.' \
+            'A successful source build is not proof of operation on physical PS5 hardware.' > "$stage/toolchains/ps5-opengl-sdk/README.txt"
+          output="$RUNNER_TEMP/Visual-PS5-offline-build-recovery-20261021-with-runtime-deps.zip"
+          (cd "$stage" && zip -qr "$output" .)
+          (cd "$RUNNER_TEMP" && sha256sum "$(basename "$output")" > "$(basename "$output").sha256")
+          ls -lh "$output" "$output.sha256"
+
+      - name: Upload self-contained IDE package
+        uses: actions/upload-artifact@v4
+        with:
+          name: Visual-PS5-offline-build-recovery-with-runtime-deps
+          path: |
+            ${{ runner.temp }}/Visual-PS5-offline-build-recovery-20261021-with-runtime-deps.zip
+            ${{ runner.temp }}/Visual-PS5-offline-build-recovery-20261021-with-runtime-deps.zip.sha256
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14

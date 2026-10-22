@@ -70,6 +70,11 @@ def main():
     parser.add_argument("--sokol-samples", action="store_true", help="also fetch the optional upstream cube sample")
     parser.add_argument("--verify-psbc", action="store_true", help="offline compiler-source check only")
     args = parser.parse_args()
+    if __import__("os").environ.get("PS5HS_LOCAL_TOOLCHAINS_ONLY") == "1" and not args.verify_psbc:
+        raise SystemExit(
+            "PS5 Homebrew Studio is in local-only mode: make source-fetch is disabled. "
+            "Add and verify missing pinned sources under toolchains/; no network fallback is allowed."
+        )
     if args.verify_psbc:
         verify_psbc()
         return

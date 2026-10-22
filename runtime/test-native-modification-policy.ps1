@@ -7,7 +7,7 @@ function Assert-Condition([bool]$Condition,[string]$Message) {
 }
 
 $defaults = NormalizePS5HSNativeModificationPolicy $null
-Assert-Condition ($defaults.Count -eq 13) 'La política debe declarar todas las operaciones registradas.'
+Assert-Condition ($defaults.Count -eq 12) 'La política debe declarar todas las operaciones registradas.'
 Assert-Condition (@($defaults.Values | Where-Object { $_ -eq $true }).Count -eq 0) 'Todas las modificaciones deben estar denegadas por defecto.'
 Assert-Condition (!$defaults.allowExecuteUpstreamAssetTools) 'La conversión de recursos también debe estar denegada por defecto.'
 $gaps = @(GetPS5HSNativeModificationConsentGaps -Backend 'opengl-ui' -Policy $null -RequireGeneration $true -RequireBuildTools $true -RequireVisualIntegration $true)
@@ -104,11 +104,41 @@ try {
   [IO.Directory]::CreateDirectory((Join-Path $root 'out-123456')) | Out-Null
   [IO.File]::WriteAllText((Join-Path $root 'build/compiler-output.bin'),'binary output',$utf8)
   [IO.File]::WriteAllText((Join-Path $root 'out-123456/title.pkg'),'binary output',$utf8)
+  $openGlDepsRoot = Join-Path $root '.deps/ps5-opengl'
+  $openGlSdkTarget = Join-Path $openGlDepsRoot 'sdk-1.0.2'
+  [IO.Directory]::CreateDirectory($openGlSdkTarget) | Out-Null
+  [IO.File]::WriteAllText((Join-Path $openGlSdkTarget 'sdk-cache.txt'),'verified-sdk-cache',$utf8)
+  $openGlCurrentLink = Join-Path $openGlDepsRoot 'current'
+  New-Item -ItemType SymbolicLink -Path $openGlCurrentLink -Target $openGlSdkTarget | Out-Null
+
   $treeSnapshot = GetPS5HSNativeTreeHashes -ProjectRoot $root
   Assert-Condition ($treeSnapshot.ContainsKey('.deps/hui/dependency.cpp')) 'El snapshot debe incluir dependencias embebidas, porque también pueden modificarse.'
+  Assert-Condition ($treeSnapshot.ContainsKey('.deps/ps5-opengl/current')) 'El alias generado current debe quedar representado en el hash de auditoría.'
+  Assert-Condition (!$treeSnapshot.ContainsKey('.deps/ps5-opengl/current/sdk-cache.txt')) 'El auditor debe registrar el alias como metadatos y nunca seguir el enlace.'
+  $linkOnlyHash = GetPS5HSNativeFileHashes -ProjectRoot $root -RelativePaths @('.deps/ps5-opengl/current')
+  Assert-Condition ($linkOnlyHash['.deps/ps5-opengl/current'] -ceq $treeSnapshot['.deps/ps5-opengl/current']) 'El snapshot completo y el registro de cambios deben hashear el mismo metadato del enlace.'
   Assert-Condition (!$treeSnapshot.ContainsKey('.git/objects/ignored')) 'El snapshot no debe recorrer ni auditar internals Git.'
+
+  # Only the exact upstream-generated OpenGL alias is accepted; arbitrary links stay denied.
+  $unexpectedLink = Join-Path $root 'src/untrusted-link'
+  New-Item -ItemType SymbolicLink -Path $unexpectedLink -Target $openGlSdkTarget | Out-Null
+  $unexpectedLinkDenied = $false
+  try { $null = GetPS5HSNativeTreeHashes -ProjectRoot $root } catch { $unexpectedLinkDenied = $true }
+  Assert-Condition $unexpectedLinkDenied 'El auditor debe seguir rechazando enlaces distintos del alias current del SDK OpenGL.'
+  Remove-Item -LiteralPath $unexpectedLink -Force
   Assert-Condition (!$treeSnapshot.ContainsKey('build/compiler-output.bin')) 'El snapshot debe excluir artefactos de build regenerables.'
   Assert-Condition (!$treeSnapshot.ContainsKey('out-123456/title.pkg')) 'El snapshot debe excluir carpetas de salida para no hashear paquetes grandes.'
+
+  # Project paths may be nested and not exist before generation starts. The audit
+  # preflight must walk to an existing ancestor instead of requiring the immediate parent.
+  $nestedRoot = Join-Path $root 'not-created-yet/nested/generated-project'
+  $nestedGenerationConsent = [pscustomobject]@{allowExecuteUpstreamGenerationTools=$true}
+  $null = InvokePS5HSNativeTreeModificationWithAudit -ProjectRoot $nestedRoot -Backend 'nativecpp' -Operation 'test-nested-tree-generator' -PermissionKey 'allowExecuteUpstreamGenerationTools' -Policy $nestedGenerationConsent -Action {
+    [IO.Directory]::CreateDirectory((Join-Path $nestedRoot 'src')) | Out-Null
+    [IO.File]::WriteAllText((Join-Path $nestedRoot 'src/generated.cpp'),'generated',$utf8)
+  }
+  $nestedManifest = Get-Content -LiteralPath (Join-Path $nestedRoot '.ps5hs-modifications.json') -Raw | ConvertFrom-Json
+  Assert-Condition ($nestedManifest.records.Count -eq 1) 'El preflight de auditoría debe aceptar nuevas rutas con más de un directorio padre inexistente.'
 
   # A newly generated project must record files created by the upstream generator.
   $treeRoot = Join-Path $root 'generated-project'
@@ -122,55 +152,7 @@ try {
   Assert-Condition ($treeManifest.records[0].permission -eq 'allowExecuteUpstreamGenerationTools') 'El registro debe identificar el consentimiento utilizado.'
   Assert-Condition (@($treeManifest.records[0].changedFiles | Where-Object { $_.path -eq 'src/generated.cpp' -and $null -eq $_.originalSha256 -and $_.resultSha256 }).Count -eq 1) 'El registro debe identificar los archivos creados por el generador.'
 
-  # Cadena de mirrors del SDK OpenGL: consentimiento, parche e idempotencia.
-  $mirrorRoot = Join-Path $root 'mirror-project'
-  [IO.Directory]::CreateDirectory((Join-Path $mirrorRoot 'tools')) | Out-Null
-  $fetchPath = Join-Path $mirrorRoot 'tools/fetch-opengl-sdk.sh'
-  $pristineFetch = @'
-#!/usr/bin/env bash
-set -euo pipefail
-version=1.0.2
-archive_sha256=30d8e51dd062739b629346102be5932728ba714bc50b1bdcdf08306c8843d9a4
-manifest_sha256=0d432edc9d648d6e0cccb4d5eb3db8484f10ba4b075b5ccf23edda3251b66360
-url="https://github.com/blackbearreloaded/ps5-opengl/releases/download/v$version/ps5-opengl-sdk-$version.tar.gz"
-cache="$root/.deps/ps5-opengl"
-archive="$cache/ps5-opengl-sdk-$version.tar.gz"
-if [[ ! -f $prefix/manifest.sha256 ]]; then
-    if [[ ! -f $archive ]] || ! sha256sum --check --status <<<"$archive_sha256  $archive"; then
-        curl -fL --retry 3 -o "$archive.part" "$url"
-        mv -- "$archive.part" "$archive"
-    fi
-fi
-'@
-  [IO.File]::WriteAllText($fetchPath,$pristineFetch.Replace("`r`n","`n"),$utf8)
-
-  $deniedPatch = ApplyPS5HSSdkMirrorChainPatch -ProjectRoot $mirrorRoot -Policy $null -Backend 'opengl-ui'
-  Assert-Condition ($deniedPatch.skipped -and !$deniedPatch.changed) 'Sin permiso, el parche de mirrors debe omitirse sin tocar el script.'
-  Assert-Condition ([IO.File]::ReadAllText($fetchPath) -ceq $pristineFetch.Replace("`r`n","`n")) 'El script del SDK debe quedar intacto sin consentimiento.'
-
-  $mirrorConsent = [pscustomobject]@{allowUpstreamSdkMirrorPatch=$true}
-  $mirrorUrls = @('https://github.com/blackbearreloaded/ps5-opengl/releases/download/v1.0.2/ps5-opengl-sdk-1.0.2.tar.gz','https://github.com/LedyBacer/ps5-opengl/releases/download/v1.0.2/ps5-opengl-sdk-1.0.2.tar.gz')
-  $appliedPatch = ApplyPS5HSSdkMirrorChainPatch -ProjectRoot $mirrorRoot -Policy $mirrorConsent -Backend 'opengl-ui' -MirrorUrls $mirrorUrls
-  Assert-Condition ($appliedPatch.changed) 'Con permiso, el parche debe reescribir el script con la cadena de mirrors.'
-  $patchedFetch = [IO.File]::ReadAllText($fetchPath)
-  Assert-Condition ($patchedFetch.Contains('# PS5HS_MIRROR_CHAIN')) 'El script parcheado debe declarar la marca de cadena de mirrors.'
-  Assert-Condition ($patchedFetch.Contains('urls=(')) 'El script parcheado debe declarar la cadena urls=().'
-  Assert-Condition ($patchedFetch.Contains('LedyBacer/ps5-opengl')) 'El script parcheado debe incluir el mirror verificado.'
-  Assert-Condition ($patchedFetch.Contains('for url in "${urls[@]}"')) 'El script parcheado debe iterar la cadena de mirrors.'
-  Assert-Condition ($patchedFetch.Contains('archive_sha256=') -and $patchedFetch.Contains('manifest_sha256=')) 'El parche debe conservar los pins de integridad del SDK.'
-  Assert-Condition (!$patchedFetch.Contains('url="https://github.com/blackbearreloaded')) 'La URL unica del upstream caido no debe permanecer activa.'
-  $mirrorManifest = Get-Content -LiteralPath (Join-Path $mirrorRoot '.ps5hs-modifications.json') -Raw | ConvertFrom-Json
-  Assert-Condition (@($mirrorManifest.records | Where-Object { $_.operation -eq 'apply-sdk-mirror-chain' }).Count -ge 1) 'El parche debe registrar su auditoria SHA-256.'
-
-  $idempotentPatch = ApplyPS5HSSdkMirrorChainPatch -ProjectRoot $mirrorRoot -Policy $mirrorConsent -Backend 'opengl-ui' -MirrorUrls $mirrorUrls
-  Assert-Condition (!$idempotentPatch.changed -and $idempotentPatch.alreadyPatched) 'El parche debe ser idempotente sobre un script ya parcheado.'
-  Assert-Condition ([IO.File]::ReadAllText($fetchPath) -ceq $patchedFetch) 'La reejecucion no debe alterar el script ya parcheado.'
-
-  [IO.File]::WriteAllText($fetchPath,'#!/usr/bin/env bash' + "`n" + 'echo unrecognizable' + "`n",$utf8)
-  $unrecognized = $false
-  try { ApplyPS5HSSdkMirrorChainPatch -ProjectRoot $mirrorRoot -Policy $mirrorConsent -Backend 'opengl-ui' | Out-Null } catch { $unrecognized = $true }
-  Assert-Condition $unrecognized 'Un script de SDK irreconocible debe abortar el parche sin modificaciones parciales.'
 } finally {
   Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction SilentlyContinue
 }
-Write-Output 'PASS native modification policy: deny-by-default, fail-closed checks, mutation guards, SHA-256 audit and SDK mirror chain.'
+Write-Output 'PASS native modification policy: deny-by-default, fail-closed checks, mutation guards and SHA-256 audit.'

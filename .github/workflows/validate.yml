@@ -54,6 +54,15 @@ jobs:
             node $test
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           }
+      - name: Check local-only dependency bootstrap shell syntax
+        shell: bash
+        run: |
+          bash -n toolchains/ps5-homebrew-ui/tools/fetch-opengl-sdk.sh
+          bash -n toolchains/ps5-homebrew-ui/tools/setup-native-dependencies.sh
+          bash -n toolchains/ps5-homebrew-ui/tools/setup-pacbrew-dependencies.sh
+          bash -n toolchains/ps5-homebrew-ui/tools/setup-test-dependencies.sh
+          bash -n toolchains/ps5-native-app-boilerplate/tools/setup-native-dependencies.sh
+          bash -n toolchains/PS5_Vulkan/tools/setup-native-dependencies.sh
       - name: Parse PowerShell sources
         shell: pwsh
         run: |

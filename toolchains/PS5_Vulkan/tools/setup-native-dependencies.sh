@@ -120,8 +120,17 @@ if [[ -z $zlib_library || ! -f $zlib_root/usr/include/zlib.h ||
         rm -f -- "$zlib_archive"
     fi
     if [[ ! -f $zlib_archive ]]; then
-        wget -q "$zlib_url" -O "$zlib_archive.download"
-        mv "$zlib_archive.download" "$zlib_archive"
+        if [[ ${PS5HS_LOCAL_TOOLCHAINS_ONLY:-0} == 1 ]]; then
+            local_archive="${PS5HS_TOOLCHAINS_ROOT:-}/artifacts/zlib-$zlib_version.tar.gz"
+            [[ -n ${PS5HS_TOOLCHAINS_ROOT:-} && -f $local_archive ]] || {
+                echo "local-only: missing toolchains/artifacts/zlib-$zlib_version.tar.gz (pinned SHA-256 required)" >&2
+                exit 2
+            }
+            cp -- "$local_archive" "$zlib_archive"
+        else
+            wget -q "$zlib_url" -O "$zlib_archive.download"
+            mv "$zlib_archive.download" "$zlib_archive"
+        fi
     fi
     printf '%s  %s\n' "$zlib_hash" "$zlib_archive" | sha256sum --check --strict >/dev/null
     rm -rf -- "$zlib_source" "$zlib_root"

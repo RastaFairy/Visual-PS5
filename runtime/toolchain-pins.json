@@ -1,74 +1,63 @@
 {
   "schema": "ps5hs-toolchain-pins",
   "version": 1,
-  "updated": "2026-10-20",
-  "notes": "Pins de integridad y cadenas de mirrors mantenidos por PS5 Homebrew Studio. 'mirrors' declara repositorios upstream cuyo original no está disponible y las copias comunitarias verificadas que el IDE puede usar en su lugar; el IDE siempre intenta primero el repositorio original y registra en .ps5hs-source.json qué fuente se usó. 'artifacts' fija versiones y SHA-256 de binarios precompilados que los proyectos generados descargan; los mirrors listados sirven el MISMO archivo verificable por checksum. Las copias locales bajo toolchains/ y toolchain-pack/ siempre tienen prioridad sobre cualquier descarga.",
-  "mirrors": {
-    "blackbearreloaded/ps5-opengl": {
-      "status": "unavailable",
-      "observedAt": "2026-10-20",
-      "alternatives": [
-        "LedyBacer/ps5-opengl",
-        "darkxex/ps5-opengl"
-      ],
-      "note": "La cuenta original desapareció de GitHub. Ambos mirrors publican el release v1.0.2 con el asset del SDK; el tarball de LedyBacer se verificó byte a byte contra el pin archive.sha256."
-    },
-    "blackbearreloaded/ps5-native-app-boilerplate": {
-      "status": "unavailable",
-      "observedAt": "2026-10-20",
-      "alternatives": [
-        "LedyBacer/ps5-native-app-boilerplate"
-      ],
-      "note": "Fork vivo del boilerplate usado por la plantilla nativecpp."
-    },
-    "blackbearreloaded/ps5-homebrew-ui": {
-      "status": "unavailable",
-      "observedAt": "2026-10-20",
-      "alternatives": [
-        "LedyBacer/ps5-homebrew-ui"
-      ],
-      "note": "Fork vivo del kit UI OpenGL usado por la plantilla hui-gl de los proyectos visuales."
-    },
-    "blackbearreloaded/ProsperoLight": {
-      "status": "unavailable",
-      "observedAt": "2026-10-20",
-      "alternatives": [
-        "LedyBacer/ProsperoLight"
-      ],
-      "note": "Fork vivo de la app de referencia Moonlight."
-    },
-    "blackbearreloaded/ps5-fsr4": {
-      "status": "unavailable",
-      "observedAt": "2026-10-20",
-      "alternatives": [],
-      "note": "Sin mirror comunitario conocido a la fecha. Una copia local bajo toolchains/ps5-fsr4 es la única fuente disponible."
-    },
-    "blackbearreloaded/ps5-helixsr": {
-      "status": "unavailable",
-      "observedAt": "2026-10-20",
-      "alternatives": [],
-      "note": "Sin mirror comunitario conocido a la fecha. Una copia local bajo toolchains/ps5-helixsr es la única fuente disponible."
-    }
-  },
+  "updated": "2026-10-22",
+  "notes": "Resolución completamente local: el IDE incluye y valida los artefactos bajo toolchains/. El SDK OpenGL 1.0.2 se reconstruyó desde las fuentes fijadas de toolchains/ps5-opengl porque el release upstream y su endpoint de API devuelven HTTP 404. No hay fallback de red durante la compilación. El paquete autocontenido debe incorporar también el SDK payload, zlib, PacBrew y GoogleTest con los hashes fijados; el proceso de build no descargará estos archivos.",
   "artifacts": {
     "ps5-opengl-sdk": {
       "usedBy": "tools/fetch-opengl-sdk.sh de los proyectos hui-gl generados",
       "version": "1.0.2",
       "file": "ps5-opengl-sdk-1.0.2.tar.gz",
-      "bytes": 226310155,
+      "bytes": 40511813,
       "archive": {
-        "sha256": "30d8e51dd062739b629346102be5932728ba714bc50b1bdcdf08306c8843d9a4"
+        "sha256": "ca7d1f4bc1cc9ba22bb115ae10aaab9cee1072e5e5d157df7bc08c4cb56a99e0"
       },
       "sdkManifest": {
         "path": "sdk/manifest.sha256",
-        "sha256": "0d432edc9d648d6e0cccb4d5eb3db8484f10ba4b075b5ccf23edda3251b66360"
+        "sha256": "700493a187604fa33b90b94416cb6faf702a4852de03e072eb79154faabd8d88"
       },
-      "urls": [
-        "https://github.com/blackbearreloaded/ps5-opengl/releases/download/v1.0.2/ps5-opengl-sdk-1.0.2.tar.gz",
-        "https://github.com/LedyBacer/ps5-opengl/releases/download/v1.0.2/ps5-opengl-sdk-1.0.2.tar.gz",
-        "https://github.com/darkxex/ps5-opengl/releases/download/v1.0.2/ps5-opengl-sdk-1.0.2.tar.gz"
-      ],
-      "urlsNote": "Cadena de descarga ordenada: upstream primero, mirrors después. El script de fetch sigue verificando archive.sha256 y sdkManifest.sha256 del pin original, así que cualquier mirror que sirva un archivo distinto queda rechazado."
+      "localPath": "toolchains/ps5-opengl-sdk/ps5-opengl-sdk-1.0.2.tar.gz",
+      "notes": "Archivo regenerado por GitHub Actions desde las fuentes versionadas y dependencias fijadas en toolchains/ps5-opengl. Se valida el SHA-256 del tarball y el manifiesto SHA-256 de todos los archivos del SDK antes de usarlo. No se considera validación en hardware PS5."
+    },
+    "ps5-payload-sdk": {
+      "usedBy": "toolchains/ps5-homebrew-ui/tools/setup-native-dependencies.sh y ps5-native-app-boilerplate",
+      "version": "v0.42",
+      "file": "ps5-payload-sdk.zip",
+      "archive": {
+        "sha256": "8cfbc7cd5811e719eb4f0c47eea668d3dc7b40bc8ab11c4a5031d40c23ec02da"
+      },
+      "localPath": "toolchains/artifacts/ps5-payload-sdk.zip",
+      "sourceUrl": "https://github.com/ps5-payload-dev/sdk/releases/download/v0.42/ps5-payload-sdk.zip"
+    },
+    "zlib": {
+      "usedBy": "bootstrap nativo OpenGL, Native C++ y Vulkan",
+      "version": "1.3.2",
+      "file": "zlib-1.3.2.tar.gz",
+      "archive": {
+        "sha256": "bb329a0a2cd0274d05519d61c667c062e06990d72e125ee2dfa8de64f0119d16"
+      },
+      "localPath": "toolchains/artifacts/zlib-1.3.2.tar.gz",
+      "sourceUrl": "https://github.com/madler/zlib/releases/download/v1.3.2/zlib-1.3.2.tar.gz"
+    },
+    "pacbrew": {
+      "usedBy": "toolchains/ps5-homebrew-ui/tools/setup-pacbrew-dependencies.sh",
+      "version": "v0.40.2",
+      "file": "ps5-payload-dev-v0.40.2.tar.gz",
+      "archive": {
+        "sha256": "a85f65de418a8e6a898c6c3e3c870d50fff7618a200e4dd59ea9692af6ecec4d"
+      },
+      "localPath": "toolchains/artifacts/ps5-payload-dev-v0.40.2.tar.gz",
+      "sourceUrl": "https://github.com/ps5-payload-dev/pacbrew-repo/releases/download/v0.40.2/ps5-payload-dev.tar.gz"
+    },
+    "googletest": {
+      "usedBy": "toolchains/ps5-homebrew-ui/tools/setup-test-dependencies.sh",
+      "version": "1.17.0",
+      "file": "googletest-1.17.0.tar.gz",
+      "archive": {
+        "sha256": "65fab701d9829d38cb77c14acdc431d2108bfdbf8979e40eb8ae567edf10b27c"
+      },
+      "localPath": "toolchains/artifacts/googletest-1.17.0.tar.gz",
+      "sourceUrl": "https://github.com/google/googletest/archive/refs/tags/v1.17.0.tar.gz"
     }
   }
 }
