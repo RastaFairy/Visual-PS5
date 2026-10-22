@@ -65,7 +65,7 @@ for (const [name] of bundledRuntimeArtifacts) {
 }
 assert.ok(packageWorkflow.includes('sha256sum --check --strict'), 'cada archivo runtime descargado en CI debe verificarse contra su hash');
 assert.ok(packageWorkflow.includes('Visual-PS5-offline-build-recovery-20261021-with-runtime-deps.zip'), 'el paquete generado debe identificarse como la edición con dependencias runtime');
-assert.doesNotMatch(packageWorkflow, /run-id:\\s*\\d+/, 'el empaquetado no debe depender de un ID fijo de ejecución que pueda caducar');
+assert.doesNotMatch(packageWorkflow, /run-id:\s*\d+/, 'el empaquetado no debe depender de un ID fijo de ejecución que pueda caducar');
 
 
 
