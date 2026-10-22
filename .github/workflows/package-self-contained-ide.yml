@@ -28,7 +28,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Locate the latest completed OpenGL SDK artifact
+      - name: Locate a completed OpenGL SDK build artifact
         id: sdk-run
         env:
           GH_TOKEN: ${{ github.token }}
@@ -49,10 +49,10 @@ jobs:
             echo "No completed SDK workflow run with a retained recovered-ps5-opengl-sdk artifact." >&2
             exit 1
           }
-          echo "Using verified SDK artifact from workflow run $run_id"
+          echo "Using SDK artifact from workflow run $run_id; the archive hash is verified next."
           echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
 
-      - name: Download the verified OpenGL SDK archive
+      - name: Download the OpenGL SDK build artifact
         uses: actions/download-artifact@v4
         with:
           name: recovered-ps5-opengl-sdk
@@ -61,20 +61,22 @@ jobs:
           run-id: ${{ steps.sdk-run.outputs.run_id }}
           github-token: ${{ github.token }}
 
-      - name: Verify SDK pins
+      - name: Verify the OpenGL SDK archive and manifest
         shell: bash
         run: |
           set -euo pipefail
           archive="$RUNNER_TEMP/sdk-artifact/ps5-opengl-sdk-1.0.2.tar.gz"
           test -s "$archive"
-          printf '%s  %s\n' '8e6cf43c03f210b5cf31e232a16a16c4154163059eaf33f00de836bf003a8818' "$archive" | sha256sum --check --strict
+          archive_sha="$(python3 -c 'import json; print(json.load(open("runtime/toolchain-pins.json"))["artifacts"]["ps5-opengl-sdk"]["archive"]["sha256"])')"
+          manifest_sha="$(python3 -c 'import json; print(json.load(open("runtime/toolchain-pins.json"))["artifacts"]["ps5-opengl-sdk"]["sdkManifest"]["sha256"])')"
+          printf '%s  %s\n' "$archive_sha" "$archive" | sha256sum --check --strict
           mkdir "$RUNNER_TEMP/sdk-verify"
           tar -xzf "$archive" -C "$RUNNER_TEMP/sdk-verify"
           sdk="$RUNNER_TEMP/sdk-verify/ps5-opengl-sdk-1.0.2/sdk"
-          test "$(sha256sum "$sdk/manifest.sha256" | cut -d' ' -f1)" = '700493a187604fa33b90b94416cb6faf702a4852de03e072eb79154faabd8d88'
+          test "$(sha256sum "$sdk/manifest.sha256" | cut -d' ' -f1)" = "$manifest_sha"
           (cd "$sdk" && sha256sum --check --strict --quiet manifest.sha256)
 
-      - name: Download and verify all remaining offline runtime dependencies
+      - name: Download and verify other pinned runtime archives
         shell: bash
         run: |
           set -euo pipefail
@@ -87,14 +89,30 @@ jobs:
           with open(sys.argv[1], "w", encoding="utf-8", newline="\n") as output:
               for name in names:
                   entry = manifest["artifacts"][name]
-                  required = (entry.get("file"), entry.get("localPath"), entry.get("sourceUrl"), entry.get("archive", {}).get("sha256"))
-                  if not all(required) or len(required[3]) != 64:
+                  file_name = entry.get("file")
+                  local_path = entry.get("localPath")
+                  url = entry.get("sourceUrl")
+                  sha = entry.get("archive", {}).get("sha256")
+                  if not file_name or not url or not sha or len(sha) != 64:
                       raise SystemExit(f"Incomplete local artifact pin: {name}")
-                  if entry["localPath"] != "toolchains/artifacts/" + entry["file"]:
-                      raise SystemExit(f"Unexpected target path for {name}: {entry['localPath']}")
-                  print(name, entry["sourceUrl"], entry["file"], required[3], sep="\t", file=output)
+                  if local_path != "toolchains/artifacts/" + file_name:
+                      raise SystemExit(f"Unexpected target path for {name}: {local_path}")
+                  print(name, url, file_name, sha, sep="\t", file=output)
           PY
-          while IFS=        shell: bash
+          while IFS=$'\t' read -r name url filename expected_sha; do
+            [[ -n "$name" && -n "$url" && -n "$filename" && -n "$expected_sha" ]] || {
+              echo "Invalid runtime artifact pin row: $name" >&2
+              exit 1
+            }
+            destination="$RUNNER_TEMP/runtime-artifacts/$filename"
+            echo "Fetching packaging input $name ($filename)"
+            curl --fail --location --retry 3 --retry-all-errors --connect-timeout 30 --max-time 900 "$url" -o "$destination"
+            printf '%s  %s\n' "$expected_sha" "$destination" | sha256sum --check --strict
+            printf '%s  %s\n' "$expected_sha" "$filename" > "$destination.sha256"
+          done < "$RUNNER_TEMP/runtime-artifact-pins.tsv"
+
+      - name: Package the IDE with verified local runtime dependencies
+        shell: bash
         run: |
           set -euo pipefail
           stage="$RUNNER_TEMP/Visual-PS5-offline-build-recovery-20261021-with-runtime-deps"
@@ -104,75 +122,30 @@ jobs:
           cp "$RUNNER_TEMP/sdk-artifact/ps5-opengl-sdk-1.0.2.tar.gz" "$stage/toolchains/ps5-opengl-sdk/"
           cp "$RUNNER_TEMP/sdk-artifact/ps5-opengl-sdk-1.0.2.tar.gz.sha256" "$stage/toolchains/ps5-opengl-sdk/"
           mkdir -p "$stage/toolchains/artifacts"
-          cp "$RUNNER_TEMP/runtime-artifacts/." "$stage/toolchains/artifacts/"
+          cp -a "$RUNNER_TEMP/runtime-artifacts/." "$stage/toolchains/artifacts/"
           printf '%s\n' \
-            'Runtime build dependencies bundled for offline/local-only use.' \
-            'All archive hashes were checked against runtime/toolchain-pins.json during packaging.' \
-            'Network access is permitted only during this CI packaging step; IDE builds must use these local files.' > "$stage/toolchains/artifacts/README.txt"
+            'Verified runtime archives for local-only dependency resolution.' \
+            'SHA-256 values are recorded in runtime/toolchain-pins.json and verified during packaging.' \
+            'CI may access source URLs during packaging; installed IDE builds must use these local files.' \
+            'WSL/Linux compiler and system-package prerequisites still need to be installed on the host.' > "$stage/toolchains/artifacts/README.txt"
           printf '%s\n' \
-            'PS5 OpenGL SDK 1.0.2 - local verified package' \
-            'Archive SHA-256: 8e6cf43c03f210b5cf31e232a16a16c4154163059eaf33f00de836bf003a8818' \
-            'SDK manifest SHA-256: 700493a187604fa33b90b94416cb6faf702a4852de03e072eb79154faabd8d88' \
-            'Rebuilt from the pinned source snapshot in toolchains/ps5-opengl.' \
-            'IDE verifies archive and manifest before use. No remote release is needed.' \
+            'PS5 OpenGL SDK 1.0.2 - locally verified package' \
+            'Archive SHA-256 is pinned in runtime/toolchain-pins.json.' \
+            'The SDK manifest is validated before use.' \
             'Payload SDK, zlib, PacBrew and GoogleTest archives are bundled under toolchains/artifacts/.' \
-            'Not independently tested on a physical PS5.' > "$stage/toolchains/ps5-opengl-sdk/README.txt"
+            'A successful source build is not proof of operation on physical PS5 hardware.' > "$stage/toolchains/ps5-opengl-sdk/README.txt"
           output="$RUNNER_TEMP/Visual-PS5-offline-build-recovery-20261021-with-runtime-deps.zip"
           (cd "$stage" && zip -qr "$output" .)
-          sha256sum "$output" > "$output.sha256"
+          (cd "$RUNNER_TEMP" && sha256sum "$(basename "$output")" > "$(basename "$output").sha256")
           ls -lh "$output" "$output.sha256"
 
-      - name: Upload the self-contained IDE package
+      - name: Upload self-contained IDE package
         uses: actions/upload-artifact@v4
         with:
-          name: Visual-PS5-offline-build-recovery-with-opengl-sdk
+          name: Visual-PS5-offline-build-recovery-with-runtime-deps
           path: |
-            ${{ runner.temp }}/Visual-PS5-offline-build-recovery-20261021-with-opengl-sdk.zip
-            ${{ runner.temp }}/Visual-PS5-offline-build-recovery-20261021-with-opengl-sdk.zip.sha256
-          if-no-files-found: error
-          compression-level: 0
-          retention-days: 14
-\t' read -r name url filename expected_sha; do
-            [[ -n "$name" && -n "$url" && -n "$filename" && -n "$expected_sha" ]] || {
-              echo "Invalid runtime artifact pin row: $name" >&2
-              exit 1
-            }
-            destination="$RUNNER_TEMP/runtime-artifacts/$filename"
-            echo "Fetching pinned packaging input: $name ($filename)"
-            curl --fail --location --retry 3 --retry-all-errors --connect-timeout 30 --max-time 900 "$url" -o "$destination"
-            printf '%s  %s\n' "$expected_sha" "$destination" | sha256sum --check --strict
-            printf '%s  %s\n' "$expected_sha" "$filename" > "$destination.sha256"
-          done < "$RUNNER_TEMP/runtime-artifact-pins.tsv"
-
-      - name: Pack the tracked IDE with its SDK archive
-        shell: bash
-        run: |
-          set -euo pipefail
-          stage="$RUNNER_TEMP/Visual-PS5-offline-build-recovery-20261021-with-opengl-sdk"
-          mkdir -p "$stage"
-          git archive --format=tar HEAD | tar -xf - -C "$stage"
-          mkdir -p "$stage/toolchains/ps5-opengl-sdk"
-          cp "$RUNNER_TEMP/sdk-artifact/ps5-opengl-sdk-1.0.2.tar.gz" "$stage/toolchains/ps5-opengl-sdk/"
-          cp "$RUNNER_TEMP/sdk-artifact/ps5-opengl-sdk-1.0.2.tar.gz.sha256" "$stage/toolchains/ps5-opengl-sdk/"
-          printf '%s\n' \
-            'PS5 OpenGL SDK 1.0.2 - local verified package' \
-            'Archive SHA-256: 8e6cf43c03f210b5cf31e232a16a16c4154163059eaf33f00de836bf003a8818' \
-            'SDK manifest SHA-256: 700493a187604fa33b90b94416cb6faf702a4852de03e072eb79154faabd8d88' \
-            'Rebuilt from the pinned source snapshot in toolchains/ps5-opengl.' \
-            'IDE verifies archive and manifest before use. No remote release is needed.' \
-            'Not independently tested on a physical PS5.' > "$stage/toolchains/ps5-opengl-sdk/README.txt"
-          output="$RUNNER_TEMP/Visual-PS5-offline-build-recovery-20261021-with-opengl-sdk.zip"
-          (cd "$stage" && zip -qr "$output" .)
-          sha256sum "$output" > "$output.sha256"
-          ls -lh "$output" "$output.sha256"
-
-      - name: Upload the self-contained IDE package
-        uses: actions/upload-artifact@v4
-        with:
-          name: Visual-PS5-offline-build-recovery-with-opengl-sdk
-          path: |
-            ${{ runner.temp }}/Visual-PS5-offline-build-recovery-20261021-with-opengl-sdk.zip
-            ${{ runner.temp }}/Visual-PS5-offline-build-recovery-20261021-with-opengl-sdk.zip.sha256
+            ${{ runner.temp }}/Visual-PS5-offline-build-recovery-20261021-with-runtime-deps.zip
+            ${{ runner.temp }}/Visual-PS5-offline-build-recovery-20261021-with-runtime-deps.zip.sha256
           if-no-files-found: error
           compression-level: 0
           retention-days: 14
