@@ -67,6 +67,9 @@ for (const [name] of bundledRuntimeArtifacts) {
 assert.ok(packageWorkflow.includes('sha256sum --check --strict'), 'cada archivo runtime descargado en CI debe verificarse contra su hash');
 assert.ok(packageWorkflow.includes('Visual-PS5-offline-build-recovery-20261021-with-runtime-deps.zip'), 'el paquete generado debe identificarse como la edición con dependencias runtime');
 assert.doesNotMatch(packageWorkflow, /run-id:\s*\d+/, 'el empaquetado no debe depender de un ID fijo de ejecución que pueda caducar');
+assert.ok(packageWorkflow.includes('select(.status != "completed")'), 'el empaquetado debe esperar si hay una reconstrucción del SDK en curso y evitar seleccionar un artefacto antiguo');
+assert.ok(packageWorkflow.includes('sleep 15'), 'la selección del SDK debe reconsultar las ejecuciones activas, no adelantarse a su resultado');
+assert.ok(packageWorkflow.includes('select(.status == "completed" and .conclusion == "success")'), 'el empaquetado no debe elegir artefactos de ejecuciones fallidas del SDK');
 assert.ok(sdkBuildWorkflow.includes('tar --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner -cf -'), 'el archivo SDK debe normalizar orden, fecha y propiedad para obtener un SHA-256 reproducible');
 assert.ok(sdkBuildWorkflow.includes('gzip -n -9'), 'el empaquetado SDK debe quitar fecha/nombre variables de la cabecera gzip');
 assert.ok(sdkBuildWorkflow.includes('cmp --silent "$RUNNER_TEMP/$name.tar.gz" "$RUNNER_TEMP/$name.repeat.tar.gz"'), 'el workflow debe verificar que dos empaquetados consecutivos sean idénticos');
