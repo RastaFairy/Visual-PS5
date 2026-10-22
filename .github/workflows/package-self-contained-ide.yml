@@ -2,7 +2,7 @@ name: Package self-contained Visual PS5 IDE
 
 on:
   push:
-    branches: [offline-build-recovery-20261021]
+    branches: [main, offline-build-recovery-20261021]
     paths:
       - .github/workflows/package-self-contained-ide.yml
       - .github/workflows/build-recovered-opengl-sdk.yml
