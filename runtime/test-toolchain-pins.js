@@ -35,6 +35,28 @@ assert.ok(pins.artifacts && pins.artifacts['ps5-opengl-sdk'], 'el manifiesto deb
 assert.match(String(pins.artifacts['ps5-opengl-sdk'].version), /^1\.\d+\.\d+$/, 'la version del SDK debe ser semver');
 assert.match(pins.artifacts['ps5-opengl-sdk'].archive.sha256, /^[0-9a-f]{64}$/, 'el archivo debe tener un SHA-256 fijado');
 assert.match(pins.artifacts['ps5-opengl-sdk'].sdkManifest.sha256, /^[0-9a-f]{64}$/, 'el manifest interno debe tener SHA-256');
+const bundledRuntimeArtifacts = [
+  ['ps5-payload-sdk', 'toolchains/artifacts/ps5-payload-sdk.zip', '8cfbc7cd5811e719eb4f0c47eea668d3dc7b40bc8ab11c4a5031d40c23ec02da'],
+  ['zlib', 'toolchains/artifacts/zlib-1.3.2.tar.gz', 'bb329a0a2cd0274d05519d61c667c062e06990d72e125ee2dfa8de64f0119d16'],
+  ['pacbrew', 'toolchains/artifacts/ps5-payload-dev-v0.40.2.tar.gz', 'a85f65de418a8e6a898c6c3e3c870d50fff7618a200e4dd59ea9692af6ecec4d'],
+  ['googletest', 'toolchains/artifacts/googletest-1.17.0.tar.gz', '65fab701d9829d38cb77c14acdc431d2108bfdbf8979e40eb8ae567edf10b27c']
+];
+for (const [name, localPath, expectedSha256] of bundledRuntimeArtifacts) {
+  const pin = pins.artifacts[name];
+  assert.ok(pin, `el manifiesto debe fijar la dependencia local ${name}`);
+  assert.equal(pin.localPath, localPath, `${name} debe usar su ruta local de distribución`);
+  assert.equal(pin.file, path.basename(localPath), `${name} debe usar el nombre de archivo esperado`);
+  assert.equal(pin.archive.sha256, expectedSha256, `${name} debe mantener el SHA-256 del bootstrapper`);
+  assert.match(pin.sourceUrl, /^https:\/\//, `${name} debe documentar la fuente usada solo para empaquetado`);
+}
+assert.ok(openGlNativeDeps.includes(`sdk_hash="${pins.artifacts['ps5-payload-sdk'].archive.sha256}"`), 'OpenGL debe usar el pin payload declarado');
+assert.ok(nativeCppDeps.includes(`sdk_hash="${pins.artifacts['ps5-payload-sdk'].archive.sha256}"`), 'Native C++ debe usar el pin payload declarado');
+for (const [name, script] of [['OpenGL native', openGlNativeDeps], ['Native C++', nativeCppDeps], ['Vulkan', vulkanDeps]]) {
+  assert.ok(script.includes(`zlib_hash="${pins.artifacts.zlib.archive.sha256}"`), `${name} debe usar el pin zlib declarado`);
+}
+assert.ok(pacbrewDeps.includes(`hash=${pins.artifacts.pacbrew.archive.sha256}`), 'PacBrew debe usar el hash del manifiesto');
+assert.ok(testDeps.includes(`hash="${pins.artifacts.googletest.archive.sha256}"`), 'GoogleTest debe usar el hash del manifiesto');
+
 
 const vendoredManifest = JSON.parse(fs.readFileSync(path.join(root, 'toolchains', 'SharpProspero', '.ps5hs-source.json'), 'utf8'));
 assert.equal(vendoredManifest.vendoredSnapshot, true, 'el snapshot de muestra debe estar versionado');
