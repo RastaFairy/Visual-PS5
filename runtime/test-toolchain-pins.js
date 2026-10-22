@@ -78,8 +78,8 @@ assert.match(openglSdkFetcher, /sha256sum --check --strict --status/, 'el archiv
 assert.match(openglSdkFetcher, /local_prefixes=\(/, 'el SDK debe buscar una copia ya extraída dentro de toolchains/');
 assert.match(openglSdkFetcher, /verify_prefix\(\) \{/, 'el SDK extraído debe verificarse contra la identidad fijada');
 assert.match(openglSdkFetcher, /manifest_sha256=700493a187604fa33b90b94416cb6faf702a4852de03e072eb79154faabd8d88/, 'el manifiesto del SDK reconstruido debe coincidir con el pin exacto');
-assert.match(openglSdkFetcher, /falta el tarball fijado o un SDK/, 'si no hay tarball ni copia extraída válida, el error debe explicitar el bloqueo offline');
-assert.match(openglSdkFetcher, /archive="\$toolchains_root\/ps5-opengl-sdk\/ps5-opengl-sdk-\$version\.tar\.gz"/, 'el tarball del SDK se guarda una sola vez bajo la raíz local toolchains configurada');
+assert.match(openglSdkFetcher, /local-only: falta \$archive/, 'si no hay tarball local ni copia extraída válida, el error debe explicitar el bloqueo offline');
+assert.match(openglSdkFetcher, /sdk_root="\$toolchains_root\/ps5-opengl-sdk"/, 'el tarball del SDK se guarda bajo la raíz local toolchains configurada');
 for (const [name, script] of [['OpenGL native', openGlNativeDeps], ['Native C++', nativeCppDeps], ['Vulkan', vulkanDeps]]) {
   assert.match(script, /PS5HS_LOCAL_TOOLCHAINS_ONLY:-0/, name + ' debe respetar el modo local-only');
   assert.match(script, /toolchains\/artifacts\/zlib-\$zlib_version\.tar\.gz/, name + ' debe pedir zlib local si falta la caché');
