@@ -89,8 +89,6 @@ extern void *sceAgcDcbSetIndexSize(void *st, unsigned char indexSize, unsigned c
 extern void *sceAgcDcbDrawIndex(void *st, unsigned int indexCount, void *indexAddr, unsigned long long modifier);
 extern void *sceAgcDcbSetFlip(void *st, unsigned int videoOutHandle, int bufferIndex, unsigned int flipMode, long long flipArg);
 extern int sceAgcDriverSubmitDcb(void *submitDescription);
-extern unsigned int *sceAgcDcbWaitUntilSafeForRendering(void *st,
-    unsigned int videoOutHandle, int displayBufferIndex);
 extern int sceVideoOutGetFlipStatus(int handle, void *status);
 extern int sceAgcSuspendPoint(void);
 
@@ -1008,8 +1006,8 @@ static int render_frame(int frame,DirectMem *fb,DirectMem *dcbMem,DirectMem *ctx
     unsigned int *pixels=(unsigned int*)fb->ptr;for(unsigned long i=0;i<fb->size/4;i++)pixels[i]=PS5HS_GAME_SKY_COLOR;
     framebuffer_writeback(fb->ptr,fb->size);
     dcb_reset(dcb,(unsigned int*)dcbMem->ptr,(unsigned int)(dcbMem->size/4));
-    /* AGC adds the VideoOut-safe wait packet to this command buffer. */
-    sceAgcDcbWaitUntilSafeForRendering(dcb,(unsigned int)video,slot);
+    /* Submit the DCB directly. The flip-status gate above prevents CPU reuse
+     * of this scan-out buffer until its previous flip has completed. */
     static const unsigned short offsets[16]={0x0318,0x031B,0x031C,0x031D,0x031E,0x031F,0x0321,0x0323,0x0324,0x0325,0x0390,0x0398,0x03A0,0x03A8,0x03B0,0x03B8};
     CxRegister rt[16];for(int i=0;i<16;i++){rt[i].offset=offsets[i];rt[i].pad=0;rt[i].value=0;
         for(unsigned int r=0;r<cxCount;r++)if(cxRecords[r].offset==offsets[i]){rt[i].value=cxRecords[r].value;break;}}
