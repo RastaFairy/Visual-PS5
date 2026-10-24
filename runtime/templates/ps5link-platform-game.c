@@ -58,6 +58,7 @@ typedef struct { void *data; void *metadata; void *reserved0; void *reserved1; }
 #define VIDEOOUT_TILING_TILED 0   /* VideoOutTilingMode.Tiled = 0 */
 #define VIDEOOUT_TILING_LINEAR 1
 #define VIDEOOUT_PIXELFORMAT_BGRA8_SRGB 0x8000000000000000ULL
+extern int sceSystemServiceHideSplashScreen(void);
 extern int sceVideoOutOpen(int userId, int busType, int index, const void *param);
 extern int sceVideoOutClose(int handle);
 extern int sceVideoOutSetFlipRate(int handle, int rate);
@@ -1074,6 +1075,8 @@ static int render_frame(int frame,DirectMem *fb,DirectMem *dcbMem,DirectMem *ctx
     return 0;
 }
 int main(void){
+    /* Release the launch splash/compositor before taking VideoOut for AGC. */
+    (void)sceSystemServiceHideSplashScreen();
     notify(PS5HS_GAME_TITLE ": AGC directo y DualSense");
     static unsigned long long agcState;int rc=sceAgcInit(&agcState,8);
     if(rc<0){notify_rc(PS5HS_GAME_TITLE ": AGC fallo",rc);return 1;}
