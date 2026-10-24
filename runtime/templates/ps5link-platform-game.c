@@ -88,6 +88,10 @@ extern void *sceAgcDcbSetIndexSize(void *st, unsigned char indexSize, unsigned c
 extern void *sceAgcDcbDrawIndex(void *st, unsigned int indexCount, void *indexAddr, unsigned long long modifier);
 extern void *sceAgcDcbSetFlip(void *st, unsigned int videoOutHandle, int bufferIndex, unsigned int flipMode, long long flipArg);
 extern int sceAgcDriverSubmitDcb(void *submitDescription);
+extern unsigned int sceAgcDriverGetWaitRenderingPacketSizeInDwords(void);
+extern unsigned int sceAgcDriverWaitUntilSafeForRendering(unsigned int **writeCursorSlot,
+    unsigned int packetSizeInDwords, unsigned int queueType, unsigned int videoOutHandle,
+    int displayBufferIndex);
 extern int sceAgcSuspendPoint(void);
 
 /* SharpProspero's CxRegister is {ushort Offset; uint Value;} sequential, which C#
@@ -992,6 +996,22 @@ static int render_frame(int frame,DirectMem *fb,DirectMem *dcbMem,DirectMem *ctx
     unsigned int *pixels=(unsigned int*)fb->ptr;for(unsigned long i=0;i<fb->size/4;i++)pixels[i]=PS5HS_GAME_SKY_COLOR;
     framebuffer_writeback(fb->ptr,fb->size);
     dcb_reset(dcb,(unsigned int*)dcbMem->ptr,(unsigned int)(dcbMem->size/4));
+    /* The AGC driver appends this packet through the address of the write-cursor
+     * slot. It gates GPU writes until VideoOut releases this exact back buffer.
+     * Keep it first in the DCB, matching SharpProspero and the local native
+     * OpenGL renderer; SuspendPoint and WaitVblank do not replace this guard. */
+    unsigned int waitDwords=sceAgcDriverGetWaitRenderingPacketSizeInDwords();
+    unsigned int remainingDwords=(unsigned int)(dcb->top-dcb->up_cursor);
+    if(waitDwords==0u||remainingDwords<dcb->reserved_dwords||
+       waitDwords>remainingDwords-dcb->reserved_dwords){
+        notify(PS5HS_GAME_TITLE ": espacio insuficiente para sincronizar el búfer AGC");return -1;
+    }
+    unsigned int *expectedCursor=dcb->up_cursor+waitDwords;
+    unsigned int writtenDwords=sceAgcDriverWaitUntilSafeForRendering(&dcb->up_cursor,
+        waitDwords,0u,(unsigned int)video,slot);
+    if(writtenDwords!=waitDwords||dcb->up_cursor!=expectedCursor){
+        notify(PS5HS_GAME_TITLE ": el driver AGC no registró la espera segura del búfer");return -1;
+    }
     static const unsigned short offsets[16]={0x0318,0x031B,0x031C,0x031D,0x031E,0x031F,0x0321,0x0323,0x0324,0x0325,0x0390,0x0398,0x03A0,0x03A8,0x03B0,0x03B8};
     CxRegister rt[16];for(int i=0;i<16;i++){rt[i].offset=offsets[i];rt[i].pad=0;rt[i].value=0;
         for(unsigned int r=0;r<cxCount;r++)if(cxRecords[r].offset==offsets[i]){rt[i].value=cxRecords[r].value;break;}}
