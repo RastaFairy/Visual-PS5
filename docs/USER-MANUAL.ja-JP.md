@@ -20,7 +20,7 @@
 
 ## 3. UI とビジュアルプロジェクト
 
-1920×1080 のキャンバスは仮想作業領域であり、PS5 システム UI の正確な画像ではありません。コンポーネントパネルで要素を追加し、インスペクターで位置やプロパティを変更し、階層と画面管理で UI を整理します。フローエディターは、対応するコンポーネントとバックエンドに対して notify、setText、toggleVisibility、setValue、changeColor、navigate などの操作をイベントに接続します。
+キャンバスは既定で1920×1080で、サイズを変更できます。これは仮想作業領域であり、PS5 システム UI の正確な画像ではありません。コンポーネントパネルで要素を追加し、インスペクターで位置やプロパティを変更し、階層と画面管理で UI を整理します。フローエディターは、対応するコンポーネントとバックエンドに対して notify、setText、toggleVisibility、setValue、changeColor、navigate などの操作をイベントに接続します。
 
 プロジェクトを作成したら依存関係を準備する前にバックエンドを選びます。コンポーネントとリソースを追加し、ID の重複を避け、画面を設定します。診断を実行し、無効な参照を修正します。Ctrl+S で保存します。モデルや ZIP のエクスポートはネイティブビルドではありません。
 
@@ -42,7 +42,7 @@ IDE は実際の upstream スクリプトを実行し、ログを保存します
 
 - **選択時の背景：** `sce_sys/pic0.dds`。**起動/ロード時の背景：** `sce_sys/pic1.dds`。それぞれ 3840×2160 の DDS BC7/DX10 に変換され、別々の画像を使えます。まだ両方ない場合は初回に2枚とも選択してください。DirectXTex の `texconv` が必要です（`winget install Microsoft.DirectXTex.Texconv`）。
 
-- **アプリ選択時の音楽：** `sce_sys/snd0.at9`（48 kHz、ループする ATRAC9、最大2 MiB）。互換性のある AT9 は直接指定できます。MP3/WAV/OGG/M4A の変換には FFmpeg と、適法に入手した互換 ATRAC9 エンコーダーが必要です。IDE はエンコーダーを配布・ダウンロードしません。
+- **アプリ選択時の音楽：** `sce_sys/snd0.at9`（48 kHz、ループする ATRAC9、最大2 MiB）。互換性のある AT9 を直接指定するか、WAV/MP3/FLAC/AIFF/AIFC を同梱のオープンソースエンコーダーでオフライン変換できます。FFmpeg と `ps4_at9tool.exe` は不要です。`toolchains/ps5-at9-converter/` の GPL-3.0-or-later ライセンスと通知を確認してください。
 
 上流の `tools/prepare-assets.ps1` が適用前に形式を検証します。これらは個別アプリの表示リソースであり、PS5 全体の壁紙や起動音は変更しません。システムテーマは別プロジェクトの [ps5-theme](https://github.com/Blaze414/ps5-theme) を参照してください。
 

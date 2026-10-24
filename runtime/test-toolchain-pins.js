@@ -13,6 +13,8 @@ const openglSdkFetcher = fs.readFileSync(path.join(root, 'toolchains', 'ps5-home
 const openGlNativeDeps = fs.readFileSync(path.join(root, 'toolchains', 'ps5-homebrew-ui', 'tools', 'setup-native-dependencies.sh'), 'utf8');
 const nativeCppDeps = fs.readFileSync(path.join(root, 'toolchains', 'ps5-native-app-boilerplate', 'tools', 'setup-native-dependencies.sh'), 'utf8');
 const vulkanDeps = fs.readFileSync(path.join(root, 'toolchains', 'PS5_Vulkan', 'tools', 'setup-native-dependencies.sh'), 'utf8');
+const payloadSdkInstaller = fs.readFileSync(path.join(root, 'toolchains', 'PS5_PayloadSDK', 'platform', 'tools', 'setup-sdk.sh'), 'utf8');
+const dusklightSdkSetup = fs.readFileSync(path.join(root, 'toolchains', 'PS5_Dusklight', 'ps5', 'tools', 'setup-sdk.sh'), 'utf8');
 const pacbrewDeps = fs.readFileSync(path.join(root, 'toolchains', 'ps5-homebrew-ui', 'tools', 'setup-pacbrew-dependencies.sh'), 'utf8');
 const testDeps = fs.readFileSync(path.join(root, 'toolchains', 'ps5-homebrew-ui', 'tools', 'setup-test-dependencies.sh'), 'utf8');
 const openGlSources = fs.readFileSync(path.join(root, 'toolchains', 'ps5-opengl', 'tools', 'fetch-sources.py'), 'utf8');
@@ -24,10 +26,15 @@ const windowsZipSafeFreeBsdHeaders = [
   'floatingpoint.h', 'linker_set.h', 'ncurses.h', 'poll.h', 'sched.h',
   'stdarg.h', 'stdatomic.h', 'stdint.h', 'syslog.h', 'ucontext.h'
 ];
-const freebsdIncludeDir = path.join(root, 'toolchains', 'PS5_PayloadSDK-pinned-b83202be', 'include', 'freebsd');
-for (const name of windowsZipSafeFreeBsdHeaders) {
-  const header = fs.readFileSync(path.join(freebsdIncludeDir, name), 'utf8');
-  assert.ok(header.length > 100, `Windows source ZIP must contain the actual ${name} header, not a symbolic-link placeholder`);
+const freebsdIncludeDirs = [
+  path.join(root, 'toolchains', 'PS5_PayloadSDK-pinned-b83202be', 'include', 'freebsd'),
+  path.join(root, 'toolchains', 'PS5_PayloadSDK-pinned-611893fc', 'include', 'freebsd')
+];
+for (const freebsdIncludeDir of freebsdIncludeDirs) {
+  for (const name of windowsZipSafeFreeBsdHeaders) {
+    const header = fs.readFileSync(path.join(freebsdIncludeDir, name), 'utf8');
+    assert.ok(header.length > 100, `Windows source ZIP must contain the actual ${name} header, not a symbolic-link placeholder`);
+  }
 }
 
 // Manifiesto de integridad: se conserva para verificar artefactos colocados localmente.
@@ -43,6 +50,19 @@ const bundledRuntimeArtifacts = [
   ['pacbrew', 'toolchains/artifacts/ps5-payload-dev-v0.40.2.tar.gz', 'a85f65de418a8e6a898c6c3e3c870d50fff7618a200e4dd59ea9692af6ecec4d'],
   ['googletest', 'toolchains/artifacts/googletest-1.17.0.tar.gz', '65fab701d9829d38cb77c14acdc431d2108bfdbf8979e40eb8ae567edf10b27c']
 ];
+const payloadSdkSourcePins = pins.sourcePins.ps5PayloadSdk.revisions;
+const vulkanSdkSource = JSON.parse(fs.readFileSync(path.join(root, payloadSdkSourcePins.vulkan.localPath, '.ps5hs-source.json'), 'utf8'));
+const dusklightSdkSource = JSON.parse(fs.readFileSync(path.join(root, payloadSdkSourcePins.dusklight.localPath, '.ps5hs-source.json'), 'utf8'));
+assert.equal(vulkanSdkSource.sourceCommit, payloadSdkSourcePins.vulkan.commit, 'el snapshot Vulkan debe estar en el commit exacto del manifiesto');
+assert.equal(dusklightSdkSource.sourceCommit, payloadSdkSourcePins.dusklight.commit, 'el snapshot Dusklight debe estar en el commit exacto del manifiesto');
+assert.equal(dusklightSdkSource.materializedSymlinkCount, windowsZipSafeFreeBsdHeaders.length, 'el snapshot Dusklight debe materializar las cabeceras enlazadas de Windows a WSL');
+assert.match(vulkanDeps, new RegExp(`sdk_revision=${payloadSdkSourcePins.vulkan.commit}`), 'Vulkan debe conservar su pin de SDK propio');
+assert.match(dusklightSdkSetup, new RegExp(`sdk_revision=${payloadSdkSourcePins.dusklight.commit}`), 'Dusklight debe conservar su pin de SDK propio');
+assert.ok(dusklightSdkSetup.includes('PS5_PayloadSDK-pinned-611893fc'), 'Dusklight debe resolver el snapshot fijado aunque la copia no tenga historial Git');
+assert.ok(vulkanDeps.includes('install -m 0644 "$sdk_fork/platform/tools/setup-sdk.sh"'), 'Vulkan debe usar el instalador local con soporte offline para el snapshot exportado');
+assert.ok(payloadSdkInstaller.includes('PS5HS_LOCAL_TOOLCHAINS_ONLY:-0'), 'el instalador Payload SDK debe respetar modo local-only');
+assert.ok(payloadSdkInstaller.includes('toolchains_root/artifacts/ps5-payload-sdk.zip'), 'el instalador Payload SDK debe usar el ZIP verificado empaquetado');
+assert.ok(payloadSdkInstaller.includes('sha256sum --check --strict'), 'el instalador Payload SDK debe validar el ZIP local antes de extraerlo');
 for (const [name, localPath, expectedSha256] of bundledRuntimeArtifacts) {
   const pin = pins.artifacts[name];
   assert.ok(pin, `el manifiesto debe fijar la dependencia local ${name}`);

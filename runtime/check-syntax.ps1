@@ -2,9 +2,15 @@
 $ErrorActionPreference = 'Stop'
 $targets = @(
     (Join-Path $PSScriptRoot 'server.ps1'),
-    (Join-Path $PSScriptRoot 'native-runtime.ps1')
+    (Join-Path $PSScriptRoot 'native-runtime.ps1'),
+    (Join-Path $PSScriptRoot 'Prepare-OfflineImage.ps1'),
+    (Join-Path $PSScriptRoot 'Build-OfflineBundle.ps1'),
+    (Join-Path $PSScriptRoot 'Install-OfflineEnvironment.ps1'),
+    (Join-Path $PSScriptRoot 'offline/OfflineBundle.psm1'),
+    (Join-Path $PSScriptRoot 'offline/OfflineEnvironment.psm1')
 )
 foreach ($target in $targets) {
+    if (!(Test-Path -LiteralPath $target -PathType Leaf)) { continue }
     $tokens = $null
     $parseErrors = $null
     [System.Management.Automation.Language.Parser]::ParseFile($target, [ref]$tokens, [ref]$parseErrors) | Out-Null

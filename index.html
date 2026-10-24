@@ -4,14 +4,14 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="color-scheme" content="dark" />
-  <meta name="application-version" content="1.1.19" />
+  <meta name="application-version" content="1.1.56" />
   <title>PS5 Homebrew Studio</title>
-  <link rel="stylesheet" href="styles.css?v=1.1.19" />
+  <link rel="stylesheet" href="styles.css?v=1.1.56" />
 </head>
 <body>
   <div class="app-shell">
     <header class="topbar">
-      <div class="brand"><div class="brand-mark">P<span>5</span></div><div><strong>Homebrew Studio</strong><small>VISUAL IDE · VERSION 1.1.19</small></div></div>
+      <div class="brand"><div class="brand-mark">P<span>5</span></div><div><strong>Homebrew Studio</strong><small>VISUAL IDE · VERSION 1.1.56</small></div></div>
       <div class="project-head"><span class="live-dot"></span><input id="projectName" value="MiHomebrew" aria-label="Nombre del proyecto"/><span class="dirty-pill" id="dirtyPill">SIN GUARDAR</span></div>
       <div class="top-actions">
         <button id="newProjectBtn" class="btn ghost">Nuevo</button>
@@ -24,7 +24,7 @@
       </div>
     </header>
 
-    <div class="notice-strip" id="noticeStrip"><span class="notice-icon">i</span><span id="noticeText">Canvas visual 1920×1080. SharpProspero genera C#; OpenGL/Vulkan generan C++20 a partir del modelo y ejecutan el build upstream real. Las dependencias del toolchain deben estar instaladas.</span><button id="dismissNotice" aria-label="Cerrar aviso">×</button></div>
+    <div class="notice-strip" id="noticeStrip"><span class="notice-icon">i</span><span id="noticeText">El lienzo lógico comienza en 1920×1080 y se puede redimensionar. SharpProspero genera C#; OpenGL/Vulkan generan C++20 a partir del modelo y ejecutan el build upstream real.</span><button id="dismissNotice" aria-label="Cerrar aviso">×</button></div>
 
     <main class="workspace">
       <aside class="left-rail">
@@ -45,18 +45,23 @@
 
       <section class="editor-area">
         <div class="editor-tabs">
-          <button class="editor-tab active" data-view="design">Diseño <span class="tab-status"></span></button>
-          <button class="editor-tab" data-view="structure">Estructura</button>
-          <button class="editor-tab" data-view="logic">Flujos</button>
-          <button class="editor-tab" data-view="code">Código</button>
-          <button class="editor-tab" data-view="diagnostics">Diagnósticos <span class="count-badge" id="diagCount">0</span></button>
-          <div class="tab-spacer"></div>
-          <label class="target-select-label">DESTINO</label><select id="backendSelect" class="compact-select" aria-label="Backend"><option value="sharp">SharpProspero · Aplicación C#</option><option value="opengl-ui">Native UI · OpenGL 4.6 / C++20</option><option value="vulkan-ui">Native UI · Vulkan / RADV / C++20</option><option value="sharp-payload">SharpProspero · Payload</option><option value="ps5sdk">PS5SDK · ELF payload</option><option value="payload">ps5-payload-dev/sdk · Payload ELF</option><option value="ps5link">ps5link · Título nativo</option><option value="etahen">etaHEN · Plugin</option></select>
-          <button id="previewBtn" class="btn secondary small">▷ Vista previa</button>
+          <div class="editor-view-tabs" role="group" aria-label="Vistas del editor">
+            <button class="editor-tab active" data-view="design">Diseño <span class="tab-status"></span></button>
+            <button class="editor-tab" data-view="structure">Estructura</button>
+            <button class="editor-tab" data-view="logic">Flujos</button>
+            <button class="editor-tab" data-view="game">Juego 3D</button>
+            <button class="editor-tab" data-view="compute">Vulkan Compute</button>
+            <button class="editor-tab" data-view="code">Código</button>
+            <button class="editor-tab" data-view="diagnostics">Diagnósticos <span class="count-badge" id="diagCount">0</span></button>
+          </div>
+          <div class="editor-tab-controls" role="group" aria-label="Destino y vista previa">
+            <label class="target-select-label">DESTINO</label><select id="backendSelect" class="compact-select" aria-label="Backend"><option value="sharp">SharpProspero · Aplicación C#</option><option value="opengl-ui">Native UI · OpenGL 4.6 / C++20</option><option value="vulkan-ui">Native UI · Vulkan / RADV / C++20</option><option value="vulkan-compute">Vulkan Compute · GLSL / SPIR-V</option><option value="sharp-payload">SharpProspero · Payload (sin integración)</option><option value="ps5sdk">PS5SDK · ELF payload (sin integración)</option><option value="payload">ps5-payload-dev/sdk · Payload ELF · offline</option><option value="ps5link">ps5link · Título nativo</option><option value="etahen">etaHEN · Plugin</option></select>
+            <button id="previewBtn" class="btn secondary small">▷ Vista previa</button>
+          </div>
         </div>
 
         <div class="view-container" id="designView">
-          <div class="canvas-toolbar"><div class="breadcrumbs"><span>Proyecto</span><i>/</i><b id="canvasBreadcrumb">Pantalla principal</b></div><div id="screenSwitcher" class="screen-switcher" aria-label="Pantallas del proyecto"></div><div class="canvas-tools"><span class="viewport-label">1920 × 1080</span><button id="gridBtn" class="icon-button toggled" title="Mostrar cuadrícula">▦</button><button id="isolateLayerBtn" class="icon-button" title="Aislar capa seleccionada" aria-label="Aislar capa seleccionada" disabled>◎</button><button id="fitBtn" class="icon-button" title="Ajustar al espacio">⤢</button><button id="centerBtn" class="icon-button" title="Centrar elementos">⊙</button></div></div>
+          <div class="canvas-toolbar"><div class="breadcrumbs"><span>Proyecto</span><i>/</i><b id="canvasBreadcrumb">Pantalla principal</b></div><div id="screenSwitcher" class="screen-switcher" aria-label="Pantallas del proyecto"></div><div class="canvas-tools"><button id="canvasSizeBtn" class="viewport-label" title="Cambiar tamaño del lienzo" aria-label="Cambiar tamaño del lienzo">1920 × 1080</button><button id="renderTargetBtn" class="viewport-label render-target-label" title="Cambiar referencia de render" aria-label="Cambiar referencia de render">Render 1080p</button><button id="gridBtn" class="icon-button toggled" title="Mostrar cuadrícula">▦</button><button id="isolateLayerBtn" class="icon-button" title="Aislar capa seleccionada" aria-label="Aislar capa seleccionada" disabled>◎</button><button id="fitBtn" class="icon-button" title="Ajustar al espacio">⤢</button><button id="centerBtn" class="icon-button" title="Centrar elementos">⊙</button></div></div>
           <div class="canvas-stage-wrap"><div id="canvasStage" class="canvas-stage" aria-label="Lienzo de diseño"><div class="safe-area"></div><div class="canvas-watermark">PS5 HOMEbrew STUDIO</div><div id="canvasElements" class="canvas-elements"></div><div id="dropHint" class="drop-hint"><div class="drop-illustration">＋</div><strong>Construye tu pantalla</strong><span>Arrastra componentes desde el panel izquierdo o pulsa sobre uno para añadirlo.</span></div></div></div>
           <div class="canvas-status"><span><i class="status-led green"></i><span id="canvasState">Diseño listo</span></span><span id="selectionPosition">Sin selección</span><span>Escala <b id="zoomValue">100%</b></span></div>
         </div>
@@ -88,7 +93,28 @@
 
         <div class="view-container hidden" id="logicView"><div class="canvas-toolbar"><div class="breadcrumbs"><span>Proyecto</span><i>/</i><b>Lógica visual</b></div><div class="canvas-tools"><button id="addFlowBtn" class="btn primary small">＋ Añadir flujo</button></div></div><div id="logicCanvas" class="logic-canvas"></div></div>
 
-        <div class="view-container hidden" id="codeView"><div class="canvas-toolbar"><div class="breadcrumbs"><span>Proyecto</span><i>/</i><b id="codeFileName">Program.cs</b><span class="language-badge" id="codeLanguageBadge">C# · SharpProspero</span></div><div class="canvas-tools"><button id="regenerateCodeBtn" class="btn secondary small">↻ Regenerar desde diseño</button><button id="copyCodeBtn" class="btn ghost small">Copiar</button></div></div><div class="code-area"><div class="code-gutter" id="codeGutter">1</div><textarea id="codeEditor" spellcheck="false" aria-label="Código fuente generado"></textarea></div><div class="code-footer"><span id="codeStatus">Código generado desde el modelo visual</span><span>El código editado se conserva al compilar</span></div></div>
+        <div class="view-container hidden" id="gameView" data-compact-pane="scene">
+          <div class="canvas-toolbar"><div class="breadcrumbs"><span>Proyecto</span><i>/</i><b>Escena 3D</b></div><div class="canvas-tools"><button id="gameAddPlatform" class="btn primary small">＋ Plataforma</button><button id="gameAddObject" class="btn secondary small">＋ Malla 3D</button><button id="gameAddCollectible" class="btn secondary small">✦ Cristal</button><button id="gameAddCheckpoint" class="btn secondary small">⌖ Checkpoint</button><button id="gameSetGoal" class="btn secondary small">⚑ Marcar meta</button></div></div>
+          <div id="gameBackendNotice" class="game-backend-notice hidden" role="status"><span><strong>Destino incompatible:</strong> la escena AGC se compila con ps5link. Destino actual: <b id="gameBackendCurrent">—</b>.</span><button type="button" class="btn secondary small" id="gameUseAgcBackend">Usar ps5link</button></div>
+          <div class="game-compact-pane-switch" role="group" aria-label="Panel visible del editor de juego"><button type="button" class="game-compact-pane-button active" data-game-pane="scene" aria-pressed="true">Escena</button><button type="button" class="game-compact-pane-button" data-game-pane="properties" aria-pressed="false">Propiedades y lógica</button></div>
+          <div class="game-editor-layout">
+            <section class="game-scene-pane"><div class="compute-pane-heading game-scene-heading"><strong>ESCENA · VISTA 3D</strong><span id="gameSceneSummary">Sin plataformas</span><div class="game-viewport-controls" role="group" aria-label="Controles de la vista 3D"><button type="button" class="btn secondary small" data-game-view-yaw="-45" title="Orbitar 45 grados a la izquierda" aria-label="Orbitar 45 grados a la izquierda">↶</button><button type="button" class="btn secondary small" data-game-view-yaw="45" title="Orbitar 45 grados a la derecha" aria-label="Orbitar 45 grados a la derecha">↷</button><button type="button" class="btn secondary small" data-game-view-pitch="-15" title="Mirar desde más arriba" aria-label="Mirar desde más arriba">⌃</button><button type="button" class="btn secondary small" data-game-view-pitch="15" title="Mirar desde más abajo" aria-label="Mirar desde más abajo">⌄</button><button type="button" id="gameSceneViewReset" class="btn secondary small">Restablecer cámara</button></div></div><div class="game-scene-stage"><canvas id="gameSceneCanvas" aria-label="Editor visual de escena 3D"></canvas><div id="gameSceneEmpty" class="empty-screen">Añade bloques de plataforma para construir el recorrido.<br>Arrastra los bloques dentro de la escena para definir su posición X/Z.</div></div><div class="game-scene-legend"><span><i class="game-legend-platform"></i> Plataforma</span><span><i class="game-legend-object"></i> Malla 3D · colisión opcional</span><span><i class="game-legend-player"></i> Inicio</span><span><i class="game-legend-collision"></i> Caja sólida · arrastra las esquinas</span><span><i class="game-legend-crystal"></i> Cristal</span><span><i class="game-legend-goal"></i> Meta</span></div></section>
+            <aside class="game-properties-pane"><div class="game-entity-tabs" role="tablist" aria-label="Elementos de la escena"><button id="gamePlatformTab" type="button" class="active" role="tab" aria-selected="true">Plataformas</button><button id="gameObjectTab" type="button" role="tab" aria-selected="false">Objetos 3D</button></div><section id="gamePlatformSection"><div class="compute-pane-heading game-platform-heading"><strong>PLATAFORMAS</strong><input id="gamePlatformFilter" type="search" placeholder="Buscar…" aria-label="Buscar plataformas por nombre o tipo" autocomplete="off"><button type="button" id="gamePlatformListSize" class="btn secondary small game-list-size" aria-controls="gamePlatformList" aria-expanded="false" aria-label="Ampliar lista de plataformas" title="Ampliar lista de plataformas">Ampliar</button><span id="gameBlockCount">0</span></div><div id="gamePlatformList" class="game-platform-list" role="list" aria-label="Plataformas del nivel"></div><div id="gamePlatformProperties" class="game-properties"></div></section><section id="gameObjectSection" class="hidden"><div class="compute-pane-heading game-platform-heading"><strong>OBJETOS 3D</strong><button id="gameAddObjectMini" class="btn secondary small">＋ Añadir</button><span id="gameObjectCount">0</span></div><div id="gameObjectList" class="game-platform-list" role="list" aria-label="Objetos 3D"></div><div id="gameObjectProperties" class="game-properties"></div></section><div class="compute-pane-heading game-physics-heading"><strong>FICHA Y PORTADA</strong><span>Título</span></div><div id="gameTitleProperties" class="game-physics-properties"></div><div class="compute-pane-heading game-physics-heading"><strong>FÍSICA Y MANDO</strong><span>DualSense</span></div><div id="gamePhysicsProperties" class="game-physics-properties"></div><div class="compute-pane-heading game-physics-heading"><strong>CÁMARA Y PRESENTACIÓN</strong><span>AGC 3D</span></div><div id="gamePresentationProperties" class="game-physics-properties"></div><div class="compute-pane-heading game-physics-heading"><strong>ILUMINACIÓN Y FOCOS</strong><button id="gameAddLight" class="btn secondary small">＋ Foco</button></div><div id="gameLightingProperties" class="game-physics-properties"></div></aside>
+          </div>
+          <div class="game-scene-footer"><span>Arrastra piezas para moverlas · botón derecho para orbitar · Mayús + arrastrar para desplazar · rueda para acercar</span><span id="gameSceneValidation">0 errores · 0 avisos</span></div>
+        </div>
+
+        <div class="view-container hidden" id="computeView">
+          <div class="canvas-toolbar"><div class="breadcrumbs"><span>Proyecto</span><i>/</i><b>Grafo de cómputo Vulkan</b></div><div class="canvas-tools"><label class="compute-target-size">DESTINO <input id="computeTargetWidth" type="number" min="1" max="16384" step="1" aria-label="Ancho del destino Vulkan"/> × <input id="computeTargetHeight" type="number" min="1" max="16384" step="1" aria-label="Alto del destino Vulkan"/></label><button id="computeAddResource" class="btn secondary small">＋ Imagen</button><button id="computeAddPass" class="btn secondary small">＋ Pase</button><button id="computeImportReport" class="btn ghost small">Importar medición GPU</button><button id="computeBuild" class="btn primary small">Compilar SPIR-V</button></div></div>
+          <div class="compute-workspace">
+            <section class="compute-graph-pane"><div class="compute-pane-heading"><strong>GRAFO · ORDEN DE EJECUCIÓN</strong><span id="computeGraphStatus">Sin analizar</span></div><div id="computeGraphCanvas" class="compute-graph-canvas"></div><div class="compute-pane-heading compute-resource-heading"><strong>IMÁGENES DE ALMACENAMIENTO</strong><span id="computeResourceCount">0</span></div><div id="computeResourceList" class="compute-resource-list"></div></section>
+            <section class="compute-editor-pane"><div class="compute-pane-heading"><strong id="computePassTitle">Shader de cómputo</strong><span id="computeDispatchSummary">—</span></div><div class="compute-pass-properties" id="computePassProperties"></div><div class="compute-code-wrap"><div class="compute-code-gutter" id="computeCodeGutter">1</div><textarea id="computeShaderEditor" spellcheck="false" aria-label="Fuente GLSL de cómputo" autocapitalize="off" autocomplete="off"></textarea></div><div class="compute-editor-footer"><span id="computeCodeStatus">GLSL 450 · salida SPIR-V local</span><span>El compilador verifica el shader; la medición GPU requiere runtime en consola.</span></div></section>
+          </div>
+          <div class="compute-report-panel"><div><strong>VALIDACIÓN GPU</strong><span id="computeReportSummary">Sin mediciones importadas. La compilación GLSL no ejecuta el shader.</span></div><div id="computeReportDetails" class="compute-report-details"></div></div>
+          <input id="computeReportFile" type="file" accept=".json,application/json" hidden />
+        </div>
+
+        <div class="view-container hidden" id="codeView"><div class="canvas-toolbar"><div class="breadcrumbs"><span>Proyecto</span><i>/</i><b id="codeFileName">Program.cs</b><span class="language-badge" id="codeLanguageBadge">C# · SharpProspero</span><select id="payloadLanguage" class="compact-select" aria-label="Lenguaje del payload" hidden><option value="c">C</option><option value="cpp">C++20</option></select></div><div class="canvas-tools"><button id="regenerateCodeBtn" class="btn secondary small">↻ Regenerar desde diseño</button><button id="copyCodeBtn" class="btn ghost small">Copiar</button></div></div><div class="code-area"><div class="code-gutter" id="codeGutter">1</div><textarea id="codeEditor" spellcheck="false" aria-label="Código fuente generado"></textarea></div><div class="code-footer"><span id="codeStatus">Código generado desde el modelo visual</span><span id="codeFooterHint">La compilación usa el modelo del proyecto</span></div></div>
 
         <div class="view-container hidden" id="diagnosticsView"><div class="canvas-toolbar"><div class="breadcrumbs"><span>Proyecto</span><i>/</i><b>Diagnósticos</b></div><div class="canvas-tools"><select id="diagFilter" class="compact-select"><option value="all">Todos los diagnósticos</option><option value="error">Errores</option><option value="warning">Advertencias</option><option value="info">Información</option></select><button id="recheckBtn" class="btn secondary small">⟳ Analizar</button></div></div><div id="diagnosticsList" class="diagnostics-list"></div></div>
       </section>
@@ -175,11 +201,14 @@
     });
   })();
   </script>
-  <script src="runtime/project-contracts.js?v=1.1.19"></script>
-  <script src="runtime/unicode-fonts.js?v=1.1.19"></script>
-  <script src="runtime/native-modification-policy.js?v=1.1.19"></script>
-  <script src="runtime/native-generator.js?v=1.1.19"></script>
-  <script src="runtime/layer-model.js?v=1.1.19"></script>
-  <script src="app.js?v=1.1.19"></script>
+  <script src="runtime/project-contracts.js?v=1.1.56"></script>
+  <script src="runtime/unicode-fonts.js?v=1.1.56"></script>
+  <script src="runtime/native-modification-policy.js?v=1.1.56"></script>
+  <script src="runtime/native-generator.js?v=1.1.56"></script>
+  <script src="runtime/payload-generator.js?v=1.1.56"></script>
+  <script src="runtime/compute-graph.js?v=1.1.56"></script>
+  <script src="runtime/layer-model.js?v=1.1.56"></script>
+  <script src="app.js?v=1.1.56"></script>
 </body>
 </html>
+

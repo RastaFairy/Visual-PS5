@@ -15,7 +15,7 @@ La utilidad del IDE depende de SDK, plantillas, kits gráficos, herramientas y a
 | [ps5-payload-dev/sdk](https://github.com/ps5-payload-dev/sdk) | [@ps5-payload-dev](https://github.com/ps5-payload-dev) | SDK C/C++ para payloads |
 | [ps5link-sdk](https://github.com/Rufidj/ps5link-sdk) | [@Rufidj](https://github.com/Rufidj) | Herramientas de enlace y títulos nativos |
 | [etaHEN-Plugins](https://github.com/etaHEN/etaHEN-Plugins) | [@etaHEN](https://github.com/etaHEN) | Plugins y daemons |
-| [libNidResolver](https://github.com/astrelsky/libNidResolver) | [@astrelsky](https://github.com/astrelsky) | Resolución de NIDs para dependencias |
+| [libNidResolver](https://github.com/astrelsky/libNidResolver) | [@astrelsky](https://github.com/astrelsky) | Resolución de NIDs para dependencias · GPL-2.0 · copia offline fijada en `toolchains/libNidResolver` |
 | [PS5 Native App Boilerplate](https://github.com/blackbearreloaded/ps5-native-app-boilerplate) | [@blackbearreloaded](https://github.com/blackbearreloaded) | Base de título nativo y scripts de build |
 | [PS5 OpenGL 4.6](https://github.com/blackbearreloaded/ps5-opengl) | [@blackbearreloaded](https://github.com/blackbearreloaded) | Stack OpenGL |
 | [PS5 Homebrew UI (OpenGL)](https://github.com/blackbearreloaded/ps5-homebrew-ui) | [@blackbearreloaded](https://github.com/blackbearreloaded) | Kit y runtime de UI OpenGL |

@@ -1,5 +1,156 @@
 # Registro de cambios
 
+## 1.1.56 — 2026-10-24
+
+- Convierte las colisiones de plataformas y objetos 3D en cajas sólidas: aterrizaje superior, bloqueo lateral y respuesta al golpe desde abajo.
+- Añade grosor vertical configurable para las plataformas y muestra el volumen completo del colisionador en el lienzo.
+- Actualiza la escena AGC generada y conserva un grosor compatible con los proyectos existentes.
+- Añade regresiones para la normalización, el inspector visual, la serialización AGC y la respuesta de colisión.
+
+## 1.1.55 — 2026-10-24
+
+- Sustituye el personaje cúbico por una exploradora original construida con mallas AGC procedurales y animación de brazos y piernas al caminar.
+- Renderiza los cristales como octaedros facetados y la meta como un arco luminoso con núcleo giratorio.
+- Cambia los puntos de luz y el decorado celeste a geometrías 3D coherentes con la escena visual.
+- Añade regresiones para evitar que el renderizador vuelva al personaje de cubos y a cristales cúbicos.
+
+## 1.1.54 — 2026-10-24
+
+- Amplía las mallas de escena visual a cubo, cristal facetado, esfera, cilindro, cono y pirámide.
+- Genera las nuevas formas con geometría nativa y normales de iluminación en el runtime AGC.
+- Añade sus formas al inspector, al árbol de objetos, a la vista de escena y a la validación del proyecto.
+
+## 1.1.53 — 2026-10-24
+
+- Sustituye la vista isométrica fija por una vista 3D orbitable con control de altura, zoom y desplazamiento.
+- Mantiene las transformaciones X/Z y la edición visual de colisiones alineadas al mundo al cambiar la cámara.
+- Actualiza los controles accesibles, la ayuda y la versión de caché de recursos del IDE.
+
+## 1.1.52 — 2026-10-24
+
+- Corrige la edición de nombre, posición, dimensiones, color y colisión de objetos 3D: cada cambio de teclado actualiza el modelo y se conserva al guardar.
+- Conserva el foco del inspector mientras se escribe y refresca la escena sin sustituir el campo en cada pulsación.
+- Añade comprobaciones de integración para la ruta de guardado del inspector 3D.
+
+## 1.1.51 — 2026-10-24
+
+- Permite activar en cada cubo o cristal 3D una caja ajustable para aterrizar sobre su cara superior.
+- Añade redimensión visual y controles numéricos para las dimensiones X/Y/Z y el desfase de la superficie de aterrizaje.
+- Integra estas superficies en la física AGC y en la comprobación de rutas; los lados de los objetos todavía no bloquean al jugador.
+- Aclara en la interfaz y la guía que el editor de juego sigue siendo especializado en niveles de plataformas, no un motor 3D general como Unity.
+- Actualiza contratos de escena, cabecera nativa y versión de caché del frontend.
+
+## 1.1.50 — 2026-10-24
+
+- Añade cubos y cristales facetados decorativos editables en la escena 3D visual AGC.
+- Permite seleccionarlos, moverlos en X/Z y ajustar altura, tamaño, giro y color desde el inspector.
+- Genera las primitivas desde los datos del proyecto y las dibuja en el renderer AGC; identifica expresamente que todavía no tienen colisión física.
+- Verifica límites, identificadores, formas y valores de la escena antes de generar el título.
+
+## 1.1.49 — 2026-10-24
+
+- Permite cambiar el tamaño de la caja de colisión de una plataforma arrastrando sus cuatro tiradores visibles en la escena isométrica.
+- Conserva la edición numérica y muestra una guía de interacción en el propio editor.
+- Verifica el cálculo de redimensión entre coordenadas de pantalla y dimensiones del mundo, con límites para evitar colisiones degeneradas o fuera del motor.
+
+## 1.1.48 — 2026-10-24
+
+- Sincroniza la versión del paquete y la caché del IDE con la interfaz publicada como 1.1.48.
+- Incluye el editor de escenas AGC con plataformas, marcadores de recorrido, colisiones ajustables, física, cámara, iluminación y flujos de control visuales.
+- Añade verificación completa del paquete UltraPack como opción recomendada.
+
+## 1.1.35 — 2026-10-24
+
+- Integra una toolchain ATRAC9 de código abierto dentro de `toolchains/`; el IDE convierte WAV, MP3, FLAC y AIFF/AIFC offline sin FFmpeg ni `ps4_at9tool.exe`.
+- Conserva el audio importado y su vínculo en el proyecto exportable; al compilar juegos AGC genera y valida `dist/<TITLE_ID>/sce_sys/snd0.at9`.
+- Aplica el mismo codificador a la edición de presentación de títulos nativos existentes y actualiza los manuales/licencias visibles.
+
+## 1.1.34 — 2026-10-24
+
+- El build AGC registra acciones de juego visuales con su nombre correcto y distingue los proyectos que usan C manual.
+- Elimina una función auxiliar sin uso de la fuente generada, que había provocado una advertencia del compilador.
+- La vista Código explica en cada backend si el fuente es editable o se regenera desde el modelo visual.
+- Añade contratos de regresión para preservar el modo visual y los diagnósticos del build.
+
+## 1.1.33 — 2026-10-24
+
+- Mantiene los proyectos AGC en modo visual al compilar: envía el modelo de bloques, escena y Flujos para que el IDE genere `src/main.c` desde su motor reutilizable.
+- Ya no exige contenido en el editor Código para compilar un juego visual; la edición manual sigue disponible como modo separado.
+- Muestra en el diálogo y en Salida los bloques, plataformas y acciones que alimentarán la generación visual.
+- Añade contratos de regresión para impedir que la compilación convierta accidentalmente un proyecto visual a código manual.
+
+## 1.1.32 — 2026-10-24
+
+- Crea la interfaz del minijuego con bloques, pantallas, propiedades y Flujos; las instrucciones del menú, pausa y partida se leen desde el lienzo visual.
+- Añade etiquetas dinámicas para componentes visuales mediante `{current}`, `{total}`, `{percent}` y `{state}`; el contador, el progreso y el sonido responden al estado del juego.
+- Mantiene el editor de escena, las colisiones por plataforma, el mando DualSense y las cinco acciones de juego en el modelo visual; el motor AGC se genera y queda en solo lectura.
+- Corrige la composición de nombres y avisos del motor para que dependan del título del proyecto, y oculta el botón de pausa al completar el nivel.
+## 1.1.31 — 2026-10-24
+
+- Genera el motor AGC de plataformas desde una plantilla reutilizable del IDE; en modo visual ya no exige editar el código C a mano.
+- Enlaza acciones de Flujos con inicio, pausa, continuación, reinicio y sonido, y deriva los botones y pantallas efectivos de los componentes configurados.
+- Genera desde Juego 3D las colisiones, físicas, cámara, colores, regla de victoria y HUD; el código generado se muestra en solo lectura para inspección.
+- Conserva una copia de seguridad del `src/main.c` anterior cuando el proyecto pasa de código manual al motor visual generado.
+
+## 1.1.30 — 2026-10-24
+
+- Evita que los nombres largos de plataforma se superpongan en el mapa isométrico: la vista muestra números legibles y conserva los nombres completos en la lista e inspector.
+- Guarda y valida desde la interfaz la ruta de Nebula Steps con seis cristales, cuatro checkpoints, una meta y cajas ajustables por plataforma.
+- El backend AGC toma las plataformas, los cristales, la meta, el inicio, la física y sus hitboxes directamente del encabezado generado desde la escena visual.
+
+## 1.1.29 — 2026-10-24
+
+- Añade colisión ajustable por plataforma: activación, medio ancho X, medio fondo Z y desfase vertical; el contorno se dibuja en la vista isométrica.
+- El motor AGC usa la caja de colisión editada para detectar aterrizajes y ajustar el punto de apoyo y de reaparición.
+- El editor y el build comprueban que inicio, checkpoints, cristales y meta tengan colisión activa y que los objetivos sean alcanzables con la física configurada.
+- Sincroniza el código AGC del proyecto Nebula Steps con el editor y deriva los contadores, el progreso y la meta desde la escena guardada.
+## 1.1.28 — 2026-10-24
+
+- Añade el editor visual de escena 3D: plataformas arrastrables, propiedades geométricas, marcadores de inicio, cristal, checkpoint y meta, junto con parámetros editables de movimiento y salto.
+- Convierte la escena guardada en `src/ps5hs_game_scene.h` durante la integración AGC; el servidor bloquea el build si el programa no incluye y consume los datos visuales.
+- Corrige el guardado de propiedades de plataforma y física con eventos delegados; los cambios ya no dependen de un `onchange` asignado a un contenedor sin soporte.
+- Documenta el flujo visual de creación de niveles y el enlace con el motor ps5link/AGC.
+
+## 1.1.26 — 2026-10-23
+
+- Permite redimensionar el lienzo desde el IDE, con preajustes y tamaño personalizado entre 640×360 y 7680×4320; al aplicarlo, escala posiciones, tamaños y fuentes de los componentes.
+- Separa ese lienzo lógico del perfil de render de referencia: permite previsualizar 720p, 900p, 1080p, 1440p, 4K o medidas personalizadas y muestra en el inspector el rectángulo equivalente en píxeles de salida.
+- Guarda el perfil de render con el proyecto sin cambiar el lienzo, el código generado ni el modo de VideoOut que se elija al ejecutar.
+- Hace que la paleta, el arrastre, el redimensionado, el inspector, las flechas, los diagnósticos y el contrato de proyectos usen la resolución lógica activa.
+- Mapea la geometría de proyecto al lienzo lógico de cada backend. En OpenGL y Vulkan, el renderer escala ese espacio virtual a la superficie activa de VideoOut/swapchain (incluida la salida 4K cuando el modo está disponible); 1920×1080 no fija la resolución física de salida.
+
+## 1.1.25 — 2026-10-23
+
+- Hace seguros todos los IDs de revisión Vulkan Compute y migra grafos antiguos con revisiones inválidas sin asociar mediciones antiguas a una revisión nueva.
+- Muestra los diagnósticos del grafo Vulkan Compute en la vista general y los mantiene fuera del bloqueo de compilación de backends distintos.
+- Genera el namespace C# a partir del nombre del proyecto para evitar el marcador genérico `SampleApp`.
+- Reconoce `libNidResolver` como fuente local offline: snapshot upstream `3f7ce7086c38ef35eb7869aafb247ed544ae3ee1`, licencia GPL-2.0 y documentación de procedencia.
+
+## 1.1.24 — 2026-10-23
+
+- Integra el artefacto PacBrew v0.40.2 fijado localmente en la imagen WSL: bibliotecas estáticas, cabeceras y metadatos pkg-config para ShadowMountPlus. La identidad de imagen y el bundle verifican versión, hash y cada archivo requerido.
+- ShadowMountPlus puede usar una caché local en `.runtime/` desde el mismo archivo versionado cuando la distro WSL actual no tiene esas dependencias. PacBrew se mantiene fijado por versión y SHA-256 y se pasa al Makefile upstream sin modificarlo.
+- El backend payload respeta `toolchain.llvmMajor` si el proyecto lo fija; si no, selecciona la pareja Clang/LLD/LLVM compatible más reciente de WSL/Ubuntu. Refresca los índices apt como máximo una vez al día, registra la selección y, sin conexión, conserva la versión compatible ya instalada.
+- Añade `hostPackages` para herramientas Ubuntu por proyecto y respaldo HTTPS con SHA-256 para dependencias empaquetadas. La resolución busca primero en WSL, proyecto, caché y `toolchains/`; solo intenta instalar o descargar lo declarado cuando falta.
+- Corrige la conversión de ruta WSL del archivo PacBrew en el generador de imágenes y añade comprobaciones de dependencias al instalar/verificar la imagen.
+- No se afirma compilación de ShadowMountPlus; queda pendiente confirmar el ELF en el entorno local del usuario.
+
+## 1.1.21 — 2026-10-23
+
+- Añade un backend Vulkan Compute separado de los renderizadores de UI: editor de grafo, pases GLSL 450, imágenes `storage-image`, bindings, despacho y resolución de destino ajustable.
+- Valida en el cliente y el servidor el orden de lectura/escritura, límites Vulkan, correspondencia de bindings, formato/acceso de imagen y declaraciones GLSL huérfanas.
+- Compila offline a SPIR-V Vulkan 1.2 con `glslangValidator` local en WSL, verifica la cabecera y SHA-256 y conserva los archivos parciales ante errores. La operación requiere consentimiento y no ejecuta los shaders en GPU.
+- Añade importación de informes GPU ligada a la revisión del grafo y a SHA-256 por shader, con métricas por pase y comparación de rendimiento.
+- Los proyectos compute guardan `compute-graph.json`; dejan de presentar o exportar código C# ficticio. Documentación: `docs/VULKAN_COMPUTE.md`.
+- No se ejecutó una compilación SPIR-V ni una prueba de GPU en esta intervención.
+
+## 1.1.20 — 2026-10-22
+
+- Añade un bootstrap local para diagnosticar e instalar WSL2 y la imagen Ubuntu del bundle offline, con validación de integridad, comprobación de virtualización/espacio, detección de colisiones, elevación puntual y reanudación después de reiniciar.
+- El estado del IDE muestra si está ejecutándose desde un bundle offline, si la distro Visual-PS5 está verificada y qué backends siguen bloqueados para compilación sin red.
+- El bundle impide iniciar builds de backends que su matriz de preparación aún no declara validados; no se anuncia compatibilidad offline a partir de la mera presencia de fuentes.
+- La instalación Windows y la importación WSL siguen pendientes de validación en un equipo limpio. OpenGL, Vulkan y SharpProspero permanecen bloqueados en la matriz offline hasta cerrar sus dependencias y builds representativos.
+
 ## 1.1.19 — 2026-10-20
 
 - El upstream comunitario `blackbearreloaded` desapareció de GitHub (ps5-opengl, ps5-native-app-boilerplate, ps5-homebrew-ui, ProsperoLight, ps5-fsr4, ps5-helixsr) y los builds OpenGL morían con `curl: (22) 404` al descargar el SDK ps5-opengl 1.0.2. Esta versión integra toolchains, pins y mirrors para que una copia local baste y la red sea opcional.

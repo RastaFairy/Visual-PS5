@@ -17,7 +17,7 @@ Esta integración controla la política de la aplicación y el enrutamiento de e
 
 ## Flujo de uso
 
-1. Añade componentes en el lienzo 1920×1080 y configura sus propiedades.
+1. Añade componentes en el lienzo configurable (inicia en 1920×1080) y configura sus propiedades.
 2. Define los flujos que responderán a `start`, `activate` y `change`.
 3. En **Destino**, elige `Native UI · OpenGL 4.6 / C++20` o `Native UI · Vulkan / RADV / C++20`.
 4. Pulsa **Compilar**, especifica el nombre y el `TITLE_ID` y confirma.
@@ -27,7 +27,7 @@ El nombre debe usar entre 1 y 40 caracteres ASCII; el `TITLE_ID` debe seguir el 
 
 ## Contrato generado
 
-La pantalla generada implementa `hui::app::Concept`: `info()`, `enter()`, `update()` y `draw()`. Las posiciones y dimensiones se mantienen en el lienzo virtual de 1920×1080. Los componentes se almacenan como widgets y se dibujan a través de `hui::gfx::DrawList`, de modo que la misma lógica base puede pasar por el backend OpenGL de `ps5-homebrew-ui` o por el fork del kit para Vulkan.
+La pantalla generada implementa `hui::app::Concept`: `info()`, `enter()`, `update()` y `draw()`. El generador mapea las posiciones y dimensiones del proyecto al espacio virtual de UI de 1920×1080 que usa el toolkit. Después, los renderers OpenGL y Vulkan ajustan ese espacio a las dimensiones reales de la superficie activa, manteniendo la proporción; 1920×1080 es el sistema lógico de coordenadas, no un límite físico de salida. El backend Vulkan obtiene el tamaño del swapchain y OpenGL consulta la superficie EGL de VideoOut, por lo que pueden presentar a 1080p, 1440p o 4K cuando el modo de pantalla está disponible.
 
 Los flujos soportados se traducen así:
 

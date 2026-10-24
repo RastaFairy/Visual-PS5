@@ -7,6 +7,7 @@ const contracts = require('./project-contracts.js');
 const app = fs.readFileSync(path.join(root, 'app.js'), 'utf8');
 const server = fs.readFileSync(path.join(__dirname, 'server.ps1'), 'utf8');
 const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
+const visualGameTemplate = fs.readFileSync(path.join(__dirname, 'templates', 'ps5link-platform-game.c'), 'utf8');
 
 assert.equal(contracts.isValidTitleId('PPSA12345'), true);
 assert.equal(contracts.isValidTitleId('ppsa12345'), true, 'normalization must accept case-insensitive user input');
@@ -21,7 +22,7 @@ assert.equal(contracts.normalizeAssetFilename('release notes'), 'release-notes',
 assert.equal(contracts.normalizeAssetFilename('../../imagen á.png'), 'imagen-a.png', 'asset names must be reduced to a safe basename');
 assert.throws(() => contracts.normalizeAssetFilename('   '), /nombre de archivo válido/);
 
-const defaults = { format: 'ps5vproj', formatVersion: 2, name: 'Prueba', backend: 'sharp', resolution: {width:1920,height:1080}, theme: {background:'#101827',accent:'#7865f6',text:'#f0f3ff'}, components: [], flows: [], assets: [], fontAssetId: '', screens: [{id:'screen-main',name:'Pantalla principal'}], currentScreen:'screen-main', settings: {titleId:'',firmware:'12.00',moduleKind:'app'}, customCode:'', manualCode:false };
+const defaults = { format: 'ps5vproj', formatVersion: 2, name: 'Prueba', backend: 'sharp', resolution: {width:1920,height:1080}, theme: {background:'#101827',accent:'#7865f6',text:'#f0f3ff'}, components: [], flows: [], assets: [], fontAssetId: '', screens: [{id:'screen-main',name:'Pantalla principal'}], currentScreen:'screen-main', settings: {titleId:'',firmware:'12.00',moduleKind:'app',renderTarget:{width:1920,height:1080}}, customCode:'', manualCode:false };
 const normalize = (value, sourceName) => contracts.normalizeProjectModel(value, defaults, ['panel','title','text','button','toggle','slider','stepper','select','carousel','list','progress','badge','image','input','gauge','separator','card'], ['sharp','opengl-ui','vulkan-ui','sharp-payload','ps5sdk','payload','ps5link','etahen'], sourceName);
 const component = (overrides = {}) => ({id:'component-1',type:'text',label:'Componente de prueba',screenId:'screen-main',x:12,y:24,w:120,h:40,bg:'transparent',fg:'#ffffff',font:20,opacity:100,value:0,min:0,max:100,step:1,visible:true,checked:false,items:[],custom:{},action:'none',...overrides});
 assert.equal(normalize({name:'Proyecto normalizado',components:[component({x:'12'})]}).components[0].x, 12);
@@ -60,6 +61,10 @@ assert.throws(() => normalize({name:'Stepper decimal',components:[component({typ
 assert.throws(() => normalize({name:'Seleccion inexistente',components:[component({type:'select',items:['A','B'],custom:{selected:3}})]}), /opción existente/);
 assert.throws(() => normalize({name:'Pantallas duplicadas',screens:[{id:'screen-main',name:'Inicio'},{id:'settings',name:'inicio'}]}), /nombre de pantalla.*duplicado/i);
 assert.equal(normalize({name:'ID normalizado',settings:{titleId:'ppsa12345'}}).settings.titleId, 'PPSA12345');
+assert.deepEqual(normalize({name:'Referencia predeterminada'}).settings.renderTarget, {width:1920,height:1080}, 'legacy projects must receive a safe preview target without changing their logical canvas');
+assert.deepEqual(normalize({name:'Referencia 4K',settings:{renderTarget:{width:3840,height:2160}}}).settings.renderTarget, {width:3840,height:2160}, 'render targets must be preserved independently from project resolution');
+assert.throws(() => normalize({name:'Referencia incompleta',settings:{renderTarget:{width:3840}}}), /referencia de render debe tener dimensiones enteras/);
+assert.throws(() => normalize({name:'Referencia fuera de rango',settings:{renderTarget:{width:8192,height:4320}}}), /referencia de render debe tener dimensiones enteras/);
 assert.throws(() => normalize({name:'Tema invalido',theme:{background:'#101827',accent:'sin-color',text:'#f0f3ff'}}), /color accent con formato/);
 assert.throws(() => normalize({name:'Tema parcial',theme:{accent:'#7865f6'}}), /declarar explícitamente el color background/);
 const fontAsset = {id:'font-file',name:'Fuente.ttf',fileName:'Fuente.ttf',mime:'font/ttf',size:4,dataUrl:'data:font/ttf;base64,AAAA'};
@@ -76,6 +81,43 @@ assert.throws(() => normalize({name:'Proyecto roto',settings:{titleId:'PPSA00000
 assert.throws(() => normalize({name:'Pantalla sin nombre', screens:[{id:'screen-main',name:'   '}]}), /necesita un nombre explícito/);
 assert.throws(() => normalize({name:'Toggle invalido',components:[component({id:'flag',type:'toggle',label:'Flag'})],flows:[{id:'f-toggle',componentId:'flag',event:'change',action:'setValue',targetId:'flag',value:'maybe'}]}), /valor booleano explícito/);
 assert.throws(() => normalize({name:'Navegacion circular',components:[component({id:'button-home',type:'button',label:'Inicio'})],flows:[{id:'f-home',componentId:'button-home',event:'activate',action:'navigate',targetScreen:'screen-main'}]}), /misma pantalla/);
+assert.equal(normalize({name:'Accion visual',backend:'ps5link',components:[component({id:'play',type:'button'})],flows:[{id:'flow-start',componentId:'play',event:'activate',action:'gameAction',value:'start'}]}).flows[0].value,'start');
+assert.equal(normalize({name:'Sonido visual',backend:'ps5link',components:[component({id:'sound',type:'toggle'})],flows:[{id:'flow-audio',componentId:'sound',event:'change',action:'gameAction',value:'toggleAudio'}]}).flows[0].value,'toggleAudio');
+assert.throws(() => normalize({name:'Accion sin control',backend:'ps5link',flows:[{id:'flow-start',componentId:'',event:'start',action:'gameAction',value:'start'}]}), /necesita enlazar una acción del juego/);
+assert.throws(() => normalize({name:'Control incorrecto',backend:'ps5link',components:[component({id:'start-toggle',type:'toggle'})],flows:[{id:'flow-start',componentId:'start-toggle',event:'change',action:'gameAction',value:'start'}]}), /control incompatible/);
+assert.throws(() => normalize({name:'Evento incorrecto',backend:'ps5link',components:[component({id:'start-button',type:'button'})],flows:[{id:'flow-start',componentId:'start-button',event:'change',action:'gameAction',value:'start'}]}), /evento incompatible/);
+assert.throws(() => normalize({name:'Accion duplicada',backend:'ps5link',components:[component({id:'start-a',type:'button'}),component({id:'start-b',type:'button'})],flows:[{id:'flow-start-a',componentId:'start-a',event:'activate',action:'gameAction',value:'start'},{id:'flow-start-b',componentId:'start-b',event:'activate',action:'gameAction',value:'start'}]}), /conectada en el flujo/);
+
+const sceneObject={id:'object-cube',label:'Cubo turquesa',shape:'box',x:1,y:2,z:3,halfWidth:0.5,halfHeight:0.75,halfDepth:0.4,rotationY:30,color:'#59DFF4'};
+const scenePlatform={id:'platform-solid',label:'Plataforma sólida',x:0,height:0,z:0,halfWidth:1,halfDepth:1,color:'#52D6BE',checkpoint:false,collectible:false,goal:false};
+const normalizedScenePlatform=normalize({name:'Escena con plataforma fisica',backend:'ps5link',gameScene:{platforms:[scenePlatform]}}).gameScene.platforms[0];
+assert.equal(normalizedScenePlatform.collisionEnabled,true,'platforms must remain solid when opening older visual projects');
+assert.equal(normalizedScenePlatform.collisionHalfHeight,0.45,'legacy platform thickness defaults to the rendered 0.9 world-unit slab');
+assert.equal(normalize({name:'Plataforma con caja ajustada',backend:'ps5link',gameScene:{platforms:[{...scenePlatform,collisionHalfHeight:1.2}]}}).gameScene.platforms[0].collisionHalfHeight,1.2,'platform solid thickness must survive project normalization');
+assert.throws(() => normalize({name:'Caja de plataforma inválida',backend:'ps5link',gameScene:{platforms:[{...scenePlatform,collisionHalfHeight:24}]}}), /caja de colisión.*fuera/);
+const normalizedSceneObject=normalize({name:'Escena con objeto 3D',backend:'ps5link',gameScene:{objects:[sceneObject]}}).gameScene.objects[0];
+assert.equal(normalizedSceneObject.shape,'box','visual 3D objects must survive project normalization');
+assert.equal(normalizedSceneObject.collisionEnabled,false,'legacy decorative objects must not unexpectedly affect game physics');
+assert.equal(normalizedSceneObject.collisionHalfHeight,sceneObject.halfHeight,'object colliders must default to the authored mesh dimensions');
+const collidableSceneObject=normalize({name:'Objeto fisico',backend:'ps5link',gameScene:{objects:[{...sceneObject,collisionEnabled:true,collisionHalfWidth:0.9,collisionHalfHeight:1,collisionHalfDepth:0.8,collisionOffsetY:0.15}]}}).gameScene.objects[0];
+assert.equal(collidableSceneObject.collisionEnabled,true);
+assert.equal(collidableSceneObject.collisionHalfWidth,0.9);
+assert.equal(normalize({name:'Cristal 3D',backend:'ps5link',gameScene:{objects:[{...sceneObject,id:'object-crystal',shape:'diamond'}]}}).gameScene.objects[0].shape,'diamond');
+for(const shape of ['box','diamond','sphere','cylinder','cone','pyramid'])assert.equal(normalize({name:`Malla ${shape}`,backend:'ps5link',gameScene:{objects:[{...sceneObject,id:`object-${shape}`,shape}]}}).gameScene.objects[0].shape,shape,`the visual scene must preserve the ${shape} mesh type`);
+assert.throws(() => normalize({name:'Forma sin soporte',gameScene:{objects:[{...sceneObject,shape:'torus'}]}}), /forma geométrica compatible/);
+assert.throws(() => normalize({name:'Geometria 3D infinita',gameScene:{objects:[{...sceneObject,x:Infinity}]}}), /valor finito explícito en x/);
+assert.throws(() => normalize({name:'Colision valor ambiguo',gameScene:{objects:[{...sceneObject,collisionEnabled:'true'}]}}), /estado de colisión booleano/);
+assert.throws(() => normalize({name:'Colisión fuera del motor',gameScene:{objects:[{...sceneObject,collisionHalfHeight:24}]}}), /caja de colisión.*fuera/);
+assert.throws(() => normalize({name:'IDs 3D duplicados',gameScene:{objects:[sceneObject,{...sceneObject,label:'Segundo objeto'}]}}), /identificador seguro y único/);
+assert.throws(() => normalize({name:'Inicio sobre objeto',gameScene:{objects:[sceneObject],player:{spawnPlatformId:sceneObject.id}}}), /plataforma inexistente/);
+const bridgeScene={physics:{moveSpeed:5.55,jumpSpeed:9.3,gravity:21},player:{spawnPlatformId:'start'},platforms:[
+  {id:'start',x:0,z:0,height:0,halfWidth:0.5,halfDepth:0.5,collisionHalfWidth:0.5,collisionHalfDepth:0.5,collisionOffsetY:0,collisionEnabled:true,goal:false,checkpoint:false,collectible:false},
+  {id:'goal',x:12,z:0,height:0,halfWidth:0.5,halfDepth:0.5,collisionHalfWidth:0.5,collisionHalfDepth:0.5,collisionOffsetY:0,collisionEnabled:true,goal:true,checkpoint:false,collectible:false}
+],objects:[{id:'bridge',x:6,y:-0.5,z:0,halfWidth:1.2,halfHeight:0.5,halfDepth:1.2,collisionHalfWidth:1.2,collisionHalfHeight:0.5,collisionHalfDepth:1.2,collisionOffsetY:0,collisionEnabled:true}]};
+const bridgedReachability=contracts.analyzeGameSceneReachability(bridgeScene);
+assert.ok(bridgedReachability.reachableObjectIds.includes('bridge'),'enabled object collider should be a valid landing node');
+assert.ok(bridgedReachability.reachablePlatformIds.includes('goal'),'reachable object landings must be included when validating the level route');
+assert.ok(contracts.analyzeGameSceneReachability({...bridgeScene,objects:[{...bridgeScene.objects[0],collisionEnabled:false}]}).unreachableCriticalPlatforms.some(platform=>platform.id==='goal'),'decorative objects must not count as physical route supports');
 
 assert.throws(() => normalize({name:'Backend vacio',backend:''}), /backend explícito no puede estar vacío/);
 assert.throws(() => normalize({name:'Seleccion tipo texto',components:[component({type:'select',items:['A','B'],custom:{selected:'1'}})]}), /índice entero/);
@@ -84,8 +126,62 @@ assert.throws(() => contracts.normalizeAssetFilename('💫.png'), /no contiene c
 assert.throws(() => normalize({name:'Flujo valor fuera de rango',components:[component({id:'source'}),component({id:'meter',type:'gauge',min:10,max:50,value:20})],flows:[{id:'f-outside',componentId:'source',event:'activate',action:'setValue',targetId:'meter',value:'75'}]}), /fuera del intervalo/);
 assert.throws(() => normalize({name:'Flujo indice sin opcion',components:[component({id:'component-1'}),component({id:'picker',type:'select',items:['A','B']})],flows:[{id:'f-index',componentId:'component-1',event:'activate',action:'setValue',targetId:'picker',value:'2'}]}), /índice entero que apunte a una opción real/);
 
+assert.deepEqual(contracts.resizeIsometricCollisionBox({deltaX:10,deltaY:5,scale:10,signX:1,signZ:-1,halfWidth:1.6,halfDepth:1.2}), {collisionHalfWidth:2.6,collisionHalfDepth:1.2}, 'dragging a projected X edge must change only its matching world-space half extent');
+assert.deepEqual(contracts.resizeIsometricCollisionBox({deltaX:0,deltaY:20,scale:10,signX:-1,signZ:1,halfWidth:0.2,halfDepth:20.4}), {collisionHalfWidth:0.1,collisionHalfDepth:20.5}, 'visual collision resizing must clamp to supported minimum and maximum sizes');
+assert.throws(() => contracts.resizeIsometricCollisionBox({deltaX:1,deltaY:1,scale:0,signX:1,signZ:1,halfWidth:1,halfDepth:1}), /redimensión de colisión no son válidos/);
+assert.deepEqual(contracts.resizeWorldCollisionBox({deltaX:0.5,deltaZ:-0.25,signX:1,signZ:-1,halfWidth:1.6,halfDepth:1.2}), {collisionHalfWidth:2.1,collisionHalfDepth:1.45}, 'collision handles must resize in world coordinates after camera projection');
+assert.deepEqual(contracts.resizeWorldCollisionBox({deltaX:100,deltaZ:-100,signX:1,signZ:1,halfWidth:1,halfDepth:1}), {collisionHalfWidth:20.5,collisionHalfDepth:0.1}, 'world-space collision resizing must clamp supported bounds');
+assert.throws(() => contracts.resizeWorldCollisionBox({deltaX:1,deltaZ:1,signX:0,signZ:1,halfWidth:1,halfDepth:1}), /redimensión espacial de colisión no son válidos/);
+assert.match(app, /contracts\.resizeWorldCollisionBox\(/, 'the scene editor must route collision handle drags through tested camera-projected world coordinates');
+assert.match(app, /__gameCollisionHandles/, 'selected platforms must expose their visible collision resize handles to pointer input');
+assert.match(app, /__gameObjectsProjected/, 'scene object selection must use the same screen-to-world scene projection as its rendering');
+assert.match(app, /mode:'object'/, '3D scene objects must be draggable in the visual editor');
+assert.match(app, /data-game-object="collisionEnabled"/, 'the visual object inspector must expose an explicit collision control');
+assert.match(app, /collisionHalfHeight/, 'the visual object inspector must expose a tunable vertical collision extent');
+assert.match(app, /data-game-platform="collisionHalfHeight"/, 'platform thickness must be editable from the visual inspector');
+assert.match(app, /collisionBottomCorners/, 'the visual editor must draw full platform collision volumes');
+assert.match(app, /Bloquear laterales y cara inferior; aterrizar arriba/, 'the inspector must describe all solid collision faces');
+assert.match(server, /collision_half_width, collision_half_height, collision_half_depth/, 'the generated AGC scene header must carry platform collider thickness');
+assert.match(server, /collisionHalfHeight/, 'the AGC scene generator must validate and serialize platform thickness');
+assert.match(visualGameTemplate, /resolve_player_box\(/, 'the AGC runtime must resolve player movement against solid collision boxes');
+assert.match(visualGameTemplate, /old_head<=bottom\+0\.06f/, 'solid colliders must block upward movement at the underside');
+assert.match(visualGameTemplate, /old_right<=left&&new_right>left/, 'solid colliders must block horizontal side traversal');
+assert.match(app, /const commitGameObjectField=/, '3D object properties must share a validated state commit path');
+assert.match(app, /commitGameObjectField\(field,false\)/, 'typing in the object inspector must update the project model before save');
+assert.match(server, /PS5HS_GAME_OBJECT_COUNT/, 'the native scene header must preserve the visual object count');
+assert.match(server, /ps5hs_game_objects/, 'the generated AGC scene must contain the authored objects');
+assert.match(server, /int shape,collision_enabled; float collision_half_width,collision_half_height,collision_half_depth,collision_offset_y/, 'the AGC scene header must carry object collider settings');
+assert.match(visualGameTemplate, /for\(unsigned int i=0;i<GAME_OBJECT_COUNT;i\+\+\)/, 'the AGC renderer must consume every object from the visual scene');
+assert.match(visualGameTemplate, /add_octahedron/, 'the AGC renderer must create the visual diamond primitive from native geometry');
+assert.match(visualGameTemplate, /add_uv_sphere/, 'the AGC renderer must create the visual sphere primitive from native geometry');
+assert.match(visualGameTemplate, /add_tapered_cylinder/, 'the AGC renderer must create visual cylinders and cones from native geometry');
+assert.match(visualGameTemplate, /add_square_pyramid/, 'the AGC renderer must create visual pyramid meshes from native geometry');
+assert.match(visualGameTemplate, /static void add_nebula_explorer\(MeshBatch \*b\)/, 'the AGC renderer must build the original explorer character from procedural geometry');
+assert.match(visualGameTemplate, /add_nebula_explorer\(b\);/, 'the AGC scene must render the authored explorer model');
+assert.match(visualGameTemplate, /add_octahedron\(b,p->x\+0\.10f/, 'collectible crystals must use a native faceted mesh');
+assert.doesNotMatch(visualGameTemplate, /add_cube\(b,hero\.x,hero\.y,hero\.z/, 'the playable character must not regress to the old cube placeholder');
+assert.match(server, /sphere=2;cylinder=3;cone=4;pyramid=5/, 'the native scene generator must preserve the selected 3D primitive type');
+assert.match(visualGameTemplate, /hero\.support=PLATFORM_COUNT\+i/, 'the AGC physics must be able to land on a scene object collider');
 
-assert.match(html, /runtime\/project-contracts\.js\?v=1\.1\.19/);
+const applicationVersion = fs.readFileSync(path.join(root, 'VERSION.txt'), 'utf8').match(/^Version:\s*(\S+)/m)?.[1];
+assert.ok(applicationVersion, 'VERSION.txt must expose the canonical app version');
+assert.ok(html.includes(`runtime/project-contracts.js?v=${applicationVersion}`), 'project-contracts cache version must match the canonical app version');
+assert.match(server, /function GetPS5HSVisualGameSource\(/, 'the IDE server must expose the reusable AGC game engine generator');
+assert.match(server, /if\(\$P\.manualCode -eq \$true\)\{\s*if \(\$flows\.Count -eq 0\)/, 'only manual C mode may require a callFunction flow; visual gameAction flows compile without hand-written C');
+const ps5LinkBuild = app.slice(app.indexOf('async function buildPS5LinkWithConsent'), app.indexOf('async function buildSharpWithConsent'));
+assert.match(ps5LinkBuild, /const visualMode=project\.manualCode!==true/, 'the ps5link build dialog must distinguish visual game projects from manual C projects');
+assert.match(ps5LinkBuild, /const code=visualMode\?'':String\(\$\('#codeEditor'\)\.value\|\|''\)/, 'visual AGC builds must not read generated or hand-written code from the code editor');
+assert.match(ps5LinkBuild, /data\.manualCode=!visualMode;data\.customCode=visualMode\?'':code/, 'visual AGC builds must send the model as visual mode and keep the manual source field empty');
+assert.doesNotMatch(ps5LinkBuild, /project\.manualCode=true/, 'building a visual AGC title must not silently switch its project to manual-code mode');
+assert.match(server, /if\(\$visualGame\)\{\$activeGameActions=@\(\$P\.flows\|Where-Object\{\$_.enabled -ne \$false -and \[string\]\$_.action -eq 'gameAction'\}\)\.Count;/, 'visual AGC build output must identify built-in game actions, not call them manual C functions');
+assert.match(html, /id="codeFooterHint"/, 'the code view must explain when visual game source is generated rather than manually edited');
+assert.match(app, /codeFooterHint\.textContent=generatedGame\?'El fuente es de solo lectura; se regenera desde Juego 3D y Flujos\.'/,'the visual game code footer must explain that source comes from visual scene and flows');
+assert.doesNotMatch(visualGameTemplate, /static int append_uint\(/, 'generated AGC source must not include an unused helper that triggers compiler warnings');
+assert.match(server, /'\/api\/ps5link-game-source'/, 'the IDE must preview its generated game source through the local API');
+assert.match(server, /PS5HS_GAME_CAMERA_FOLLOW_DISTANCE/, 'visual camera settings must reach the generated scene header');
+assert.match(visualGameTemplate, /PS5HS_GAME_START_COMPONENT_ID/, 'visual action bindings must configure the generated controller bridge');
+assert.match(server, /WritePS5LinkVisualBridge \$P \$dir/, 'saving a visual game must regenerate the component and flow bridge');
+assert.match(app, /Motor AGC generado desde Juego 3D y Flujos · solo lectura/, 'visual AGC source must be read-only and identify its visual origin');
 assert.match(server, /function TestPS5HSTitleId\(/);
 assert.match(server, /TestPS5HSTitleId \$titleId/);
 assert.match(server, /TestPS5HSTitleId \$TitleId/);
@@ -103,7 +199,7 @@ assert.match(app, /valor booleano explícito para el interruptor/, 'invalid togg
 
 assert.match(app, /índice entero que corresponda a una opción real/, 'preview flow execution must reject invalid option indices rather than round/clamp them');
 assert.match(app, /csharpFloat\(\(c\.value-c\.min\)\/\(c\.max-c\.min\)\)/, 'C# progress values must be normalized to the component min/max interval');
-assert.ok(app.includes("const selectedIndex=c=>{const items=requireItems(c);const raw=Object.hasOwn(c.custom||{},'selected')?c.custom.selected:c.value;"), 'the Sharp selector must respect the model value when no explicit custom selection overrides it');
+assert.ok(app.includes("const selectedIndex=c=>{const items=Array.isArray(c.items)?c.items:[];if(items.length===0||items.some(item=>typeof item!==\"string\"||!item.trim()))throw new Error(\"El componente \"+c.id+\" necesita opciones reales.\");const raw=Object.hasOwn(c.custom||{},'selected')?c.custom.selected:c.value;"), 'the Sharp selector must validate options and respect the model value when no explicit custom selection overrides it');
 assert.match(app, /El valor debe respetar el rango del control/, 'static analysis must report values outside a flow target range');
 
 assert.doesNotMatch(app, /El botón \$\{c\.id\} no tiene una acción ejecutable/, 'an explicit no-action button is a valid passive control, not a preflight build error');
@@ -127,7 +223,7 @@ assert.match(app, /El archivo de recuperación local se conserva sin modificar/,
 assert.match(app, /function undo\(/);
 
 assert.ok(app.includes("if(!/^[a-zA-Z_][a-zA-Z0-9_-]{0,63}$/.test(v))"), 'renaming a component must use the same minimum ID length as the model contract');
-assert.match(app, /data-prop="x" min="0" max="1920" step="any" value="\$\{c\.x\}"/, 'the inspector must preserve coordinate precision when it renders numeric fields');
+assert.match(app, /data-prop="x" min="0" max="\$\{resolution\.width\}" step="any" value="\$\{c\.x\}"/, 'the inspector must use the active canvas width and preserve coordinate precision');
 assert.match(app, /function redo\(/);
 assert.match(app, /e\.key\.toLowerCase\(\)==='z'\).*undo\(\)/s);
 assert.match(app, /e\.key\.toLowerCase\(\)==='y'\).*redo\(\)/s);

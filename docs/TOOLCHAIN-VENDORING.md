@@ -1,6 +1,6 @@
 # Toolchains integrados, pins y mirrors — PS5 Homebrew Studio
 
-Este documento describe cómo el IDE integra el material de toolchains local, fija la integridad de los artefactos binarios que los proyectos descargan y sobrevive a la desaparición de repositorios upstream. Aplica desde la versión 1.1.19.
+Este documento describe cómo el IDE integra el material local de toolchains, fija la integridad de los artefactos binarios y sobrevive a la desaparición de repositorios upstream. En un checkout de desarrollo hay rutas históricas que pueden consultar upstream o mirrors cuando falta una copia local; el bundle offline no usa esas rutas para instalar y bloquea builds cuyo backend no esté validado sin red. Aplica desde la versión 1.1.19; el flujo de bundle e instalación offline se incorporó en 1.1.20.
 
 ## Motivación
 
@@ -71,3 +71,15 @@ El IDE es MIT; los toolchains vendorizados son GPL-3.0-or-later (u otras). El ve
 - `runtime/test-toolchain-pins.js`: contratos estáticos del manifiesto, los hooks del servidor, la política, la UI y el packer.
 - `runtime/test-native-modification-policy.ps1`: niega por defecto, parchea con consentimiento, es idempotente, aborta con script irreconocible y audita SHA-256.
 - La cadena real se comprobó en vivo contra los mirrors (upstream 404; LedyBacer y darkxex devuelven el mismo asset de 226 310 155 bytes; el tarball de LedyBacer verificado byte a byte contra el pin).
+
+## Bundle de instalación offline
+
+`runtime/Build-OfflineBundle.ps1 -InputRoot <raíz de Visual-PS5> -OutputRoot <carpeta externa>` crea una copia transportable del IDE y de todo `toolchains/`, junto con la imagen WSL. El destino debe ser una carpeta nueva o vacía y estar fuera del árbol fuente. El proceso omite el estado temporal de `.runtime/` y la metadata Git de la raíz, conserva el resto de las rutas y no consulta la red.
+
+El bundle incluye `manifest.json` y `SHA256SUMS`. `runtime/offline/OfflineBundle.psm1` valida el tamaño/hash de cada archivo, la firma Microsoft del MSI WSL, la identidad y los comandos requeridos de Ubuntu, los manifiestos de procedencia de toolchains y el estado explícito de cada backend. El test `runtime/test-offline-bundle.ps1` usa una copia del MSI firmado local y fixtures pequeños; no copia la imagen de 5,4 GB.
+
+`INSTALL-OFFLINE.bat` arranca el preflight de Windows PowerShell 5.1. Solo después de validar el bundle puede solicitar UAC para DISM con `/LimitAccess` o para instalar el MSI WSL local; nunca fuerza un reinicio. La imagen se importa desde el tar local con WSL 2 y el instalador comprueba usuario, release y herramientas básicas. En `GetStatus`, `/api/status` indica si la distro de Visual-PS5 está verificada y la UI muestra la matriz offline. Los builds empaquetados fallan antes de mutar proyectos si el estado del backend no es `validated`.
+
+El MSI WSL 2.9.13.0 está fijado en `runtime/offline/image-lock.json` por bytes y SHA-256, además de verificar su firma Authenticode de Microsoft. El paquete requiere Windows 11 x64, virtualización y espacio local; una instalación simulada no sustituye a la prueba en un host limpio sin red.
+
+La imagen WSL mide 5.417.789.440 bytes, por lo que se transporta en el bundle externo y no como archivo Git ordinario. La primera matriz no declara OpenGL, Vulkan ni SharpProspero como compilables offline; solo queda probado el build de la muestra PS5 Payload SDK con la red aislada. Consulta `docs/OFFLINE_INSTALLATION.es-ES.md` antes de distribuirlo.

@@ -1,0 +1,36 @@
+{
+  "schema": "ps5hs-offline-backend-readiness",
+  "version": 1,
+  "backends": [
+    {
+      "id": "native-app-boilerplate",
+      "status": "blocked",
+      "evidence": "Sin compilación representativa reproducible con la imagen incluida y la red deshabilitada.",
+      "scope": "Plantilla base de título nativo; mantenerla separada del build de muestra de payload."
+    },
+    {
+      "id": "ps5-payload-sdk-sample",
+      "status": "validated",
+      "evidence": "La muestra hello_world del SDK se compiló en Ubuntu 26.04.1 dentro de un namespace sin red.",
+      "scope": "Prueba de compilador y enlace del SDK de payload; no es una validación de instalación en consola."
+    },
+    {
+      "id": "native-opengl-ui",
+      "status": "blocked",
+      "evidence": "Sin build representativo con red desconectada.",
+      "scope": "Pendiente de cerrar y probar dependencias de OpenGL y empaquetado de recursos."
+    },
+    {
+      "id": "native-vulkan-ui",
+      "status": "blocked",
+      "evidence": "Sin build representativo con red desconectada.",
+      "scope": "Pendiente de cerrar Mesa/RADV, historial de fuentes y dependencias auxiliares."
+    },
+    {
+      "id": "sharpprospero-nativeaot",
+      "status": "blocked",
+      "evidence": "Sin build representativo con red desconectada.",
+      "scope": "Pendiente de validar runtimes Windows/WSL y NativeAOT en el host limpio."
+    }
+  ]
+}

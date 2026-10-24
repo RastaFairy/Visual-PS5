@@ -1,0 +1,24 @@
+{
+  "schema": "ps5hs-offline-source",
+  "tool": "ps5-at9-converter",
+  "sourceRepository": "https://github.com/elripalda/psgfx",
+  "sourceRevision": "5ee7aa9e7d91c9f518322847d13a6bda5ba97837",
+  "upstreamEncoder": "https://github.com/blackbearreloaded/ps5-at9-converter",
+  "upstreamEncoderRevision": "65be0a1",
+  "license": "GPL-3.0-or-later",
+  "addedAt": "2026-10-24",
+  "binarySha256": "c44f889c60edde86a6885250f927fdb70a1ab1c480ec3e80e432cd8fcba1bb31",
+  "files": [
+    ".ps5hs-source.json",
+    "cli.cpp",
+    "build.sh",
+    "bin/ps5-at9-converter",
+    "LICENSE",
+    "README.md",
+    "THIRD_PARTY_NOTICES.md",
+    "src/lib/at9"
+  ],
+  "localPatches": [
+    "Removed the upstream CLI-only fmt_time helper because the standalone encoder does not use it; keeps the offline build warning-free."
+  ]
+}

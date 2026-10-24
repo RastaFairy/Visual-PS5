@@ -1,12 +1,14 @@
 {
   "repository": "mihawk-99/PS5_Mesa",
   "branch": "main",
-  "commit": "",
+  "commit": "1ba9874f478657ccf6da72ce55f0260164cc0bd0",
   "installedAt": "2026-10-17T18:32:45.1551524+02:00",
   "method": "vendored-snapshot",
   "vendorRepository": "RastaFairy/Visual-PS5",
   "vendoredSnapshot": true,
   "vendoredAt": "2026-10-20T15:43:39Z",
   "originalMethod": "git clone --recurse-submodules",
-  "sourceRevisionRecorded": false
+  "sourceRevisionRecorded": true,
+  "sourceCommit": "1ba9874f478657ccf6da72ce55f0260164cc0bd0",
+  "sourceRef": "1ba9874f478657ccf6da72ce55f0260164cc0bd0"
 }

@@ -54,8 +54,26 @@ if [[ -f $install/PROVENANCE.txt ]] && grep -q "^revision: $mesa_revision$" "$in
     echo "==> [radv] $install is RADV ($variant) at ${mesa_revision:0:12}"
     exit 0
 fi
-git -C "$mesa_fork" cat-file -e "$mesa_revision^{commit}" 2>/dev/null ||
-    { echo "the Mesa fork at $mesa_fork does not have $mesa_revision" >&2; exit 2; }
+mesa_source_mode=git
+if ! command -v git >/dev/null 2>&1 ||
+    ! git -C "$mesa_fork" cat-file -e "$mesa_revision^{commit}" 2>/dev/null; then
+    mesa_source_mode=vendored-snapshot
+    mesa_snapshot_revision=$(python3 - "$mesa_fork/.ps5hs-source.json" <<'PY'
+import json, sys
+try:
+    with open(sys.argv[1], encoding="utf-8") as f:
+        d = json.load(f)
+    print(d.get("sourceCommit") or d.get("commit") or "")
+except Exception:
+    print("")
+PY
+)
+    if [[ $mesa_snapshot_revision != "$mesa_revision" ||
+        ! -f "$mesa_fork/meson.build" || ! -f "$mesa_fork/src/amd/vulkan/meson.build" ]]; then
+        echo "the Mesa fork at $mesa_fork is neither a Git checkout containing $mesa_revision nor a vendored snapshot recording that revision" >&2
+        exit 2
+    fi
+fi
 
 if [[ ! -f $source_tree/.revision || $(<"$source_tree/.revision") != "$mesa_revision" ]]; then
     # The new revision's files replace the old ones by content: a file that
@@ -65,7 +83,12 @@ if [[ ! -f $source_tree/.revision || $(<"$source_tree/.revision") != "$mesa_revi
     staging="$source_tree.new"
     rm -rf "$staging"
     mkdir -p "$staging" "$source_tree"
-    git -C "$mesa_fork" archive "$mesa_revision" | tar -x -C "$staging"
+    if [[ $mesa_source_mode == git ]]; then
+        git -C "$mesa_fork" archive "$mesa_revision" | tar -x -C "$staging"
+    else
+        tar --exclude='./.ps5hs-source.json' --exclude='./.git' -C "$mesa_fork" -cf - . | tar -x -C "$staging"
+        echo "Using vendored PS5 Mesa snapshot $mesa_revision" >&2
+    fi
     rsync -rlp --checksum --delete --exclude=/.revision --exclude=/subprojects/packagecache/ \
         --exclude=/subprojects/zlib-*/ "$staging/" "$source_tree/"
     rm -rf "$staging"

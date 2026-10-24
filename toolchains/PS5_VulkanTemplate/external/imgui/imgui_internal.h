@@ -468,7 +468,7 @@ struct IMGUI_API ImGuiInputTextState
     ImGuiInputTextCallback  UserCallback;
     void*                   UserCallbackData;
 
-    ImGuiInputTextState()                           { memset(this, 0, sizeof(*this)); }
+    ImGuiInputTextState()                           { memset(static_cast<void*>(this), 0, sizeof(*this)); }
     void                CursorAnimReset()           { CursorAnim = -0.30f; }                                   // After a user-input the cursor stays on for a while without blinking
     void                CursorClamp()               { StbState.cursor = ImMin(StbState.cursor, CurLenW); StbState.select_start = ImMin(StbState.select_start, CurLenW); StbState.select_end = ImMin(StbState.select_end, CurLenW); }
     bool                HasSelection() const        { return StbState.select_start != StbState.select_end; }

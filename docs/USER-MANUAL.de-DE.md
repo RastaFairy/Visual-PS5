@@ -20,7 +20,7 @@ Der Dienst bindet ausschließlich an 127.0.0.1. Stelle ihn nicht im Netzwerk ber
 
 ## 3. Oberfläche und visuelles Projekt
 
-Die 1920×1080-Arbeitsfläche ist ein virtueller Bereich, kein exakter Screenshot der PS5-Systemoberfläche. Füge Steuerelemente über die Komponentenpalette hinzu, bearbeite Geometrie und Eigenschaften im Inspektor, ordne Elemente in der Hierarchie und strukturiere die UI über die Bildschirmverwaltung. Der Flow-Editor verbindet Ereignisse mit Aktionen wie notify, setText, toggleVisibility, setValue, changeColor und navigate, sofern Komponente und Backend dies unterstützen.
+Die Arbeitsfläche beginnt mit 1920×1080 und kann in der Größe geändert werden. Sie ist ein virtueller Bereich, kein exakter Screenshot der PS5-Systemoberfläche. Füge Steuerelemente über die Komponentenpalette hinzu, bearbeite Geometrie und Eigenschaften im Inspektor, ordne Elemente in der Hierarchie und strukturiere die UI über die Bildschirmverwaltung. Der Flow-Editor verbindet Ereignisse mit Aktionen wie notify, setText, toggleVisibility, setValue, changeColor und navigate, sofern Komponente und Backend dies unterstützen.
 
 Erstelle das Projekt, wähle das Backend vor der Einrichtung der Abhängigkeiten, füge Komponenten und Ressourcen hinzu, verwende eindeutige IDs und richte Bildschirme ein. Führe die Diagnose aus und korrigiere ungültige Referenzen. Speichere mit Ctrl+S. Ein Modell- oder ZIP-Export ist kein nativer Build.
 
@@ -42,7 +42,7 @@ Das IDE führt echte Upstream-Skripte aus und bewahrt Logs auf. Exit-Code null r
 
 - **Auswahlhintergrund:** `sce_sys/pic0.dds`. **Start-/Ladehintergrund:** `sce_sys/pic1.dds`. Beide werden in DDS BC7/DX10 mit 3840×2160 Pixeln konvertiert und dürfen verschieden sein. Fehlen beide, wähle beim ersten Mal beide Dateien aus. Benötigt DirectXTex `texconv` (`winget install Microsoft.DirectXTex.Texconv`).
 
-- **Auswahlmusik:** `sce_sys/snd0.at9`, gelooptes ATRAC9 mit 48 kHz, höchstens 2 MiB. Eine kompatible AT9-Datei kann direkt verwendet werden. MP3/WAV/OGG/M4A benötigen FFmpeg und einen kompatiblen, legal bezogenen ATRAC9-Encoder; das IDE lädt ihn nicht herunter.
+- **Auswahlmusik:** `sce_sys/snd0.at9`, gelooptes ATRAC9 mit 48 kHz, höchstens 2 MiB. Eine kompatible AT9-Datei kann direkt verwendet werden. WAV/MP3/FLAC/AIFF/AIFC werden offline mit dem enthaltenen Open-Source-Encoder konvertiert; FFmpeg und `ps4_at9tool.exe` sind nicht erforderlich. Lizenz GPL-3.0-or-later und Hinweise unter `toolchains/ps5-at9-converter/` beachten.
 
 Das Upstream-Skript `tools/prepare-assets.ps1` validiert Formate vor dem Anwenden. Diese Dateien ändern nur die Präsentation dieser App, nicht den globalen PS5-Hintergrund oder den Startton der Konsole. Für ein separates Systemthema siehe [ps5-theme](https://github.com/Blaze414/ps5-theme).
 

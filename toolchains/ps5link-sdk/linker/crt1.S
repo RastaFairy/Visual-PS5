@@ -23,21 +23,25 @@
 
 _start:
     .cfi_startproc
-    push   %rbp
-    mov    %rsp, %rbp
-    push   %r15
-    push   %r14
-    push   %rbx
-    push   %rax                    /* keep the stack 16-byte aligned across the calls below */
+    /* Some launchers enter with only the small argument area mapped below
+     * the initial RSP. Switch before the first push/call so the CRT never
+     * writes into that guard page. The private stack is in this image's BSS. */
+    mov    %rdi, %r12              /* loader process-parameter block */
+    mov    %rsi, %r13              /* loader teardown routine */
+    lea    __ps5link_main_stack_top(%rip), %rsp
+    and    $-16, %rsp              /* SysV call-site alignment */
 
-    mov    (%rdi), %r14d           /* argc, from the loader's parameter block */
-    mov    %rsi, %rbx              /* the loader-provided teardown routine, run via atexit below */
-    lea    8(%rdi), %r15           /* argv */
+    mov    (%r12), %r14d           /* argc, from the loader's parameter block */
+    lea    8(%r12), %r15           /* argv */
+    mov    %r12, %rdi
 
-    call   _init_env                /* rdi still holds the parameter block - _init_env wants it as-is */
+    call   _init_env                /* initialize libc before using its services */
 
-    mov    %rbx, %rdi
+    test   %r13, %r13
+    jz     1f
+    mov    %r13, %rdi
     call   atexit                   /* register the loader's teardown to run at process exit */
+1:
 
     lea    _fini(%rip), %rdi
     call   atexit                   /* register this module's own teardown */
@@ -60,3 +64,11 @@ _init:
     ret
 _fini:
     ret
+
+/* Keep the initial C runtime stack independent from the loader's transient
+ * entry stack. A 1 MiB stack matches the IDE's standard native-thread budget. */
+    .section .bss,"aw",@nobits
+    .balign 16
+    .globl __ps5link_main_stack_top
+    .skip 0x100000
+__ps5link_main_stack_top:

@@ -26,6 +26,16 @@ a platform layer of our own:
   a fixed result an application module can accept, or a weak no-op the toolchain overrides. The set is
   recorded in `imports/compat.txt`; the emitter is `tools/SharpProspero.Link/CompatEmitter.cs`.
 
+The current .NET 10 NativeAOT runtime also links glibc-only CPU helpers. The compat object supplies
+the dynamically sized CPU-mask allocator, frees masks through the device allocator, and reports EOF
+for the runtime's `/proc/cpuinfo` probe. The collector then uses the existing `sysconf` implementation,
+which asks Prospero for the thread's actual affinity. Its C++ destructor handle points to its own
+data object, as expected by `__cxa_atexit`.
+
+For offline IDE builds without an explicit module folder or an installed SDK module folder, the
+SharpProspero build script can source the clean-room `libc.prx` bundled at
+`../../PS5_Vulkan/runtime/libc.prx`; it verifies `libc.prx.sha256` before copying the module.
+
 The linker also defines the section-boundary symbols the runtime reads to walk its own managed-code and
 module tables (`__start_<section>` / `__stop_<section>`), the way the system linker does.
 

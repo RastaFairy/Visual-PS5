@@ -20,7 +20,7 @@
 
 ## 3. 界面与可视化项目
 
-1920×1080 画布是虚拟工作区，并非 PS5 系统界面的精确截图。使用组件面板添加控件、属性检查器修改位置和属性、层级面板整理元素，并通过屏幕管理器组织界面。流程编辑器可以把事件连接到 notify、setText、toggleVisibility、setValue、changeColor、navigate 等操作，但必须由选定的后端和组件支持。
+画布默认大小为1920×1080，且可以调整；它是虚拟工作区，并非 PS5 系统界面的精确截图。使用组件面板添加控件、属性检查器修改位置和属性、层级面板整理元素，并通过屏幕管理器组织界面。流程编辑器可以把事件连接到 notify、setText、toggleVisibility、setValue、changeColor、navigate 等操作，但必须由选定的后端和组件支持。
 
 创建项目后，在准备依赖前先选择后端。添加组件和资源，保持 ID 唯一并配置屏幕。运行诊断并修复无效目标。使用 Ctrl+S 保存。导出模型或 ZIP 不等于编译原生标题。
 
@@ -42,7 +42,7 @@ IDE 会运行真实的上游构建脚本并保留日志。退出代码为 0 并�
 
 - **选中应用时的背景：** `sce_sys/pic0.dds`。**启动/加载背景：** `sce_sys/pic1.dds`。两者都会转换为 3840×2160 的 DDS BC7/DX10，也可以使用不同图片。若两个背景均不存在，首次操作必须同时选择两张图。需要 DirectXTex 的 `texconv`（`winget install Microsoft.DirectXTex.Texconv`）。
 
-- **选择应用时的音乐：** `sce_sys/snd0.at9`，48 kHz 循环 ATRAC9，最大 2 MiB。可以直接提供兼容的 AT9 文件。MP3/WAV/OGG/M4A 等音频需要 FFmpeg 和合法取得的兼容 ATRAC9 编码器；IDE 不会下载该编码器。
+- **选择应用时的音乐：** `sce_sys/snd0.at9`，48 kHz 循环 ATRAC9，最大 2 MiB。可以直接提供兼容的 AT9 文件，也可以导入 WAV/MP3/FLAC/AIFF/AIFC，由 IDE 自带的开源编码器离线转换；无需 FFmpeg 或 `ps4_at9tool.exe`。请查看 `toolchains/ps5-at9-converter/` 中的 GPL-3.0-or-later 许可证和第三方声明。
 
 上游脚本 `tools/prepare-assets.ps1` 会在应用更改前验证格式。这些文件只影响单个应用，不会修改 PS5 系统全局壁纸或开机声音。系统主题是独立项目，参见 [ps5-theme](https://github.com/Blaze414/ps5-theme)。
 

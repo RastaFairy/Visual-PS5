@@ -1763,6 +1763,24 @@ public static class CompatEmitter
         return new("__sched_cpucount", false, code, relocs);
     }
 
+    // glibc's __sched_cpualloc(count) returns a zeroed CPU set rounded up to whole machine words.
+    // The PS5 affinity adapters consume the first 64-bit word and safely ignore any higher words,
+    // so retain the caller's requested capacity while using the platform's ordinary allocator.
+    private static CompatFunc SchedCpuAlloc()
+    {
+        var a = new Asm();
+        a.Emit(0x55, 0x48, 0x89, 0xE5);                     // push rbp ; mov rbp, rsp (align before call)
+        a.Emit(0x48, 0x83, 0xC7, 0x3F);                     // add rdi, 63
+        a.Emit(0x48, 0xC1, 0xEF, 0x06);                     // shr rdi, 6   (round to 64 CPUs)
+        a.Emit(0x48, 0xC1, 0xE7, 0x03);                     // shl rdi, 3   (eight bytes per word)
+        a.Emit(0x48, 0x89, 0xFE);                           // mov rsi, rdi (calloc size)
+        a.Emit(0xBF, 0x01, 0x00, 0x00, 0x00);               // mov edi, 1    (one allocation)
+        a.Call("calloc");
+        a.Emit(0x5D, 0xC3);                                 // pop rbp ; ret
+        (byte[] code, (int Offset, string Target)[] relocs) = a.Build();
+        return new("__sched_cpualloc", false, code, relocs);
+    }
+
     // ---------------------------------------------------------------------------
     // Error numbers.
     //
@@ -3180,6 +3198,16 @@ public static class CompatEmitter
         SchedGetAffinity(),
         SchedSetAffinity(),
         SchedCpuCount(),
+        // glibc's dynamically sized CPU masks are a word-aligned allocation followed by free().
+        // Prospero affinity reads/writes the low 64-bit mask, while preserving any higher words
+        // allocated for callers that request more CPUs.
+        SchedCpuAlloc(),
+        Forward("__sched_cpufree", "free"),
+        // NativeAOT's Linux CPU-count helper probes /proc/cpuinfo before falling back to sysconf.
+        // Prospero has no procfs, so these two calls must report end-of-file; they are not exported
+        // by the console's libc and forwarding them to similarly named APIs would create bad imports.
+        Value("__isoc99_fscanf", -1),
+        Value("fgetc", -1),
 
         // Further large-file variants that forward to a base name the device publishes.
         Forward("ftruncate64", "ftruncate"),
@@ -3384,6 +3412,10 @@ public static class CompatEmitter
         // no behaviour; holding its address is what puts the name in the import table, which is what a
         // module built against the same library carries.
         new("__sce_libc_marker", LibcMarkerName),
+        // The C++ ABI passes this object to __cxa_atexit as the identity of this module. Its value is
+        // its own address, matching the usual toolchain definition and keeping destructors scoped to
+        // this image.
+        new("__dso_handle", "__dso_handle"),
     ];
 
     /// <summary>

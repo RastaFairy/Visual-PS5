@@ -2,6 +2,10 @@
 (function attachPS5HSProjectContracts(root) {
   const NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9 ._-]{0,39}$/;
   const TITLE_ID_PATTERN = /^PPSA\d{5}$/;
+  const MIN_CANVAS_WIDTH = 640;
+  const MIN_CANVAS_HEIGHT = 360;
+  const MAX_CANVAS_WIDTH = 7680;
+  const MAX_CANVAS_HEIGHT = 4320;
 
   function normalizeTitleId(value) {
     return String(value ?? '').trim().toUpperCase();
@@ -116,9 +120,109 @@
       if (Object.hasOwn(value, key) && !isRecord(value[key])) throw new Error(`El campo ${key} debe ser un objeto.`);
       project[key] = { ...(isRecord(defaults[key]) ? defaults[key] : {}), ...(isRecord(value[key]) ? value[key] : {}) };
     }
+    const gameDefaults = isRecord(defaults.gameScene) ? defaults.gameScene : {
+      schemaVersion: 1, enabled: false,
+      physics: { moveSpeed: 5.55, acceleration: 9, jumpSpeed: 9.3, gravity: 21, fallLimit: -8, playerHalfHeight: 0.72 },
+      player: { spawnPlatformId: '' },
+      camera: { followDistance: 8.7, followHeight: 3.4, lookAhead: 3.3 },
+      appearance: { skyColor: '#100B20', playerColor: '#7D89FF', playerAccentColor: '#FFD5A5', collectibleColor: '#67F3E8', goalColor: '#FF9A6B', requireCollectibles: true },
+      platforms: [], objects: []
+    };
+    if (Object.hasOwn(value, 'gameScene') && !isRecord(value.gameScene)) throw new Error('gameScene debe ser un objeto de escena 3D.');
+    const incomingGame = isRecord(value.gameScene) ? value.gameScene : {};
+    if (Object.hasOwn(incomingGame, 'enabled') && typeof incomingGame.enabled !== 'boolean') throw new Error('gameScene.enabled debe ser booleano.');
+    if (Object.hasOwn(incomingGame, 'physics') && !isRecord(incomingGame.physics)) throw new Error('gameScene.physics debe ser un objeto.');
+    if (Object.hasOwn(incomingGame, 'player') && !isRecord(incomingGame.player)) throw new Error('gameScene.player debe ser un objeto.');
+    if (Object.hasOwn(incomingGame, 'camera') && !isRecord(incomingGame.camera)) throw new Error('gameScene.camera debe ser un objeto.');
+    if (Object.hasOwn(incomingGame, 'appearance') && !isRecord(incomingGame.appearance)) throw new Error('gameScene.appearance debe ser un objeto.');
+    if (Object.hasOwn(incomingGame, 'platforms') && !Array.isArray(incomingGame.platforms)) throw new Error('gameScene.platforms debe ser una lista.');
+    if (Object.hasOwn(incomingGame, 'objects') && !Array.isArray(incomingGame.objects)) throw new Error('gameScene.objects debe ser una lista de objetos 3D.');
+    project.gameScene = {
+      ...gameDefaults,
+      ...incomingGame,
+      physics: { ...(isRecord(gameDefaults.physics) ? gameDefaults.physics : {}), ...(isRecord(incomingGame.physics) ? incomingGame.physics : {}) },
+      player: { ...(isRecord(gameDefaults.player) ? gameDefaults.player : {}), ...(isRecord(incomingGame.player) ? incomingGame.player : {}) },
+      camera: { ...(isRecord(gameDefaults.camera) ? gameDefaults.camera : {}), ...(isRecord(incomingGame.camera) ? incomingGame.camera : {}) },
+      appearance: { ...(isRecord(gameDefaults.appearance) ? gameDefaults.appearance : {}), ...(isRecord(incomingGame.appearance) ? incomingGame.appearance : {}) },
+      platforms: Array.isArray(incomingGame.platforms) ? incomingGame.platforms.map(platform => isRecord(platform) ? { ...platform } : platform) : Array.isArray(gameDefaults.platforms) ? gameDefaults.platforms.map(platform => ({ ...platform })) : [],
+      objects: Array.isArray(incomingGame.objects) ? incomingGame.objects.map(object => isRecord(object) ? { ...object } : object) : Array.isArray(gameDefaults.objects) ? gameDefaults.objects.map(object => ({ ...object })) : []
+    };
+    if (project.gameScene.schemaVersion !== 1) throw new Error(`Versión de escena de juego no compatible: ${String(project.gameScene.schemaVersion)}.`);
+    if (!Array.isArray(project.gameScene.platforms) || project.gameScene.platforms.length > 128) throw new Error('La escena admite entre 0 y 128 bloques de plataforma.');
+    const platformIds = new Set();
+    project.gameScene.platforms = project.gameScene.platforms.map((platform, index) => {
+      if (!isRecord(platform)) throw new Error(`El bloque de plataforma ${index + 1} no es válido.`);
+      const id = String(platform.id ?? '').trim();
+      if (!/^[A-Za-z_][A-Za-z0-9_-]{0,63}$/.test(id) || platformIds.has(id)) throw new Error(`El bloque de plataforma ${index + 1} necesita un identificador seguro y único.`);
+      platformIds.add(id);
+      for (const key of ['x','height','z','halfWidth','halfDepth']) {
+        const n = platform[key];
+        if (typeof n !== 'number' || !Number.isFinite(n) || !Number.isFinite(Math.fround(n))) throw new Error(`La plataforma ${id} necesita un valor finito explícito en ${key}.`);
+      }
+      if (Math.abs(platform.x) > 500 || Math.abs(platform.z) > 500 || Math.abs(platform.height) > 100 || platform.halfWidth < 0.25 || platform.halfWidth > 20 || platform.halfDepth < 0.25 || platform.halfDepth > 20) throw new Error(`La geometría de la plataforma ${id} queda fuera de los límites del editor.`);
+      if (typeof platform.checkpoint !== 'boolean' || typeof platform.collectible !== 'boolean' || typeof platform.goal !== 'boolean') throw new Error(`La plataforma ${id} necesita estados explícitos de checkpoint, cristal y meta.`);
+      if (typeof platform.color !== 'string' || !/^#[0-9a-f]{6}$/i.test(platform.color)) throw new Error(`La plataforma ${id} necesita un color #RRGGBB válido.`);
+      const collisionEnabled = platform.collisionEnabled === undefined ? true : platform.collisionEnabled;
+      if (typeof collisionEnabled !== 'boolean') throw new Error('La plataforma ' + id + ' necesita un estado de colisión booleano.');
+      const collisionHalfWidth = platform.collisionHalfWidth === undefined ? platform.halfWidth + 0.24 : platform.collisionHalfWidth;
+      const collisionHalfHeight = platform.collisionHalfHeight === undefined ? 0.45 : platform.collisionHalfHeight;
+      const collisionHalfDepth = platform.collisionHalfDepth === undefined ? platform.halfDepth + 0.24 : platform.collisionHalfDepth;
+      const collisionOffsetY = platform.collisionOffsetY === undefined ? 0 : platform.collisionOffsetY;
+      for (const [key, n] of [['collisionHalfWidth',collisionHalfWidth],['collisionHalfHeight',collisionHalfHeight],['collisionHalfDepth',collisionHalfDepth],['collisionOffsetY',collisionOffsetY]]) {
+        if (typeof n !== 'number' || !Number.isFinite(n) || !Number.isFinite(Math.fround(n))) throw new Error('La plataforma ' + id + ' necesita un valor finito en ' + key + '.');
+      }
+      if (collisionHalfWidth < 0.1 || collisionHalfWidth > 20.5 || collisionHalfHeight < 0.1 || collisionHalfHeight > 20.5 || collisionHalfDepth < 0.1 || collisionHalfDepth > 20.5 || collisionOffsetY < -2 || collisionOffsetY > 2) throw new Error('La caja de colisión de ' + id + ' está fuera de los límites permitidos.');
+      if (!collisionEnabled && (platform.checkpoint || platform.collectible || platform.goal)) throw new Error('La plataforma ' + id + ' no puede tener un cristal, checkpoint o meta si su colisión está desactivada.');
+      return { ...platform, id, label: String(platform.label ?? id), collisionEnabled, collisionHalfWidth, collisionHalfHeight, collisionHalfDepth, collisionOffsetY };
+    });
+    if (!Array.isArray(project.gameScene.objects) || project.gameScene.objects.length > 128) throw new Error('La escena admite hasta 128 objetos 3D adicionales.');
+    project.gameScene.objects = project.gameScene.objects.map((object, index) => {
+      if (!isRecord(object)) throw new Error(`El objeto 3D ${index + 1} no es válido.`);
+      const id = String(object.id ?? '').trim();
+      if (!/^[A-Za-z_][A-Za-z0-9_-]{0,63}$/.test(id) || platformIds.has(id)) throw new Error(`El objeto 3D ${index + 1} necesita un identificador seguro y único en la escena.`);
+      platformIds.add(id);
+      if (!['box','diamond','sphere','cylinder','cone','pyramid'].includes(object.shape)) throw new Error(`El objeto ${id} necesita una forma geométrica compatible.`);
+      for (const key of ['x','y','z','halfWidth','halfHeight','halfDepth','rotationY']) {
+        const n = object[key];
+        if (typeof n !== 'number' || !Number.isFinite(n) || !Number.isFinite(Math.fround(n))) throw new Error(`El objeto ${id} necesita un valor finito explícito en ${key}.`);
+      }
+      if (Math.abs(object.x) > 500 || Math.abs(object.z) > 500 || Math.abs(object.y) > 100 || object.halfWidth < 0.1 || object.halfWidth > 20.5 || object.halfHeight < 0.1 || object.halfHeight > 20.5 || object.halfDepth < 0.1 || object.halfDepth > 20.5 || object.rotationY < -360 || object.rotationY > 360) throw new Error(`La geometría del objeto ${id} queda fuera de los límites del editor.`);
+      if (typeof object.color !== 'string' || !/^#[0-9a-f]{6}$/i.test(object.color)) throw new Error(`El objeto ${id} necesita un color #RRGGBB válido.`);
+      const collisionEnabled = object.collisionEnabled === undefined ? false : object.collisionEnabled;
+      if (typeof collisionEnabled !== 'boolean') throw new Error(`El objeto ${id} necesita un estado de colisión booleano.`);
+      const collisionHalfWidth = object.collisionHalfWidth === undefined ? object.halfWidth : object.collisionHalfWidth;
+      const collisionHalfHeight = object.collisionHalfHeight === undefined ? object.halfHeight : object.collisionHalfHeight;
+      const collisionHalfDepth = object.collisionHalfDepth === undefined ? object.halfDepth : object.collisionHalfDepth;
+      const collisionOffsetY = object.collisionOffsetY === undefined ? 0 : object.collisionOffsetY;
+      for (const [key, n] of [['collisionHalfWidth',collisionHalfWidth],['collisionHalfHeight',collisionHalfHeight],['collisionHalfDepth',collisionHalfDepth],['collisionOffsetY',collisionOffsetY]]) {
+        if (typeof n !== 'number' || !Number.isFinite(n) || !Number.isFinite(Math.fround(n))) throw new Error(`El colisionador del objeto ${id} necesita un valor finito en ${key}.`);
+      }
+      if (collisionHalfWidth < 0.1 || collisionHalfWidth > 20.5 || collisionHalfHeight < 0.1 || collisionHalfHeight > 20.5 || collisionHalfDepth < 0.1 || collisionHalfDepth > 20.5 || collisionOffsetY < -20.5 || collisionOffsetY > 20.5) throw new Error(`La caja de colisión del objeto ${id} queda fuera de los límites permitidos.`);
+      return { ...object, id, label: String(object.label ?? id), collisionEnabled, collisionHalfWidth, collisionHalfHeight, collisionHalfDepth, collisionOffsetY };
+    });
+    const scenePhysics = project.gameScene.physics;
+    for (const [key, min, max] of [['moveSpeed',0,20],['acceleration',0.1,30],['jumpSpeed',0,30],['gravity',0,50],['fallLimit',-100,-0.1],['playerHalfHeight',0.1,5]]) {
+      const n = scenePhysics[key];
+      if (typeof n !== 'number' || !Number.isFinite(n) || n < min || n > max) throw new Error(`La física del juego requiere un valor entre ${min} y ${max} para ${key}.`);
+    }
+    if (project.gameScene.enabled) {
+      for (const [key, min, max] of [['followDistance',4,30],['followHeight',1,12],['lookAhead',0,20]]) {
+        const n = project.gameScene.camera[key];
+        if (typeof n !== 'number' || !Number.isFinite(n) || n < min || n > max) throw new Error(`La cámara del juego requiere un valor entre ${min} y ${max} para ${key}.`);
+      }
+      for (const key of ['skyColor','playerColor','playerAccentColor','collectibleColor','goalColor']) {
+        if (typeof project.gameScene.appearance[key] !== 'string' || !/^#[0-9a-f]{6}$/i.test(project.gameScene.appearance[key])) throw new Error(`La presentación del juego requiere un color #RRGGBB válido para ${key}.`);
+      }
+      if (typeof project.gameScene.appearance.requireCollectibles !== 'boolean') throw new Error('La regla de victoria requireCollectibles debe ser booleana.');
+    }
+    const spawnPlatformId = String(project.gameScene.player.spawnPlatformId ?? '');
+    if (spawnPlatformId && !project.gameScene.platforms.some(platform => platform.id === spawnPlatformId)) throw new Error(`El punto de inicio apunta a una plataforma inexistente: ${spawnPlatformId}.`);
+    project.gameScene.player.spawnPlatformId = spawnPlatformId;
+    const goalCount = project.gameScene.platforms.filter(platform => platform.goal).length;
+    if (goalCount > 1) throw new Error('La escena solo admite una plataforma de meta.');
     if (Object.hasOwn(value, 'resolution')) {
       if (!Object.hasOwn(value.resolution, 'width') || !Object.hasOwn(value.resolution, 'height')) throw new Error('La resolución debe declarar explícitamente ancho y alto; no se completarán dimensiones faltantes.');
-      if (value.resolution.width !== 1920 || value.resolution.height !== 1080) throw new Error('La resolución compatible del lienzo es exactamente 1920×1080.');
+      if (!Number.isSafeInteger(value.resolution.width) || value.resolution.width < MIN_CANVAS_WIDTH || value.resolution.width > MAX_CANVAS_WIDTH || !Number.isSafeInteger(value.resolution.height) || value.resolution.height < MIN_CANVAS_HEIGHT || value.resolution.height > MAX_CANVAS_HEIGHT) throw new Error(`El lienzo debe tener dimensiones enteras entre ${MIN_CANVAS_WIDTH}×${MIN_CANVAS_HEIGHT} y ${MAX_CANVAS_WIDTH}×${MAX_CANVAS_HEIGHT}.`);
     }
     if (Object.hasOwn(value, 'theme')) {
       for (const key of ['background','accent','text']) if (typeof value.theme[key] !== 'string' || !/^#[0-9a-f]{6}$/i.test(value.theme[key])) throw new Error(`El tema necesita declarar explícitamente el color ${key} con formato #RRGGBB.`);
@@ -133,18 +237,41 @@
       if (recoveredName) project.name = recoveredName;
     }
     if (!isValidProjectName(project.name)) throw new Error('El nombre del proyecto debe tener entre 1 y 40 caracteres ASCII seguros. En proyectos antiguos, usa un nombre de archivo compatible al importarlos; los proyectos v2 no se modifican automáticamente.');
+    if (Object.hasOwn(value, 'description') && typeof value.description !== 'string') throw new Error('La descripción del proyecto debe ser texto.');
+    project.description = String(project.description ?? '').trim();
+    if (project.description.length > 500) throw new Error('La descripción del proyecto no puede superar 500 caracteres.');
+    if (Object.hasOwn(value, 'gamePresentation') && !isRecord(value.gamePresentation)) throw new Error('gamePresentation debe ser un objeto de presentación.');
+    const incomingGamePresentation = isRecord(value.gamePresentation) ? value.gamePresentation : {};
+    project.gamePresentation = { ...(isRecord(defaults.gamePresentation) ? defaults.gamePresentation : {}), ...incomingGamePresentation };
+    for (const key of ['iconAssetId', 'audioAssetId']) {
+      if (Object.hasOwn(incomingGamePresentation, key) && typeof incomingGamePresentation[key] !== 'string') throw new Error(`gamePresentation.${key} debe ser un identificador de recurso o una cadena vacía.`);
+      project.gamePresentation[key] = String(project.gamePresentation[key] || '');
+    }
     if (Object.hasOwn(value, 'backend') && typeof value.backend !== 'string') throw new Error('El backend debe ser una cadena explícita.');
     if (Object.hasOwn(value, 'backend') && !value.backend.trim()) throw new Error('El backend explícito no puede estar vacío; selecciona un backend compatible.');
     project.backend = Object.hasOwn(value, 'backend') ? value.backend.trim() : String(defaults.backend);
     if (!validBackends.includes(project.backend)) throw new Error(`Backend de proyecto desconocido: ${project.backend}`);
     if (Object.hasOwn(value, 'customCode') && typeof value.customCode !== 'string') throw new Error('El código manual debe ser una cadena explícita.');
     if (Object.hasOwn(value, 'manualCode') && typeof value.manualCode !== 'boolean') throw new Error('manualCode debe ser una bandera booleana explícita.');
+    if (Object.hasOwn(value, 'payloadLanguage') && !['c','cpp'].includes(value.payloadLanguage)) throw new Error('payloadLanguage debe ser c o cpp.');
+    if (Object.hasOwn(value, 'payloadBuildMode') && !['managed','upstream-makefile'].includes(value.payloadBuildMode)) throw new Error('payloadBuildMode debe ser managed o upstream-makefile.');
     project.customCode = String(project.customCode ?? '');
     project.manualCode = project.manualCode === true;
+    project.payloadLanguage = value.payloadLanguage === 'cpp' ? 'cpp' : 'c';
+    project.payloadBuildMode = value.payloadBuildMode === 'upstream-makefile' ? 'upstream-makefile' : 'managed';
+    if (project.payloadBuildMode === 'upstream-makefile' && project.backend !== 'payload') throw new Error('upstream-makefile solo es válido para proyectos payload.');
     if (Object.hasOwn(value, 'fontAssetId') && typeof value.fontAssetId !== 'string') throw new Error('fontAssetId debe ser un identificador de recurso explícito o una cadena vacía.');
     if (Object.hasOwn(value, 'currentScreen') && typeof value.currentScreen !== 'string') throw new Error('currentScreen debe ser un identificador de pantalla explícito.');
     project.fontAssetId = String(project.fontAssetId || '');
     project.currentScreen = String(project.currentScreen || '');
+    if (Object.hasOwn(value.settings || {}, 'renderTarget')) {
+      const target = value.settings.renderTarget;
+      if (!isRecord(target)) throw new Error('La referencia de render debe ser un objeto con ancho y alto explícitos.');
+      if (!Object.hasOwn(target, 'width') || !Object.hasOwn(target, 'height') || !Number.isSafeInteger(target.width) || target.width < MIN_CANVAS_WIDTH || target.width > MAX_CANVAS_WIDTH || !Number.isSafeInteger(target.height) || target.height < MIN_CANVAS_HEIGHT || target.height > MAX_CANVAS_HEIGHT) throw new Error(`La referencia de render debe tener dimensiones enteras entre ${MIN_CANVAS_WIDTH}×${MIN_CANVAS_HEIGHT} y ${MAX_CANVAS_WIDTH}×${MAX_CANVAS_HEIGHT}.`);
+      project.settings.renderTarget = { width: target.width, height: target.height };
+    } else if (!isRecord(project.settings.renderTarget) || !Number.isSafeInteger(project.settings.renderTarget.width) || project.settings.renderTarget.width < MIN_CANVAS_WIDTH || project.settings.renderTarget.width > MAX_CANVAS_WIDTH || !Number.isSafeInteger(project.settings.renderTarget.height) || project.settings.renderTarget.height < MIN_CANVAS_HEIGHT || project.settings.renderTarget.height > MAX_CANVAS_HEIGHT) {
+      project.settings.renderTarget = { width: 1920, height: 1080 };
+    }
     if (Object.hasOwn(value.settings || {}, 'titleId') && typeof value.settings.titleId !== 'string') throw new Error('TITLE_ID debe ser una cadena explícita.');
     project.settings.titleId = normalizeTitleId(project.settings.titleId);
     if (project.settings.titleId && !isValidTitleId(project.settings.titleId)) throw new Error('El TITLE_ID guardado no tiene el formato PPSA12345 válido.');
@@ -169,7 +296,7 @@
         if (!Number.isFinite(numeric)) throw new Error(`El componente ${id} tiene un valor numérico inválido en ${field}.`);
         normalized[field] = numeric;
       }
-      if (normalized.w <= 0 || normalized.h <= 0 || normalized.x < 0 || normalized.y < 0 || normalized.x + normalized.w > 1920 || normalized.y + normalized.h > 1080) throw new Error(`La geometría del componente ${id} queda fuera del lienzo 1920×1080 o tiene dimensiones no positivas.`);
+      if (normalized.w <= 0 || normalized.h <= 0 || normalized.x < 0 || normalized.y < 0 || normalized.x + normalized.w > project.resolution.width || normalized.y + normalized.h > project.resolution.height) throw new Error(`La geometría del componente ${id} queda fuera del lienzo ${project.resolution.width}×${project.resolution.height} o tiene dimensiones no positivas.`);
       for (const field of ['font','opacity','value','min','max','step']) {
         if (normalized[field] === undefined || normalized[field] === null || String(normalized[field]).trim() === '') throw new Error(`El componente ${id} necesita un valor explícito en ${field}; no se sustituirá por un valor inventado.`);
       }
@@ -254,7 +381,7 @@
     });
     const flowIds = new Set();
     const knownEvents = new Set(['activate','change','start','any']);
-    const knownActions = new Set(['notify','setText','toggleVisibility','setValue','changeColor','navigate']);
+    const knownActions = new Set(['notify','setText','toggleVisibility','setValue','changeColor','navigate','callFunction','gameAction']);
     const byComponentId = new Map(project.components.map(component => [component.id, component]));
     project.flows = project.flows.map((flow, index) => {
       if (!isRecord(flow)) throw new Error(`El flujo ${index + 1} no es un objeto válido.`);
@@ -296,6 +423,24 @@
       if (action === 'navigate' && sourceScreen && sourceScreen === targetScreen) throw new Error(`El flujo ${id} navega a la misma pantalla desde la que se dispara; el destino debe ser otra pantalla.`);
       if (action === 'changeColor' && !/^#[0-9a-f]{6}$/i.test(String(flow.value ?? ''))) throw new Error(`El flujo ${id} necesita un color hexadecimal #RRGGBB explícito.`);
       if (action === 'notify' && !String(flow.message ?? '').trim()) throw new Error(`El flujo ${id} necesita un mensaje explícito.`);
+      if (action === 'callFunction') {
+        if (project.backend !== 'ps5link') throw new Error(`El flujo ${id} solo puede llamar funciones C con el backend ps5link.`);
+        if (!/^[A-Za-z_][A-Za-z0-9_]{0,79}$/.test(String(flow.value ?? ''))) throw new Error(`El flujo ${id} necesita un nombre de función C válido.`);
+        if (event === 'start' && !componentId) throw new Error(`El flujo ${id} necesita un origen válido para llamar una función C.`);
+      }
+      if (action === 'gameAction') {
+        if (project.backend !== 'ps5link') throw new Error(`El flujo ${id} solo puede usar acciones de juego con el backend ps5link.`);
+        const gameAction = String(flow.value ?? '');
+        if (!new Set(['start','pause','resume','restart','toggleAudio']).has(gameAction)) throw new Error(`El flujo ${id} usa una acción de juego no compatible: ${gameAction || '(vacía)'}.`);
+        const source = byComponentId.get(componentId);
+        if (!source) throw new Error(`El flujo ${id} necesita enlazar una acción del juego a un componente visual existente.`);
+        const allowedTypes = gameAction === 'toggleAudio' ? ['button','toggle'] : ['button'];
+        if (!allowedTypes.includes(source.type)) throw new Error(`El flujo ${id} usa un control incompatible para ${gameAction}; utiliza un botón${gameAction === 'toggleAudio' ? ' o interruptor' : ''}.`);
+        const allowedEvents = source.type === 'toggle' ? ['change','any'] : ['activate','any'];
+        if (!allowedEvents.includes(event)) throw new Error(`El flujo ${id} usa un evento incompatible con el control ${source.type}.`);
+        const duplicate = project.flows.find(other => other !== flow && other.enabled !== false && other.action === 'gameAction' && other.value === gameAction);
+        if (duplicate) throw new Error(`La acción integrada ${gameAction} ya está conectada en el flujo ${duplicate.id}; cada acción debe tener un control principal.`);
+      }
       return { ...flow, id, event, action, componentId, targetId, targetScreen, message: String(flow.message ?? ''), value: flow.value ?? '' };
     });
     if (project.fontAssetId) {
@@ -303,7 +448,95 @@
       const fontAsset = project.assets.find(asset => asset.id === project.fontAssetId);
       if (!fontAsset || !/\.ttf$/i.test(fontAsset.fileName) || !/^data:[^,]+,/.test(fontAsset.dataUrl)) throw new Error('La fuente seleccionada debe ser un recurso TTF real y contener sus datos; no se aceptan fuentes sustitutivas.');
     }
+    if (project.gamePresentation.audioAssetId) {
+      if (!assetIds.has(project.gamePresentation.audioAssetId)) throw new Error(`La música del título hace referencia a un recurso inexistente: ${project.gamePresentation.audioAssetId}`);
+      const audioAsset = project.assets.find(asset => asset.id === project.gamePresentation.audioAssetId);
+      if (!audioAsset || !/\.(?:at9|wav|mp3|flac|aiff|aif|aifc)$/i.test(audioAsset.fileName) || !/^data:[^,]+,/.test(audioAsset.dataUrl)) {
+        throw new Error('La música de selección debe ser un recurso ATRAC9, WAV, MP3, FLAC o AIFF importado al proyecto.');
+      }
+    }
     return project;
+  }
+
+  function analyzeGameSceneReachability(scene) {
+    const platforms = Array.isArray(scene?.platforms) ? scene.platforms : [];
+    const objects = Array.isArray(scene?.objects) ? scene.objects : [];
+    const physics = scene?.physics || {};
+    const nodes = [
+      ...platforms.map(platform => ({ id:platform.id, kind:'platform', ref:platform, x:platform.x, z:platform.z,
+        top:platform.height+(platform.collisionOffsetY||0), halfWidth:platform.collisionHalfWidth??platform.halfWidth,
+        halfDepth:platform.collisionHalfDepth??platform.halfDepth, enabled:platform.collisionEnabled!==false })),
+      ...objects.filter(object => object?.collisionEnabled===true).map(object => ({ id:object.id, kind:'object', ref:object, x:object.x, z:object.z,
+        top:object.y+(object.collisionOffsetY||0)+(object.collisionHalfHeight??object.halfHeight),
+        halfWidth:object.collisionHalfWidth??object.halfWidth, halfDepth:object.collisionHalfDepth??object.halfDepth, enabled:true }))
+    ];
+    const byId = new Map(platforms.map((p, i) => [p.id, i]));
+    const spawnIndex = byId.get(scene?.player?.spawnPlatformId);
+    const reachable = new Set();
+    if (Number.isInteger(spawnIndex) && platforms[spawnIndex]?.collisionEnabled !== false) reachable.add(spawnIndex);
+    const speed = Number(physics.moveSpeed), jump = Number(physics.jumpSpeed), gravity = Number(physics.gravity);
+    if (speed > 0 && jump > 0 && gravity > 0 && reachable.size) {
+      let changed = true;
+      while (changed) {
+        changed = false;
+        for (const fromIndex of [...reachable]) {
+          const from = nodes[fromIndex];
+          for (let toIndex = 0; toIndex < nodes.length; toIndex++) {
+            if (reachable.has(toIndex)) continue;
+            const to = nodes[toIndex];
+            if (!to.enabled) continue;
+            const rise = to.top - from.top;
+            const discriminant = jump * jump - 2 * gravity * rise;
+            if (discriminant < 0) continue;
+            const landingTime = (jump + Math.sqrt(Math.max(0, discriminant))) / gravity;
+            const reach = speed * landingTime;
+            const xAllowance = reach + from.halfWidth + to.halfWidth + 0.34;
+            const zAllowance = reach + from.halfDepth + to.halfDepth + 0.34;
+            if (Math.abs(to.x - from.x) > xAllowance || Math.abs(to.z - from.z) > zAllowance) continue;
+            reachable.add(toIndex);
+            changed = true;
+          }
+        }
+      }
+    }
+    const unreachableCriticalPlatforms = platforms.filter((p, i) => (p.goal || p.collectible || p.checkpoint) && !reachable.has(i))
+      .map(p => ({ id: p.id, label: p.label || p.id, goal: !!p.goal, collectible: !!p.collectible, checkpoint: !!p.checkpoint }));
+    const disabledCriticalPlatforms = platforms.filter(p => p.collisionEnabled===false && (p.goal || p.collectible || p.checkpoint))
+      .map(p => ({ id: p.id, label: p.label || p.id }));
+    return {
+      reachablePlatformIds: [...reachable].filter(i => i<platforms.length).map(i => platforms[i].id),
+      reachableObjectIds: [...reachable].filter(i => i>=platforms.length).map(i => nodes[i].id),
+      unreachablePlatformIds: platforms.filter((_, i) => !reachable.has(i)).map(p => p.id),
+      unreachableCriticalPlatforms,
+      disabledCriticalPlatforms,
+      spawnValid: Number.isInteger(spawnIndex) && platforms[spawnIndex]?.collisionEnabled !== false
+    };
+  }
+
+  function resizeIsometricCollisionBox({ deltaX, deltaY, scale, signX, signZ, halfWidth, halfDepth }) {
+    const values = [deltaX, deltaY, scale, signX, signZ, halfWidth, halfDepth].map(Number);
+    if (!values.every(Number.isFinite) || values[2] <= 0 || ![-1, 1].includes(values[3]) || ![-1, 1].includes(values[4])) {
+      throw new Error('Los datos de redimensión de colisión no son válidos.');
+    }
+    const [screenX, screenY, projectionScale, cornerX, cornerZ, width, depth] = values;
+    const worldDeltaX = screenX / (2 * projectionScale) + screenY / projectionScale;
+    const worldDeltaZ = screenY / projectionScale - screenX / (2 * projectionScale);
+    return {
+      collisionHalfWidth: Math.min(20.5, Math.max(0.1, width + cornerX * worldDeltaX)),
+      collisionHalfDepth: Math.min(20.5, Math.max(0.1, depth + cornerZ * worldDeltaZ))
+    };
+  }
+
+  function resizeWorldCollisionBox({ deltaX, deltaZ, signX, signZ, halfWidth, halfDepth }) {
+    const values = [deltaX, deltaZ, signX, signZ, halfWidth, halfDepth].map(Number);
+    if (!values.every(Number.isFinite) || ![-1, 1].includes(values[2]) || ![-1, 1].includes(values[3])) {
+      throw new Error('Los datos de redimensión espacial de colisión no son válidos.');
+    }
+    const [worldDeltaX, worldDeltaZ, cornerX, cornerZ, width, depth] = values;
+    return {
+      collisionHalfWidth: Math.min(20.5, Math.max(0.1, width + cornerX * worldDeltaX)),
+      collisionHalfDepth: Math.min(20.5, Math.max(0.1, depth + cornerZ * worldDeltaZ))
+    };
   }
 
   const api = Object.freeze({
@@ -313,7 +546,10 @@
     isValidProjectName,
     normalizeLegacyProjectName,
     normalizeAssetFilename,
-    normalizeProjectModel
+    normalizeProjectModel,
+    analyzeGameSceneReachability,
+    resizeIsometricCollisionBox,
+    resizeWorldCollisionBox
   });
   if (root) root.PS5HSProjectContracts = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

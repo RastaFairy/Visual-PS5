@@ -20,7 +20,7 @@ Le service écoute uniquement sur 127.0.0.1. Ne l’exposez pas au réseau et ne
 
 ## 3. Interface et projet visuel
 
-Le canevas 1920×1080 est une zone de travail virtuelle, pas une capture exacte de l’interface PS5. Le panneau des composants ajoute des contrôles ; l’inspecteur modifie leur géométrie et leurs propriétés ; la hiérarchie organise les éléments et le gestionnaire d’écrans structure l’UI. L’éditeur de flux relie événements et actions comme notify, setText, toggleVisibility, setValue, changeColor et navigate lorsque le composant et le backend le permettent.
+Le canevas commence en 1920×1080 et peut être redimensionné. Cette zone de travail est virtuelle, pas une capture exacte de l’interface PS5. Le panneau des composants ajoute des contrôles ; l’inspecteur modifie leur géométrie et leurs propriétés ; la hiérarchie organise les éléments et le gestionnaire d’écrans structure l’UI. L’éditeur de flux relie événements et actions comme notify, setText, toggleVisibility, setValue, changeColor et navigate lorsque le composant et le backend le permettent.
 
 Créez le projet, choisissez le backend avant de préparer ses dépendances, ajoutez composants et ressources, utilisez des ID uniques et configurez les écrans. Lancez les diagnostics et corrigez les références invalides. Enregistrez avec Ctrl+S. L’export d’un modèle ou d’un ZIP n’est pas une compilation native.
 
@@ -42,7 +42,7 @@ Dans **Projets**, ouvrez un titre initialisé avec `sce_sys/param.json`, puis cl
 
 - **Fond de sélection :** `sce_sys/pic0.dds`. **Fond de lancement :** `sce_sys/pic1.dds`. Chaque image est convertie en DDS BC7/DX10 de 3840×2160. Les images peuvent être différentes. Si les deux fonds sont absents, sélectionnez les deux lors de la première opération. La conversion nécessite DirectXTex `texconv` (`winget install Microsoft.DirectXTex.Texconv`).
 
-- **Musique de sélection :** `sce_sys/snd0.at9`, ATRAC9 en boucle à 48 kHz, 2 Mio maximum. Un fichier AT9 déjà compatible peut être fourni. Les fichiers MP3/WAV/OGG/M4A nécessitent FFmpeg et un encodeur ATRAC9 compatible obtenu légalement ; l’IDE ne le télécharge pas.
+- **Musique de sélection :** `sce_sys/snd0.at9`, ATRAC9 en boucle à 48 kHz, 2 Mio maximum. Un fichier AT9 compatible peut être fourni, ou WAV/MP3/FLAC/AIFF/AIFC convertis hors ligne avec l’encodeur open source inclus ; FFmpeg et `ps4_at9tool.exe` ne sont pas nécessaires. Voir la licence GPL-3.0-or-later et les avis dans `toolchains/ps5-at9-converter/`.
 
 Le script upstream `tools/prepare-assets.ps1` valide les formats avant d’appliquer les fichiers. Ces ressources ne changent que la présentation de cette application, pas le fond global ou le son de démarrage de la console. Pour un thème système distinct, voir [ps5-theme](https://github.com/Blaze414/ps5-theme).
 

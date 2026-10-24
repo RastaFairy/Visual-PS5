@@ -1,0 +1,21 @@
+{
+  "updatedAt": "2026-10-22T19:34:03.8407112+02:00",
+  "restoredFiles": [
+    {
+      "path": "tools/ninja-build.sh",
+      "sourcePath": "tools/ninja-build.sh",
+      "action": "restored-missing-upstream-build-helper",
+      "sourceRepository": "blackbearreloaded/ps5-native-app-boilerplate",
+      "sha256": "fa85689b3cb839d357412ff9bf9166aee5e3c63fec65e9e14d34561d9ea12296"
+    },
+    {
+      "path": "tools/build-host-tools.sh",
+      "sourcePath": "tools/build-host-tools.sh",
+      "action": "restored-missing-upstream-build-helper",
+      "sourceRepository": "blackbearreloaded/ps5-native-app-boilerplate",
+      "sha256": "c3ea9578eb9e86655ecf81d4b4c2847a2a58630aa6c935289156271295cd3912"
+    }
+  ],
+  "notice": "Compatibility overlay: restores absent shared build scripts from their upstream boilerplate source; no generated stubs.",
+  "sourceRepository": "blackbearreloaded/ps5-native-app-boilerplate"
+}

@@ -4,7 +4,38 @@
   <img src="{EDC916EF-F967-4908-A4E6-D206F0BA1AA6}.png" alt="Texto alternativo" width="1000">
 </p>
 
-**Release 1.1.18 · IDE visual local para Windows.** Integra un editor visual 1920×1080, análisis de flujos, generación de código C# para SharpProspero y conversión del modelo visual a pantallas C++20 para los kits nativos OpenGL/Vulkan. Incluye un catálogo verificado por función de boilerplates, UI kits, drivers, complementos gráficos y aplicaciones comunitarias de referencia.
+**Release 1.1.56 · IDE visual local para Windows.** Integra un lienzo lógico redimensionable (inicia en 1920×1080), análisis de flujos, generación de código C# para SharpProspero, pantallas C++20 para OpenGL/Vulkan con salida adaptada a la superficie activa —incluido 4K—, grafos Vulkan Compute en GLSL 450, un editor visual especializado en niveles de plataformas 3D AGC y edición/compilación C/C++ de payloads PS5 a ELF con el SDK offline.
+
+El lienzo lógico de diseño es independiente del perfil de salida de referencia: se pueden previsualizar tamaños 720p, 900p, 1080p, 1440p, 4K o personalizados sin alterar las coordenadas del proyecto ni fijar la resolución de ejecución.
+
+## Escena de juego 3D · 1.1.56
+
+- Construye recorridos en una vista 3D orbitable; gira la cámara con el botón derecho, desplázala con Mayús + arrastrar, acerca con la rueda y usa los controles de órbita/altura o Restablecer cámara.
+- Arrastra plataformas y objetos sobre el plano del nivel: el editor convierte el movimiento de pantalla a coordenadas X/Z según la vista actual.
+- Añade seis mallas procedurales —cubo, cristal facetado, esfera, cilindro, cono y pirámide— desde Componentes. Selecciónalas o arrástralas en la escena y ajusta forma, posición, dimensiones, giro y color desde el inspector. La caja opcional bloquea los laterales y la cara inferior, y permite aterrizar encima.
+- Ajusta por plataforma el ancho X, grosor Y, fondo Z y desfase de su caja sólida; el lienzo muestra el volumen completo y los tiradores permiten cambiar X/Z.
+- La validación del IDE y de compilación avisa si el inicio, checkpoints, cristales o meta quedan fuera de una ruta alcanzable. Las cajas de colisión siguen sus tiradores en cualquier orientación de cámara.
+- Marca visualmente inicio, cristales, checkpoints y meta; configura movimiento, salto y gravedad sin editar constantes en C.
+- Ajusta cámara, paleta y condición de victoria desde el inspector; enlaza botones e interruptores con acciones de juego en Flujos y controla el juego con DualSense.
+- El IDE genera el motor AGC, la escena y el puente de interfaz desde el modelo visual. El fuente aparece en Código en modo de solo lectura; el código manual es una opción avanzada separada.
+- Antes de sustituir código manual existente, el IDE guarda una copia de seguridad dentro de `src/`.
+- Consulta [la guía de escenas de juego](docs/GAME_SCENE_EDITOR.md).
+
+El editor AGC actual está centrado en niveles de plataformas y no es todavía un motor general de escenas como Unity: no importa mallas arbitrarias ni ofrece animación esquelética, materiales PBR ni componentes de física de propósito general. Las colisiones son cajas alineadas con los ejes del mundo; no rotan con una malla girada.
+
+## PS5 Payload SDK · 1.1.28
+
+- Edita la entrada `src/main.c` o `src/main.cpp` desde el IDE y compílala con el `ps5-payload-dev/sdk` preinstalado en WSL, sin acceso a Internet. La imagen offline incluye las bibliotecas y cabeceras PacBrew fijadas para proyectos payload; una distro WSL existente obtiene una caché local desde el archivo versionado en `toolchains/`, sin modificar la distro.
+- El IDE conserva cada compilación, comprueba la cabecera ELF64 little-endian para x86-64 y ofrece el fichero `.elf` para descargar.
+- La autorización para escribir el proyecto y para ejecutar Make/Clang se solicita por separado en cada operación. El ELF no se despliega ni se ejecuta en la consola.
+- ShadowMountPlus puede abrirse como proyecto upstream de varios archivos: se conserva su `Makefile` y se ejecuta su target original. El IDE prepara `libmicrohttpd`, `libpng`, `sqlite3`, `json-c`, `zlib`, cabeceras y stubs desde el artefacto PacBrew fijado localmente; no instala paquetes en WSL ni descarga dependencias.
+
+## Vulkan Compute · 1.1.28
+
+- Edita grafos con pases ordenados, imágenes de almacenamiento, bindings, tamaño de grupo, despacho y resolución de destino.
+- Compila GLSL 450 a SPIR-V para Vulkan 1.2 con `glslangValidator` local en WSL; el flujo no descarga herramientas ni afirma que el shader se haya ejecutado en GPU.
+- Importa informes GPU con identidad de revisión y SHA-256 de cada shader, junto a métricas de tiempo, PSNR, SSIM y comparación de salida cuando el runtime las proporciona.
+- Consulta [el flujo Vulkan Compute](docs/VULKAN_COMPUTE.md) y [el esquema de informe GPU](docs/vulkan-compute-report.schema.json).
 
 ## Runtime nativo autónomo · 1.1.18
 
@@ -153,9 +184,9 @@ La casilla **Verificar el contenido contra el origen** está activada por defect
 
 ## Editor visual y compilación
 
-El editor ofrece lienzo 1920×1080, cuadrícula, arrastrar/soltar, propiedades, jerarquía, temas, pantallas, vista previa, lógica visual, diagnósticos, recursos, guardado, importación/exportación y código inspeccionable.
+El editor ofrece un lienzo configurable entre 640×360 y 7680×4320, cuadrícula, arrastrar/soltar, propiedades, jerarquía, temas, pantallas, vista previa, lógica visual, diagnósticos, recursos, guardado, importación/exportación y código inspeccionable. Al cambiar el tamaño se escala la distribución relativa de los componentes.
 
-**SharpProspero · Aplicación** genera C# y utiliza su pipeline NativeAOT. Requiere .NET SDK 10 en Windows y dentro de WSL, además del SDK correspondiente. Los destinos payload/plugin que no son renderers no aceptan indebidamente código C# de interfaz.
+**SharpProspero · Aplicación** genera C# y utiliza su pipeline NativeAOT. Requiere .NET SDK 10 en Windows y dentro de WSL, además del SDK correspondiente. El backend PS5 Payload SDK tiene un editor C separado; no traduce widgets ni acepta código C# como si fuera C.
 
 **Native UI · OpenGL 4.6 / C++20** genera una pantalla basada en el contrato real de `ps5-homebrew-ui`. Conserva las coordenadas virtuales y los flujos `notify`, `setText`, `toggleVisibility`, `setValue`, `changeColor` y `navigate`. Los recursos de imagen vinculados se convierten a RGBA8 con un máximo de 512×512 píxeles y se empaquetan en el título; se cargan como texturas OpenGL (máximo 16 IDs únicos por pantalla).
 
@@ -224,7 +255,7 @@ La etiqueta **IA declarada** está reservada a declaraciones explícitas. Por ej
 ## Archivos importantes
 
 - `start.bat`: comprueba sintaxis e inicia el IDE.
-- `runtime/server.ps1`: servidor loopback, gestor de fuentes, materializador RGBA y build providers de SharpProspero, Homebrew UI y Vulkan Template.
+- `runtime/server.ps1`: servidor loopback, gestor de fuentes, materializador RGBA y build providers de SharpProspero, payloads PS5 y títulos OpenGL/Vulkan.
 - `runtime/native-generator.js`: generador C++20 para el contrato Concept del kit UI upstream.
 - `runtime/test-native-generator.js`: pruebas automatizadas del generador y de las rutas OpenGL/Vulkan.
 - `runtime/check-syntax.ps1`: usa el parser de PowerShell disponible en Windows y muestra línea/columna de errores.

@@ -4,7 +4,7 @@
 param(
   [string]$SdkTarball = '',
   [string]$OutputZip = '',
-  [string[]]$Include = @('ps5-homebrew-ui','ps5-native-app-boilerplate','ps5-opengl','SharpProspero','ps5-payload-sdk','PS5SDK','ps5link-sdk','ps5-ultrapack')
+  [string[]]$Include = @('ps5-homebrew-ui','ps5-native-app-boilerplate','ps5-opengl','ps5-at9-converter','SharpProspero','ps5-payload-sdk','PS5SDK','ps5link-sdk','ps5-ultrapack')
 )
 $ErrorActionPreference = 'Stop'
 $ideRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))

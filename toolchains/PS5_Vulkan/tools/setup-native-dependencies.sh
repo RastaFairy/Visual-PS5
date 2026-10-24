@@ -100,6 +100,13 @@ PY
         echo "the pinned PS5 payload SDK source is unavailable locally. Expected Git commit $sdk_revision at $sdk_fork or snapshot $sdk_snapshot" >&2
         exit 2
     fi
+    # Use the IDE's offline-aware archive resolver with this exact source export.
+    [[ -f $sdk_fork/platform/tools/setup-sdk.sh ]] || {
+        rm -rf -- "$sdk_tree"
+        echo "the vendored payload SDK installer is missing at $sdk_fork/platform/tools/setup-sdk.sh" >&2
+        exit 2
+    }
+    install -m 0644 "$sdk_fork/platform/tools/setup-sdk.sh" "$sdk_tree/platform/tools/setup-sdk.sh"
     bash "$sdk_tree/platform/tools/setup-sdk.sh" "$sdk" "$sdk_revision" "$cache" >&2
     rm -rf -- "$sdk_tree"
     restore_sdk_permissions
