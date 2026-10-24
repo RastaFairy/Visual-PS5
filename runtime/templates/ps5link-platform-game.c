@@ -89,10 +89,9 @@ extern void *sceAgcDcbSetIndexSize(void *st, unsigned char indexSize, unsigned c
 extern void *sceAgcDcbDrawIndex(void *st, unsigned int indexCount, void *indexAddr, unsigned long long modifier);
 extern void *sceAgcDcbSetFlip(void *st, unsigned int videoOutHandle, int bufferIndex, unsigned int flipMode, long long flipArg);
 extern int sceAgcDriverSubmitDcb(void *submitDescription);
-extern unsigned int sceAgcDriverGetWaitRenderingPacketSizeInDwords(void);
-extern unsigned int sceAgcDriverWaitUntilSafeForRendering(unsigned int **writeCursorSlot,
-    unsigned int packetSizeInDwords, unsigned int queueType, unsigned int videoOutHandle,
-    int displayBufferIndex);
+extern unsigned int *sceAgcDcbWaitUntilSafeForRendering(void *st,
+    unsigned int videoOutHandle, int displayBufferIndex);
+extern int sceVideoOutGetFlipStatus(int handle, void *status);
 extern int sceAgcSuspendPoint(void);
 
 /* SharpProspero's CxRegister is {ushort Offset; uint Value;} sequential, which C#
@@ -978,11 +977,23 @@ static int open_pad(void){
     for(int i=0;i<20;i++){int h=scePadOpen(user,0,0,0);if(h>=0){(void)scePadSetVibrationMode(h,2);return h;}sceKernelUsleep(50000);}
     notify(PS5HS_GAME_TITLE ": conecta DualSense y reinicia");return -1;
 }
+static int wait_until_flip_visible(int video,long long target_frame){
+    for(int blank=0;blank<120;blank++){
+        unsigned long long status[16]={0};
+        int rc=sceVideoOutGetFlipStatus(video,status);
+        if(rc<0){notify_rc(PS5HS_GAME_TITLE ": FlipStatus fallo",rc);return rc;}
+        if((long long)status[3]>=target_frame)return 0;
+        rc=sceVideoOutWaitVblank(video);
+        if(rc<0){notify_rc(PS5HS_GAME_TITLE ": WaitVblank de FlipStatus fallo",rc);return rc;}
+    }
+    notify(PS5HS_GAME_TITLE ": timeout esperando flip de VideoOut");
+    return -1;
+}
 static int render_frame(int frame,DirectMem *fb,DirectMem *dcbMem,DirectMem *ctxMem,DirectMem *shMem,
     DirectMem *primMem,DirectMem *consMem,DcbState *dcb,void *vs,void *ps,CxRegister *cxRecords,
     unsigned int cxCount,int video,unsigned int W,unsigned int H,int slot,DirectMem *sceneV,
     DirectMem *sceneI,DirectMem *uiV,DirectMem *uiI,int cbOff,int vbOff){
-    (void)frame;
+    if(frame>=2&&wait_until_flip_visible(video,(long long)frame-1)<0)return -1;
     MeshBatch scene,ui;batch_init(&scene,sceneV,sceneI,SCENE_MAX_VERTS,SCENE_MAX_INDICES);build_scene(&scene);
     batch_init(&ui,uiV,uiI,UI_MAX_VERTS,UI_MAX_INDICES);build_ui(&ui);
     float ex=hero.x*0.72f,ey=hero.y+PS5HS_GAME_CAMERA_FOLLOW_HEIGHT,ez=hero.z-PS5HS_GAME_CAMERA_FOLLOW_DISTANCE;
@@ -997,22 +1008,8 @@ static int render_frame(int frame,DirectMem *fb,DirectMem *dcbMem,DirectMem *ctx
     unsigned int *pixels=(unsigned int*)fb->ptr;for(unsigned long i=0;i<fb->size/4;i++)pixels[i]=PS5HS_GAME_SKY_COLOR;
     framebuffer_writeback(fb->ptr,fb->size);
     dcb_reset(dcb,(unsigned int*)dcbMem->ptr,(unsigned int)(dcbMem->size/4));
-    /* The AGC driver appends this packet through the address of the write-cursor
-     * slot. It gates GPU writes until VideoOut releases this exact back buffer.
-     * Keep it first in the DCB, matching SharpProspero and the local native
-     * OpenGL renderer; SuspendPoint and WaitVblank do not replace this guard. */
-    unsigned int waitDwords=sceAgcDriverGetWaitRenderingPacketSizeInDwords();
-    unsigned int remainingDwords=(unsigned int)(dcb->top-dcb->up_cursor);
-    if(waitDwords==0u||remainingDwords<dcb->reserved_dwords||
-       waitDwords>remainingDwords-dcb->reserved_dwords){
-        notify(PS5HS_GAME_TITLE ": espacio insuficiente para sincronizar el búfer AGC");return -1;
-    }
-    unsigned int *expectedCursor=dcb->up_cursor+waitDwords;
-    unsigned int writtenDwords=sceAgcDriverWaitUntilSafeForRendering(&dcb->up_cursor,
-        waitDwords,0u,(unsigned int)video,slot);
-    if(writtenDwords!=waitDwords||dcb->up_cursor!=expectedCursor){
-        notify(PS5HS_GAME_TITLE ": el driver AGC no registró la espera segura del búfer");return -1;
-    }
+    /* AGC adds the VideoOut-safe wait packet to this command buffer. */
+    sceAgcDcbWaitUntilSafeForRendering(dcb,(unsigned int)video,slot);
     static const unsigned short offsets[16]={0x0318,0x031B,0x031C,0x031D,0x031E,0x031F,0x0321,0x0323,0x0324,0x0325,0x0390,0x0398,0x03A0,0x03A8,0x03B0,0x03B8};
     CxRegister rt[16];for(int i=0;i<16;i++){rt[i].offset=offsets[i];rt[i].pad=0;rt[i].value=0;
         for(unsigned int r=0;r<cxCount;r++)if(cxRecords[r].offset==offsets[i]){rt[i].value=cxRecords[r].value;break;}}
