@@ -1045,13 +1045,16 @@ static int render_frame(int frame,DirectMem *fb,DirectMem *dcbMem,DirectMem *ctx
     submit.words=dcb->bottom;submit.wordCount=(unsigned int)(dcb->up_cursor-dcb->bottom);submit.flag=0;
     rc=sceAgcDriverSubmitDcb(&submit);
     if(rc<0){notify_rc(PS5HS_GAME_TITLE ": Submit fallo",rc);return -1;}
+    if(frame==0)notify(PS5HS_GAME_TITLE ": primer DCB AGC enviado");
     rc=sceAgcSuspendPoint();
     if(rc<0){notify_rc(PS5HS_GAME_TITLE ": SuspendPoint fallo",rc);return -1;}
     rc=sceVideoOutWaitVblank(video);
     if(rc<0){notify_rc(PS5HS_GAME_TITLE ": WaitVblank fallo",rc);return -1;}
+    if(frame==0)notify(PS5HS_GAME_TITLE ": primer vblank completado");
     return 0;
 }
 int main(void){
+    notify(PS5HS_GAME_TITLE ": AGC directo y DualSense");
     static unsigned long long agcState;int rc=sceAgcInit(&agcState,8);
     if(rc<0){notify_rc(PS5HS_GAME_TITLE ": AGC fallo",rc);return 1;}
     int video=sceVideoOutOpen(SCE_USER_SYSTEM,VIDEOOUT_BUS_MAIN,0,0);
