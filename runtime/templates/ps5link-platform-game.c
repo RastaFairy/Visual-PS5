@@ -87,10 +87,8 @@ extern void *sceAgcDcbSetIndexCount(void *st, unsigned int indexCount);
 extern void *sceAgcDcbSetIndexSize(void *st, unsigned char indexSize, unsigned char cachePolicy);
 extern void *sceAgcDcbDrawIndex(void *st, unsigned int indexCount, void *indexAddr, unsigned long long modifier);
 extern void *sceAgcDcbSetFlip(void *st, unsigned int videoOutHandle, int bufferIndex, unsigned int flipMode, long long flipArg);
-extern unsigned int *sceAgcDcbWaitUntilSafeForRendering(void *st, unsigned int videoOutHandle, int displayBufferIndex);
 extern int sceAgcDriverSubmitDcb(void *submitDescription);
 extern int sceAgcSuspendPoint(void);
-extern int sceVideoOutGetFlipStatus(int handle, void *status);
 
 /* SharpProspero's CxRegister is {ushort Offset; uint Value;} sequential, which C#
  * lays out as offset(2) + pad(2) + value(4) = 8 bytes (uint needs 4-byte alignment).
@@ -168,20 +166,6 @@ static void framebuffer_writeback(const void *address, unsigned long bytes) {
     for (unsigned long offset = 0; offset < bytes; offset += 64)
         __asm__ volatile("clflushopt (%0)" : : "r"(line + offset) : "memory");
     __asm__ volatile("sfence" : : : "memory");
-}
-
-/* A vblank alone does not prove that the display has retired a particular flip.
- * Wait for the flip argument that replaced the one using this double-buffered
- * slot before touching its CPU-side scene data or scan-out memory again. */
-static int wait_until_flip_visible(int video, long long target_frame) {
-    for (;;) {
-        unsigned long long status[16] = {0}; /* SceVideoOutFlipStatus is 128 bytes; FlipArg is at +24. */
-        int rc = sceVideoOutGetFlipStatus(video, status);
-        if (rc < 0) return rc;
-        if ((long long)status[3] >= target_frame) return 0;
-        rc = sceVideoOutWaitVblank(video);
-        if (rc < 0) return rc;
-    }
 }
 
 static void notify(const char *msg) {
@@ -993,8 +977,7 @@ static int render_frame(int frame,DirectMem *fb,DirectMem *dcbMem,DirectMem *ctx
     DirectMem *primMem,DirectMem *consMem,DcbState *dcb,void *vs,void *ps,CxRegister *cxRecords,
     unsigned int cxCount,int video,unsigned int W,unsigned int H,int slot,DirectMem *sceneV,
     DirectMem *sceneI,DirectMem *uiV,DirectMem *uiI,int cbOff,int vbOff){
-    if(frame>=2){int wait_rc=wait_until_flip_visible(video,(long long)frame-1);
-        if(wait_rc<0){notify_rc(PS5HS_GAME_TITLE ": FlipStatus fallo",wait_rc);return -1;}}
+    (void)frame;
     MeshBatch scene,ui;batch_init(&scene,sceneV,sceneI,SCENE_MAX_VERTS,SCENE_MAX_INDICES);build_scene(&scene);
     batch_init(&ui,uiV,uiI,UI_MAX_VERTS,UI_MAX_INDICES);build_ui(&ui);
     float ex=hero.x*0.72f,ey=hero.y+PS5HS_GAME_CAMERA_FOLLOW_HEIGHT,ez=hero.z-PS5HS_GAME_CAMERA_FOLLOW_DISTANCE;
@@ -1009,7 +992,6 @@ static int render_frame(int frame,DirectMem *fb,DirectMem *dcbMem,DirectMem *ctx
     unsigned int *pixels=(unsigned int*)fb->ptr;for(unsigned long i=0;i<fb->size/4;i++)pixels[i]=PS5HS_GAME_SKY_COLOR;
     framebuffer_writeback(fb->ptr,fb->size);
     dcb_reset(dcb,(unsigned int*)dcbMem->ptr,(unsigned int)(dcbMem->size/4));
-    sceAgcDcbWaitUntilSafeForRendering(dcb,(unsigned int)video,slot);
     static const unsigned short offsets[16]={0x0318,0x031B,0x031C,0x031D,0x031E,0x031F,0x0321,0x0323,0x0324,0x0325,0x0390,0x0398,0x03A0,0x03A8,0x03B0,0x03B8};
     CxRegister rt[16];for(int i=0;i<16;i++){rt[i].offset=offsets[i];rt[i].pad=0;rt[i].value=0;
         for(unsigned int r=0;r<cxCount;r++)if(cxRecords[r].offset==offsets[i]){rt[i].value=cxRecords[r].value;break;}}
