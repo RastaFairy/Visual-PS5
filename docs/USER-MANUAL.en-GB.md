@@ -20,7 +20,7 @@ The service binds only to 127.0.0.1. Do not expose it to a network or change the
 
 ## 3. Interface and visual projects
 
-The 1920×1080 canvas is a virtual work area, not an exact screenshot of the PS5 system interface. Use the components panel to add controls, the inspector to edit geometry and properties, the hierarchy to organise elements, and the screens manager to structure the UI. The flow editor connects events to actions such as notify, setText, toggleVisibility, setValue, changeColor and navigate when the selected component, event and backend support that combination.
+The canvas starts at 1920×1080 and can be resized. It is a virtual work area, not an exact screenshot of the PS5 system interface. Use the components panel to add controls, the inspector to edit geometry and properties, the hierarchy to organise elements, and the screens manager to structure the UI. The flow editor connects events to actions such as notify, setText, toggleVisibility, setValue, changeColor and navigate when the selected component, event and backend support that combination.
 
 Create a project, choose its backend before preparing dependencies, add components and assets, keep IDs unique, and configure screens. Run diagnostics and fix references to missing elements. Save with Ctrl+S. Exporting a model or ZIP is not the same as compiling a native title.
 
@@ -40,7 +40,7 @@ In **Projects**, choose an initialized title and select **Presentación**. Only 
 
 - **Icon:** converted to `sce_sys/icon0.png`, 512×512 PNG.
 - **Selection and launch backgrounds:** the selection image produces `pic0.dds` and the launch image `pic1.dds`, each 3840×2160 BC7/DX10. They may differ; if neither exists, select both. DirectXTex `texconv` is required (`winget install Microsoft.DirectXTex.Texconv`); renaming a PNG to `.dds` is not valid conversion.
-- **Selection music:** produces `sce_sys/snd0.at9`, looped 48 kHz ATRAC9 no larger than 2 MiB. An already compatible AT9 can be supplied directly. Converting WAV/MP3/OGG/M4A requires FFmpeg and a compatible, legally obtained ATRAC9 encoder (`ps4_at9tool.exe`). The IDE does not download or redistribute the encoder.
+- **Selection music:** produces `sce_sys/snd0.at9`, looped 48 kHz ATRAC9 no larger than 2 MiB. Supply a compatible AT9 directly or import WAV/MP3/FLAC/AIFF/AIFC; the included open-source encoder converts offline without FFmpeg or `ps4_at9tool.exe`. Review its GPL-3.0-or-later license and notices in `toolchains/ps5-at9-converter/`.
 
 The upstream `tools/prepare-assets.ps1` script validates dimensions and formats. If conversion fails, inspect the output and install the missing tools; incomplete files are not applied. These assets affect the selected app only, not the system-wide home background or console startup sound. The separate [ps5-theme project](https://github.com/Blaze414/ps5-theme) is a plugin/payload for jailbroken PS5 systems and documents firmware support up to 13.60; it is not part of this asset editor.
 

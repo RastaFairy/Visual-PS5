@@ -1,0 +1,20 @@
+{
+  "schema": "ps5hs-toolchain-source",
+  "repository": "elripalda/psgfx",
+  "branch": "main",
+  "commit": "5ee7aa9e7d91c9f518322847d13a6bda5ba97837",
+  "sourceCommit": "5ee7aa9e7d91c9f518322847d13a6bda5ba97837",
+  "installedAt": "2026-10-24T00:00:00Z",
+  "method": "vendored-open-source-encoder",
+  "vendorRepository": "RastaFairy/Visual-PS5",
+  "vendoredSnapshot": true,
+  "vendoredAt": "2026-10-24T00:00:00Z",
+  "sourceOnly": false,
+  "sourceRevisionRecorded": true,
+  "license": "GPL-3.0-or-later",
+  "sourceRepository": "https://github.com/elripalda/psgfx",
+  "encoderProject": "https://github.com/blackbearreloaded/ps5-at9-converter",
+  "encoderRevision": "65be0a1",
+  "binary": "bin/ps5-at9-converter",
+  "binarySha256": "c44f889c60edde86a6885250f927fdb70a1ab1c480ec3e80e432cd8fcba1bb31"
+}

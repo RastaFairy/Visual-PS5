@@ -6,6 +6,8 @@ if ($null -eq (Get-Variable -Name ActiveBuildLogPath -Scope Script -ErrorAction 
 $script:PS5HSNativeModificationKeys = @(
   'allowExecuteUpstreamGenerationTools',
   'allowExecuteUpstreamBuildTools',
+  'allowPayloadProjectIntegration',
+  'allowPs5LinkProjectIntegration',
   'allowExecuteUpstreamAssetTools',
   'allowSharpTemplateIntegration',
   'allowOpenGlTemplateIntegration',
@@ -13,6 +15,7 @@ $script:PS5HSNativeModificationKeys = @(
   'allowOpenGlEuropeanAtlas',
   'allowWindowsBuildEntrypointPatch',
   'allowVulkanTemplateIntegration',
+  'allowVulkanComputeShaderBuild',
   'allowVulkanBuildHelperRestore',
   'normalizeBuildFiles',
   'allowCustomUnicodeFont'
@@ -92,25 +95,157 @@ function AssertPS5HSNativePathNoReparsePoints {
   return $fullPath
 }
 
-function GetPS5HSNativeOpenGlCurrentLinkFingerprint {
-  param([Parameter(Mandatory=$true)]$LinkItem)
-  $linkTarget = ''
-  if ($LinkItem.PSObject.Properties['Target']) {
-    $linkTarget = (@($LinkItem.Target) | ForEach-Object { [string]$_ }) -join '|'
+function TestPS5HSNativeProjectDestinationAvailable {
+  param([Parameter(Mandatory=$true)][string]$Path)
+  try { $fullPath = [IO.Path]::GetFullPath($Path) } catch { return $false }
+  $parent = [IO.Path]::GetDirectoryName($fullPath)
+  $leaf = [IO.Path]::GetFileName($fullPath)
+  if ([string]::IsNullOrWhiteSpace($parent) -or [string]::IsNullOrWhiteSpace($leaf)) { return $false }
+  if (!(Test-Path -LiteralPath $parent -PathType Container)) { return $true }
+  try {
+    $null = AssertPS5HSNativePathNoReparsePoints -Path $parent
+    $entry = Get-ChildItem -LiteralPath $parent -Force -ErrorAction Stop |
+      Where-Object { $_.Name -ieq $leaf } | Select-Object -First 1
+  } catch { return $false }
+  if ($null -eq $entry) { return $true }
+  if (($entry.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0 -or !$entry.PSIsContainer) { return $false }
+  try {
+    $child = Get-ChildItem -LiteralPath $entry.FullName -Force -ErrorAction Stop | Select-Object -First 1
+  } catch { return $false }
+  return ($null -eq $child)
+}
+
+function GetPS5HSNativeReparsePointData {
+  param([Parameter(Mandatory=$true)][string]$Path)
+  if (!('PS5HS.NativeReparsePointReader' -as [type])) {
+    Add-Type -TypeDefinition @'
+using System;
+using System.ComponentModel;
+using System.IO;
+using System.Runtime.InteropServices;
+using Microsoft.Win32.SafeHandles;
+
+namespace PS5HS {
+  public static class NativeReparsePointReader {
+    private const uint FILE_READ_ATTRIBUTES = 0x00000080;
+    private const uint FILE_SHARE_READ = 0x00000001;
+    private const uint FILE_SHARE_WRITE = 0x00000002;
+    private const uint FILE_SHARE_DELETE = 0x00000004;
+    private const uint OPEN_EXISTING = 3;
+    private const uint FILE_FLAG_OPEN_REPARSE_POINT = 0x00200000;
+    private const uint FILE_FLAG_BACKUP_SEMANTICS = 0x02000000;
+    private const uint FSCTL_GET_REPARSE_POINT = 0x000900A8;
+
+    [DllImport("kernel32.dll", EntryPoint="CreateFileW", CharSet=CharSet.Unicode, SetLastError=true)]
+    private static extern SafeFileHandle CreateFile(string path, uint access, uint share, IntPtr security,
+      uint creation, uint flags, IntPtr template);
+
+    [DllImport("kernel32.dll", SetLastError=true)]
+    private static extern bool DeviceIoControl(SafeFileHandle handle, uint controlCode, IntPtr input,
+      uint inputSize, [Out] byte[] output, uint outputSize, out uint bytesReturned, IntPtr overlapped);
+
+    public static byte[] Read(string path) {
+      using (SafeFileHandle handle = CreateFile(path, FILE_READ_ATTRIBUTES,
+          FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, IntPtr.Zero, OPEN_EXISTING,
+          FILE_FLAG_OPEN_REPARSE_POINT | FILE_FLAG_BACKUP_SEMANTICS, IntPtr.Zero)) {
+        if (handle.IsInvalid) throw new Win32Exception(Marshal.GetLastWin32Error(), "CreateFile failed for reparse point metadata.");
+        byte[] buffer = new byte[16 * 1024];
+        uint returned;
+        if (!DeviceIoControl(handle, FSCTL_GET_REPARSE_POINT, IntPtr.Zero, 0, buffer,
+            (uint)buffer.Length, out returned, IntPtr.Zero)) {
+          throw new Win32Exception(Marshal.GetLastWin32Error(), "FSCTL_GET_REPARSE_POINT failed.");
+        }
+        if (returned < 8 || returned > buffer.Length) throw new InvalidDataException("Invalid reparse point metadata length.");
+        byte[] result = new byte[(int)returned];
+        Buffer.BlockCopy(buffer, 0, result, 0, (int)returned);
+        return result;
+      }
+    }
   }
-  if ([string]::IsNullOrWhiteSpace($linkTarget) -and $LinkItem.PSObject.Properties['LinkTarget']) {
-    $linkTarget = [string]$LinkItem.LinkTarget
+}
+'@
   }
-  if ([string]::IsNullOrWhiteSpace($linkTarget)) {
-    throw 'No se pudo registrar de forma segura el destino del enlace generado de OpenGL.'
+  return [PS5HS.NativeReparsePointReader]::Read($Path)
+}
+
+function GetPS5HSNativeReparsePointFingerprint {
+  param([Parameter(Mandatory=$true)][byte[]]$ReparseData)
+  if ($ReparseData.Length -lt 8) { throw 'Los metadatos del enlace están incompletos.' }
+  $tag = [BitConverter]::ToUInt32($ReparseData,0)
+  $dataLength = [BitConverter]::ToUInt16($ReparseData,4)
+  if ($ReparseData.Length -ne (8 + [int]$dataLength)) { throw 'La longitud de los metadatos del enlace no es válida.' }
+  $symlinkTag = [Convert]::ToUInt32('A000000C',16)
+  $lxSymlinkTag = [Convert]::ToUInt32('A000001D',16)
+  if ($tag -ne $symlinkTag -and $tag -ne $lxSymlinkTag) {
+    throw ('Tipo de punto de reanálisis no permitido para un enlace simbólico: 0x' + $tag.ToString('X8'))
   }
-  $fingerprint = [Text.Encoding]::UTF8.GetBytes("PS5HS-OPENGL-CURRENT-LINK`n" + $linkTarget)
   $sha = [Security.Cryptography.SHA256]::Create()
   try {
-    return ([BitConverter]::ToString($sha.ComputeHash($fingerprint))).Replace('-','').ToLowerInvariant()
+    return ([BitConverter]::ToString($sha.ComputeHash($ReparseData))).Replace('-','').ToLowerInvariant()
   } finally {
     $sha.Dispose()
   }
+}
+
+function GetPS5HSNativeGeneratedDependencyLinkFingerprint {
+  param(
+    [Parameter(Mandatory=$true)]$LinkItem,
+    [byte[]]$ReparseData
+  )
+  if (($LinkItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -eq 0) {
+    throw 'El enlace generado esperado no es un punto de reanálisis.'
+  }
+  if ($null -eq $ReparseData) {
+    if ([string]::IsNullOrWhiteSpace([string]$LinkItem.FullName)) {
+      throw 'No se pudo identificar la ruta del enlace generado.'
+    }
+    $ReparseData = GetPS5HSNativeReparsePointData -Path $LinkItem.FullName
+  }
+  return GetPS5HSNativeReparsePointFingerprint -ReparseData $ReparseData
+}
+
+function GetPS5HSPayloadSdkIncludeLinkFingerprint {
+  param(
+    [Parameter(Mandatory=$true)]$LinkItem,
+    [byte[]]$ReparseData
+  )
+  if (($LinkItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -eq 0) {
+    throw 'target/include_common no es el enlace simbólico esperado del SDK.'
+  }
+  if ($null -eq $ReparseData) {
+    $ReparseData = GetPS5HSNativeReparsePointData -Path $LinkItem.FullName
+  }
+  $fingerprint = GetPS5HSNativeReparsePointFingerprint -ReparseData $ReparseData
+  $lxSymlinkTag = [Convert]::ToUInt32('A000001D',16)
+  if ([BitConverter]::ToUInt32($ReparseData,0) -ne $lxSymlinkTag -or $ReparseData.Length -lt 12) {
+    throw 'target/include_common no usa un enlace simbólico WSL válido.'
+  }
+  $isRelative = [BitConverter]::ToUInt32($ReparseData,8) -eq 2
+  $target = [Text.Encoding]::UTF8.GetString($ReparseData,12,$ReparseData.Length - 12)
+  if (!$isRelative -or $target -cne 'user/homebrew/include') {
+    throw 'target/include_common no apunta al include interno esperado del SDK.'
+  }
+  return $fingerprint
+}
+
+function GetPS5HSNativeTreeReparsePointHash {
+  param(
+    [Parameter(Mandatory=$true)][string]$RelativePath,
+    [Parameter(Mandatory=$true)]$LinkItem,
+    [Parameter(Mandatory=$true)][ValidateSet('file','directory')][string]$EntryKind,
+    [byte[]]$ReparseData
+  )
+  if ($RelativePath -ieq '.deps/ps5-opengl/current') {
+    return GetPS5HSNativeGeneratedDependencyLinkFingerprint -LinkItem $LinkItem -ReparseData $ReparseData
+  }
+  if ($RelativePath -ieq '.deps/native/ps5-payload-sdk/target/include_common') {
+    # WSL creates this SDK include alias. Hash only its reparse metadata; never traverse its target.
+    return GetPS5HSPayloadSdkIncludeLinkFingerprint -LinkItem $LinkItem -ReparseData $ReparseData
+  }
+  if ($EntryKind -eq 'directory') {
+    throw ('Se ha encontrado una carpeta enlazada dentro del árbol nativo; se cancela para evitar escrituras fuera del proyecto: ' + $LinkItem.FullName)
+  }
+  throw ('Se ha encontrado un archivo enlazado dentro del árbol nativo; se cancela la operación: ' + $LinkItem.FullName)
 }
 
 function GetPS5HSNativeFileHashes {
@@ -137,7 +272,11 @@ function GetPS5HSNativeFileHashes {
         $currentItem = Get-Item -LiteralPath $current -Force
         if (($currentItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
           if ($relative -ieq '.deps/ps5-opengl/current' -and $current -ieq $path) {
-            $linkFingerprint = GetPS5HSNativeOpenGlCurrentLinkFingerprint -LinkItem $currentItem
+            $linkFingerprint = GetPS5HSNativeGeneratedDependencyLinkFingerprint -LinkItem $currentItem
+            break
+          }
+          if ($relative -ieq '.deps/native/ps5-payload-sdk/target/include_common' -and $current -ieq $path) {
+            $linkFingerprint = GetPS5HSPayloadSdkIncludeLinkFingerprint -LinkItem $currentItem
             break
           }
           throw "No se modificará ni auditará una ruta a través de un enlace: $relative"
@@ -273,25 +412,23 @@ function GetPS5HSNativeTreeHashes {
       $relativeDirectory = $subdirectory.Substring($root.TrimEnd([IO.Path]::DirectorySeparatorChar,[IO.Path]::AltDirectorySeparatorChar).Length).TrimStart([IO.Path]::DirectorySeparatorChar,[IO.Path]::AltDirectorySeparatorChar)
       $relativeDirectory = $relativeDirectory.Replace([IO.Path]::DirectorySeparatorChar,'/').Replace([IO.Path]::AltDirectorySeparatorChar,'/')
       if (($directoryItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
-        # Upstream OpenGL creates this one SDK alias while preparing its link group.
-        # Hash link metadata only: never traverse or read the target through the alias.
-        if ($relativeDirectory -ieq '.deps/ps5-opengl/current') {
-          $hashes[$relativeDirectory] = GetPS5HSNativeOpenGlCurrentLinkFingerprint -LinkItem $directoryItem
-          continue
-        }
-        throw ("Se ha encontrado una carpeta enlazada dentro del árbol nativo; se cancela para evitar escrituras fuera del proyecto: " + $subdirectory)
+        # The generated SDK alias may be returned as a directory or file entry
+        # depending on the reparse tag. Hash its metadata, never its target.
+        $hashes[$relativeDirectory] = GetPS5HSNativeTreeReparsePointHash -RelativePath $relativeDirectory -LinkItem $directoryItem -EntryKind 'directory'
+        continue
       }
       if ($directoryName -in $excludedDirectoryNames -or $directoryName -match '^out-[A-Za-z0-9-]+$') { continue }
       $pending.Push($subdirectory)
     }
     foreach ($filePath in [IO.Directory]::EnumerateFiles($directory)) {
       $item = Get-Item -LiteralPath $filePath -Force
-      if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
-        throw ("Se ha encontrado un archivo enlazado dentro del árbol nativo; se cancela la operación: " + $filePath)
-      }
-      if ($item.Name -ieq '.ps5hs-modifications.json') { continue }
       $relative = $item.FullName.Substring($root.TrimEnd([IO.Path]::DirectorySeparatorChar,[IO.Path]::AltDirectorySeparatorChar).Length).TrimStart([IO.Path]::DirectorySeparatorChar,[IO.Path]::AltDirectorySeparatorChar)
       $relative = $relative.Replace([IO.Path]::DirectorySeparatorChar,'/').Replace([IO.Path]::AltDirectorySeparatorChar,'/')
+      if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+        $hashes[$relative] = GetPS5HSNativeTreeReparsePointHash -RelativePath $relative -LinkItem $item -EntryKind 'file'
+        continue
+      }
+      if ($item.Name -ieq '.ps5hs-modifications.json') { continue }
       $hashes[$relative] = (Get-FileHash -LiteralPath $item.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
     }
   }

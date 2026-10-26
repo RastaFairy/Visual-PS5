@@ -3,6 +3,23 @@
   "version": 1,
   "updated": "2026-10-22",
   "notes": "Resolución completamente local: el IDE incluye y valida los artefactos bajo toolchains/. El SDK OpenGL 1.0.2 se reconstruyó desde las fuentes fijadas de toolchains/ps5-opengl porque el release upstream y su endpoint de API devuelven HTTP 404. No hay fallback de red durante la compilación. El paquete autocontenido debe incorporar también el SDK payload, zlib, PacBrew y GoogleTest con los hashes fijados; el proceso de build no descargará estos archivos.",
+  "sourcePins": {
+    "ps5PayloadSdk": {
+      "repository": "mihawk-99/PS5_PayloadSDK",
+      "revisions": {
+        "vulkan": {
+          "commit": "b83202be73e930050e00de0f1b4d9ec46c0391bf",
+          "localPath": "toolchains/PS5_PayloadSDK-pinned-b83202be",
+          "usedBy": "toolchains/PS5_Vulkan/tools/setup-native-dependencies.sh"
+        },
+        "dusklight": {
+          "commit": "611893fc25ef3e138f5bc2c90d829d8b58174cd2",
+          "localPath": "toolchains/PS5_PayloadSDK-pinned-611893fc",
+          "usedBy": "toolchains/PS5_VulkanTemplate/ps5/tools/setup-sdk.sh; toolchains/PS5_Dusklight/ps5/tools/setup-sdk.sh; toolchains/PS5_SwitchWaker/ps5/tools/setup-sdk.sh; toolchains/PS5_Sunshine/ps5/tools/setup-sdk.sh; toolchains/PS5_Ghostship/ps5/tools/setup-sdk.sh; toolchains/PS5_Quake3e/ps5/tools/setup-sdk.sh"
+        }
+      }
+    }
+  },
   "artifacts": {
     "ps5-opengl-sdk": {
       "usedBy": "tools/fetch-opengl-sdk.sh de los proyectos hui-gl generados",

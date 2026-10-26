@@ -1,10 +1,10 @@
-# Manual de usuario — PS5 Homebrew Studio 1.1.5
+# Manual de usuario — PS5 Homebrew Studio 1.1.20
 
-Última actualización: 16 de octubre de 2026. La interfaz de la aplicación continúa en español; estos manuales localizados no significan que la UI ya se haya traducido.
+Última actualización: 22 de octubre de 2026. La interfaz de la aplicación continúa en español; estos manuales localizados no significan que la UI ya se haya traducido.
 
 ## 1. Requisitos
 
-Para abrir el IDE: Windows 10/11, permisos de lectura y escritura en la carpeta de la aplicación y PowerShell 7 recomendado. El lanzador también admite Windows PowerShell 5.1.
+Para abrir el IDE: Windows 10/11, permisos de lectura y escritura en la carpeta de la aplicación y PowerShell 7 recomendado. El lanzador también admite Windows PowerShell 5.1. El bundle offline está dirigido a Windows 11 x64 con WSL2 y virtualización disponibles; consulta [Instalación offline](OFFLINE_INSTALLATION.es-ES.md) para preparar un equipo limpio.
 
 Para compilar: Git, WSL/Linux y las dependencias upstream del backend elegido. SharpProspero/C# requiere la versión de .NET indicada por su revisión. Los títulos C++ necesitan toolchains compatibles con su plantilla. UltraPack requiere Python 3.10 o posterior y un checkout de [PS5 UltraPack](https://github.com/knutwurst/ps5-ultrapack).
 
@@ -20,7 +20,7 @@ El servidor escucha únicamente en 127.0.0.1. No lo expongas a la red ni cambies
 
 ## 3. Interfaz y proyectos visuales
 
-El lienzo representa un área virtual de 1920×1080; no es una captura exacta de la interfaz del sistema PS5. Usa el panel de componentes para añadir controles, el inspector para editar geometría y propiedades, la jerarquía para ordenarlos y el gestor de pantallas para dividir la UI. El editor de flujos conecta eventos con acciones como notify, setText, toggleVisibility, setValue, changeColor y navigate cuando el componente, el evento y el backend admiten esa combinación.
+El lienzo lógico comienza en 1920×1080 y se puede redimensionar. En la barra del lienzo, el primer selector cambia el tamaño de trabajo y el selector «Render» permite elegir una referencia independiente de 720p, 900p, 1080p, 1440p, 4K o una resolución personalizada. El inspector muestra las coordenadas lógicas guardadas y su equivalente aproximado en píxeles de salida; los perfiles sirven para ajustar la interfaz visualmente, no cambian el lienzo, el código generado ni el modo VideoOut que usará el juego. El área de trabajo no es una captura exacta de la interfaz del sistema PS5. Usa el panel de componentes para añadir controles, el inspector para editar geometría y propiedades, la jerarquía para ordenarlos y el gestor de pantallas para dividir la UI. El editor de flujos conecta eventos con acciones como notify, setText, toggleVisibility, setValue, changeColor y navigate cuando el componente, el evento y el backend admiten esa combinación.
 
 Crea el proyecto, elige el backend antes de preparar dependencias, añade componentes y recursos, usa identificadores únicos y configura las pantallas. Ejecuta los diagnósticos y corrige los destinos que apunten a elementos inexistentes. Guarda con Ctrl+S. Exportar un modelo o ZIP no equivale a compilar un título nativo.
 
@@ -46,7 +46,7 @@ En **Proyectos** busca el título ya inicializado y pulsa **Presentación**. Sel
 
 - **Fondos de selección y lanzamiento:** la imagen de selección produce `pic0.dds` y la de lanzamiento produce `pic1.dds`, cada una a 3840×2160, BC7/DX10. Pueden ser distintas; si todavía no existe el par, selecciona ambas durante la primera operación. Requiere `texconv` de DirectXTex (`winget install Microsoft.DirectXTex.Texconv`). No basta con renombrar un PNG a `.dds`.
 
-- **Música al seleccionar:** produce `sce_sys/snd0.at9`, ATRAC9 en bucle, 48 kHz y máximo 2 MiB. Se puede aportar un AT9 ya compatible; convertir WAV/MP3/OGG/M4A necesita FFmpeg y un codificador ATRAC9 compatible adquirido legalmente (`ps4_at9tool.exe`). El IDE no descarga ni redistribuye ese codificador.
+- **Música al seleccionar:** produce `sce_sys/snd0.at9`, ATRAC9 en bucle, 48 kHz y máximo 2 MiB. Se puede aportar un AT9 ya compatible o importar WAV/MP3/FLAC/AIFF/AIFC; el codificador de código abierto incluido convierte offline sin FFmpeg ni `ps4_at9tool.exe`. Consulta su licencia GPL-3.0-or-later y los avisos en `toolchains/ps5-at9-converter/`.
 
 
 

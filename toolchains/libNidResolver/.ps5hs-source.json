@@ -7,5 +7,8 @@
   "vendoredSnapshot": true,
   "vendoredAt": "2026-10-20T15:43:39Z",
   "originalMethod": "source ZIP",
-  "sourceRevisionRecorded": false
+  "sourceRevisionRecorded": true,
+  "sourceCommit": "3f7ce7086c38ef35eb7869aafb247ed544ae3ee1",
+  "sourceRevisionVerifiedAt": "2026-10-23",
+  "license": "GPL-2.0"
 }

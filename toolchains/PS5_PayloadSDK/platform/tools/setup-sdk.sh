@@ -61,8 +61,18 @@ if [[ -f $archive ]] &&
     rm -f -- "$archive"
 fi
 if [[ ! -f $archive ]]; then
-    wget -q "$release_url" -O "$archive.download"
-    mv -- "$archive.download" "$archive"
+    if [[ ${PS5HS_LOCAL_TOOLCHAINS_ONLY:-0} == 1 ]]; then
+        toolchains_root=${PS5HS_TOOLCHAINS_ROOT:-}
+        local_archive="$toolchains_root/artifacts/ps5-payload-sdk.zip"
+        [[ -n $toolchains_root && -f $local_archive ]] || {
+            echo "local-only: missing toolchains/artifacts/ps5-payload-sdk.zip (pinned SHA-256 required)" >&2
+            exit 2
+        }
+        cp -- "$local_archive" "$archive"
+    else
+        wget -q "$release_url" -O "$archive.download"
+        mv -- "$archive.download" "$archive"
+    fi
 fi
 printf '%s  %s\n' "$release_hash" "$archive" | sha256sum --check --strict >/dev/null
 

@@ -1011,16 +1011,9 @@ int dynwriter_write(ElfObject **objects, size_t object_count,
     uint64_t version_off = align_up(comment_off + comment_blob.len, 8);
     uint64_t tail_note_off = align_up(version_off + version_blob.len, 8);
 
-    /* Minimal well-formed but EMPTY .eh_frame_hdr: version=1, then three
-     * DW_EH_PE_omit(0xff) bytes for eh_frame_ptr_enc/fde_count_enc/
-     * table_enc - each "omit" byte means the corresponding field (the
-     * pointer back to .eh_frame, the FDE count, and the binary-search
-     * table) is simply absent. A valid, standard way to say "no unwind
-     * info", short of actually merging/relocating real CFI data. */
-    static const uint8_t eh_frame_hdr[4] = { 1, 0xff, 0xff, 0xff };
-    uint64_t eh_frame_hdr_off = align_up(tail_note_off + sizeof(tail_note), 4);
-
-    uint64_t shstrtab_off = align_up(eh_frame_hdr_off + sizeof(eh_frame_hdr), 8);
+    /* .eh_frame is intentionally discarded above. Do not advertise a
+     * PT_GNU_EH_FRAME for a header that has no mapped .eh_frame payload. */
+    uint64_t shstrtab_off = align_up(tail_note_off + sizeof(tail_note), 8);
     uint64_t shoff = align_up(shstrtab_off + shstrtab.bytes.len, 8);
 
     enum { SEC_NULL, SEC_TEXT, SEC_RODATA, SEC_DYNSYM, SEC_DYNSTR, SEC_HASH, SEC_DYNAMIC, SEC_DATA, SEC_PROCPARAM, SEC_SHSTRTAB, SEC_COUNT };
@@ -1098,7 +1091,7 @@ int dynwriter_write(ElfObject **objects, size_t object_count,
     ph[5] = (Elf64_Phdr){ PT_SCE_PROC_PARAM, PF_R, seg3_off + proc_param_offset_in_data, procparam_vaddr, procparam_vaddr, SCE_PROC_PARAM_SIZE, SCE_PROC_PARAM_SIZE, 8 };
     ph[6] = (Elf64_Phdr){ PT_DYNAMIC, PF_R | PF_W, off_dynamic, TOVADDR(off_dynamic), TOVADDR(off_dynamic), dynamic_size, dynamic_size, 8 };
     ph[7] = (Elf64_Phdr){ PT_TLS, PF_R, 0, got_vaddr, got_vaddr, 0, 0, 1 };
-    ph[8] = (Elf64_Phdr){ PT_GNU_EH_FRAME, PF_R, eh_frame_hdr_off, 0, 0, sizeof(eh_frame_hdr), sizeof(eh_frame_hdr), 4 };
+    ph[8] = (Elf64_Phdr){ 0 };
     ph[9] = (Elf64_Phdr){ PT_LOAD, 0, seg2_off, dynlink_vaddr, dynlink_vaddr, seg2_filesz, seg2_filesz, SCE_SEG_ALIGN };
     /* File-tail records (DynamicWriter.cs:1698-1702) - see the comment
      * above comment_blob's construction for why these turned out to be
@@ -1134,7 +1127,6 @@ int dynwriter_write(ElfObject **objects, size_t object_count,
     fseek(f, (long)version_off, SEEK_SET); fwrite(version_blob.data, version_blob.len, 1, f);
     fseek(f, (long)off_note_gnu, SEEK_SET); fwrite(note_gnu, sizeof(note_gnu), 1, f);
     fseek(f, (long)tail_note_off, SEEK_SET); fwrite(tail_note, sizeof(tail_note), 1, f);
-    fseek(f, (long)eh_frame_hdr_off, SEEK_SET); fwrite(eh_frame_hdr, sizeof(eh_frame_hdr), 1, f);
     fseek(f, (long)shstrtab_off, SEEK_SET); fwrite(shstrtab.bytes.data, shstrtab.bytes.len, 1, f);
     fseek(f, (long)shoff, SEEK_SET); fwrite(sh, sizeof(sh), 1, f);
     fseek(f, (long)total_size - 1, SEEK_SET); fputc(0, f);

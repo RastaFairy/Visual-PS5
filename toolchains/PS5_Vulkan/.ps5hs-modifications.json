@@ -1,0 +1,47 @@
+{
+  "schema": "ps5hs-native-modifications",
+  "version": 1,
+  "project": "C:\\Visual-PS5\\toolchains\\PS5_Vulkan",
+  "records": [
+    {
+      "at": "2026-10-22T19:34:03.8573584+02:00",
+      "backend": "vulkan-template",
+      "operation": "restore-missing-vulkan-build-helpers",
+      "permission": "allowVulkanBuildHelperRestore",
+      "consented": true,
+      "upstreamRepository": "blackbearreloaded/ps5-native-app-boilerplate",
+      "upstreamCommit": "",
+      "changedFiles": [
+        {
+          "path": "tools/ninja-build.sh",
+          "originalSha256": null,
+          "resultSha256": "fa85689b3cb839d357412ff9bf9166aee5e3c63fec65e9e14d34561d9ea12296"
+        },
+        {
+          "path": "tools/build-host-tools.sh",
+          "originalSha256": null,
+          "resultSha256": "c3ea9578eb9e86655ecf81d4b4c2847a2a58630aa6c935289156271295cd3912"
+        },
+        {
+          "path": ".ps5hs-compatibility.json",
+          "originalSha256": null,
+          "resultSha256": "bfe6b6d6956c99b2fdd4ed6ab2120fef403a4957dd6534f913e3ad102077d889"
+        }
+      ],
+      "policy": {
+        "allowExecuteUpstreamGenerationTools": true,
+        "allowExecuteUpstreamBuildTools": true,
+        "allowExecuteUpstreamAssetTools": true,
+        "allowCustomUnicodeFont": true,
+        "allowSharpTemplateIntegration": false,
+        "normalizeBuildFiles": true,
+        "allowOpenGlEuropeanAtlas": false,
+        "allowVulkanTemplateIntegration": true,
+        "allowVulkanBuildHelperRestore": true,
+        "allowWindowsBuildEntrypointPatch": false,
+        "allowOpenGlRuntimeProfile": false,
+        "allowOpenGlTemplateIntegration": false
+      }
+    }
+  ]
+}

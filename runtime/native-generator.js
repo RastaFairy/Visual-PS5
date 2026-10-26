@@ -28,6 +28,12 @@
     if (!Array.isArray(p.flows)) throw new Error('El modelo visual debe declarar una lista de flujos, aunque esté vacía.');
     if (!Array.isArray(p.assets)) throw new Error('El modelo visual debe declarar una lista de recursos, aunque esté vacía.');
     if (!Array.isArray(p.screens) || p.screens.length === 0) throw new Error('El modelo visual debe definir al menos una pantalla real.');
+    if (!p.resolution || !Number.isSafeInteger(p.resolution.width) || p.resolution.width < 640 || p.resolution.width > 7680 || !Number.isSafeInteger(p.resolution.height) || p.resolution.height < 360 || p.resolution.height > 4320) throw new Error('El lienzo debe declarar dimensiones enteras entre 640×360 y 7680×4320 antes de generar C++20.');
+    const canvasWidth = p.resolution.width;
+    const canvasHeight = p.resolution.height;
+    const outputScale = Math.min(1920 / canvasWidth, 1080 / canvasHeight);
+    const outputOffsetX = (1920 - canvasWidth * outputScale) / 2;
+    const outputOffsetY = (1080 - canvasHeight * outputScale) / 2;
     const isVulkan = targetBackend === 'vulkan-ui';
     const safeId = (value, pattern, label) => {
       if (typeof value !== 'string' || !pattern.test(value)) throw new Error(`${label} necesita un identificador técnico explícito y seguro.`);
@@ -70,7 +76,7 @@
       if (typeof component.label !== 'string' || (!component.label.trim() && component.type !== 'separator')) throw new Error(`El componente ${component.id} necesita una etiqueta explícita${component.type === 'separator' ? '' : ' y no vacía'}.`);
       if (typeof component.screenId !== 'string' || !screenIds.has(component.screenId)) throw new Error(`El componente ${component.id} apunta a una pantalla inexistente o no especificada: ${String(component.screenId || '(vacía)')}`);
       for (const field of ['x','y','w','h','font','opacity','value','min','max','step']) requireNumber(component, field, `El componente ${component.id}`);
-      if (component.x < 0 || component.y < 0 || component.w <= 0 || component.h <= 0 || component.x + component.w > 1920 || component.y + component.h > 1080) throw new Error(`La geometría del componente ${component.id} queda fuera del lienzo 1920×1080 o tiene dimensiones no positivas; no se recortará silenciosamente.`);
+      if (component.x < 0 || component.y < 0 || component.w <= 0 || component.h <= 0 || component.x + component.w > canvasWidth || component.y + component.h > canvasHeight) throw new Error(`La geometría del componente ${component.id} queda fuera del lienzo ${canvasWidth}×${canvasHeight} o tiene dimensiones no positivas; no se recortará silenciosamente.`);
       if (component.font < 8 || component.font > 144) throw new Error(`El tamaño de fuente del componente ${component.id} debe estar entre 8 y 144; no se cambiará automáticamente.`);
       if (component.opacity < 0 || component.opacity > 100) throw new Error(`La opacidad del componente ${component.id} debe estar entre 0 y 100.`);
       if (component.min > component.max) throw new Error(`El intervalo min/max del componente ${component.id} está invertido.`);
@@ -133,16 +139,18 @@
     }).map(({ component: c }) => {
       const custom = c.custom || {};
       const asset = c.assetId ? assetById.get(c.assetId) : null;
+      const hasActivationFlow = p.flows.some(flow => flow && flow.enabled === true && flow.componentId === c.id && (flow.event === 'activate' || flow.event === 'any'));
       return {
         id: c.id, screenId: c.screenId, assetId: c.assetId || '',
         type: c.type, label: c.label,
-        x: c.x, y: c.y, w: c.w, h: c.h,
-        font: c.font, opacity: c.opacity,
+        x: outputOffsetX + c.x * outputScale, y: outputOffsetY + c.y * outputScale,
+        w: c.w * outputScale, h: c.h * outputScale,
+        font: c.font * outputScale, opacity: c.opacity,
         value: Object.hasOwn(custom, 'selected') ? custom.selected : c.value,
         min: c.min, max: c.max, step: c.step,
         bg: c.bg === 'transparent' ? 0 : colorHex(c.bg), fg: colorHex(c.fg),
         visible: c.visible, checked: c.checked, transparentBg: c.bg === 'transparent',
-        action: c.action, actionMessage: c.actionMessage || '',
+        action: c.type === 'button' && hasActivationFlow ? 'none' : c.action, actionMessage: c.actionMessage || '',
         text: custom.text || '', assetPath: c.type === 'image' && asset ? `ps5hs/${asset.id}.rgba` : '',
         items: c.items
       };
@@ -231,7 +239,7 @@
     });
     push('        };', `        screen_ = ${cppString(p.currentScreen)};`, `        background_ = ${colorLiteral(p.theme.background)};`, `        accent_ = ${colorLiteral(p.theme.accent)};`, `        text_color_ = ${colorLiteral(p.theme.text)};`, '        selected_ = next_interactive(-1, 1);', '    }', '',
       '    const hui::app::ConceptInfo &info() const override', '    {',
-      '        static constexpr const char *kTechniques[] = {"Generated from a 1920x1080 visual canvas", "Absolute-position layout preserved", "DualSense navigation and value editing", "Visual event flows compiled into native C++", "All screens are embedded in one concept"};',
+      `        static constexpr const char *kTechniques[] = {"Generated from a ${canvasWidth}x${canvasHeight} canvas and mapped to the 1920x1080 virtual UI space; the renderer fits the active display surface", "Absolute-position layout preserved", "DualSense navigation and value editing", "Visual event flows compiled into native C++", "All screens are embedded in one concept"};`,
       `        static const hui::app::ConceptInfo kInfo{"ps5hs-generated", ${cppString(p.name)}, "Screen generated from PS5 Homebrew Studio", "generated/ps5hs-screen.cpp", hui::audio::SoundSet::glass, ${colorLiteral(p.theme.accent)}, kTechniques};`,
       '        return kInfo;', '    }', '', ...(isVulkan ? ['    void enter() override { started_ = false; selected_ = next_interactive(-1, 1); keyboard_open_ = false; }'] : ['    void enter() override { started_ = false; selected_ = next_interactive(-1, 1); keyboard_open_ = false; load_textures(); }']), '',
       '    void update(const hui::InputFrame &input, float /*dt*/, hui::app::Feedback & /*feedback*/) override', '    {',
@@ -319,9 +327,9 @@
       '        for (int step = 1; step <= n; ++step) { const int i = (from + direction * step + n * 2) % n; const Widget &w = widgets_[static_cast<std::size_t>(i)]; if (w.visible && w.screen == screen_ && interactive(w.type)) return i; }',
       '        return -1;', '    }', '',
       '    void activate(int index)', '    {', '        if (index < 0 || index >= static_cast<int>(widgets_.size())) return;', '        Widget &w = widgets_[static_cast<std::size_t>(index)];',
-      '        if (w.type == "toggle") { w.checked = !w.checked; run_flows(index, "change"); }',
+      '        if (w.type == "toggle") { w.checked = !w.checked; run_flows_for_events(index, "change", "activate"); }',
       '        else if (w.type == "slider" || w.type == "stepper") { w.value = clamp_value(w.value + w.step, w.min, w.max); run_flows(index, "change"); }',
-      '        else if (w.type == "select" || w.type == "carousel" || w.type == "list") { if (!w.items.empty()) w.value = static_cast<float>((static_cast<int>(w.value) + 1) % static_cast<int>(w.items.size())); run_flows(index, "change"); run_flows(index, "activate"); }',
+      '        else if (w.type == "select" || w.type == "carousel" || w.type == "list") { if (!w.items.empty()) w.value = static_cast<float>((static_cast<int>(w.value) + 1) % static_cast<int>(w.items.size())); run_flows_for_events(index, "change", "activate"); }',
       '        else if (w.type == "input") { keyboard_widget_ = index; keyboard_draft_ = w.text; keyboard_index_ = 0; keyboard_open_ = true; status_ = "Editor de texto abierto"; }',
       '        else { if (w.action == "notify") { if (w.action_message.empty()) status_ = "Error: la acción no tiene un mensaje configurado"; else status_ = w.action_message; } run_flows(index, "activate"); }',
       '    }', '', '    void run_flows(int source, std::string_view event)', '    {');
@@ -338,6 +346,19 @@
           const eventExpr = f.event === 'any' ? 'true' : `(event == ${cppString(f.event)})`;
           push(`        if (source == ${sourceIndex} && ${eventExpr}) { ${flowAction(f, indexById, components)} }`);
         }
+      });
+    }
+    push('    }', '', '    void run_flows_for_events(int source, std::string_view first, std::string_view second)', '    {');
+    push('        (void)first;', '        (void)second;');
+    const componentFlows = activeFlows.filter(flow => flow.event !== 'start');
+    if (componentFlows.length === 0) {
+      push('        (void)source; // No se han configurado flujos de componente para este proyecto.');
+    } else {
+      componentFlows.forEach(f => {
+        const sourceIndex = indexById.has(f.componentId) ? indexById.get(f.componentId) : -1;
+        if (sourceIndex < 0) return;
+        const eventExpr = f.event === 'any' ? 'true' : `(first == ${cppString(f.event)} || second == ${cppString(f.event)})`;
+        push(`        if (source == ${sourceIndex} && ${eventExpr}) { ${flowAction(f, indexById, components)} }`);
       });
     }
     push('    }', '', '    void draw_widget(DrawList &draw, const Widget &w, bool focused) const', '    {',

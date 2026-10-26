@@ -25,6 +25,8 @@ assert.ok(policy.entriesForBackend('vulkan-template').some(entry => entry.key ==
 assert.deepEqual(policy.missingForBackend('nativecpp', defaults, false), ['allowExecuteUpstreamGenerationTools','allowExecuteUpstreamBuildTools']);
 assert.deepEqual(policy.requiredForBackend('sharp'), ['allowExecuteUpstreamBuildTools','allowSharpTemplateIntegration']);
 assert.deepEqual(policy.missingForBackend('sharp', defaults, false), ['allowExecuteUpstreamBuildTools','allowSharpTemplateIntegration']);
+assert.deepEqual(policy.requiredForBackend('payload'), ['allowExecuteUpstreamBuildTools','allowPayloadProjectIntegration']);
+assert.deepEqual(policy.missingForBackend('payload', defaults, false), ['allowExecuteUpstreamBuildTools','allowPayloadProjectIntegration']);
 assert.deepEqual(policy.missingForPermissions(defaults, ['allowExecuteUpstreamGenerationTools']), ['allowExecuteUpstreamGenerationTools']);
 assert.deepEqual(policy.missingForPermissions(defaults, ['allowSharpTemplateIntegration']), ['allowSharpTemplateIntegration']);
 assert.deepEqual(policy.missingForPermissions(defaults, ['allowExecuteUpstreamAssetTools']), ['allowExecuteUpstreamAssetTools']);

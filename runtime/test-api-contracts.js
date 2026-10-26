@@ -33,6 +33,11 @@ for (const apiPath of called) {
 assert.match(app, /function openSetup\(/);
 assert.match(app, /text:'Configurar dependencias'.*openSetup\(\)/s,
   'environment setup must be reachable from the UI');
+assert.match(server, /offlineEnvironment=\$offlineEnvironment/, 'status must expose the offline installation and Ubuntu verification state');
+assert.match(server, /GetPS5HSOfflineBackendReadiness/, 'the server must read the declared offline backend readiness matrix');
+assert.match(server, /buildStoppedBeforeMutation=\$true;offlineStatus=\$offlineBackend\.status/, 'a bundled build must stop before project mutation when its backend is not validated offline');
+assert.match(app, /Instalación offline disponible/, 'the setup dialog must direct clean hosts to the bundled offline installer');
+assert.match(app, /Preparación offline por backend/, 'the setup dialog must show backend readiness rather than generic download instructions');
 assert.match(app, /function openProject(?:\([^)]*\))[\s\S]*const dialogRevision=modalRevision/, 'project browser must capture the dialog context');
 assert.match(app, /function saveProject\(\)[\s\S]*snapshotJson=JSON\.stringify\(data\)/, 'save must preserve the serialized snapshot and not mark subsequent edits clean');
 assert.match(app, /function openIntegrationSettings\(\)[\s\S]*revisionAtStart=modalRevision/, 'async settings discovery must not replace a newer modal');

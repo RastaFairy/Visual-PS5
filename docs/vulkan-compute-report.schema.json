@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://visual-ps5.local/schemas/vulkan-compute-report.schema.json",
+  "title": "PS5 Homebrew Studio Vulkan Compute GPU report",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "version", "graphRevisionId", "capturedAt", "device", "driver", "runtime", "results"],
+  "properties": {
+    "schema": { "const": "ps5hs-vulkan-compute-report" },
+    "version": { "const": 1 },
+    "graphRevisionId": { "type": "string", "pattern": "^[A-Za-z0-9_-]{1,64}$" },
+    "capturedAt": { "type": "string", "format": "date-time" },
+    "runId": { "type": "string", "maxLength": 128 },
+    "device": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "vendor": { "type": "string", "maxLength": 128 },
+        "deviceId": { "type": "string", "maxLength": 128 }
+      }
+    },
+    "driver": { "type": "string", "minLength": 1, "maxLength": 256 },
+    "runtime": { "type": "string", "minLength": 1, "maxLength": 256 },
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "api": { "const": "Vulkan" },
+        "width": { "type": "integer", "minimum": 1, "maximum": 16384 },
+        "height": { "type": "integer", "minimum": 1, "maximum": 16384 },
+        "format": { "type": "string", "maxLength": 32 }
+      }
+    },
+    "results": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["passId", "shaderSha256", "gpuMs"],
+        "properties": {
+          "passId": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_-]{0,63}$" },
+          "shaderSha256": { "type": "string", "pattern": "^[A-Fa-f0-9]{64}$" },
+          "gpuMs": { "type": "number", "minimum": 0 },
+          "psnrDb": { "type": "number" },
+          "ssim": { "type": "number", "minimum": -1, "maximum": 1 },
+          "memoryBytes": { "type": "integer", "minimum": 0 },
+          "outputSha256": { "type": "string", "pattern": "^[A-Fa-f0-9]{64}$" },
+          "referenceSha256": { "type": "string", "pattern": "^[A-Fa-f0-9]{64}$" }
+        }
+      }
+    }
+  }
+}

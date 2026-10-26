@@ -144,6 +144,11 @@ def icon(path, name):
 
 def export(target, ui):
     """The foundation's files at this repository's last commit, and glm (a submodule) at its own."""
+    source_info = vendored_source_info()
+    if source_info is not None:
+        export_vendored_snapshot(target, ui)
+        return vendored_source_revision(source_info)
+
     archive = subprocess.run(["git", "-C", str(ROOT), "archive", "HEAD", *FOUNDATION, *STARTERS[ui]],
                              capture_output=True, check=True).stdout
     with tarfile.open(fileobj=io.BytesIO(archive)) as tar:
@@ -156,6 +161,56 @@ def export(target, ui):
         tar.extractall(target, filter="data")
     return subprocess.run(["git", "-C", str(ROOT), "rev-parse", "HEAD"], capture_output=True, text=True,
                           check=True).stdout.strip()
+
+
+def vendored_source_info():
+    """Return the explicit vendoring manifest, without mistaking a parent repo for this source."""
+    marker = ROOT / ".ps5hs-source.json"
+    if not marker.is_file():
+        return None
+    source_info = json.loads(marker.read_text())
+    if source_info.get("vendoredSnapshot") is not True:
+        return None
+    if source_info.get("repository") != "mihawk-99/PS5_VulkanTemplate":
+        raise ValueError(f"{marker} does not identify the PS5_VulkanTemplate source")
+    return source_info
+
+
+def vendored_source_revision(source_info):
+    """Never present a vendored snapshot as an upstream commit that was not recorded."""
+    commit = str(source_info.get("sourceCommit") or source_info.get("commit") or "")
+    if source_info.get("sourceRevisionRecorded"):
+        if not re.fullmatch(r"[0-9a-fA-F]{40}", commit):
+            raise ValueError("The vendored source marks its upstream revision recorded but has no full commit id")
+        return commit.lower()
+    vendored_at = str(source_info.get("vendoredAt") or "")
+    vendored_date = vendored_at[:10] if re.match(r"^\d{4}-\d{2}-\d{2}", vendored_at) else "date unknown"
+    return f"vendored snapshot {vendored_date} (upstream revision not recorded)"
+
+
+def export_vendored_snapshot(target, ui):
+    """Copy only the same foundation and starter paths selected by git archive."""
+    def copy_member(source):
+        relative = source.relative_to(ROOT).as_posix()
+        if any(part == ".git" for part in Path(relative).parts):
+            return
+        if LEFT_OUT.match(relative) or (not ui and UI_ONLY.match(relative)):
+            return
+        if source.is_symlink():
+            raise RuntimeError(f"The vendored foundation contains a symbolic link: {relative}")
+        destination = target / Path(relative)
+        if source.is_dir():
+            destination.mkdir(parents=True, exist_ok=True)
+            for child in sorted(source.iterdir(), key=lambda item: item.name):
+                copy_member(child)
+        elif source.is_file():
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(source, destination)
+        else:
+            raise FileNotFoundError(f"The vendored foundation is missing {relative}")
+
+    for relative in FOUNDATION + STARTERS[ui]:
+        copy_member(ROOT / relative)
 
 
 def kit_designs(kit):
@@ -223,6 +278,19 @@ def program_id(name):
     return word if word and word[0].isalpha() else "title" + word
 
 
+def create_initial_commit(target, message):
+    """Leave a usable generated project when Git has no configured author."""
+    for identity in ("GIT_AUTHOR_IDENT", "GIT_COMMITTER_IDENT"):
+        result = subprocess.run(["git", "-C", str(target), "var", identity], capture_output=True, text=True)
+        if result.returncode:
+            print("note: Git user.name/user.email is not configured; the project was created without an initial commit. "
+                  "Configure an identity in this project and commit when ready.")
+            return False
+    subprocess.run(["git", "-C", str(target), "add", "-A"], check=True)
+    subprocess.run(["git", "-C", str(target), "commit", "-q", "-m", message], check=True)
+    return True
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("directory", type=Path)
@@ -257,6 +325,9 @@ def main():
         sys.exit(f"{target} exists and is not empty")
     target.mkdir(parents=True, exist_ok=True)
     revision = export(target, ui)
+    is_commit = bool(re.fullmatch(r"[0-9a-fA-F]{40}", revision))
+    revision_short = revision[:8] if is_commit else revision
+    revision_note = revision[:12] if is_commit else revision
     pid = program_id(args.name)
 
     if ui:
@@ -315,17 +386,16 @@ def main():
     (target / ".gitignore").write_text("build/\ndist/\nklog/\n.deps/\nimgui.ini\n")
 
     (target / "README.md").write_text((UI_README if ui else README).format(
-        name=args.name, title_id=args.title_id, pid=pid, revision=revision, short=revision[:8], design=args.ui))
+        name=args.name, title_id=args.title_id, pid=pid, revision=revision, short=revision_short, design=args.ui))
     subprocess.run(["python3", str(target / "ps5/tools/build-assets.py"), "--notices"], check=True,
                    capture_output=True)
     subprocess.run(["git", "init", "-q", "-b", "main", str(target)], check=True)
-    subprocess.run(["git", "-C", str(target), "add", "-A"], check=True)
-    subprocess.run(["git", "-C", str(target), "commit", "-q", "-m",
-                    f"{args.name}: a new title on the PS5 Vulkan Template foundation\n\n"
-                    f"Made by ps5/tools/new-title.py from PS5_VulkanTemplate {revision[:12]}: the base class,\n"
-                    + (f"the PS5 layer and its tools, and the UI starter as the program ({pid}), with\n"
-                       f"the UI kit's \"{args.ui}\" design as its screen." if ui else
-                       f"the PS5 layer and its tools, and the starter as the program ({pid}).")], check=True)
+    create_initial_commit(target,
+                          f"{args.name}: a new title on the PS5 Vulkan Template foundation\n\n"
+                          f"Made by ps5/tools/new-title.py from PS5_VulkanTemplate {revision_note}: the base class,\n"
+                          + (f"the PS5 layer and its tools, and the UI starter as the program ({pid}), with\n"
+                             f"the UI kit's \"{args.ui}\" design as its screen." if ui else
+                             f"the PS5 layer and its tools, and the starter as the program ({pid})."))
     print(f"==> {args.name} ({args.title_id}) in {target}")
     if ui:
         print(f"    program: examples/{pid}/{pid}.cpp, its screen examples/{pid}/kit/screen.cpp ({args.ui})")

@@ -7,9 +7,10 @@ function Assert-Condition([bool]$Condition,[string]$Message) {
 }
 
 $defaults = NormalizePS5HSNativeModificationPolicy $null
-Assert-Condition ($defaults.Count -eq 12) 'La política debe declarar todas las operaciones registradas.'
+Assert-Condition ($defaults.Count -eq 14) 'La política debe declarar todas las operaciones registradas.'
 Assert-Condition (@($defaults.Values | Where-Object { $_ -eq $true }).Count -eq 0) 'Todas las modificaciones deben estar denegadas por defecto.'
 Assert-Condition (!$defaults.allowExecuteUpstreamAssetTools) 'La conversión de recursos también debe estar denegada por defecto.'
+Assert-Condition (!$defaults.allowPayloadProjectIntegration) 'La integración de código C/C++ y Makefile payload también debe estar denegada por defecto.'
 $gaps = @(GetPS5HSNativeModificationConsentGaps -Backend 'opengl-ui' -Policy $null -RequireGeneration $true -RequireBuildTools $true -RequireVisualIntegration $true)
 Assert-Condition ($gaps.Count -eq 3) 'OpenGL debe exigir generador, herramientas upstream e integración visual.'
 $approved = [pscustomobject]@{
@@ -22,6 +23,7 @@ $approved = [pscustomobject]@{
   allowOpenGlEuropeanAtlas=$false
   allowWindowsBuildEntrypointPatch=$false
   allowVulkanTemplateIntegration=$false
+  allowVulkanComputeShaderBuild=$true
   allowVulkanBuildHelperRestore=$false
   normalizeBuildFiles=$false
   allowCustomUnicodeFont=$false
@@ -32,7 +34,7 @@ $visualGaps = @(GetPS5HSNativeModificationConsentGaps -Backend 'opengl-ui' -Poli
 Assert-Condition ($visualGaps.Count -eq 2) 'El preflight visual debe detectar conversión de recursos y TTF sin autorización antes de empezar.'
 $visualApproved = NormalizePS5HSNativeModificationPolicy ([pscustomobject]@{allowExecuteUpstreamAssetTools=$true;allowCustomUnicodeFont=$true})
 Assert-Condition (@(GetPS5HSNativeModificationConsentGaps -Backend 'opengl-ui' -Policy $visualApproved -RequirePermissionKeys @('allowExecuteUpstreamAssetTools','allowCustomUnicodeFont')).Count -eq 0) 'Las autorizaciones específicas deben desbloquear solo las operaciones señaladas.'
-Assert-Condition ($normalized.allowOpenGlTemplateIntegration -and !$normalized.allowOpenGlRuntimeProfile) 'Solo deben respetarse permisos booleanos explícitos.'
+Assert-Condition ($normalized.allowOpenGlTemplateIntegration -and !$normalized.allowOpenGlRuntimeProfile -and $normalized.allowVulkanComputeShaderBuild) 'Solo deben respetarse permisos booleanos explícitos.'
 Assert-Condition (!$normalized.ContainsKey('unexpectedPermission')) 'No deben admitirse permisos desconocidos.'
 Assert-Condition (@(GetPS5HSNativeModificationConsentGaps -Backend 'vulkan-ui' -Policy $normalized -RequireVisualIntegration $true -HasCustomFont $true).Count -eq 2) 'Vulkan y la fuente TTF deben exigir sus permisos específicos.'
 $unknownDenied = $false
@@ -45,6 +47,8 @@ try {
   AssertPS5HSNativeModificationConsent -Backend 'sharp' -Policy $null -RequirePermissionKeys @('allowSharpTemplateIntegration','allowExecuteUpstreamBuildTools') | Out-Null
 } catch { $sharpDenied = $true }
 Assert-Condition $sharpDenied 'Una invocación directa de SharpProspero debe fallar cerrada si no recibe permiso de integración y de build.'
+$payloadGaps = @(GetPS5HSNativeModificationConsentGaps -Backend 'payload' -Policy $null -RequirePermissionKeys @('allowPayloadProjectIntegration','allowExecuteUpstreamBuildTools'))
+Assert-Condition ($payloadGaps.Count -eq 2) 'Un payload debe exigir permiso independiente para escribir el proyecto y ejecutar el SDK.'
 $assetGaps = @(GetPS5HSNativeModificationConsentGaps -Backend 'hui-gl' -Policy $null -RequirePermissionKeys @('allowExecuteUpstreamAssetTools'))
 Assert-Condition ($assetGaps.Count -eq 1 -and $assetGaps[0] -eq 'allowExecuteUpstreamAssetTools') 'Los cambios de presentación deben exigir el permiso de conversión independiente del build.';
 $assetDenied = $false
@@ -110,6 +114,36 @@ try {
   [IO.File]::WriteAllText((Join-Path $openGlSdkTarget 'sdk-cache.txt'),'verified-sdk-cache',$utf8)
   $openGlCurrentLink = Join-Path $openGlDepsRoot 'current'
   New-Item -ItemType SymbolicLink -Path $openGlCurrentLink -Target $openGlSdkTarget | Out-Null
+
+  # WSL stores LX symlinks as file-like reparse points, and PowerShell does not
+  # expose their target through Target/LinkTarget. Exercise that metadata shape
+  # without following the destination.
+  $lxTargetBytes = [Text.Encoding]::UTF8.GetBytes('/mnt/c/Visual-PS5/toolchains/ps5-opengl-sdk/.cache/sdk')
+  $lxPayload = [byte[]]::new(4 + $lxTargetBytes.Length)
+  [BitConverter]::GetBytes([int]2).CopyTo($lxPayload,0)
+  [Array]::Copy($lxTargetBytes,0,$lxPayload,4,$lxTargetBytes.Length)
+  $lxReparseData = [byte[]]::new(8 + $lxPayload.Length)
+  [BitConverter]::GetBytes([Convert]::ToUInt32('A000001D',16)).CopyTo($lxReparseData,0)
+  [BitConverter]::GetBytes([uint16]$lxPayload.Length).CopyTo($lxReparseData,4)
+  [Array]::Copy($lxPayload,0,$lxReparseData,8,$lxPayload.Length)
+  $lxLinkItem = [pscustomobject]@{
+    FullName = $openGlCurrentLink
+    Attributes = [IO.FileAttributes]::Archive -bor [IO.FileAttributes]::ReparsePoint
+    Target = $null
+    LinkTarget = $null
+  }
+  $lxFingerprint = GetPS5HSNativeGeneratedDependencyLinkFingerprint -LinkItem $lxLinkItem -ReparseData $lxReparseData
+  Assert-Condition ($lxFingerprint -match '^[0-9a-f]{64}$') 'El enlace WSL debe producir una huella SHA-256 del metadato sin depender de Target/LinkTarget.'
+  $lxTreeFingerprint = GetPS5HSNativeTreeReparsePointHash -RelativePath '.deps/ps5-opengl/current' -LinkItem $lxLinkItem -ReparseData $lxReparseData -EntryKind 'file'
+  Assert-Condition ($lxTreeFingerprint -ceq $lxFingerprint) 'El alias OpenGL enumerado como archivo debe pasar por la huella de metadatos permitida.'
+  $wrongLxPathDenied = $false
+  try { $null = GetPS5HSNativeTreeReparsePointHash -RelativePath 'src/untrusted-link' -LinkItem $lxLinkItem -ReparseData $lxReparseData -EntryKind 'file' } catch { $wrongLxPathDenied = $true }
+  Assert-Condition $wrongLxPathDenied 'El auditor debe seguir rechazando los enlaces WSL fuera del alias OpenGL exacto.'
+  $unknownReparseData = [byte[]]$lxReparseData.Clone()
+  [BitConverter]::GetBytes([Convert]::ToUInt32('A0000003',16)).CopyTo($unknownReparseData,0)
+  $unknownTagDenied = $false
+  try { $null = GetPS5HSNativeGeneratedDependencyLinkFingerprint -LinkItem $lxLinkItem -ReparseData $unknownReparseData } catch { $unknownTagDenied = $true }
+  Assert-Condition $unknownTagDenied 'El alias OpenGL debe rechazar tipos de reanálisis distintos de symlink y LX symlink.'
 
   $treeSnapshot = GetPS5HSNativeTreeHashes -ProjectRoot $root
   Assert-Condition ($treeSnapshot.ContainsKey('.deps/hui/dependency.cpp')) 'El snapshot debe incluir dependencias embebidas, porque también pueden modificarse.'

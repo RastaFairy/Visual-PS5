@@ -1,0 +1,12 @@
+{
+  "schema": "ps5hs-offline-bundle-links",
+  "version": 1,
+  "links": [
+    {
+      "path": "toolchains/PS5_Vulkan/.deps/native/ps5-payload-sdk/target/include_common",
+      "target": "toolchains/PS5_Vulkan/.deps/native/ps5-payload-sdk/target/user/homebrew/include",
+      "type": "directory-symbolic-link",
+      "bundleRepresentation": "materialized-copy"
+    }
+  ]
+}

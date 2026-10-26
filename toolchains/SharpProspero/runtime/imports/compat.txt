@@ -1,15 +1,19 @@
 _ITM_deregisterTMCloneTable
 _ITM_registerTMCloneTable
+__dso_handle
 __errno_location
 __fxstat64
 __getdelim
 __gmon_start__
+__isoc99_fscanf
 __libc_current_sigrtmax
 __libc_current_sigrtmin
 __libc_start_main
 __lxstat64
 __sce_libc_marker
+__sched_cpualloc
 __sched_cpucount
+__sched_cpufree
 __xmknod
 __xstat64
 clock_gettime
@@ -21,6 +25,7 @@ dlopen
 dlsym
 environ
 fallocate64
+fgetc
 fcntl
 fopen64
 fork

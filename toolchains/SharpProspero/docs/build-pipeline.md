@@ -243,7 +243,9 @@ The build therefore checks it and refuses to produce a package otherwise:
 
 Put a copy in the project's `sce_module` folder and it is used as-is. To have the build fetch them
 instead, point `ProsperoModuleFolder` (or the `PROSPERO_MODULES` environment variable) at a folder
-holding them, and the line reads `gathered` rather than `present`. If a required module is neither
+holding them, and the line reads `gathered` rather than `present`. For an offline Visual-PS5 build
+with no project, environment, or installed-SDK module folder, SharpProspero can gather the bundled
+clean-room `libc.prx` from `toolchains/PS5_Vulkan/runtime` after checking its SHA-256 sidecar. If a required module is neither
 present nor available the build stops with the list, rather than handing you a package that wedges a
 console.
 

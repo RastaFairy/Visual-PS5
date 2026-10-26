@@ -19,7 +19,7 @@ const makeAsset = (id, overrides = {}) => ({
   ...overrides,
 });
 const makeProject = (overrides = {}) => ({
-  name: 'Studio "Prueba"', backend: 'opengl-ui', currentScreen: 'home',
+  name: 'Studio "Prueba"', backend: 'opengl-ui', currentScreen: 'home', resolution: { width: 1920, height: 1080 },
   theme: { background: '#101827', accent: '#7865f6', text: '#f0f3ff' },
   assets: [makeAsset('asset-avatar', { fileName: 'avatar.png', name: 'Avatar' })],
   screens: [{ id: 'home', name: 'Inicio' }, { id: 'settings', name: 'Ajustes' }],
