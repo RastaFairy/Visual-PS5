@@ -7,7 +7,7 @@ function Assert-Condition([bool]$Condition,[string]$Message) {
 }
 
 $defaults = NormalizePS5HSNativeModificationPolicy $null
-Assert-Condition ($defaults.Count -eq 14) 'La política debe declarar todas las operaciones registradas.'
+Assert-Condition ($defaults.Count -eq 15) 'La política debe declarar todas las operaciones registradas.'
 Assert-Condition (@($defaults.Values | Where-Object { $_ -eq $true }).Count -eq 0) 'Todas las modificaciones deben estar denegadas por defecto.'
 Assert-Condition (!$defaults.allowExecuteUpstreamAssetTools) 'La conversión de recursos también debe estar denegada por defecto.'
 Assert-Condition (!$defaults.allowPayloadProjectIntegration) 'La integración de código C/C++ y Makefile payload también debe estar denegada por defecto.'
