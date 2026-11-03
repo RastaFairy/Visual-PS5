@@ -2,6 +2,11 @@
 $ErrorActionPreference = 'Stop'
 $targets = @(
     (Join-Path $PSScriptRoot 'server.ps1'),
+    (Join-Path $PSScriptRoot 'server-console.ps1'),
+    (Join-Path $PSScriptRoot 'server-status.ps1'),
+    (Join-Path $PSScriptRoot 'server-model.ps1'),
+    (Join-Path $PSScriptRoot 'server-project-files.ps1'),
+    (Join-Path $PSScriptRoot 'server-build-config.ps1'),
     (Join-Path $PSScriptRoot 'native-runtime.ps1'),
     (Join-Path $PSScriptRoot 'Prepare-OfflineImage.ps1'),
     (Join-Path $PSScriptRoot 'Build-OfflineBundle.ps1'),

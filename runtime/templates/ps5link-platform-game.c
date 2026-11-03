@@ -1,4 +1,4 @@
-static int visual_token_at(const char *text,const char *token){while(*token){if(*text++!=*token++)return 0;}return 1;}
+﻿static int visual_token_at(const char *text,const char *token){while(*token){if(*text++!=*token++)return 0;}return 1;}
 static int visual_append(char *out,int length,int capacity,const char *value){while(*value&&length<capacity-1)out[length++]=*value++;return length;}
 static int visual_append_uint(char *out,int length,int capacity,unsigned int value){char digits[10];int count=0;do{digits[count++]=(char)('0'+value%10u);value/=10u;}while(value&&count<10);while(count&&length<capacity-1)out[length++]=digits[--count];return length;}
 static void format_visual_label(char *out,int capacity,const char *format,unsigned int current,unsigned int total,unsigned int percent,int audioEnabled){
@@ -391,6 +391,16 @@ extern int sceAudioOutInit(void);
 extern int sceAudioOutOpen(int,int,int,unsigned,unsigned,unsigned);
 extern int sceAudioOutOutput(int,const void *);
 extern int sceAudioOutClose(int);
+/* Hilos y sincronización: el catálogo del enlazador ps5link (linker/catalog.c) resuelve
+   libScePthread, así que el audio corre en su propio hilo desde 1.1.59. */
+typedef void *ScePthread;
+typedef void *ScePthreadMutex;
+extern int scePthreadCreate(ScePthread *thread,const void *attr,void *(*entry)(void *),void *arg,const char *name);
+extern int scePthreadJoin(ScePthread thread,void **value);
+extern int scePthreadMutexInit(ScePthreadMutex *mutex,const void *attr,const char *name);
+extern int scePthreadMutexLock(ScePthreadMutex mutex);
+extern int scePthreadMutexUnlock(ScePthreadMutex mutex);
+extern int scePthreadMutexDestroy(ScePthreadMutex mutex);
 
 #define BTN_OPTIONS 0x00000008u
 #define BTN_UP 0x00000010u
@@ -410,10 +420,9 @@ extern int sceAudioOutClose(int);
 #define UI_MAX_INDICES 18000
 #define AUDIO_RATE 48000u
 #define AUDIO_GRAIN 256u
-/* Un bloque por frame a 60 fps: 768 muestras cubre el 96 % del consumo real
-   (48000/60 ≈ 800 muestras por frame), de modo que sceAudioOutOutput casi nunca
-   espera y la música deja de recortarse, sin necesitar un hilo aparte (el SDK
-   ps5link no expone scePthread). */
+/* Bloque de 768 muestras (≈16 ms): el hilo de audio llama a sceAudioOutOutput en bucle
+   propio y el kernel lo auto-ritma al consumo (48000/768 ≈ 62,5 llamadas/s), así que el
+   hilo del juego no gasta ni un micro de su presupuesto en audio. */
 #define AUDIO_BLOCK (AUDIO_GRAIN*3u)
 #define SCREEN_W 1920.0f
 #define SCREEN_H 1080.0f
@@ -441,9 +450,9 @@ static unsigned char shard_taken[SHARD_COUNT];
 static Player hero;
 static int checkpoint_platform,current_screen,game_started,game_won,menu_choice;
 static int audio_enabled=1,audio_port=-1,pad_handle=-1,rumble_frames,respawn_flash,shard_total;
-static int audio_sfx_samples;
-static float audio_sfx_frequency,audio_sfx_phase,music_phase,world_time;
+static float audio_sfx_phase,music_phase,world_time;
 static unsigned int music_sample;
+static void audio_request_sfx(float hz,unsigned int samples);
 void game_start(void); void game_pause(void); void game_resume(void);
 void game_restart(void); void game_toggle_audio(void);
 static void play_note(float hz,int samples);
@@ -748,8 +757,8 @@ void game_pause(void){if(game_started&&!game_won&&current_screen==2){current_scr
 void game_resume(void){if(current_screen==1)current_screen=2;}
 void game_restart(void){reset_run();if(game_started)current_screen=2;}
 
-void game_toggle_audio(void){audio_enabled=!audio_enabled;audio_sfx_frequency=audio_enabled?660:330;audio_sfx_samples=3600;audio_sfx_phase=0;}
-static void play_note(float hz,int samples){audio_sfx_frequency=hz;audio_sfx_samples=samples;audio_sfx_phase=0;}
+void game_toggle_audio(void){audio_enabled=!audio_enabled;audio_request_sfx(audio_enabled?660.0f:330.0f,3600);}
+static void play_note(float hz,int samples){audio_request_sfx(hz,(unsigned int)samples);}
 static void rumble(unsigned char large,unsigned char small,int frames){
     if(pad_handle<0)return;PadVibration v={large,small};(void)scePadSetVibration(pad_handle,&v);rumble_frames=frames;
 }
@@ -853,21 +862,53 @@ static void menu_input(int up,int down,int cross,int circle){
         if(circle)dispatch_game_action(PS5HS_GAME_RESUME_COMPONENT_ID,PS5HS_GAME_RESUME_EVENT,game_resume);
     }else if(current_screen==2&&game_won&&cross)dispatch_game_action(PS5HS_GAME_RESTART_COMPONENT_ID,PS5HS_GAME_RESTART_EVENT,game_restart);
 }
+static ScePthread audio_thread=0;
+static ScePthreadMutex audio_lock=0;
+static volatile int audio_thread_running=0;
+/* SFX pedidos por el hilo del juego; solo se tocan bajo audio_lock. */
+static unsigned int audio_sfx_pending=0;
+static float audio_sfx_pending_hz=0.0f;
+static void audio_request_sfx(float hz,unsigned int samples){
+    if(!audio_thread_running)return;
+    if(scePthreadMutexLock(audio_lock)==0){
+        audio_sfx_pending_hz=hz;audio_sfx_pending+=samples;
+        scePthreadMutexUnlock(audio_lock);
+    }
+}
 static void audio_frame(void){
-    if(audio_port<0)return;static int16_t pcm[AUDIO_BLOCK*2];const float step=TAU_F/(float)AUDIO_RATE;
+    if(audio_port<0||audio_lock==0)return;
+    static int16_t pcm[AUDIO_BLOCK*2];const float step=TAU_F/(float)AUDIO_RATE;
     static const unsigned short notes[8]={392,440,523,659,587,523,440,349};
+    if(scePthreadMutexLock(audio_lock)!=0)return;
+    const unsigned int sfxLeft=audio_sfx_pending;
+    const float sfxHz=audio_sfx_pending_hz;
+    audio_sfx_pending=0;
+    const int duck=(current_screen==2&&!game_won)?1:0;
+    const int enabled=audio_enabled;
+    scePthreadMutexUnlock(audio_lock);
+    unsigned int consumed=0;
     for(unsigned int i=0;i<AUDIO_BLOCK;i++){
         float sample=0;
-        if(audio_enabled){
+        if(enabled){
             unsigned int beat=(music_sample/12000u)&7u;music_phase+=step*notes[beat];if(music_phase>TAU_F)music_phase-=TAU_F;
             sample=m_sin(music_phase)*0.055f+m_sin(music_phase*0.5f)*0.018f;
-            if(current_screen==2&&!game_won)sample*=0.58f;
-            if(audio_sfx_samples>0){audio_sfx_phase+=step*audio_sfx_frequency;if(audio_sfx_phase>TAU_F)audio_sfx_phase-=TAU_F;
-                sample+=m_sin(audio_sfx_phase)*0.20f;audio_sfx_samples--;}
+            if(duck)sample*=0.58f;
+            if(consumed<sfxLeft){audio_sfx_phase+=step*sfxHz;if(audio_sfx_phase>TAU_F)audio_sfx_phase-=TAU_F;
+                sample+=m_sin(audio_sfx_phase)*0.20f;consumed++;}
         }
         sample=clampf(sample,-0.90f,0.90f);int16_t v=(int16_t)(sample*32767);pcm[i*2]=v;pcm[i*2+1]=v;music_sample++;
     }
-    if(sceAudioOutOutput(audio_port,pcm)<0){audio_enabled=0;(void)sceAudioOutClose(audio_port);audio_port=-1;}
+    if(consumed<sfxLeft&&scePthreadMutexLock(audio_lock)==0){
+        audio_sfx_pending=sfxLeft-consumed;audio_sfx_pending_hz=sfxHz;
+        scePthreadMutexUnlock(audio_lock);
+    }
+    if(sceAudioOutOutput(audio_port,pcm)<0){audio_enabled=0;(void)sceAudioOutClose(audio_port);audio_port=-1;audio_thread_running=0;}
+}
+static void *audio_thread_entry(void *arg){
+    (void)arg;
+    PS5HS_TRACE(PS5HS_GAME_TITLE ": hilo de audio iniciado");
+    while(audio_thread_running)audio_frame();
+    return 0;
 }
 static void add_platform(MeshBatch *b,int i){
     Platform *p=&level[i];unsigned int stone=(i/4)%3==0?0xFF514D78u:((i/4)%3==1?0xFF59495Fu:0xFF424F7Cu);
@@ -1211,10 +1252,20 @@ int main(void){
             if(audioInit>=0||(unsigned int)audioInit==0x8026000Eu){
                 audio_port=sceAudioOutOpen(0xFF,0,0,AUDIO_BLOCK,AUDIO_RATE,1);
                 if(audio_port<0){error_notice("AudioOutOpen fallo",audio_port);audio_enabled=0;}
-                else PS5HS_TRACE(PS5HS_GAME_TITLE ": audio listo");
+                else if(scePthreadMutexInit(&audio_lock,0,"ps5hs_audio")==0){
+                    audio_thread_running=1;
+                    if(scePthreadCreate(&audio_thread,0,audio_thread_entry,0,"ps5hs_audio")!=0){
+                        audio_thread_running=0;error_notice("pthread de audio fallo",0);
+                    }
+                    PS5HS_TRACE(PS5HS_GAME_TITLE ": audio listo");
+                }else{error_notice("mutex de audio fallo",0);audio_enabled=0;}
             }else{error_notice("AudioOutInit fallo",audioInit);audio_enabled=0;}
         }
-        audio_frame();
+    }
+    if(audio_thread_running){
+        audio_thread_running=0;
+        void *audioJoinValue=0;(void)scePthreadJoin(audio_thread,&audioJoinValue);
+        (void)scePthreadMutexDestroy(audio_lock);audio_lock=0;
     }
     if(audio_port>=0)(void)sceAudioOutClose(audio_port);
     if(pad_handle>=0)(void)scePadClose(pad_handle);

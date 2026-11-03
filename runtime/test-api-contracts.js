@@ -73,4 +73,14 @@ assert.match(app, /SHAPE_VERTS/, 'AGC vertex budget estimator must run in Diagno
 assert.match(server, /function Test-PS5HSProjectModel/, 'server must validate the project model');
 assert.match(server, /Test-PS5HSProjectModel \$body\.project/, 'the save route must validate the model');
 assert.match(app, /payloadBuildProfile/, 'payload build dialog must expose the build profile');
+assert.match(html, /ps5hs-i18n\.js/, 'the i18n engine must load before app.js');
+assert.match(html, /ps5hs-ui-theme\.js/, 'the theme engine must load before app.js');
+assert.ok(!app.includes('I18N_STRINGS'), 'i18n dictionary must live in runtime/ps5hs-i18n.js, not inline in app.js');
+const template = fs.readFileSync(path.join(__dirname, 'templates/ps5link-platform-game.c'), 'utf8');
+assert.match(template, /scePthreadCreate/, 'the AGC template must run audio in its own thread');
+assert.match(template, /audio_request_sfx/, 'SFX must be handed to the audio thread through the mutex-protected queue');
+for (const moduleFile of ['server-console.ps1', 'server-status.ps1', 'server-model.ps1', 'server-project-files.ps1', 'server-build-config.ps1']) {
+  assert.ok(fs.existsSync(path.join(__dirname, moduleFile)), `server module must exist: ${moduleFile}`);
+  assert.match(server, new RegExp(moduleFile.replace(/\./g, '\\.')), `server.ps1 must dot-source ${moduleFile}`);
+}
 console.log(`PASS API contracts: ${called.size} frontend API path families map to server handlers; static assets and version strings are consistent.`);

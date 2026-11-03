@@ -1,5 +1,12 @@
 # Registro de cambios
 
+## 1.1.59 — 2026-11-03
+
+- Modularización: server.ps1 (4.447 → 4.017 líneas) extrae consola PS5, estado del entorno, validación del modelo, explorador de archivos y configuración de build payload a cinco ficheros dot-sourced (runtime/server-*.ps1); el frontend separa el motor i18n y el tema a runtime/ps5hs-i18n.js y runtime/ps5hs-ui-theme.js, servidos por la allowlist estática.
+- i18n profundo: puntos de paso centralizados (log, toast, estado de consola y diagnósticos) traducen por texto original mediante el diccionario DEEP es→en; el panel Diagnósticos y la consola PS5 cambian de idioma en vivo.
+- Hilo de audio real en la plantilla AGC: el catálogo del enlazador ps5link resuelve libScePthread, así que la plantilla crea un hilo dedicado (scePthreadCreate + mutex) que auto-ritma el bloque de 768 muestras; los efectos sonoros se entregan al hilo mediante una cola protegida por mutex y el hilo del juego deja de ejecutar audio. Verificado con prospero-clang -fsyntax-only; pendiente de confirmación en consola física.
+- validate.yml parsea también los cinco módulos nuevos de server.
+
 ## 1.1.58 — 2026-11-03
 
 - Tema claro/oscuro con botón en la barra superior y persistencia en localStorage; la paleta clara se genera desde la oscura (consolas tipo terminal permanecen oscuras).

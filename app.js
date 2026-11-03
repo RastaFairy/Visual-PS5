@@ -6,6 +6,7 @@
   const clone = o => JSON.parse(JSON.stringify(o));
   const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const slug = s => String(s || 'MiHomebrew').normalize('NFKD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-zA-Z0-9_-]+/g,'-').replace(/^-+|-+$/g,'').slice(0,48) || 'MiHomebrew';
+  const t = window.PS5HSI18N.t, trMsg = window.PS5HSI18N.tr;
   const contracts = window.PS5HSProjectContracts;
   if (!contracts) throw new Error('Falta runtime/project-contracts.js; no se puede iniciar con validaciones incompletas.');
   const isValidTitleId = value => contracts.isValidTitleId(value);
@@ -104,6 +105,7 @@
   function setTextIfPresent(selector,value){const node=$(selector);if(!node)return false;node.textContent=String(value??'');return true;}
   function setModalText(selector,value,expectedRevision){if(expectedRevision!==modalRevision)return false;return setTextIfPresent(selector,value);}
   function log(text, level='INFO') {
+    text=trMsg(text);
     const line={time:now(),timestamp:new Date().toISOString(),text:String(text),level:['INFO','WARN','ERROR'].includes(level)?level:'INFO'};
     outputLines.push(line);if(outputLines.length>MAX_BUILD_LOG_ENTRIES)outputLines=outputLines.slice(-MAX_BUILD_LOG_ENTRIES);
     try{localStorage.setItem(BUILD_LOG_STORAGE_KEY,JSON.stringify(outputLines));}catch{/* The visible log remains usable when browser storage is unavailable. */}
@@ -114,6 +116,7 @@
   function logBuildOutput(traceId,text){for(const line of String(text||'').split(/\r?\n/).filter(value=>value.trim())){const level=/\b(error|fatal|failed|failure|exception|traceback)\b/i.test(line)?'ERROR':/\b(warn|warning)\b/i.test(line)?'WARN':'INFO';buildLog(traceId,`[SALIDA SDK] ${line}`,level);}}
   function exportDiagnosticLog(){buildLog('LOGEXPORT','Exportando registro de diagnóstico actual.');const payload=outputLines.map(line=>`${line.timestamp||line.time} [${line.level}] ${line.text}`).join('\r\n')+'\r\n';downloadBlob(new Blob([payload],{type:'text/plain;charset=utf-8'}),`Visual-PS5-diagnostic-log-${new Date().toISOString().replace(/[:.]/g,'-')}.log`);}
   function toast(message, kind='ok') {
+    message=trMsg(message);
     const node=document.createElement('div');node.className='toast';node.innerHTML=`<i>${kind==='error'?'!':kind==='warn'?'!':'✓'}</i><span>${esc(message)}</span>`;$('#toastHost').append(node);setTimeout(()=>node.remove(),4200);
   }
   async function api(path, body) {
@@ -205,7 +208,7 @@
 
   function renderSidePanel(){
     const titles={components:[t('panel.components.title'),t('panel.components.sub'),'UI'],logic:[t('panel.logic.title'),t('panel.logic.sub'),'FLOW'],systems:[t('panel.systems.title'),t('panel.systems.sub'),'API'],assets:[t('panel.assets.title'),t('panel.assets.sub'),'ASSET'],files:[t('panel.files.title'),t('panel.files.sub'),'FILE'],sdk:[t('panel.sdk.title'),t('panel.sdk.sub'),'SDK'],templates:[t('panel.templates.title'),t('panel.templates.sub'),'SRC'],docs:[t('panel.docs.title'),t('panel.docs.sub'),'REF']};
-    const gameTools=activeView==='game'&&activePanel==='components';const t=gameTools?['Construcción 3D','Añade piezas al recorrido AGC','AGC']:titles[activePanel];$('#panelTitle').textContent=t[0];$('#panelSubtitle').textContent=t[1];$('#panelKicker').textContent=t[2];
+    const gameTools=activeView==='game'&&activePanel==='components';const panelMeta=gameTools?['Construcción 3D','Añade piezas al recorrido AGC','AGC']:titles[activePanel];$('#panelTitle').textContent=panelMeta[0];$('#panelSubtitle').textContent=panelMeta[1];$('#panelKicker').textContent=panelMeta[2];
     const root=$('#panelContent');root.innerHTML='';
     if(activePanel==='components'){
       if(gameTools){
@@ -1671,7 +1674,7 @@
   let analysisTimer=null;
   function scheduleAnalysis(){clearTimeout(analysisTimer);analysisTimer=setTimeout(runAnalysis,230);}
   function blockingDiagnostics(items,backend=project.backend){return items.filter(item=>item.severity==='error'&&(!item.backendScope||item.backendScope===backend));}
-  function runAnalysis(){const canvas=canvasResolution(),d=[];const add=(severity,title,message,location='Proyecto',fix='')=>d.push({severity,title,message,location,fix});const comps=project.components;const offline=sdkStatus?.offlineEnvironment;const readinessId=project.backend==='opengl-ui'?'native-opengl-ui':project.backend==='vulkan-ui'?'native-vulkan-ui':project.backend==='sharp'?'sharpprospero-nativeaot':project.backend==='payload'?'ps5-payload-sdk-sample':null;const offlineBackend=readinessId?(offline?.backends||[]).find(item=>item.id===readinessId):null;if(offline?.mode==='offline-bundle'&&readinessId&&offlineBackend?.status!=='validated')add('error','Backend no validado para compilación offline',offlineBackend?.evidence||'La matriz no declara una receta completa y verificada sin red.','Backend '+project.backend,'Revisa Configurar entorno y la matriz de preparación offline.');
+  function runAnalysis(){const canvas=canvasResolution(),d=[];const add=(severity,title,message,location='Proyecto',fix='')=>d.push({severity,title:trMsg(title),message:trMsg(message),location:trMsg(location),fix:trMsg(fix)});const comps=project.components;const offline=sdkStatus?.offlineEnvironment;const readinessId=project.backend==='opengl-ui'?'native-opengl-ui':project.backend==='vulkan-ui'?'native-vulkan-ui':project.backend==='sharp'?'sharpprospero-nativeaot':project.backend==='payload'?'ps5-payload-sdk-sample':null;const offlineBackend=readinessId?(offline?.backends||[]).find(item=>item.id===readinessId):null;if(offline?.mode==='offline-bundle'&&readinessId&&offlineBackend?.status!=='validated')add('error','Backend no validado para compilación offline',offlineBackend?.evidence||'La matriz no declara una receta completa y verificada sin red.','Backend '+project.backend,'Revisa Configurar entorno y la matriz de preparación offline.');
     if(!comps.length)add('info','Lienzo vacío','Añade componentes para empezar a construir la interfaz.','Diseño');
     for(const c of comps){
       if(['select','carousel','list'].includes(c.type)&&(!Array.isArray(c.items)||c.items.length===0))add('error','Control sin opciones','Este componente necesita al menos una opción para generar un widget nativo válido.',`Componente ${c.label}`,'Añade una o más opciones.');
@@ -2418,7 +2421,7 @@
   ];
   function consoleStore(){try{return JSON.parse(localStorage.getItem(CONSOLE_STORAGE_KEY)||'{}')||{};}catch{return {};}}
   function consoleSave(){try{localStorage.setItem(CONSOLE_STORAGE_KEY,JSON.stringify({host:$('#consoleHost').value.trim(),folder:$('#consoleDeployFolder').value.trim(),remote:$('#consoleDeployRemote').value.trim(),port:$('#consoleDeployPort').value.trim(),elf:$('#consoleElfPath').value.trim()}));}catch{}}
-  function consoleSetStatus(text,connected){consoleState.connected=connected===true;const el=$('#consoleStatus');if(el){el.textContent=text;el.style.color=connected?'#7ee2a8':text.startsWith('Error')?'#ff9c9c':'';}const led=$('#consoleLed');if(led)led.style.display=connected?'inline-block':'none';}
+  function consoleSetStatus(rawText,connected){const text=trMsg(rawText);consoleState.connected=connected===true;const el=$('#consoleStatus');if(el){el.textContent=text;el.style.color=connected?'#7ee2a8':text.startsWith('Error')?'#ff9c9c':'';}const led=$('#consoleLed');if(led)led.style.display=connected?'inline-block':'none';}
   function classifyConsoleLine(line){
     const classes=[];
     if(/\bEXEC \/app0\//.test(line))classes.push('k-exec');
@@ -2850,48 +2853,9 @@
       e.preventDefault();const canvas=canvasResolution(),c=component(selectedId);if(c){snapshot();const step=e.shiftKey?10:1;if(e.key==='ArrowLeft')c.x=clamp(c.x-step,0,canvas.width-c.w);if(e.key==='ArrowRight')c.x=clamp(c.x+step,0,canvas.width-c.w);if(e.key==='ArrowUp')c.y=clamp(c.y-step,0,canvas.height-c.h);if(e.key==='ArrowDown')c.y=clamp(c.y+step,0,canvas.height-c.h);changed('Posición actualizada');renderCanvas();renderInspector();}
     }
   });
-  /* ===== 1.1.58 · Tema claro/oscuro y selector de idioma ===== */
-  const THEME_KEY='ps5hs-theme-v1',LANG_KEY='ps5hs-lang-v1';
-  function applyTheme(theme){const t=theme==='light'?'light':'dark';document.documentElement.dataset.theme=t;const btn=$('#themeToggle');if(btn){btn.textContent=t==='light'?'☾':'☀';btn.title=t==='light'?'Cambiar al tema oscuro':'Cambiar al tema claro';}}
-  $('#themeToggle').addEventListener('click',()=>{const next=document.documentElement.dataset.theme==='light'?'dark':'light';try{localStorage.setItem(THEME_KEY,next);}catch{}applyTheme(next);});
-  applyTheme((()=>{try{return localStorage.getItem(THEME_KEY)||'dark';}catch{return 'dark';}})());
-  /* ===== 1.1.58 · i18n: diccionario es/en, selector de idioma y aplicación a la UI estática ===== */
-  const I18N_STRINGS={
-    es:{
-      'btn.new':'Nuevo','btn.open':'Abrir','btn.save':'Guardar','btn.closeProject':'Cerrar proyecto','btn.exportProject':'Exportar proyecto','btn.tools':'Herramientas','btn.pack':'Empaquetar','btn.build':'Compilar','btn.preview':'Vista previa',
-      'rail.blocks':'Bloques','rail.logic':'Lógica','rail.systems':'Sistemas','rail.assets':'Recursos','rail.files':'Archivos','rail.projects':'Proyectos','rail.sdks':'SDKs','rail.docs':'Docs',
-      'tab.design':'Diseño','tab.structure':'Estructura','tab.logic':'Flujos','tab.game':'Juego 3D','tab.compute':'Vulkan Compute','tab.code':'Código','tab.diagnostics':'Diagnósticos','tab.console':'Consola PS5','tab.inspector':'Inspector','tab.hierarchy':'Jerarquía',
-      'label.target':'DESTINO','dock.output':'Salida','dock.problems':'Problemas','dock.environment':'Entorno','dock.exportLog':'Exportar log',
-      'crumb.project':'Proyecto','crumb.console':'Consola PS5',
-      'console.disconnected':'Sin conectar','console.clear':'Limpiar','console.connection':'CONEXIÓN','console.hostLabel':'IP de la consola','console.autoKlog':'Capturar klog automáticamente (klogsrv · 3232)','console.test':'Probar conexión','console.stop':'Detener captura','console.hint':'Requiere klogsrv/ftpsrv activos en la consola. El IDE solo habla con esta IP y nunca expone tu equipo a la red.','console.ftpHeading':'DESPLIEGUE FTP','console.portLabel':'Puerto FTP','console.folderLabel':'Carpeta local del título','console.remoteLabel':'Ruta remota','console.userLabel':'Usuario FTP','console.userHint':'(vacío = anónimo)','console.passLabel':'Contraseña','console.deploy':'Desplegar título','console.ftpNote':'Sube eboot.bin, sce_sys y sce_module con --ftp-create-dirs al puerto configurado. Registra la carpeta con ShadowMountPlus si aún no aparece en el inicio.','console.elfHeading':'ELF LOADER · 9021','console.elfLabel':'ELF local','console.sendElf':'Enviar payload','console.elfNote':'Envía el ELF al loader de etaHEN/kstuff. Los títulos de ps5link se lanzan desde la pantalla de inicio, no desde aquí.','console.filterPh':'Filtrar líneas (EXEC, NoDraw, gc_gfx, 0x80…)','console.autoscroll':'Autoscroll','console.download':'Descargar .txt',
-      'panel.components.title':'Componentes','panel.components.sub':'Arrastra elementos al lienzo','panel.logic.title':'Lógica visual','panel.logic.sub':'Eventos y comportamientos','panel.systems.title':'Subsistemas','panel.systems.sub':'Capacidades del entorno','panel.assets.title':'Recursos','panel.assets.sub':'Archivos del proyecto','panel.files.title':'Archivos del proyecto','panel.files.sub':'Explora y edita los archivos reales en disco','panel.sdk.title':'SDK y toolchains','panel.sdk.sub':'Backends comunitarios','panel.templates.title':'Proyectos y motores','panel.templates.sub':'Repositorios reales de PS5','panel.docs.title':'Documentación técnica','panel.docs.sub':'Capacidades y límites del IDE'
-    },
-    en:{
-      'btn.new':'New','btn.open':'Open','btn.save':'Save','btn.closeProject':'Close project','btn.exportProject':'Export project','btn.tools':'Tools','btn.pack':'Package','btn.build':'Build','btn.preview':'Preview',
-      'rail.blocks':'Blocks','rail.logic':'Logic','rail.systems':'Systems','rail.assets':'Assets','rail.files':'Files','rail.projects':'Projects','rail.sdks':'SDKs','rail.docs':'Docs',
-      'tab.design':'Design','tab.structure':'Structure','tab.logic':'Flows','tab.game':'3D Game','tab.compute':'Vulkan Compute','tab.code':'Code','tab.diagnostics':'Diagnostics','tab.console':'PS5 Console','tab.inspector':'Inspector','tab.hierarchy':'Hierarchy',
-      'label.target':'TARGET','dock.output':'Output','dock.problems':'Problems','dock.environment':'Environment','dock.exportLog':'Export log',
-      'crumb.project':'Project','crumb.console':'PS5 Console',
-      'console.disconnected':'Not connected','console.clear':'Clear','console.connection':'CONNECTION','console.hostLabel':'Console IP','console.autoKlog':'Capture klog automatically (klogsrv · 3232)','console.test':'Test connection','console.stop':'Stop capture','console.hint':'Requires klogsrv/ftpsrv running on the console. The IDE only talks to this IP and never exposes your computer to the network.','console.ftpHeading':'FTP DEPLOY','console.portLabel':'FTP port','console.folderLabel':'Local title folder','console.remoteLabel':'Remote path','console.userLabel':'FTP user','console.userHint':'(empty = anonymous)','console.passLabel':'Password','console.deploy':'Deploy title','console.ftpNote':'Uploads eboot.bin, sce_sys and sce_module with --ftp-create-dirs to the configured port. Register the folder with ShadowMountPlus if it does not show up on the home screen yet.','console.elfHeading':'ELF LOADER · 9021','console.elfLabel':'Local ELF','console.sendElf':'Send payload','console.elfNote':'Sends the ELF to the etaHEN/kstuff loader. ps5link titles launch from the home screen, not from here.','console.filterPh':'Filter lines (EXEC, NoDraw, gc_gfx, 0x80…)','console.autoscroll':'Autoscroll','console.download':'Download .txt',
-      'panel.components.title':'Components','panel.components.sub':'Drag elements onto the canvas','panel.logic.title':'Visual logic','panel.logic.sub':'Events and behaviors','panel.systems.title':'Subsystems','panel.systems.sub':'Environment capabilities','panel.assets.title':'Assets','panel.assets.sub':'Project files','panel.files.title':'Project files','panel.files.sub':'Browse and edit the real files on disk','panel.sdk.title':'SDKs and toolchains','panel.sdk.sub':'Community backends','panel.templates.title':'Projects and engines','panel.templates.sub':'Real PS5 repositories','panel.docs.title':'Technical documentation','panel.docs.sub':'Capabilities and IDE limits'
-    }
-  };
-  let uiLang='es';try{uiLang=localStorage.getItem(LANG_KEY)||'es';}catch{uiLang='es';}
-  if(uiLang!=='en'&&uiLang!=='es')uiLang='es';
-  function t(key){const dict=I18N_STRINGS[uiLang]||I18N_STRINGS.es;return dict[key]??I18N_STRINGS.es[key]??key;}
-  function applyStaticI18n(){
-    document.documentElement.lang=uiLang==='en'?'en-GB':'es-ES';
-    document.querySelectorAll('[data-i18n]').forEach(el=>{
-      const text=t(el.dataset.i18n);
-      const first=el.firstChild;
-      if(first&&first.nodeType===Node.TEXT_NODE&&!first.textContent.trim().startsWith('▶'))first.textContent=text;else el.textContent=text;
-    });
-    document.querySelectorAll('[data-i18n-ph]').forEach(el=>{el.placeholder=t(el.dataset.i18nPh);});
-    const sel=$('#uiLangSelect');if(sel&&sel.value!==uiLang)sel.value=uiLang;
-  }
-  $('#uiLangSelect').addEventListener('change',()=>{uiLang=$('#uiLangSelect').value;try{localStorage.setItem(LANG_KEY,uiLang);}catch{}applyStaticI18n();if(isProjectOpen)renderSidePanel();});
-  applyStaticI18n();
-  const shortViewportDockQuery=window.matchMedia?.('(max-height:600px)');
+  /* ===== 1.1.59 · tema e idioma viven en runtime/ps5hs-ui-theme.js y runtime/ps5hs-i18n.js ===== */
+  window.PS5HSI18N.onLanguageChange=()=>{if(isProjectOpen)renderSidePanel();};
+const shortViewportDockQuery=window.matchMedia?.('(max-height:600px)');
   shortViewportDockQuery?.addEventListener?.('change',syncDockToViewportHeight);
   syncDockToViewportHeight();
   // Initial state: restore autosaved design only if it is a Studio project. No mock SDK/toolchain state is shown.
@@ -2899,7 +2863,7 @@
   // Browser recovery autosave is independent from explicit project saving.
   setInterval(()=>{if(!isProjectOpen)return;try{localStorage.setItem(STORAGE_KEY,JSON.stringify(project));}catch(error){if(error?.name==='QuotaExceededError')log('El navegador no tiene espacio para el autosalvado; exporta el proyecto para conservarlo.','WARN');}},12000);
   const stageWrap=$('.canvas-stage-wrap');if(stageWrap&&window.ResizeObserver){const stageObserver=new ResizeObserver(()=>{if(fitCanvasToViewport()&&activeView==='design')renderCanvas();if(activeView==='game')drawGameSceneCanvas();});stageObserver.observe(stageWrap);}window.addEventListener('resize',()=>{if(fitCanvasToViewport()&&activeView==='design')renderCanvas();if(activeView==='game')drawGameSceneCanvas();});
-  setProjectOpenState(isProjectOpen);renderAll();if(!isProjectOpen){$('#dirtyPill').textContent='SIN PROYECTO';$('#canvasState').textContent='No hay proyecto visual abierto. Las carpetas nativas y sus artefactos se conservan.';}log('PS5 Homebrew Studio v1.1.58 inicializado.');log('Editor visual: lienzo adaptable, capas aislables, pantallas múltiples, inspector, flujos, escenas y física 3D AGC, cámara de escena libre, seis mallas primitivas editables, código generado de solo lectura y grafo Vulkan Compute.');log('Backends: SharpProspero C#/NativeAOT, OpenGL/Vulkan UI C++20, Vulkan Compute GLSL/SPIR-V, juegos AGC desde bloques visuales y PS5 Payload SDK C/C++ a ELF.');log('La compilación requiere dependencias reales; solo se informa éxito cuando el proceso termina correctamente y se verifica el artefacto.');
+  setProjectOpenState(isProjectOpen);renderAll();if(!isProjectOpen){$('#dirtyPill').textContent='SIN PROYECTO';$('#canvasState').textContent='No hay proyecto visual abierto. Las carpetas nativas y sus artefactos se conservan.';}log('PS5 Homebrew Studio v1.1.59 inicializado.');log('Editor visual: lienzo adaptable, capas aislables, pantallas múltiples, inspector, flujos, escenas y física 3D AGC, cámara de escena libre, seis mallas primitivas editables, código generado de solo lectura y grafo Vulkan Compute.');log('Backends: SharpProspero C#/NativeAOT, OpenGL/Vulkan UI C++20, Vulkan Compute GLSL/SPIR-V, juegos AGC desde bloques visuales y PS5 Payload SDK C/C++ a ELF.');log('La compilación requiere dependencias reales; solo se informa éxito cuando el proceso termina correctamente y se verifica el artefacto.');
   window.__PS5HS_BOOT_READY=true;
   refreshStatus();
 })();

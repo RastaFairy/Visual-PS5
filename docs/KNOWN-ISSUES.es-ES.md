@@ -46,7 +46,7 @@ Las confirmaciones siguientes se refieren a la versión 1.1.5 y al entorno del u
 
 ### 5. Hilo de audio propio en la plantilla AGC
 
-**Estado: mitigado en 1.1.58; hilo del SO pendiente.** El SDK ps5link (Rufidj) no expone scePthread/creación de hilos, por lo que el audio sigue en el hilo del juego. Desde 1.1.58 el bloque de audio es de 768 muestras (≈96 % del consumo real a 60 fps), lo que elimina el recorte y reduce el bloqueo de sceAudioOutOutput a márgenes despreciables en régimen. Un hilo real exigirá stubs de pthread en el SDK o cambiar a ps5-payload-sdk para este backend.
+**Estado: implementado en 1.1.59; pendiente de verificación en consola física.** El catálogo del enlazador ps5link (linker/catalog.c) ya resuelve libScePthread, así que la plantilla crea un hilo dedicado (`scePthreadCreate` + mutex) que auto-ritma `sceAudioOutOutput` con bloques de 768 muestras; el hilo del juego no ejecuta audio. Falta la verificación en hardware (compilación completa + arranque del título en la PS5): si el loader de ps5link no resolviera pthread en el firmware de destino, el título mostrará el hito «pthread de audio fallo» y seguirá sin audio en lugar de colgarse.
 
 ### 1. Preparación directa del SDK OpenGL compartido en una unidad DrvFS sin `metadata`
 

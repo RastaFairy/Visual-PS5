@@ -71,6 +71,11 @@ jobs:
         run: |
           $paths = @(
             'runtime/server.ps1',
+            'runtime/server-console.ps1',
+            'runtime/server-status.ps1',
+            'runtime/server-model.ps1',
+            'runtime/server-project-files.ps1',
+            'runtime/server-build-config.ps1',
             'runtime/native-runtime.ps1',
             'runtime/check-syntax.ps1',
             'runtime/test-native-runtime.ps1',
