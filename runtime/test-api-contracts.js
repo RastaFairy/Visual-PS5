@@ -65,4 +65,12 @@ assert.ok(html.includes(`?v=${version}`), 'index.html cache-busting must match V
 assert.ok(app.includes(`v${version}`), 'app.js footer version must match VERSION.txt');
 assert.match(fs.readFileSync(path.join(root, 'docs/CHANGELOG.md'), 'utf8'),
   new RegExp(`^## ${version.replace(/\./g, '\\.')}`, 'm'), 'CHANGELOG.md must have an entry for the current version');
+assert.match(html, /id="themeToggle"/, 'theme toggle must exist in the topbar');
+assert.match(app, /I18N_STRINGS/, 'i18n dictionary must be present');
+assert.match(html, /data-i18n=/, 'static UI must carry i18n keys');
+assert.match(html, /id="uiLangSelect"/, 'language selector must exist');
+assert.match(app, /SHAPE_VERTS/, 'AGC vertex budget estimator must run in Diagnostics');
+assert.match(server, /function Test-PS5HSProjectModel/, 'server must validate the project model');
+assert.match(server, /Test-PS5HSProjectModel \$body\.project/, 'the save route must validate the model');
+assert.match(app, /payloadBuildProfile/, 'payload build dialog must expose the build profile');
 console.log(`PASS API contracts: ${called.size} frontend API path families map to server handlers; static assets and version strings are consistent.`);

@@ -1,5 +1,14 @@
 # Registro de cambios
 
+## 1.1.58 — 2026-11-03
+
+- Tema claro/oscuro con botón en la barra superior y persistencia en localStorage; la paleta clara se genera desde la oscura (consolas tipo terminal permanecen oscuras).
+- i18n: diccionario es/en con selector de idioma persistente y atributo `lang` dinámico. Cobertura inicial de la capa estática (barra superior, rail, pestañas, dock, panel de consola y títulos de paneles); los mensajes de flujos profundos siguen en español mientras se completa la migración.
+- Estimador de presupuesto de vértices AGC en Diagnósticos: coste por malla (cubo/cristal 24, esfera 200, cilindro/cono 120 vértices) contra los límites de la plantilla (24.000 escena / 12.000 UI), con aviso al 75 % y error al 100 % antes de compilar.
+- El servidor valida el modelo del proyecto en /api/save y /api/load (formato, versión, backend, nombre, ids únicos, pantallas coherentes): deja de confiar ciegamente en el navegador.
+- Perfil Debug/Release para el backend payload: selector en el diálogo de compilación, flags del perfil al final del Makefile generado (-O0 -g / -O2) y preferencia recordada en el proyecto.
+- Audio AGC desacoplado del presupuesto de frame: bloque de 768 muestras (≈96 % del consumo real a 60 fps) en vez del grano de 256 (33 %), elimina el recorte y el bloqueo prolongado del hilo del juego sin hilos del SO (el SDK ps5link no expone scePthread). Verificado con prospero-clang -fsyntax-only sobre los headers reales.
+
 ## 1.1.57 — 2026-11-03
 
 - Arregla el panel de consola: la ruta del klog leía `$request.QueryString`, que el servidor TCP propio nunca construyó (era API de HttpListener), por lo que toda captura de klog fallaba con «No se puede indicar en una matriz nula». El objeto petición ahora parsea la query string.

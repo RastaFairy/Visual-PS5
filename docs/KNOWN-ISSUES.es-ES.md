@@ -44,6 +44,10 @@ Las confirmaciones siguientes se refieren a la versión 1.1.5 y al entorno del u
 
 ## Problemas y validaciones pendientes
 
+### 5. Hilo de audio propio en la plantilla AGC
+
+**Estado: mitigado en 1.1.58; hilo del SO pendiente.** El SDK ps5link (Rufidj) no expone scePthread/creación de hilos, por lo que el audio sigue en el hilo del juego. Desde 1.1.58 el bloque de audio es de 768 muestras (≈96 % del consumo real a 60 fps), lo que elimina el recorte y reduce el bloqueo de sceAudioOutOutput a márgenes despreciables en régimen. Un hilo real exigirá stubs de pthread en el SDK o cambiar a ps5-payload-sdk para este backend.
+
 ### 1. Preparación directa del SDK OpenGL compartido en una unidad DrvFS sin `metadata`
 
 **Estado: pendiente; existe una vía alternativa para proyectos visuales generados por el IDE.**

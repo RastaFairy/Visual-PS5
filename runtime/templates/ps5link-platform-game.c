@@ -410,6 +410,11 @@ extern int sceAudioOutClose(int);
 #define UI_MAX_INDICES 18000
 #define AUDIO_RATE 48000u
 #define AUDIO_GRAIN 256u
+/* Un bloque por frame a 60 fps: 768 muestras cubre el 96 % del consumo real
+   (48000/60 ≈ 800 muestras por frame), de modo que sceAudioOutOutput casi nunca
+   espera y la música deja de recortarse, sin necesitar un hilo aparte (el SDK
+   ps5link no expone scePthread). */
+#define AUDIO_BLOCK (AUDIO_GRAIN*3u)
 #define SCREEN_W 1920.0f
 #define SCREEN_H 1080.0f
 #define PI_F 3.14159265358979f
@@ -849,9 +854,9 @@ static void menu_input(int up,int down,int cross,int circle){
     }else if(current_screen==2&&game_won&&cross)dispatch_game_action(PS5HS_GAME_RESTART_COMPONENT_ID,PS5HS_GAME_RESTART_EVENT,game_restart);
 }
 static void audio_frame(void){
-    if(audio_port<0)return;static int16_t pcm[AUDIO_GRAIN*2];const float step=TAU_F/(float)AUDIO_RATE;
+    if(audio_port<0)return;static int16_t pcm[AUDIO_BLOCK*2];const float step=TAU_F/(float)AUDIO_RATE;
     static const unsigned short notes[8]={392,440,523,659,587,523,440,349};
-    for(unsigned int i=0;i<AUDIO_GRAIN;i++){
+    for(unsigned int i=0;i<AUDIO_BLOCK;i++){
         float sample=0;
         if(audio_enabled){
             unsigned int beat=(music_sample/12000u)&7u;music_phase+=step*notes[beat];if(music_phase>TAU_F)music_phase-=TAU_F;
@@ -1204,7 +1209,7 @@ int main(void){
             audio_ready=1;
             int audioInit=sceAudioOutInit();
             if(audioInit>=0||(unsigned int)audioInit==0x8026000Eu){
-                audio_port=sceAudioOutOpen(0xFF,0,0,AUDIO_GRAIN,AUDIO_RATE,1);
+                audio_port=sceAudioOutOpen(0xFF,0,0,AUDIO_BLOCK,AUDIO_RATE,1);
                 if(audio_port<0){error_notice("AudioOutOpen fallo",audio_port);audio_enabled=0;}
                 else PS5HS_TRACE(PS5HS_GAME_TITLE ": audio listo");
             }else{error_notice("AudioOutInit fallo",audioInit);audio_enabled=0;}

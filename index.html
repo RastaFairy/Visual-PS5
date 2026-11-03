@@ -1,26 +1,28 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="es">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="color-scheme" content="dark" />
-  <meta name="application-version" content="1.1.57" />
+  <meta name="application-version" content="1.1.58" />
   <title>PS5 Homebrew Studio</title>
-  <link rel="stylesheet" href="styles.css?v=1.1.57" />
+  <link rel="stylesheet" href="styles.css?v=1.1.58" />
 </head>
 <body>
   <div class="app-shell">
     <header class="topbar">
-      <div class="brand"><div class="brand-mark">P<span>5</span></div><div><strong>Homebrew Studio</strong><small>VISUAL IDE · VERSION 1.1.57</small></div></div>
+      <div class="brand"><div class="brand-mark">P<span>5</span></div><div><strong>Homebrew Studio</strong><small>VISUAL IDE · VERSION 1.1.58</small></div></div>
       <div class="project-head"><span class="live-dot"></span><input id="projectName" value="MiHomebrew" aria-label="Nombre del proyecto"/><span class="dirty-pill" id="dirtyPill">SIN GUARDAR</span></div>
       <div class="top-actions">
-        <button id="newProjectBtn" class="btn ghost">Nuevo</button>
-        <button id="openProjectBtn" class="btn ghost">Abrir</button>
-        <button id="saveProjectBtn" class="btn ghost">Guardar</button>
-        <button id="closeProjectBtn" class="btn ghost">Cerrar proyecto</button>
-        <button id="exportProjectBtn" class="btn secondary">Exportar proyecto</button>
-        <button id="integrationSettingsBtn" class="btn ghost" title="Configurar Python y PS5 UltraPack">Herramientas</button>
-        <button id="postBuildPackBtn" class="btn secondary" disabled title="Compila y verifica un título nativo para habilitar esta acción">Empaquetar</button><button id="buildBtn" class="btn primary"><span>▶</span> Compilar</button>
+        <select id="uiLangSelect" class="compact-select" aria-label="Idioma de la interfaz" title="Idioma de la interfaz"><option value="es">ES</option><option value="en">EN</option></select>
+        <button id="themeToggle" class="btn ghost" title="Cambiar entre tema oscuro y claro" aria-label="Cambiar tema">☀</button>
+        <button id="newProjectBtn" class="btn ghost" data-i18n="btn.new">Nuevo</button>
+        <button id="openProjectBtn" class="btn ghost" data-i18n="btn.open">Abrir</button>
+        <button id="saveProjectBtn" class="btn ghost" data-i18n="btn.save">Guardar</button>
+        <button id="closeProjectBtn" class="btn ghost" data-i18n="btn.closeProject">Cerrar proyecto</button>
+        <button id="exportProjectBtn" class="btn secondary" data-i18n="btn.exportProject">Exportar proyecto</button>
+        <button id="integrationSettingsBtn" class="btn ghost" title="Configurar Python y PS5 UltraPack" data-i18n="btn.tools">Herramientas</button>
+        <button id="postBuildPackBtn" class="btn secondary" disabled title="Compila y verifica un título nativo para habilitar esta acción" data-i18n="btn.pack">Empaquetar</button><button id="buildBtn" class="btn primary"><span>▶</span> <span data-i18n="btn.build">Compilar</span></button>
       </div>
     </header>
 
@@ -28,15 +30,15 @@
 
     <main class="workspace">
       <aside class="left-rail">
-        <button class="rail-item active" data-panel="components" title="Componentes"><b>▦</b><span>Bloques</span></button>
-        <button class="rail-item" data-panel="logic" title="Lógica"><b>⌘</b><span>Lógica</span></button>
-        <button class="rail-item" data-panel="systems" title="Sistemas"><b>⚙</b><span>Sistemas</span></button>
-        <button class="rail-item" data-panel="assets" title="Recursos"><b>◩</b><span>Recursos</span></button>
-        <button class="rail-item" data-panel="files" title="Archivos del proyecto en disco"><b>❐</b><span>Archivos</span></button>
-        <button class="rail-item" data-panel="templates" title="Proyectos y motores"><b>⬡</b><span>Proyectos</span></button>
+        <button class="rail-item active" data-panel="components" title="Componentes"><b>▦</b><span data-i18n="rail.blocks">Bloques</span></button>
+        <button class="rail-item" data-panel="logic" title="Lógica"><b>⌘</b><span data-i18n="rail.logic">Lógica</span></button>
+        <button class="rail-item" data-panel="systems" title="Sistemas"><b>⚙</b><span data-i18n="rail.systems">Sistemas</span></button>
+        <button class="rail-item" data-panel="assets" title="Recursos"><b>◩</b><span data-i18n="rail.assets">Recursos</span></button>
+        <button class="rail-item" data-panel="files" title="Archivos del proyecto en disco"><b>❐</b><span data-i18n="rail.files">Archivos</span></button>
+        <button class="rail-item" data-panel="templates" title="Proyectos y motores"><b>⬡</b><span data-i18n="rail.projects">Proyectos</span></button>
         <div class="rail-spacer"></div>
-        <button class="rail-item" data-panel="sdk" title="SDK y toolchains"><b>⬇</b><span>SDKs</span></button>
-        <button class="rail-item" data-panel="docs" title="Documentación"><b>▤</b><span>Docs</span></button>
+        <button class="rail-item" data-panel="sdk" title="SDK y toolchains"><b>⬇</b><span data-i18n="rail.sdks">SDKs</span></button>
+        <button class="rail-item" data-panel="docs" title="Documentación"><b>▤</b><span data-i18n="rail.docs">Docs</span></button>
       </aside>
 
       <aside class="left-panel" id="leftPanel">
@@ -47,18 +49,18 @@
       <section class="editor-area">
         <div class="editor-tabs">
           <div class="editor-view-tabs" role="group" aria-label="Vistas del editor">
-            <button class="editor-tab active" data-view="design">Diseño <span class="tab-status"></span></button>
-            <button class="editor-tab" data-view="structure">Estructura</button>
-            <button class="editor-tab" data-view="logic">Flujos</button>
-            <button class="editor-tab" data-view="game">Juego 3D</button>
-            <button class="editor-tab" data-view="compute">Vulkan Compute</button>
-            <button class="editor-tab" data-view="code">Código</button>
-            <button class="editor-tab" data-view="diagnostics">Diagnósticos <span class="count-badge" id="diagCount">0</span></button>
-            <button class="editor-tab" data-view="console">Consola PS5 <span class="count-badge" id="consoleLed" style="display:none">●</span></button>
+            <button class="editor-tab active" data-view="design"><span data-i18n="tab.design">Diseño</span> <span class="tab-status"></span></button>
+            <button class="editor-tab" data-view="structure"><span data-i18n="tab.structure">Estructura</span></button>
+            <button class="editor-tab" data-view="logic"><span data-i18n="tab.logic">Flujos</span></button>
+            <button class="editor-tab" data-view="game"><span data-i18n="tab.game">Juego 3D</span></button>
+            <button class="editor-tab" data-view="compute"><span data-i18n="tab.compute">Vulkan Compute</span></button>
+            <button class="editor-tab" data-view="code"><span data-i18n="tab.code">Código</span></button>
+            <button class="editor-tab" data-view="diagnostics"><span data-i18n="tab.diagnostics">Diagnósticos</span> <span class="count-badge" id="diagCount">0</span></button>
+            <button class="editor-tab" data-view="console"><span data-i18n="tab.console">Consola PS5</span> <span class="count-badge" id="consoleLed" style="display:none">●</span></button>
           </div>
           <div class="editor-tab-controls" role="group" aria-label="Destino y vista previa">
-            <label class="target-select-label">DESTINO</label><select id="backendSelect" class="compact-select" aria-label="Backend"><optgroup label="Generadores visuales (del lienzo)"><option value="sharp">SharpProspero · Aplicación C#</option><option value="opengl-ui">Native UI · OpenGL 4.6 / C++20</option><option value="vulkan-ui">Native UI · Vulkan / RADV / C++20</option><option value="vulkan-compute">Vulkan Compute · GLSL / SPIR-V</option><option value="ps5link">ps5link · Título nativo AGC</option></optgroup><optgroup label="Payloads C/C++ con código manual"><option value="payload">ps5-payload-dev/sdk · Payload ELF · offline</option><option value="sharp-payload">SharpProspero · Payload (sin integración)</option><option value="ps5sdk">PS5SDK · ELF payload (sin integración)</option></optgroup><optgroup label="Referencia (no genera desde el lienzo)"><option value="etahen">etaHEN · Plugin</option></optgroup></select>
-            <button id="previewBtn" class="btn secondary small">▷ Vista previa</button>
+            <label class="target-select-label" data-i18n="label.target">DESTINO</label><select id="backendSelect" class="compact-select" aria-label="Backend"><optgroup label="Generadores visuales (del lienzo)"><option value="sharp">SharpProspero · Aplicación C#</option><option value="opengl-ui">Native UI · OpenGL 4.6 / C++20</option><option value="vulkan-ui">Native UI · Vulkan / RADV / C++20</option><option value="vulkan-compute">Vulkan Compute · GLSL / SPIR-V</option><option value="ps5link">ps5link · Título nativo AGC</option></optgroup><optgroup label="Payloads C/C++ con código manual"><option value="payload">ps5-payload-dev/sdk · Payload ELF · offline</option><option value="sharp-payload">SharpProspero · Payload (sin integración)</option><option value="ps5sdk">PS5SDK · ELF payload (sin integración)</option></optgroup><optgroup label="Referencia (no genera desde el lienzo)"><option value="etahen">etaHEN · Plugin</option></optgroup></select>
+            <button id="previewBtn" class="btn secondary small">▷ <span data-i18n="btn.preview">Vista previa</span></button>
           </div>
         </div>
 
@@ -121,36 +123,36 @@
         <div class="view-container hidden" id="diagnosticsView"><div class="canvas-toolbar"><div class="breadcrumbs"><span>Proyecto</span><i>/</i><b>Diagnósticos</b></div><div class="canvas-tools"><select id="diagFilter" class="compact-select"><option value="all">Todos los diagnósticos</option><option value="error">Errores</option><option value="warning">Advertencias</option><option value="info">Información</option></select><button id="recheckBtn" class="btn secondary small">⟳ Analizar</button></div></div><div id="diagnosticsList" class="diagnostics-list"></div></div>
 
         <div class="view-container hidden" id="consoleView">
-          <div class="canvas-toolbar"><div class="breadcrumbs"><span>Proyecto</span><i>/</i><b>Consola PS5</b></div><div class="canvas-tools"><span id="consoleStatus" class="structure-summary">Sin conectar</span><button id="consoleClearBtn" class="btn secondary small">Limpiar</button></div></div>
+          <div class="canvas-toolbar"><div class="breadcrumbs"><span data-i18n="crumb.project">Proyecto</span><i>/</i><b data-i18n="crumb.console">Consola PS5</b></div><div class="canvas-tools"><span id="consoleStatus" class="structure-summary" data-i18n="console.disconnected">Sin conectar</span><button id="consoleClearBtn" class="btn secondary small" data-i18n="console.clear">Limpiar</button></div></div>
           <div class="console-layout">
             <aside class="console-side">
-              <div class="compute-pane-heading"><strong>CONEXIÓN</strong></div>
+              <div class="compute-pane-heading"><strong data-i18n="console.connection">CONEXIÓN</strong></div>
               <div class="game-physics-properties">
-                <label>IP de la consola<input id="consoleHost" type="text" inputmode="ipv4" placeholder="192.168.1.23" spellcheck="false"></label>
-                <label class="check-row"><input id="consoleKlogAuto" type="checkbox" checked> Capturar klog automáticamente (klogsrv · 3232)</label>
-                <button id="consoleConnectBtn" class="btn secondary small" type="button">Probar conexión</button>
-                <button id="consoleStopBtn" class="btn ghost small" type="button">Detener captura</button>
-                <small id="consoleHint" class="section-note">Requiere klogsrv/ftpsrv activos en la consola. El IDE solo habla con esta IP y nunca expone tu equipo a la red.</small>
+                <label data-i18n="console.hostLabel">IP de la consola<input id="consoleHost" type="text" inputmode="ipv4" placeholder="192.168.1.23" spellcheck="false"></label>
+                <label class="check-row"><input id="consoleKlogAuto" type="checkbox" checked> <span data-i18n="console.autoKlog">Capturar klog automáticamente (klogsrv · 3232)</span></label>
+                <button id="consoleConnectBtn" class="btn secondary small" type="button" data-i18n="console.test">Probar conexión</button>
+                <button id="consoleStopBtn" class="btn ghost small" type="button" data-i18n="console.stop">Detener captura</button>
+                <small id="consoleHint" class="section-note" data-i18n="console.hint">Requiere klogsrv/ftpsrv activos en la consola. El IDE solo habla con esta IP y nunca expone tu equipo a la red.</small>
               </div>
-              <div class="compute-pane-heading"><strong>DESPLIEGUE FTP</strong></div>
+              <div class="compute-pane-heading"><strong data-i18n="console.ftpHeading">DESPLIEGUE FTP</strong></div>
               <div class="game-physics-properties">
-                <label>Puerto FTP <small>(ftpsrv de ps5-payload-dev: 2121)</small><input id="consoleDeployPort" type="number" min="1" max="65535" value="2121"></label>
-                <label>Carpeta local del título<input id="consoleDeployFolder" type="text" spellcheck="false" placeholder="Ruta del título compilado (dist/…)"></label>
-                <label>Ruta remota<input id="consoleDeployRemote" type="text" spellcheck="false" value="/data/homebrew/"></label>
-                <label>Usuario FTP <small>(vacío = anónimo)</small><input id="consoleDeployUser" type="text" spellcheck="false" autocomplete="off"></label>
-                <label>Contraseña<input id="consoleDeployPass" type="password" autocomplete="new-password"></label>
-                <button id="consoleDeployBtn" class="btn secondary small" type="button">Desplegar título</button>
-                <small class="section-note">Sube eboot.bin, sce_sys y sce_module con --ftp-create-dirs al puerto configurado. Registra la carpeta con ShadowMountPlus si aún no aparece en el inicio.</small>
+                <label data-i18n="console.portLabel">Puerto FTP <small>(ftpsrv de ps5-payload-dev: 2121)</small><input id="consoleDeployPort" type="number" min="1" max="65535" value="2121"></label>
+                <label data-i18n="console.folderLabel">Carpeta local del título<input id="consoleDeployFolder" type="text" spellcheck="false" placeholder="Ruta del título compilado (dist/…)"></label>
+                <label data-i18n="console.remoteLabel">Ruta remota<input id="consoleDeployRemote" type="text" spellcheck="false" value="/data/homebrew/"></label>
+                <label><span data-i18n="console.userLabel">Usuario FTP</span> <small data-i18n="console.userHint">(vacío = anónimo)</small><input id="consoleDeployUser" type="text" spellcheck="false" autocomplete="off"></label>
+                <label data-i18n="console.passLabel">Contraseña<input id="consoleDeployPass" type="password" autocomplete="new-password"></label>
+                <button id="consoleDeployBtn" class="btn secondary small" type="button" data-i18n="console.deploy">Desplegar título</button>
+                <small class="section-note" data-i18n="console.ftpNote">Sube eboot.bin, sce_sys y sce_module con --ftp-create-dirs al puerto configurado. Registra la carpeta con ShadowMountPlus si aún no aparece en el inicio.</small>
               </div>
-              <div class="compute-pane-heading"><strong>ELF LOADER · 9021</strong></div>
+              <div class="compute-pane-heading"><strong data-i18n="console.elfHeading">ELF LOADER · 9021</strong></div>
               <div class="game-physics-properties">
-                <label>ELF local<input id="consoleElfPath" type="text" spellcheck="false" placeholder="build/ps5link/app.elf"></label>
-                <button id="consoleSendElfBtn" class="btn secondary small" type="button">Enviar payload</button>
-                <small class="section-note">Envía el ELF al loader de etaHEN/kstuff. Los títulos de ps5link se lanzan desde la pantalla de inicio, no desde aquí.</small>
+                <label data-i18n="console.elfLabel">ELF local<input id="consoleElfPath" type="text" spellcheck="false" placeholder="build/ps5link/app.elf"></label>
+                <button id="consoleSendElfBtn" class="btn secondary small" type="button" data-i18n="console.sendElf">Enviar payload</button>
+                <small class="section-note" data-i18n="console.elfNote">Envía el ELF al loader de etaHEN/kstuff. Los títulos de ps5link se lanzan desde la pantalla de inicio, no desde aquí.</small>
               </div>
             </aside>
             <section class="console-main">
-              <div class="console-toolbar"><input id="consoleFilter" type="search" placeholder="Filtrar líneas (EXEC, NoDraw, gc_gfx, 0x80…)" aria-label="Filtrar klog"><label class="check-row small"><input id="consoleAutoScroll" type="checkbox" checked> Autoscroll</label><button id="consoleDownloadBtn" class="btn ghost small" type="button">Descargar .txt</button></div>
+              <div class="console-toolbar"><input id="consoleFilter" type="search" placeholder="Filtrar líneas (EXEC, NoDraw, gc_gfx, 0x80…)" aria-label="Filtrar klog" data-i18n-ph="console.filterPh"><label class="check-row small"><input id="consoleAutoScroll" type="checkbox" checked> <span data-i18n="console.autoscroll">Autoscroll</span></label><button id="consoleDownloadBtn" class="btn ghost small" type="button" data-i18n="console.download">Descargar .txt</button></div>
               <div id="consoleKlog" class="console-klog" aria-label="Registro del kernel de la consola" aria-live="polite"></div>
             </section>
           </div>
@@ -158,14 +160,14 @@
       </section>
 
       <aside class="right-panel">
-        <div class="right-panel-tabs"><button class="right-tab active" data-right="inspector">Inspector</button><button class="right-tab" data-right="hierarchy">Jerarquía</button></div>
+        <div class="right-panel-tabs"><button class="right-tab active" data-right="inspector"><span data-i18n="tab.inspector">Inspector</span></button><button class="right-tab" data-right="hierarchy"><span data-i18n="tab.hierarchy">Jerarquía</span></button></div>
         <div id="inspectorPane" class="inspector-pane"></div>
         <div id="hierarchyPane" class="hierarchy-pane hidden"></div>
       </aside>
     </main>
 
     <footer class="bottom-dock">
-      <div class="dock-tabs"><button class="dock-tab active" data-dock="output">Salida</button><button class="dock-tab" data-dock="problems">Problemas <span id="problemCount">0</span></button><button class="dock-tab" data-dock="sdkstate">Entorno</button><button class="dock-log-export" id="exportBuildLogBtn" type="button" title="Exportar el registro persistente de diagnóstico">Exportar log</button></div>
+      <div class="dock-tabs"><button class="dock-tab active" data-dock="output"><span data-i18n="dock.output">Salida</span></button><button class="dock-tab" data-dock="problems"><span data-i18n="dock.problems">Problemas</span> <span id="problemCount">0</span></button><button class="dock-tab" data-dock="sdkstate"><span data-i18n="dock.environment">Entorno</span></button><button class="dock-log-export" id="exportBuildLogBtn" type="button" title="Exportar el registro persistente de diagnóstico"><span data-i18n="dock.exportLog">Exportar log</span></button></div>
       <div class="dock-content" id="dockContent"><div class="output-line"><span class="output-time">--:--:--</span><span class="output-ok">INFO</span><span>Inicializando el espacio de trabajo visual.</span></div><div class="output-line"><span class="output-time">--:--:--</span><span class="output-ok">READY</span><span>El editor está listo. La compilación real se habilitará al configurar un backend compatible.</span></div></div>
       <button class="dock-toggle" id="dockToggle" title="Contraer panel">⌄</button>
     </footer>
@@ -239,14 +241,14 @@
     });
   })();
   </script>
-  <script src="runtime/project-contracts.js?v=1.1.57"></script>
-  <script src="runtime/unicode-fonts.js?v=1.1.57"></script>
-  <script src="runtime/native-modification-policy.js?v=1.1.57"></script>
-  <script src="runtime/native-generator.js?v=1.1.57"></script>
-  <script src="runtime/payload-generator.js?v=1.1.57"></script>
-  <script src="runtime/compute-graph.js?v=1.1.57"></script>
-  <script src="runtime/layer-model.js?v=1.1.57"></script>
-  <script src="app.js?v=1.1.57"></script>
+  <script src="runtime/project-contracts.js?v=1.1.58"></script>
+  <script src="runtime/unicode-fonts.js?v=1.1.58"></script>
+  <script src="runtime/native-modification-policy.js?v=1.1.58"></script>
+  <script src="runtime/native-generator.js?v=1.1.58"></script>
+  <script src="runtime/payload-generator.js?v=1.1.58"></script>
+  <script src="runtime/compute-graph.js?v=1.1.58"></script>
+  <script src="runtime/layer-model.js?v=1.1.58"></script>
+  <script src="app.js?v=1.1.58"></script>
 </body>
 </html>
 
