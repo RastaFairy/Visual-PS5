@@ -1,0 +1,120 @@
+{
+ "name": "fast68-l-ultra-k01",
+ "family": [
+  7680,
+  4320
+ ],
+ "model": 1,
+ "inv": 1,
+ "ae": 0,
+ "dmv": 0,
+ "jit": 0,
+ "nl": 0,
+ "scratch": 797414784,
+ "passes": [
+  {
+   "dxil": "optimize/variants/sm66/sm68-out-pre-l-ultra-k01.dxil",
+   "cb": "main",
+   "kind": "pre",
+   "barrier_before": false,
+   "role": 1
+  },
+  {
+   "dxil": "optimize/variants/sm66/shaders-e1d4de8afd99bd0a75741f1f5e6cbc88565666492e6ac93c6ee04c54b48b8462.dxil",
+   "cb": "tensor",
+   "kind": "tiny",
+   "barrier_before": false,
+   "role": 0,
+   "tiny": [
+    0,
+    3841,
+    2161
+   ]
+  },
+  {
+   "dxil": "optimize/variants/sm66/first-os2-first-l-ultra.dxil",
+   "cb": "none",
+   "kind": "first",
+   "barrier_before": true,
+   "role": 0,
+   "wcb": "optimize/variants/first-os2/first-l-ultra.sm68.wcb.bin",
+   "wcb_reg": 0
+  },
+  {
+   "dxil": "optimize/variants/sm66/shaders-650671c43ebb2cd6dd2cca26ddac63ceeb0624e4cbf2785c6fe2aa922bb16956.dxil",
+   "cb": "tensor",
+   "kind": "tiny",
+   "barrier_before": false,
+   "role": 0,
+   "tiny": [
+    2,
+    3841,
+    2161
+   ]
+  },
+  {
+   "dxil": "optimize/variants/sm66/shaders-94d17858f3ebe38e69b02b10e30fe5438583460c7023dbc8965e8153295335fc.dxil",
+   "cb": "tensor",
+   "kind": "tiny",
+   "barrier_before": false,
+   "role": 0,
+   "tiny": [
+    3,
+    1921,
+    1081
+   ]
+  },
+  {
+   "dxil": "optimize/variants/sm66/sm68-tuned-large-f6008d9ea98c5f6f414d3fc526b4ffff09d5a6c1846f582551bc3e1710b131c1.dxil",
+   "cb": "tensor",
+   "kind": "p57",
+   "barrier_before": true,
+   "role": 0,
+   "wcb": "optimize/variants/sm68/tuned-large-f6008d9ea98c5f6f414d3fc526b4ffff09d5a6c1846f582551bc3e1710b131c1.wcb.bin",
+   "wcb_reg": 0
+  },
+  {
+   "dxil": "optimize/variants/sm66/shaders-30464cdf619bb2881b06297d2bfb93ef3b3ab15b50f74610e55a27778672fd84.dxil",
+   "cb": "tensor",
+   "kind": "tiny",
+   "barrier_before": false,
+   "role": 0,
+   "tiny": [
+    4,
+    1921,
+    1081
+   ]
+  },
+  {
+   "dxil": "optimize/variants/sm66/sm68-tuned-large-c43f4c46619547f22e45086b2e36ec451d18a2158c88f70b5f80d96e21f2df99.dxil",
+   "cb": "tensor",
+   "kind": "p57",
+   "barrier_before": true,
+   "role": 0,
+   "wcb": "optimize/variants/sm68/tuned-large-c43f4c46619547f22e45086b2e36ec451d18a2158c88f70b5f80d96e21f2df99.wcb.bin",
+   "wcb_reg": 0
+  },
+  {
+   "dxil": "optimize/variants/sm66/shaders-ad83dc103031a78efccf5fa56fda78ba3ac762701273bd8632f82d595f1b05de.dxil",
+   "cb": "tensor",
+   "kind": "tiny",
+   "barrier_before": false,
+   "role": 0,
+   "tiny": [
+    5,
+    3841,
+    2161
+   ]
+  },
+  {
+   "dxil": "optimize/variants/sm66/sm68-out-post-l-ultra-a0n0.dxil",
+   "cb": "main",
+   "kind": "post",
+   "barrier_before": true,
+   "role": 2,
+   "wcb": "optimize/variants/sm68/out-post-l-ultra-a0n0.wcb.bin",
+   "wcb_reg": 0
+  }
+ ],
+ "tier": 2
+}

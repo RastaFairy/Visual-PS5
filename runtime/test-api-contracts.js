@@ -15,7 +15,11 @@ for (const match of html.matchAll(/<script\b[^>]*\bsrc=["']([^"']+)["'][^>]*>/gi
   assert.ok(fs.existsSync(path.join(root, src)), `script exists: ${src}`);
   assert.ok(allowed.has(src), `server serves script: ${src}`);
 }
-const called = new Set([...app.matchAll(/\bapi\(\s*['"]([^'"]+)['"]/g)].map(match => match[1]));
+const called = new Set();
+for (const match of app.matchAll(/\bapi\(\s*(['"`])([^'"`]+?)\1/g)) {
+  const route = match[2].split('?')[0].split('${')[0];
+  if (route) called.add(route);
+}
 for (const apiPath of called) {
   if (apiPath === 'build-jobs/') {
     assert.match(server, /-and \$path -match '\^\/api\/build-jobs\/\[a-f0-9\]\{32\}\$'/,
@@ -27,7 +31,8 @@ for (const apiPath of called) {
     server.includes(`'/api/${apiPath}'`) || (apiPath === 'status' && server.includes("$path -eq '/api/status'")) ||
     (apiPath === 'integrations' && server.includes("$path -eq '/api/integrations'")) ||
     (apiPath === 'projects' && server.includes("$path -eq '/api/projects'")) ||
-    (apiPath === 'native-projects' && server.includes("$path -eq '/api/native-projects'")),
+    (apiPath === 'native-projects' && server.includes("$path -eq '/api/native-projects'")) ||
+    (apiPath === 'files' && server.includes("'/api/files'")),
     `frontend API path must have a server route: ${apiPath}`);
 }
 assert.match(app, /function openSetup\(/);
@@ -41,4 +46,23 @@ assert.match(app, /Preparación offline por backend/, 'the setup dialog must sho
 assert.match(app, /function openProject(?:\([^)]*\))[\s\S]*const dialogRevision=modalRevision/, 'project browser must capture the dialog context');
 assert.match(app, /function saveProject\(\)[\s\S]*snapshotJson=JSON\.stringify\(data\)/, 'save must preserve the serialized snapshot and not mark subsequent edits clean');
 assert.match(app, /function openIntegrationSettings\(\)[\s\S]*revisionAtStart=modalRevision/, 'async settings discovery must not replace a newer modal');
-console.log(`PASS API contracts: ${called.size} frontend API path families map to server handlers; static assets are resolvable.`);
+assert.match(app, /api\('console\/deploy',\{host,localFolder:folder,remoteFolder:remote/, 'FTP deploy must send localFolder/remoteFolder as the server contract expects');
+assert.match(server, /'\/api\/console\/deploy' \{[\s\S]{0,400}\$body\.localFolder[\s\S]{0,200}\$body\.remoteFolder/, 'server deploy route must read localFolder/remoteFolder');
+assert.match(app, /api\('console\/klog-stop'/, 'stopping the klog poll must release the server-side socket');
+assert.ok(server.includes("'/api/console/klog-stop'"), 'server must expose /api/console/klog-stop');
+assert.match(html, /id="consoleStopBtn"/, 'console view must offer a stop control');
+assert.match(app, /\$\('#consoleStopBtn'\)\.addEventListener/, 'stop control must be wired');
+assert.match(app, /\$\('#consoleDownloadBtn'\)\.addEventListener/, 'klog download button must be wired');
+assert.match(app, /NON_UI_BACKEND_NOTICE/, 'non-canvas backends must warn immediately on selection');
+assert.ok(server.includes("'/api/files'"), 'server must expose the project file explorer endpoint');
+assert.ok(server.includes("'/api/files/search'"), 'server must expose project-wide search');
+assert.match(app, /api\('files/, 'file explorer must call the files API');
+assert.ok(!server.includes("'/api/build-native' {"), 'dead synchronous /api/build-native route must stay removed');
+assert.ok(!server.includes("'/api/build-visual-native' {"), 'dead synchronous /api/build-visual-native route must stay removed');
+const version = (fs.readFileSync(path.join(root, 'VERSION.txt'), 'utf8').match(/Version:\s*(\S+)/) || [])[1];
+assert.ok(version, 'VERSION.txt must declare a version');
+assert.ok(html.includes(`?v=${version}`), 'index.html cache-busting must match VERSION.txt');
+assert.ok(app.includes(`v${version}`), 'app.js footer version must match VERSION.txt');
+assert.match(fs.readFileSync(path.join(root, 'docs/CHANGELOG.md'), 'utf8'),
+  new RegExp(`^## ${version.replace(/\./g, '\\.')}`, 'm'), 'CHANGELOG.md must have an entry for the current version');
+console.log(`PASS API contracts: ${called.size} frontend API path families map to server handlers; static assets and version strings are consistent.`);

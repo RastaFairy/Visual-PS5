@@ -1,6 +1,6 @@
-# Validación y problemas conocidos — PS5 Homebrew Studio 1.1.18
+# Validación y problemas conocidos — PS5 Homebrew Studio
 
-Última actualización: 2026-10-19.
+Última actualización: 2026-10-19 (secciones 1.1.18 y 1.1.17). Revisado el 2026-11-03 contra la **1.1.56**: las secciones históricas se conservan tal cual; las 4 validaciones pendientes siguen sin confirmar. Los números de suites citados corresponden a la versión de cada sección, no al total actual (12 suites JavaScript en CI desde la 1.1.57).
 
 ## Validación técnica de 1.1.18 en el entorno de preparación
 

@@ -1,5 +1,9 @@
 # PS5 Homebrew Studio
 
+<p align="center">
+  <img src="docs/assets/screenshot-ide.png" alt="Captura del editor de PS5 Homebrew Studio: lienzo de diseño, inspector y panel de consola PS5" width="1000">
+</p>
+
 **Release 1.1.56 · IDE visual local para Windows.** Integra un lienzo lógico redimensionable (inicia en 1920×1080), análisis de flujos, generación de código C# para SharpProspero, pantallas C++20 para OpenGL/Vulkan con salida adaptada a la superficie activa —incluido 4K—, grafos Vulkan Compute en GLSL 450, un editor visual especializado en niveles de plataformas 3D AGC y edición/compilación C/C++ de payloads PS5 a ELF con el SDK offline.
 
 El lienzo lógico de diseño es independiente del perfil de salida de referencia: se pueden previsualizar tamaños 720p, 900p, 1080p, 1440p, 4K o personalizados sin alterar las coordenadas del proyecto ni fijar la resolución de ejecución.
@@ -262,7 +266,7 @@ La etiqueta **IA declarada** está reservada a declaraciones explícitas. Por ej
 - `index.html`, `styles.css`, `app.js`: editor visual y catálogo.
 - `docs/SDK_MATRIX.md`, `docs/PROJECT_ECOSYSTEM.md`: investigación técnica.
 
-**Validación de esta release:** pasan `node --check` sobre `app.js` y los módulos del runtime, las diez suites JavaScript de `runtime/` (incluida la nueva regresión de selectores de `test-build-flow.js`) y una prueba de navegador real del flujo Compilar → diálogo nativo → confirmar: la 1.1.17 reproduce el `TypeError: buttons.forEach is not a function` y la 1.1.18 lo elimina, desactiva los botones del diálogo durante el build y los reactiva en el `finally`. No se pudo ejecutar el parser oficial de PowerShell, una compilación C++20 real de PPSA19918 ni un empaquetado UltraPack de extremo a extremo porque esas herramientas no están disponibles en el entorno de preparación. Consulta `docs/KNOWN-ISSUES.es-ES.md` para separar las pruebas locales de las validaciones pendientes en Windows/WSL.
+**Validación de esta release:** pasan `node --check` sobre `app.js` y los módulos del runtime, las doce suites JavaScript de `runtime/` (incluida la nueva regresión de selectores de `test-build-flow.js`) y una prueba de navegador real del flujo Compilar → diálogo nativo → confirmar: la 1.1.17 reproduce el `TypeError: buttons.forEach is not a function` y la 1.1.18 lo elimina, desactiva los botones del diálogo durante el build y los reactiva en el `finally`. No se pudo ejecutar el parser oficial de PowerShell, una compilación C++20 real de PPSA19918 ni un empaquetado UltraPack de extremo a extremo porque esas herramientas no están disponibles en el entorno de preparación. Consulta `docs/KNOWN-ISSUES.es-ES.md` para separar las pruebas locales de las validaciones pendientes en Windows/WSL.
 
 
 ## Corrección 1.0.1

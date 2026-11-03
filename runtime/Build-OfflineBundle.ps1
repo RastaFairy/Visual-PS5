@@ -92,8 +92,9 @@ try {
     }
   }
 
-  $exclude = @((Join-Path $InputRoot '.runtime'), (Join-Path $InputRoot '.git'))
-  & robocopy.exe $InputRoot $stage /E /COPY:DAT /DCOPY:DAT /R:1 /W:1 /XJ /NP /NFL /NDL /NJH /NJS /XD $exclude
+  $exclude = @((Join-Path $InputRoot '.runtime'), (Join-Path $InputRoot '.git'), (Join-Path $InputRoot '.idea'))
+  $excludeFiles = @('.server-dev-*.ps1')
+  & robocopy.exe $InputRoot $stage /E /COPY:DAT /DCOPY:DAT /R:1 /W:1 /XJ /NP /NFL /NDL /NJH /NJS /XD $exclude /XF $excludeFiles
   $copyCode = $LASTEXITCODE
   if ($copyCode -ge 8) { throw "No se pudo copiar el contenido offline (robocopy $copyCode)." }
 

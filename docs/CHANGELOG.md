@@ -1,5 +1,21 @@
 # Registro de cambios
 
+## 1.1.57 — 2026-11-03
+
+- Arregla el panel de consola: la ruta del klog leía `$request.QueryString`, que el servidor TCP propio nunca construyó (era API de HttpListener), por lo que toda captura de klog fallaba con «No se puede indicar en una matriz nula». El objeto petición ahora parsea la query string.
+- El despliegue FTP permite configurar el puerto (por defecto **2121**, el de ftpsrv de ps5-payload-dev); antes la UI anunciaba 1337 pero curl conectaba al 21 por defecto.
+
+- Corrige el contrato del despliegue FTP: la UI enviaba `folder`/`remote` y el servidor esperaba `localFolder`/`remoteFolder`, por lo que el botón fallaba siempre con un 400 engañoso.
+- «Detener captura» y el cierre de la página liberan ahora el socket klog del servidor vía `/api/console/klog-stop`; se añade el botón y se cablea la descarga del klog como .txt.
+- Explorador de archivos reales del proyecto: panel «Archivos» con árbol en disco, crear/renombrar/eliminar, edición de texto multi-archivo con pestañas y guardado con Ctrl+S mediante el nuevo `POST /api/files` (rutas validadas contra path traversal, reparse points y extensiones no textuales).
+- Búsqueda en todo el proyecto con resultados clicables vía `POST /api/files/search` (omite snapshots y binarios, tope de 200 coincidencias).
+- Resaltado de sintaxis propio (C, C++, C#, JS, GLSL, JSON, YAML) sin dependencias externas; buscar/reemplazar en el editor (Ctrl+F/Ctrl+H), ir a línea (Ctrl+G) y aviso `beforeunload` con cambios sin guardar.
+- Los errores del compilador (gcc/clang y MSVC) se parsean del log de build y quedan en Diagnósticos con archivo y línea clicable.
+- Aviso inmediato al elegir un backend que no genera desde el lienzo; `backend-capabilities.json` corregido (`sharp.multiScreen: false`) y consumido por `/api/status`, con nota de capacidades en el panel SDKs y diagnóstico de imágenes no soportadas por el puente AGC.
+- Higiene: retirados los 4 snapshots obsoletos `.server-dev-*.ps1` y los endpoints síncronos muertos `/api/build-native` y `/api/build-visual-native`; `.idea/` y `.server-dev-*.ps1` excluidos del bundle offline y de los ZIP de CI; captura del IDE renombrada a `docs/assets/screenshot-ide.png` con texto alternativo real.
+- Documentación: enlace roto del CHANGELOG corregido, conteo de suites actualizado (12 con el contrato de plantilla AGC) y KNOWN-ISSUES re-datado con nota de revisión.
+- CI: `test-template-contract.js` y `test-native-project-destination.ps1` se ejecutan ahora en validate.yml; `test-api-contracts.js` ampliado (rutas en backticks, contratos FTP/klog-stop/files y consistencia de versión entre VERSION.txt, index.html, app.js y CHANGELOG).
+
 ## 1.1.56 — 2026-10-24
 
 - Convierte las colisiones de plataformas y objetos 3D en cajas sólidas: aterrizaje superior, bloqueo lateral y respuesta al golpe desde abajo.
@@ -423,5 +439,5 @@
 - Añadidas rutas de configuración locales para KytyPS5, Python y PS5 UltraPack.
 - Añadida la acción «Probar en Kyty» para lanzar un título compilado desde su carpeta.
 - Añadido el empaquetado UltraPack a `.ffpfs`, `.ffpfsc` o `.pkg`, con registro y verificación del archivo de salida.
-- Añadida guía en `docs/INTEGRACIONES-KYTY-ULTRAPACK.es-ES.md`.
+- Añadida guía en `docs/INTEGRACION-ULTRAPACK.es-ES.md`.
 - La integración no distribuye binarios ni garantiza compatibilidad de emulación o soporte de fPKG en Windows.

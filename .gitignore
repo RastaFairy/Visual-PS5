@@ -1,0 +1,8 @@
+﻿.runtime/
+.idea/
+toolchains/WSL2/visual-ps5-ubuntu-26.04.1-amd64.tar
+toolchains/WSL2/wsl.2.9.13.0.x64.msi
+toolchains/PowerShell7/PowerShell-7.6.1-win-x64.msi
+toolchains/PS5_Vulkan/.deps/native/radv-release/lib/libvulkan_radeon.ps5.a
+toolchains/PS5_Vulkan/.deps/work/radv-build-ps5-release/src/amd/vulkan/libvulkan_radeon.a
+toolchains/PS5_VulkanTemplate/.deps/PS5_VKHomebrewUI.git/objects/pack/pack-181de0f8178b5eeb82e9241c80875d3701610e93.pack

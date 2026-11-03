@@ -1,0 +1,112 @@
+{
+ "name": "w32-m-ultra-k09",
+ "family": [
+  3840,
+  2160
+ ],
+ "model": 1,
+ "inv": 1,
+ "ae": 0,
+ "dmv": 0,
+ "jit": 1,
+ "nl": 0,
+ "scratch": 99820992,
+ "passes": [
+  {
+   "dxil": "optimize/variants/w64/mypre/pre-m-ultra-k09-f.w64.dxil",
+   "cb": "main",
+   "kind": "pre",
+   "barrier_before": false,
+   "role": 1
+  },
+  {
+   "dxil": "optimize/variants/w64/g/0211c5e41ba337f88867d450a7e0a64b8d587518ff1432edce4bf580e3718495-shaders.dxil",
+   "cb": "tensor",
+   "kind": "tiny",
+   "barrier_before": false,
+   "role": 0,
+   "tiny": [
+    0,
+    1921,
+    1081
+   ]
+  },
+  {
+   "dxil": "optimize/variants/w64/gcn/first-m-ultra-f32.dxil",
+   "cb": "none",
+   "kind": "first",
+   "barrier_before": true,
+   "role": 0
+  },
+  {
+   "dxil": "optimize/variants/w64/g/2203808bcfc786633fe826310c85fb57a66440464f304896e219b74452b9eb4e-shaders.dxil",
+   "cb": "tensor",
+   "kind": "tiny",
+   "barrier_before": false,
+   "role": 0,
+   "tiny": [
+    2,
+    1921,
+    1081
+   ]
+  },
+  {
+   "dxil": "optimize/variants/w64/g/51aa3ec1db48c10a1477202755f71e72ed2ea09bfa7c76cfa63321fb3f83ae19-shaders.dxil",
+   "cb": "tensor",
+   "kind": "tiny",
+   "barrier_before": false,
+   "role": 0,
+   "tiny": [
+    3,
+    961,
+    541
+   ]
+  },
+  {
+   "dxil": "optimize/variants/w64/gcn/m5-m-ultra-f32.dxil",
+   "cb": "tensor",
+   "kind": "p57",
+   "barrier_before": true,
+   "role": 0
+  },
+  {
+   "dxil": "optimize/variants/w64/g/0dbd8249025f533ced94d16e9a6608821a4c3a2851c8ebe8c2f7f078e317720d-shaders.dxil",
+   "cb": "tensor",
+   "kind": "tiny",
+   "barrier_before": false,
+   "role": 0,
+   "tiny": [
+    4,
+    961,
+    541
+   ]
+  },
+  {
+   "dxil": "optimize/variants/w64/emu/m7-78ca2ff048df709c84261903-m1-pascal-fast-f32.dxil",
+   "cb": "tensor",
+   "kind": "p57",
+   "barrier_before": true,
+   "role": 0
+  },
+  {
+   "dxil": "optimize/variants/w64/g/0b6e801630518739f8d0905f318f1739598704ebf1ea8892e20d208e424f3d16-shaders.dxil",
+   "cb": "tensor",
+   "kind": "tiny",
+   "barrier_before": false,
+   "role": 0,
+   "tiny": [
+    5,
+    1921,
+    1081
+   ]
+  },
+  {
+   "dxil": "optimize/variants/w64/gcn/post-m-ultra-a0n0-f32.dxil",
+   "cb": "main",
+   "kind": "post",
+   "barrier_before": true,
+   "role": 2
+  }
+ ],
+ "tier": 5
+}

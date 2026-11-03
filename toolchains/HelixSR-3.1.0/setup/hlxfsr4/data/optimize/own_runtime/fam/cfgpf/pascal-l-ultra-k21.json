@@ -1,0 +1,112 @@
+{
+ "name": "pascal-l-ultra-k21",
+ "family": [
+  7680,
+  4320
+ ],
+ "model": 1,
+ "inv": 1,
+ "ae": 0,
+ "dmv": 1,
+ "jit": 0,
+ "nl": 1,
+ "scratch": 398707392,
+ "passes": [
+  {
+   "dxil": "optimize/variants/pascal-fast/pre-7680-ultra-k21.dxil",
+   "cb": "main",
+   "kind": "pre",
+   "barrier_before": false,
+   "role": 1
+  },
+  {
+   "dxil": "optimize/runs/tuned-tcf-l-std-inv-ae/shaders/e1d4de8afd99bd0a75741f1f5e6cbc88565666492e6ac93c6ee04c54b48b8462.dxil",
+   "cb": "tensor",
+   "kind": "tiny",
+   "barrier_before": false,
+   "role": 0,
+   "tiny": [
+    0,
+    3841,
+    2161
+   ]
+  },
+  {
+   "dxil": "optimize/variants/pascal-fast/first-l-ultra.dxil",
+   "cb": "none",
+   "kind": "first",
+   "barrier_before": true,
+   "role": 0
+  },
+  {
+   "dxil": "optimize/runs/tuned-tcf-l-std-inv-ae/shaders/650671c43ebb2cd6dd2cca26ddac63ceeb0624e4cbf2785c6fe2aa922bb16956.dxil",
+   "cb": "tensor",
+   "kind": "tiny",
+   "barrier_before": false,
+   "role": 0,
+   "tiny": [
+    2,
+    3841,
+    2161
+   ]
+  },
+  {
+   "dxil": "optimize/runs/tuned-tcf-l-std-inv-ae/shaders/94d17858f3ebe38e69b02b10e30fe5438583460c7023dbc8965e8153295335fc.dxil",
+   "cb": "tensor",
+   "kind": "tiny",
+   "barrier_before": false,
+   "role": 0,
+   "tiny": [
+    3,
+    1921,
+    1081
+   ]
+  },
+  {
+   "dxil": "optimize/runs/tuned-tcf-l-ultra-inv-ae/shaders/3a2c8a7e04e66568ab42f23b2bfa03b6a40c72f201fcb03a3068b363b78b7651.dxil",
+   "cb": "tensor",
+   "kind": "p57",
+   "barrier_before": true,
+   "role": 0
+  },
+  {
+   "dxil": "optimize/runs/tuned-tcf-l-std-inv-ae/shaders/30464cdf619bb2881b06297d2bfb93ef3b3ab15b50f74610e55a27778672fd84.dxil",
+   "cb": "tensor",
+   "kind": "tiny",
+   "barrier_before": false,
+   "role": 0,
+   "tiny": [
+    4,
+    1921,
+    1081
+   ]
+  },
+  {
+   "dxil": "optimize/variants/pascal-fast/m7-a401bb1603e2d30bcb4e8f01-m1.dxil",
+   "cb": "tensor",
+   "kind": "p57",
+   "barrier_before": true,
+   "role": 0
+  },
+  {
+   "dxil": "optimize/runs/tuned-tcf-l-std-inv-ae/shaders/ad83dc103031a78efccf5fa56fda78ba3ac762701273bd8632f82d595f1b05de.dxil",
+   "cb": "tensor",
+   "kind": "tiny",
+   "barrier_before": false,
+   "role": 0,
+   "tiny": [
+    5,
+    3841,
+    2161
+   ]
+  },
+  {
+   "dxil": "optimize/variants/pascal-fast/post-l-ultra-a0n1.dxil",
+   "cb": "main",
+   "kind": "post",
+   "barrier_before": true,
+   "role": 2
+  }
+ ],
+ "tier": 1
+}

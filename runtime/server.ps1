@@ -202,6 +202,124 @@ function GetPS5HSOfflineBackendReadiness([string]$Backend) {
   }
   return @{backend=$backendId;status=[string]$record[0].status;enforced=[bool]$bundlePresent;reason=[string]$record[0].evidence;scope=[string]$record[0].scope}
 }
+# ===== Panel de consola PS5: klogsrv (TCP 3232), despliegue FTP (puerto configurable, 2121 por defecto) y elfldr (9021) =====
+# Todo apunta a la IP que el usuario escribe; el servidor local no expone nada a la red.
+$script:PS5HSConsole = @{ KlogClient = $null; KlogHost = ''; KlogPort = 3232; LogLines = [System.Collections.Generic.List[string]]::new() }
+
+function GetPS5HSBackendCapabilities {
+  $path = Join-Path $script:Root 'runtime/backend-capabilities.json'
+  if (!(Test-Path -LiteralPath $path -PathType Leaf)) { return $null }
+  try { return (Get-Content -LiteralPath $path -Raw | ConvertFrom-Json) } catch { return $null }
+}
+
+function Connect-PS5HSTcpClient([string]$Address,[int]$Port,[int]$TimeoutMs=2500) {
+  $client = [System.Net.Sockets.TcpClient]::new()
+  try {
+    $connect = $client.ConnectAsync($Address, $Port)
+    if (-not $connect.Wait($TimeoutMs)) { throw "Sin respuesta en ${Address}:${Port} tras $TimeoutMs ms." }
+  } catch {
+    try { $client.Close() } catch { }
+    throw
+  }
+  $client.ReceiveTimeout = 1200
+  return $client
+}
+
+# Conexión persistente al klogsrv: cada sondeo lee lo nuevo y mantiene un buffer
+# de las últimas 2000 líneas para que la vista muestre un historial estable.
+function Invoke-PS5HSKlogPoll([string]$Address,[int]$Port) {
+  $state = $script:PS5HSConsole
+  $needsConnect = $true
+  try { $needsConnect = ($null -eq $state.KlogClient -or -not $state.KlogClient.Connected -or $state.KlogHost -ne $Address -or $state.KlogPort -ne $Port) } catch { $needsConnect = $true }
+  if ($needsConnect) {
+    if ($state.KlogClient) { try { $state.KlogClient.Close() } catch { } }
+    $state.KlogClient = Connect-PS5HSTcpClient $Address $Port
+    $state.KlogHost = $Address
+    $state.KlogPort = $Port
+  }
+  $stream = $state.KlogClient.GetStream()
+  $chunks = [System.Collections.Generic.List[byte]]::new()
+  $buffer = [byte[]]::new(16384)
+  $deadline = [DateTime]::UtcNow.AddMilliseconds(650)
+  while ([DateTime]::UtcNow -lt $deadline) {
+    $read = 0
+    try { if ($stream.DataAvailable) { $read = $stream.Read($buffer, 0, $buffer.Length) } } catch { break }
+    if ($read -gt 0) { for ($i = 0; $i -lt $read; $i++) { $chunks.Add($buffer[$i]) } }
+    elseif ($read -lt 0) { break }
+    else { Start-Sleep -Milliseconds 80 }
+  }
+  $text = [Text.Encoding]::UTF8.GetString($chunks.ToArray())
+  if ($text) {
+    foreach ($line in ($text -split "`r?`n")) {
+      if ($line.Length -gt 0) { $state.LogLines.Add($line); if ($state.LogLines.Count -gt 2000) { $state.LogLines.RemoveAt(0) } }
+    }
+  }
+  $tailCount = [Math]::Min(400, $state.LogLines.Count)
+  $tail = [string[]]::new($tailCount)
+  $state.LogLines.CopyTo($state.LogLines.Count - $tailCount, $tail, 0, $tailCount)
+  return @{ ok = $true; connected = $true; host = $Address; port = $Port; lines = $tail }
+}
+
+function Stop-PS5HSKlog {
+  if ($script:PS5HSConsole.KlogClient) { try { $script:PS5HSConsole.KlogClient.Close() } catch { } }
+  $script:PS5HSConsole.KlogClient = $null
+  return @{ ok = $true; connected = $false }
+}
+
+# Despliegue del título por FTP con curl.exe (viene con Windows 10+). ftpsrv de
+# ps5-payload-dev crea directorios al vuelo con --ftp-create-dirs; se sube cada
+# archivo de la carpeta del título conservando la ruta relativa.
+function Invoke-PS5HSFtpDeploy([string]$Address,[string]$User,[string]$Password,[string]$LocalFolder,[string]$RemoteFolder,[int]$Port=2121) {
+  $curl = CmdInfo 'curl.exe'; if (!$curl.ok) { $curl = CmdInfo 'curl' }
+  if (!$curl.ok) { throw 'curl.exe no está disponible en el PATH de Windows.' }
+  if ($Port -lt 1 -or $Port -gt 65535) { throw ('Puerto FTP fuera de rango (1-65535): ' + $Port) }
+  if (!(Test-Path -LiteralPath $LocalFolder -PathType Container)) { throw "La carpeta local no existe: $LocalFolder" }
+  $files = @(Get-ChildItem -LiteralPath $LocalFolder -Recurse -File | Sort-Object FullName)
+  if (!$files.Count) { throw 'La carpeta del título no contiene archivos que desplegar.' }
+  $credential = @()
+  if ($User) { $credential = @('-u', ("{0}:{1}" -f $User, $Password)) }
+  $baseUri = "ftp://${Address}:${Port}/$($RemoteFolder.TrimStart('/').TrimEnd('/'))/"
+  $uploaded = [System.Collections.Generic.List[string]]::new()
+  foreach ($file in $files) {
+    $relative = $file.FullName.Substring((Resolve-Path -LiteralPath $LocalFolder).Path.Length).TrimStart('\','/').Replace('\','/')
+    $target = $baseUri + $relative
+    $arguments = @('--ftp-create-dirs','--connect-timeout','8','--max-time','900','--silent','--show-error','-T', $file.FullName, $target) + $credential
+    $output = & $curl.path @arguments 2>&1 | ForEach-Object { $_.ToString() }
+    if ($LASTEXITCODE -ne 0) { throw ("Fallo FTP subiendo {0}: {1}" -f $relative, ($output -join ' ')) }
+    $uploaded.Add($relative)
+  }
+  return @{ ok = $true; uploaded = $uploaded; remote = $baseUri; count = $uploaded.Count }
+}
+
+# Envía un ELF al elfldr de etaHEN/kstuff (puerto 9021). Devuelve la respuesta
+# textual del loader; un ELF válido lanza el payload directamente.
+function Invoke-PS5HSSendElf([string]$Address,[string]$ElfPath) {
+  if (!(Test-Path -LiteralPath $ElfPath -PathType Leaf)) { throw "No existe el ELF: $ElfPath" }
+  $bytes = [IO.File]::ReadAllBytes($ElfPath)
+  if ($bytes.Length -lt 64 -or $bytes[0] -ne 0x7F -or $bytes[1] -ne 0x45 -or $bytes[2] -ne 0x4C -or $bytes[3] -ne 0x46) { throw 'El archivo no es un ELF64 válido (cabecera 0x7F E L F).' }
+  $client = Connect-PS5HSTcpClient $Address 9021 4000
+  try {
+    $stream = $client.GetStream()
+    $stream.Write($bytes, 0, $bytes.Length)
+    $stream.Flush()
+    $response = [Text.Encoding]::ASCII.GetString((Read-PS5HSTcpTail $stream 2500)).Trim()
+    return @{ ok = $true; sent = $bytes.Length; response = $response; note = 'El payload queda lanzado por elfldr; los títulos registrados con ShadowMountPlus se lanzan desde la pantalla de inicio.' }
+  } finally { try { $client.Close() } catch { } }
+}
+
+function Read-PS5HSTcpTail([System.Net.Sockets.NetworkStream]$Stream,[int]$WindowMs) {
+  $chunks = [System.Collections.Generic.List[byte]]::new()
+  $buffer = [byte[]]::new(4096)
+  $deadline = [DateTime]::UtcNow.AddMilliseconds($WindowMs)
+  while ([DateTime]::UtcNow -lt $deadline) {
+    $read = 0
+    try { if ($Stream.DataAvailable) { $read = $Stream.Read($buffer, 0, $buffer.Length) } } catch { break }
+    if ($read -gt 0) { for ($i = 0; $i -lt $read; $i++) { $chunks.Add($buffer[$i]) } }
+    else { Start-Sleep -Milliseconds 80 }
+  }
+  return $chunks.ToArray()
+}
+
 function GetStatus {
   $dot=CmdInfo 'dotnet.exe'; if(!$dot.ok){$dot=CmdInfo 'dotnet'}; $dot10=$false; $dotVersion='No detectado'
   if($dot.ok){try{$list=(& $dot.path --list-sdks 2>$null|Out-String);$dot10=[bool]($list -match '(?m)^10\.[0-9.]+');$dotVersion=((& $dot.path --version 2>$null|Out-String).Trim())}catch{$dot10=$false;$dotVersion='No se pudo consultar .NET SDK: '+$_.Exception.Message}}
@@ -279,7 +397,7 @@ function GetStatus {
     backendReadinessSourcePresent=$readinessSourcePresent
     backends=$readinessBackends
   }
-  return @{root=$script:Root;workspace=$script:Workspace;wslDistribution=$wslDist;sdks=$sdks;toolchainHealth=$toolchainHealth;offlineEnvironment=$offlineEnvironment;prerequisites=@{git=$git.ok;gitPath=$git.path;dotnet10=$dot10;wsl=$wslOk;wslDotnet10=$wslDot;wslGitPython=$wslGitPython;items=$items}}
+  return @{root=$script:Root;workspace=$script:Workspace;wslDistribution=$wslDist;sdks=$sdks;toolchainHealth=$toolchainHealth;offlineEnvironment=$offlineEnvironment;backendCapabilities=GetPS5HSBackendCapabilities;prerequisites=@{git=$git.ok;gitPath=$git.path;dotnet10=$dot10;wsl=$wslOk;wslDotnet10=$wslDot;wslGitPython=$wslGitPython;items=$items}}
 }
 function Slug([string]$Text) { $s=([string]$Text).Normalize([Text.NormalizationForm]::FormD) -replace '\p{Mn}','';$s=$s -replace '[^a-zA-Z0-9_-]+','-';$s=$s.Trim('-');if(!$s){$s='MiHomebrew'};if($s.Length -gt 48){$s=$s.Substring(0,48)};return $s }
 function TestPS5HSTitleId([string]$Value) { $id = ([string]$Value).Trim().ToUpperInvariant(); return (($id -match '^PPSA\d{5}$') -and $id -ne 'PPSA00000') }
@@ -2493,6 +2611,19 @@ function SaveProject($P,[string]$Code) {
   } else {
     New-Item -ItemType Directory -Force -Path $dir | Out-Null
   }
+  # Snapshot del modelo anterior antes de sobrescribir: el undo en memoria no
+  # protege contra un guardado corrupto o un cierre inesperado. Retención de 10.
+  $existingModel = Join-Path $dir 'project.json'
+  if (Test-Path -LiteralPath $existingModel -PathType Leaf) {
+    try {
+      $snapDir = Join-Path $dir 'snapshots'
+      New-Item -ItemType Directory -Force -Path $snapDir | Out-Null
+      $stamp = (Get-Date).ToString('yyyyMMdd-HHmmss')
+      Copy-Item -LiteralPath $existingModel -Destination (Join-Path $snapDir ($stamp + '-project.json')) -Force
+      $stale = @(Get-ChildItem -LiteralPath $snapDir -Filter '*-project.json' | Sort-Object Name -Descending | Select-Object -Skip 10)
+      foreach ($old in $stale) { Remove-Item -LiteralPath $old.FullName -Force }
+    } catch { }
+  }
   WriteProjectFiles $P $Code $dir
   if([string]$P.backend -eq 'ps5link' -and $P.manualCode -ne $true){$null=WritePS5LinkVisualBridge $P $dir;$null=WritePS5LinkGameSceneHeader $P $dir}
   if([string]$P.backend -eq 'payload'){$sourceName=if([string]$P.payloadLanguage -eq 'cpp'){'src/main.cpp'}else{'src/main.c'};$description=if([string]$P.payloadLanguage -eq 'cpp'){'Entrada C++20 del payload PS5. Usa Compilar para producir un ELF64 con el PS5 Payload SDK local.'}else{'Entrada C del payload PS5. Usa Compilar para producir un ELF64 con el PS5 Payload SDK local.'}}
@@ -2544,6 +2675,132 @@ function GetPS5HSPayloadScopedPath([string]$Scope,[string]$RelativePath,[string]
   if (!$candidate.StartsWith(($baseFull.TrimEnd([IO.Path]::DirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar),[StringComparison]::OrdinalIgnoreCase)) { throw ("Ruta fuera de la raíz " + $Scope + ": " + $RelativePath) }
   $null = AssertPS5HSNativePathNoReparsePoints -Path $candidate
   return $candidate
+}
+# ===== Explorador de archivos de proyecto (solo texto, acotado a <Workspace>\<proyecto>) =====
+$script:PS5HSTextExtensions = @('.c','.cpp','.cc','.cxx','.h','.hpp','.hh','.cs','.js','.json','.md','.txt','.yml','.yaml','.xml','.glsl','.vert','.frag','.comp','.bat','.sh','.ps1','.cmake','.in','.ld','.toml','.ini','.cfg','.sql','.html','.css','.mk','.ninja','.proto','')
+function Test-PS5HSProjectRelativePath([string]$Value) {
+  if ([string]::IsNullOrWhiteSpace($Value) -or $Value.Contains('\') -or $Value.Contains(':') -or $Value -match '[\x00-\x1f]' -or $Value.StartsWith('/')) { return $false }
+  if ($Value -match '[\?\*"<>|]') { return $false }
+  return (@($Value.Split('/') | Where-Object { $_ -in @('', '.', '..') }).Count -eq 0)
+}
+function Resolve-PS5HSProjectScopedPath([string]$ProjectDir,[string]$RelativePath) {
+  if (!(Test-PS5HSProjectRelativePath $RelativePath)) { throw ("Ruta de proyecto no segura: " + $RelativePath) }
+  $baseFull = [IO.Path]::GetFullPath($ProjectDir)
+  $candidate = [IO.Path]::GetFullPath((Join-Path $baseFull ($RelativePath -replace '/', [IO.Path]::DirectorySeparatorChar)))
+  if (!$candidate.StartsWith(($baseFull.TrimEnd([IO.Path]::DirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar),[StringComparison]::OrdinalIgnoreCase)) { throw ("Ruta fuera del proyecto: " + $RelativePath) }
+  $null = AssertPS5HSNativePathNoReparsePoints -Path $candidate
+  return $candidate
+}
+function Invoke-PS5HSProjectFileOp($Body) {
+  $op = [string]$Body.op
+  $project = [IO.Path]::GetFileName([string]$Body.project)
+  if (!$project) { return @{ ok = $false; error = 'Falta el proyecto.' } }
+  $projectDir = Join-Path $script:Workspace $project
+  if (!(Test-Path -LiteralPath $projectDir -PathType Container)) { return @{ ok = $false; error = 'El proyecto no existe en disco.' } }
+  try {
+    switch ($op) {
+      'list' {
+        $items = @()
+        Get-ChildItem -LiteralPath $projectDir -Recurse -Force | ForEach-Object {
+          $relative = $_.FullName.Substring($projectDir.Length).TrimStart('\','/').Replace('\','/')
+          if ($relative -match '(^|/)snapshots/') { return }
+          $items += @{ path = $relative; dir = [bool]$_.PSIsContainer; size = if ($_.PSIsContainer) { 0 } else { $_.Length }; text = if ($_.PSIsContainer) { $false } else { $script:PS5HSTextExtensions -contains $_.Extension.ToLowerInvariant() } }
+        }
+        if ($items.Count -gt 2000) { $items = @($items[0..1999]) + @{ path = '(árbol truncado: más de 2000 entradas)'; dir = $false; size = 0; text = $false } }
+        return @{ ok = $true; items = $items; root = $project }
+      }
+      'read' {
+        $relative = [string]$Body.path
+        $full = Resolve-PS5HSProjectScopedPath $projectDir $relative
+        $item = Get-Item -LiteralPath $full -Force
+        if ($item.PSIsContainer) { return @{ ok = $false; error = 'La ruta es una carpeta.' } }
+        if ($script:PS5HSTextExtensions -notcontains $item.Extension.ToLowerInvariant()) { return @{ ok = $false; error = 'Tipo de archivo no editable en el IDE (binario o no textual).' } }
+        if ($item.Length -gt 2MB) { return @{ ok = $false; error = 'El archivo supera 2 MiB; edítalo con una herramienta externa.' } }
+        return @{ ok = $true; path = $relative; content = [string](Get-Content -LiteralPath $full -Raw) }
+      }
+      'write' {
+        $relative = [string]$Body.path
+        $full = Resolve-PS5HSProjectScopedPath $projectDir $relative
+        $item = Get-Item -LiteralPath $full -Force -ErrorAction SilentlyContinue
+        if ($item -and $item.PSIsContainer) { return @{ ok = $false; error = 'La ruta es una carpeta.' } }
+        if ($item -and $script:PS5HSTextExtensions -notcontains $item.Extension.ToLowerInvariant()) { return @{ ok = $false; error = 'Tipo de archivo no editable en el IDE.' } }
+        $content = [string]$Body.content
+        if ($content.Length -gt 2MB) { return @{ ok = $false; error = 'El contenido supera 2 MiB.' } }
+        if (!$item) {
+          if ($script:PS5HSTextExtensions -notcontains ([IO.Path]::GetExtension($full).ToLowerInvariant())) { return @{ ok = $false; error = 'Extensión no editable en el IDE.' } }
+          $parent = Split-Path -Parent $full
+          if (!(Test-Path -LiteralPath $parent -PathType Container)) { New-Item -ItemType Directory -Path $parent -Force | Out-Null }
+        }
+        WriteUtf8 $full $content
+        return @{ ok = $true; path = $relative; size = $content.Length }
+      }
+      'create' {
+        $relative = [string]$Body.path
+        $full = Resolve-PS5HSProjectScopedPath $projectDir $relative
+        if (Test-Path -LiteralPath $full) { return @{ ok = $false; error = 'La ruta ya existe.' } }
+        if ([string]$Body.type -eq 'folder') {
+          New-Item -ItemType Directory -Path $full -Force | Out-Null
+        } else {
+          if ($script:PS5HSTextExtensions -notcontains ([IO.Path]::GetExtension($full).ToLowerInvariant())) { return @{ ok = $false; error = 'Extensión no editable en el IDE; crea el archivo con una herramienta externa.' } }
+          $parent = Split-Path -Parent $full
+          if (!(Test-Path -LiteralPath $parent -PathType Container)) { New-Item -ItemType Directory -Path $parent -Force | Out-Null }
+          WriteUtf8 $full ''
+        }
+        return @{ ok = $true; path = $relative }
+      }
+      'rename' {
+        $relative = [string]$Body.path
+        $newRelative = [string]$Body.newPath
+        if ([string]::IsNullOrWhiteSpace($newRelative)) { return @{ ok = $false; error = 'Falta el nombre nuevo.' } }
+        $full = Resolve-PS5HSProjectScopedPath $projectDir $relative
+        if (!(Test-Path -LiteralPath $full)) { return @{ ok = $false; error = 'La ruta de origen no existe.' } }
+        $newFull = Resolve-PS5HSProjectScopedPath $projectDir $newRelative
+        if (Test-Path -LiteralPath $newFull) { return @{ ok = $false; error = 'El destino ya existe.' } }
+        $newParent = Split-Path -Parent $newFull
+        if (!(Test-Path -LiteralPath $newParent -PathType Container)) { New-Item -ItemType Directory -Path $newParent -Force | Out-Null }
+        Move-Item -LiteralPath $full -Destination $newFull -Force
+        return @{ ok = $true; path = $newRelative }
+      }
+      'delete' {
+        $relative = [string]$Body.path
+        if ([string]::IsNullOrWhiteSpace($relative)) { return @{ ok = $false; error = 'Falta la ruta a eliminar.' } }
+        if ($relative -eq 'project.json') { return @{ ok = $false; error = 'project.json contiene el modelo del editor; usa «Cerrar proyecto» o borra el proyecto completo desde Abrir.' } }
+        $full = Resolve-PS5HSProjectScopedPath $projectDir $relative
+        if (!(Test-Path -LiteralPath $full)) { return @{ ok = $false; error = 'La ruta no existe.' } }
+        Remove-Item -LiteralPath $full -Recurse -Force
+        return @{ ok = $true; path = $relative }
+      }
+      default { return @{ ok = $false; error = 'Operación de archivo no reconocida.' } }
+    }
+  } catch { return @{ ok = $false; error = $_.Exception.Message } }
+}
+function Invoke-PS5HSProjectFileSearch($Body) {
+  $project = [IO.Path]::GetFileName([string]$Body.project)
+  $query = [string]$Body.query
+  if (!$project) { return @{ ok = $false; error = 'Falta el proyecto.' } }
+  if ([string]::IsNullOrWhiteSpace($query) -or $query.Length -gt 200) { return @{ ok = $false; error = 'Consulta de búsqueda vacía o demasiado larga.' } }
+  $projectDir = Join-Path $script:Workspace $project
+  if (!(Test-Path -LiteralPath $projectDir -PathType Container)) { return @{ ok = $false; error = 'El proyecto no existe en disco.' } }
+  $results = @()
+  $truncated = $false
+  try {
+    $files = Get-ChildItem -LiteralPath $projectDir -Recurse -File -Force | Where-Object {
+      ($_.FullName -notmatch '\\snapshots\\') -and ($script:PS5HSTextExtensions -contains $_.Extension.ToLowerInvariant()) -and ($_.Length -le 2MB)
+    }
+    foreach ($file in $files) {
+      if ($results.Count -ge 200) { $truncated = $true; break }
+      try {
+        $lines = [IO.File]::ReadAllLines($file.FullName)
+        for ($i = 0; $i -lt $lines.Count; $i++) {
+          if ($lines[$i].IndexOf($query, [StringComparison]::OrdinalIgnoreCase) -ge 0) {
+            $results += @{ path = $file.FullName.Substring($projectDir.Length).TrimStart('\','/').Replace('\','/'); line = ($i + 1); text = $lines[$i].Substring(0, [Math]::Min(240, $lines[$i].Length)) }
+            if ($results.Count -ge 200) { $truncated = $true; break }
+          }
+        }
+      } catch { }
+    }
+  } catch { return @{ ok = $false; error = $_.Exception.Message } }
+  return @{ ok = $true; results = $results; truncated = $truncated }
 }
 function GetPS5HSPayloadDependencySpec([string]$ProjectRoot,$Marker,[bool]$RequireBuild=$false) {
   $relative = if ($Marker -and $Marker.dependenciesManifest) { [string]$Marker.dependenciesManifest } else { '.ps5hs-payload-dependencies.json' }
@@ -2895,6 +3152,14 @@ function WritePS5LinkGameSceneHeader($P,[string]$ProjectRoot) {
   $cameraDistance=ConvertToPS5HSGameFloat $camera.followDistance 'camera.followDistance';$cameraHeight=ConvertToPS5HSGameFloat $camera.followHeight 'camera.followHeight';$cameraLookAhead=ConvertToPS5HSGameFloat $camera.lookAhead 'camera.lookAhead'
   $skyColor=ConvertToPS5HSVisualColor ([string]$appearance.skyColor) '#100B20';$playerColor=ConvertToPS5HSVisualColor ([string]$appearance.playerColor) '#7D89FF';$playerAccentColor=ConvertToPS5HSVisualColor ([string]$appearance.playerAccentColor) '#FFD5A5';$collectibleColor=ConvertToPS5HSVisualColor ([string]$appearance.collectibleColor) '#67F3E8';$goalColor=ConvertToPS5HSVisualColor ([string]$appearance.goalColor) '#FF9A6B'
   $requireCollectibles=if($appearance.requireCollectibles -eq $false){0}else{1}
+  # Presentación opt-in: el motor no impone explorador, decorado, partículas ni marcos.
+  # Ausente en el modelo (proyectos antiguos) => se conserva el comportamiento previo (activado).
+  $presentation=$scene.presentation
+  if(!$presentation){$presentation=@{}}
+  $explorerEnabled=if($presentation.explorer -eq $false){0}else{1}
+  $decorEnabled=if($presentation.decor -eq $false){0}else{1}
+  $particlesEnabled=if($presentation.particles -eq $false){0}else{1}
+  $menuFrameEnabled=if($presentation.menuFrame -eq $false){0}else{1}
   $surfaceTextureColors=@($appearance.surfaceTextureColors)
   $surfaceTextureEnabled=0
   if($surfaceTextureColors.Count -gt 0 -and $surfaceTextureColors.Count -ne 256){throw 'La textura de superficie debe tener exactamente 256 muestras de color (16 × 16).'}
@@ -3005,7 +3270,7 @@ typedef struct {
 '@
   $header += "`ntypedef struct { const char *id; float x,y,z,half_width,half_height,half_depth,rotation_y_degrees; int shape,collision_enabled; float collision_half_width,collision_half_height,collision_half_depth,collision_offset_y; uint32_t color; } Ps5HSGameObject;`n"
   $header += "`ntypedef struct { float x,y,z,range,intensity; uint32_t color; } Ps5HSGamePointLight;`n"
-  $header += "`n#define PS5HS_GAME_TITLE "+(ConvertToPS5HSCStringLiteral ([string]$P.name))+"`n#define PS5HS_GAME_PLATFORM_COUNT $($platforms.Count)`n#define PS5HS_GAME_OBJECT_COUNT $objectCount`n#define PS5HS_GAME_OBJECT_STORAGE_COUNT $objectStorageCount`n#define PS5HS_GAME_SHARD_COUNT $collectibleIndex`n#define PS5HS_GAME_SPAWN_INDEX $spawnIndex`n#define PS5HS_GAME_GOAL_INDEX $($goalIndices[0])`n#define PS5HS_GAME_MOVE_SPEED $move`n#define PS5HS_GAME_ACCELERATION $accel`n#define PS5HS_GAME_JUMP_SPEED $jump`n#define PS5HS_GAME_GRAVITY $gravity`n#define PS5HS_GAME_FALL_LIMIT $fall`n#define PS5HS_GAME_PLAYER_HALF_HEIGHT $halfHeight`n#define PS5HS_GAME_CAMERA_FOLLOW_DISTANCE $cameraDistance`n#define PS5HS_GAME_CAMERA_FOLLOW_HEIGHT $cameraHeight`n#define PS5HS_GAME_CAMERA_LOOK_AHEAD $cameraLookAhead`n#define PS5HS_GAME_SKY_COLOR $skyColor`n#define PS5HS_GAME_PLAYER_COLOR $playerColor`n#define PS5HS_GAME_PLAYER_ACCENT_COLOR $playerAccentColor`n#define PS5HS_GAME_COLLECTIBLE_COLOR $collectibleColor`n#define PS5HS_GAME_GOAL_COLOR $goalColor`n#define PS5HS_GAME_REQUIRE_COLLECTIBLES $requireCollectibles`n#define PS5HS_GAME_MENU_SCREEN_INDEX $menuScreenIndex`n#define PS5HS_GAME_PAUSE_SCREEN_INDEX $pauseScreenIndex`n#define PS5HS_GAME_PLAY_SCREEN_INDEX $playScreenIndex`n#define PS5HS_GAME_HUD_BADGE_ID "+(ConvertToPS5HSCStringLiteral $hudBadgeId)+"`n#define PS5HS_GAME_HUD_PROGRESS_ID "+(ConvertToPS5HSCStringLiteral $hudProgressId)+"`n"+($actionMacros -join "`n")+"`n"
+  $header += "`n#define PS5HS_GAME_TITLE "+(ConvertToPS5HSCStringLiteral ([string]$P.name))+"`n#define PS5HS_GAME_PLATFORM_COUNT $($platforms.Count)`n#define PS5HS_GAME_OBJECT_COUNT $objectCount`n#define PS5HS_GAME_OBJECT_STORAGE_COUNT $objectStorageCount`n#define PS5HS_GAME_SHARD_COUNT $collectibleIndex`n#define PS5HS_GAME_SPAWN_INDEX $spawnIndex`n#define PS5HS_GAME_GOAL_INDEX $($goalIndices[0])`n#define PS5HS_GAME_MOVE_SPEED $move`n#define PS5HS_GAME_ACCELERATION $accel`n#define PS5HS_GAME_JUMP_SPEED $jump`n#define PS5HS_GAME_GRAVITY $gravity`n#define PS5HS_GAME_FALL_LIMIT $fall`n#define PS5HS_GAME_PLAYER_HALF_HEIGHT $halfHeight`n#define PS5HS_GAME_CAMERA_FOLLOW_DISTANCE $cameraDistance`n#define PS5HS_GAME_CAMERA_FOLLOW_HEIGHT $cameraHeight`n#define PS5HS_GAME_CAMERA_LOOK_AHEAD $cameraLookAhead`n#define PS5HS_GAME_SKY_COLOR $skyColor`n#define PS5HS_GAME_PLAYER_COLOR $playerColor`n#define PS5HS_GAME_PLAYER_ACCENT_COLOR $playerAccentColor`n#define PS5HS_GAME_COLLECTIBLE_COLOR $collectibleColor`n#define PS5HS_GAME_GOAL_COLOR $goalColor`n#define PS5HS_GAME_REQUIRE_COLLECTIBLES $requireCollectibles`n#define PS5HS_GAME_EXPLORER_ENABLED $explorerEnabled`n#define PS5HS_GAME_DECOR_ENABLED $decorEnabled`n#define PS5HS_GAME_PARTICLES_ENABLED $particlesEnabled`n#define PS5HS_GAME_MENU_FRAME_ENABLED $menuFrameEnabled`n#define PS5HS_GAME_MENU_SCREEN_INDEX $menuScreenIndex`n#define PS5HS_GAME_PAUSE_SCREEN_INDEX $pauseScreenIndex`n#define PS5HS_GAME_PLAY_SCREEN_INDEX $playScreenIndex`n#define PS5HS_GAME_HUD_BADGE_ID "+(ConvertToPS5HSCStringLiteral $hudBadgeId)+"`n#define PS5HS_GAME_HUD_PROGRESS_ID "+(ConvertToPS5HSCStringLiteral $hudProgressId)+"`n"+($actionMacros -join "`n")+"`n"
   $header += "#define PS5HS_GAME_AMBIENT_INTENSITY $ambientIntensity`n#define PS5HS_GAME_AMBIENT_COLOR $ambientColor`n#define PS5HS_GAME_SUN_ENABLED $sunEnabled`n#define PS5HS_GAME_SUN_INTENSITY $sunIntensity`n#define PS5HS_GAME_SUN_X $sunX`n#define PS5HS_GAME_SUN_Y $sunY`n#define PS5HS_GAME_SUN_Z $sunZ`n#define PS5HS_GAME_SUN_COLOR $sunColor`n#define PS5HS_GAME_POINT_LIGHT_COUNT $lightCount`n#define PS5HS_GAME_POINT_LIGHT_STORAGE_COUNT $lightStorageCount`n"
   $header += "static const Ps5HSGamePointLight ps5hs_game_point_lights[PS5HS_GAME_POINT_LIGHT_STORAGE_COUNT] = {`n"+($lightRows -join "`n")+"`n};`n"
   $header += "static const Ps5HSGameObject ps5hs_game_objects[PS5HS_GAME_OBJECT_STORAGE_COUNT] = {`n"+($objectRows -join "`n")+"`n};`n"
@@ -3014,7 +3279,7 @@ typedef struct {
   $header += "static const Ps5HSGamePlatform ps5hs_game_platforms[PS5HS_GAME_PLATFORM_COUNT] = {`n"+($rows -join "`n")+"`n};`n#endif`n"
   WriteUtf8 (Join-Path $ProjectRoot 'src/ps5hs_game_scene.h') $header
   $collidableObjectCount=@($objects|Where-Object{$_.collisionEnabled -eq $true}).Count
-  return @{enabled=$true;platforms=$platforms.Count;objects=$objectCount;collidableObjects=$collidableObjectCount;collectibles=$collectibleIndex;lights=$lightCount;surfaceTexture=($surfaceTextureEnabled -eq 1);goalIndex=$goalIndices[0];spawnIndex=$spawnIndex}
+  return @{enabled=$true;platforms=$platforms.Count;objects=$objectCount;collidableObjects=$collidableObjectCount;collectibles=$collectibleIndex;lights=$lightCount;surfaceTexture=($surfaceTextureEnabled -eq 1);goalIndex=$goalIndices[0];spawnIndex=$spawnIndex;presentation=@{explorer=($explorerEnabled -eq 1);decor=($decorEnabled -eq 1);particles=($particlesEnabled -eq 1);menuFrame=($menuFrameEnabled -eq 1)}}
 }
 function BuildPS5LinkProject($P,[string]$Code,$Policy=$null,[string]$LibcPath='') {
   $backend = 'ps5link'
@@ -3168,24 +3433,40 @@ set -euo pipefail
 PROJECT="${1:?project root required}"
 IDE_ROOT="${2:?IDE root required}"
 TITLE="${3:?title output required}"
+PROFILE="${4:-release}"
+case "$PROFILE" in
+  debug) CFLAGS="-O1 -Wall -DPS5HS_DEBUG=1" ;;
+  release) CFLAGS="-O2 -Wall" ;;
+  *) echo "Perfil de build no valido: $PROFILE (usa debug|release)" >&2; exit 2 ;;
+esac
 SDK="$IDE_ROOT/toolchains/ps5link-sdk"
 SHARP="$IDE_ROOT/toolchains/SharpProspero"
 PSDK="/opt/ps5-payload-sdk"
 BUILD="$PROJECT/build/ps5link"
-mkdir -p "$BUILD/shaders"
-mkdir -p "$BUILD/nuget-empty"
-DOTNET_CLI_TELEMETRY_OPTOUT=1 DOTNET_NOLOGO=1 dotnet restore \
-  "$SHARP/tools/SharpProspero.Bindings.Generator/SharpProspero.Bindings.Generator.csproj" \
-  --source "$BUILD/nuget-empty"
-DOTNET_CLI_TELEMETRY_OPTOUT=1 DOTNET_NOLOGO=1 dotnet build \
-  "$SHARP/tools/SharpProspero.Bindings.Generator/SharpProspero.Bindings.Generator.csproj" \
-  --configuration Release --no-restore
+CACHE="$BUILD/cache"
+mkdir -p "$BUILD/shaders" "$CACHE/nuget-empty"
+# El generador de bindings se compila una sola vez y se reutiliza por hash de sus
+# fuentes: dotnet restore/build solo se repiten si cambia el generador upstream.
+BINDGEN_DIR="$SHARP/tools/SharpProspero.Bindings.Generator"
+BINDGEN_HASH="$(cd "$BINDGEN_DIR" && find . -path ./bin -prune -o -path ./obj -prune -o -type f -print 2>/dev/null | LC_ALL=C sort | xargs sha256sum 2>/dev/null | sha256sum | cut -d' ' -f1)"
+if [ ! -f "$CACHE/bindgen.dll" ] || [ "$(cat "$CACHE/bindgen.sha256" 2>/dev/null)" != "$BINDGEN_HASH" ]; then
+  rm -f "$CACHE/bindgen.dll"
+  DOTNET_CLI_TELEMETRY_OPTOUT=1 DOTNET_NOLOGO=1 dotnet restore \
+    "$BINDGEN_DIR/SharpProspero.Bindings.Generator.csproj" \
+    --source "$CACHE/nuget-empty"
+  DOTNET_CLI_TELEMETRY_OPTOUT=1 DOTNET_NOLOGO=1 dotnet build \
+    "$BINDGEN_DIR/SharpProspero.Bindings.Generator.csproj" \
+    --configuration Release --no-restore
+  cp "$BINDGEN_DIR/bin/Release/net10.0/sharpprospero-bindgen.dll" "$CACHE/bindgen.dll"
+  printf '%s' "$BINDGEN_HASH" > "$CACHE/bindgen.sha256"
+fi
+BINDGEN="$CACHE/bindgen.dll"
 test -x "$PSDK/bin/prospero-clang"
 test -x "$PSDK/bin/prospero-clang++"
 test -r "$SDK/linker/crt1.S"
 test -r "$SDK/shaders/third_party/sharpprospero/mesh_vs.sb"
 test -r "$SDK/shaders/third_party/sharpprospero/mesh_ps.sb"
-test -r "$SHARP/tools/SharpProspero.Bindings.Generator/bin/Release/net10.0/sharpprospero-bindgen.dll"
+test -f "$BINDGEN"
 python3 "$PROJECT/tools/embed-ps5link-shader.py" "$SDK/shaders/third_party/sharpprospero/mesh_vs.sb" "$BUILD/shaders/mesh_vs_sb.h" mesh_vs_sb
 python3 "$PROJECT/tools/embed-ps5link-shader.py" "$SDK/shaders/third_party/sharpprospero/mesh_ps.sb" "$BUILD/shaders/mesh_ps_sb.h" mesh_ps_sb
 cc -O2 -Wall -I "$SDK/linker" -o "$BUILD/link_real" \
@@ -3193,14 +3474,16 @@ cc -O2 -Wall -I "$SDK/linker" -o "$BUILD/link_real" \
   "$SDK/linker/dynwriter.c" "$SDK/linker/catalog.c" "$SDK/linker/catalog_extra.c" \
   "$SDK/linker/catalog_lookup.c" "$SDK/linker/nid.c" "$SDK/linker/sha1.c"
 "$PSDK/bin/prospero-clang" -c "$SDK/linker/crt1.S" -o "$BUILD/crt1_ps5.o"
-"$PSDK/bin/prospero-clang" -O2 -Wall -I "$BUILD/shaders" -I "$PROJECT/src" -c "$PROJECT/src/main.c" -o "$BUILD/main.o"
-"$PSDK/bin/prospero-clang" -O2 -Wall -I "$PROJECT/src" -c "$PROJECT/src/ps5hs_visual.c" -o "$BUILD/ps5hs_visual.o"
+# shellcheck disable=SC2086
+"$PSDK/bin/prospero-clang" $CFLAGS -I "$BUILD/shaders" -I "$PROJECT/src" -c "$PROJECT/src/main.c" -o "$BUILD/main.o"
+# shellcheck disable=SC2086
+"$PSDK/bin/prospero-clang" $CFLAGS -I "$PROJECT/src" -c "$PROJECT/src/ps5hs_visual.c" -o "$BUILD/ps5hs_visual.o"
 "$BUILD/link_real" "$BUILD/app.elf" "$BUILD/crt1_ps5.o" "$BUILD/main.o" "$BUILD/ps5hs_visual.o"
 mkdir -p "$TITLE"
-dotnet "$SHARP/tools/SharpProspero.Bindings.Generator/bin/Release/net10.0/sharpprospero-bindgen.dll" self --sign --in "$BUILD/app.elf" --out "$TITLE/eboot.bin"
+dotnet "$BINDGEN" self --sign --in "$BUILD/app.elf" --out "$TITLE/eboot.bin"
 test -s "$TITLE/eboot.bin"
-dotnet "$SHARP/tools/SharpProspero.Bindings.Generator/bin/Release/net10.0/sharpprospero-bindgen.dll" self --inspect --file "$TITLE/eboot.bin"
-printf 'ELF64: %s\nSELF: %s\n' "$BUILD/app.elf" "$TITLE/eboot.bin"
+dotnet "$BINDGEN" self --inspect --file "$TITLE/eboot.bin"
+printf 'ELF64: %s\nSELF: %s\nPerfil: %s\n' "$BUILD/app.elf" "$TITLE/eboot.bin" "$PROFILE"
 sha256sum "$BUILD/app.elf" "$TITLE/eboot.bin"
 '@
   WriteUtf8 $scriptPath ($buildScript -replace "`r`n","`n")
@@ -3220,7 +3503,9 @@ target.write_text(text, encoding="ascii")
 '@
   WriteUtf8 (Join-Path $projectRoot 'tools/embed-ps5link-shader.py') $embedScript
   $scriptWsl = ConvertToWslPath $scriptPath
-  $buildCommand = 'bash ' + (BashQuote $scriptWsl) + ' ' + (BashQuote $projectWsl) + ' ' + (BashQuote $rootWsl) + ' ' + (BashQuote $titleWsl)
+  $buildProfile = [string]$P.settings.buildProfile
+  if ($buildProfile -notin @('debug','release')) { $buildProfile = 'release' }
+  $buildCommand = 'bash ' + (BashQuote $scriptWsl) + ' ' + (BashQuote $projectWsl) + ' ' + (BashQuote $rootWsl) + ' ' + (BashQuote $titleWsl) + ' ' + (BashQuote $buildProfile)
   $buildOutput = @(& $wsl.path -d $distribution --exec bash -lc $buildCommand 2>&1 | ForEach-Object { $_.ToString() })
   $buildExit = $LASTEXITCODE
   $buildText = ($buildOutput -join "`r`n")
@@ -3234,7 +3519,7 @@ target.write_text(text, encoding="ascii")
   if($visualGame){$activeGameActions=@($P.flows|Where-Object{$_.enabled -ne $false -and [string]$_.action -eq 'gameAction'}).Count;$buildText += "`r`nPuente visual: $($bridge.components) componente(s) de interfaz y $activeGameActions acción(es) de juego integrada(s)."}
   else{$buildText += "`r`nPuente visual: $($bridge.components) componente(s) y $($bridge.functionCalls) llamada(s) C enlazada(s)."}
   if($gameScene.enabled){$surfaceSummary=if($gameScene.surfaceTexture){"textura de superficie 16 × 16 horneada en vértices AGC"}else{"color plano por plataforma"};$buildText += "`r`nEscena visual AGC: $($gameScene.platforms) plataformas, $($gameScene.objects) objetos 3D ($($gameScene.collidableObjects) con superficie de aterrizaje), $($gameScene.collectibles) cristales, $($gameScene.lights) focos, $surfaceSummary, inicio $($gameScene.spawnIndex), meta $($gameScene.goalIndex)."}
-  $buildText += "`r`nTITLE_ID: $titleId`r`nSELF: $ebootPath"
+  $buildText += "`r`nPerfil: $buildProfile`r`nTITLE_ID: $titleId`r`nSELF: $ebootPath"
   $buildMessage=if($visualGame){'Título AGC firmado y verificado desde la escena y los flujos visuales.'}else{'Título AGC firmado y verificado desde el código C y sus flujos.'}
   return @{ok=$true;message=$buildMessage;output=$buildText;path=$projectRoot;titleFolder=$titleFolder;projectPath=$projectRoot;artifact=$ebootPath;titleId=$titleId;backend=$backend;visualBridge=$bridge}
 }
@@ -3854,9 +4139,19 @@ while (!$script:StopServerRequested -and $listener.Server.IsBound) {
                 $uri = [Uri]('http://127.0.0.1:47813' + $target)
                 $origin = [string]$headers['origin']
                 $path = $uri.AbsolutePath
+                # Query string parseada (la ruta del klog la lee como diccionario; sin esto era $null y fallaba con «matriz nula»).
+                $queryString = @{}
+                if ($uri.Query) {
+                    foreach ($pair in ($uri.Query.TrimStart('?') -split '&')) {
+                        if (!$pair) { continue }
+                        $kv = $pair -split '=', 2
+                        $queryString[[uri]::UnescapeDataString($kv[0])] = if ($kv.Count -gt 1) { [uri]::UnescapeDataString($kv[1]) } else { '' }
+                    }
+                }
                 $request = [pscustomobject]@{
                     HttpMethod = $method
                     Url = $uri
+                    QueryString = $queryString
                     ContentEncoding = [Text.Encoding]::UTF8
                     Body = [Text.Encoding]::UTF8.GetString($bodyBytes)
                     Headers = $headers
@@ -3879,6 +4174,18 @@ while (!$script:StopServerRequested -and $listener.Server.IsBound) {
                     elseif ($path.StartsWith('/api/')) {
                         if ($method -eq 'GET' -and $path -eq '/api/status') {
                             SendJson $ctx (GetStatus)
+                        }
+                        elseif ($method -eq 'GET' -and $path -eq '/api/console/klog') {
+                            $host2 = ([string]$request.QueryString['host']).Trim()
+                            $port2 = 3232
+                            try { if ($request.QueryString['port']) { $port2 = [int]$request.QueryString['port'] } } catch { $port2 = 3232 }
+                            if ($host2 -notmatch '^\d{1,3}(\.\d{1,3}){3}$' -and $host2 -ne 'localhost') {
+                                SendJson $ctx @{ ok = $false; error = 'Indica una IPv4 válida de la consola (por ejemplo 192.168.1.23).' } 400
+                            }
+                            else {
+                                try { SendJson $ctx (Invoke-PS5HSKlogPoll $host2 $port2) }
+                                catch { $null = Stop-PS5HSKlog; SendJson $ctx @{ ok = $false; connected = $false; error = $_.Exception.Message } 502 }
+                            }
                         }
                         elseif ($method -eq 'GET' -and $path -eq '/api/integrations') {
                             SendJson $ctx (GetIntegrationConfig)
@@ -3923,6 +4230,68 @@ while (!$script:StopServerRequested -and $listener.Server.IsBound) {
                                     $result = SaveProject $body.project ([string]$body.programCode)
                                     SendJson $ctx $result
                                 }
+                                '/api/console/klog-stop' {
+                                    SendJson $ctx (Stop-PS5HSKlog)
+                                }
+                                '/api/snapshots/list' {
+                                    $file = [IO.Path]::GetFileName([string]$body.file)
+                                    $snapDir = Join-Path (Join-Path $script:Workspace $file) 'snapshots'
+                                    $items = @()
+                                    if (Test-Path -LiteralPath $snapDir -PathType Container) {
+                                        Get-ChildItem -LiteralPath $snapDir -Filter '*-project.json' | Sort-Object Name -Descending | ForEach-Object {
+                                            try {
+                                                $model = Get-Content -LiteralPath $_.FullName -Raw | ConvertFrom-Json
+                                                $items += @{ name = $_.Name; backend = [string]$model.backend; title = [string]$model.name; saved = $_.LastWriteTime.ToString('yyyy-MM-dd HH:mm:ss'); size = $_.Length }
+                                            } catch { $items += @{ name = $_.Name; backend = '?'; title = '?'; saved = $_.LastWriteTime.ToString('yyyy-MM-dd HH:mm:ss'); size = $_.Length } }
+                                        }
+                                    }
+                                    SendJson $ctx @{ ok = $true; snapshots = $items }
+                                }
+                                '/api/snapshots/restore' {
+                                    $file = [IO.Path]::GetFileName([string]$body.file)
+                                    $snap = [IO.Path]::GetFileName([string]$body.snapshot)
+                                    if ($snap -notmatch '^\d{8}-\d{6}-project\.json$') { SendJson $ctx @{ ok = $false; error = 'Nombre de snapshot no válido.' } 400 }
+                                    else {
+                                        $snapPath = Join-Path (Join-Path (Join-Path $script:Workspace $file) 'snapshots') $snap
+                                        if (!(Test-Path -LiteralPath $snapPath -PathType Leaf)) { SendJson $ctx @{ ok = $false; error = 'El snapshot no existe.' } 404 }
+                                        else {
+                                            try {
+                                                $model = Get-Content -LiteralPath $snapPath -Raw | ConvertFrom-Json
+                                                SendJson $ctx @{ ok = $true; project = $model }
+                                            } catch { SendJson $ctx @{ ok = $false; error = 'El snapshot está dañado y no se puede leer.' } 500 }
+                                        }
+                                    }
+                                }
+                                '/api/console/deploy' {
+                                    $host3 = ([string]$body.host).Trim()
+                                    $localFolder = [string]$body.localFolder
+                                    $remoteFolder = [string]$body.remoteFolder
+                                    $user = [string]$body.user
+                                    $password = [string]$body.password
+                                    $deployPort = 2121
+                                    try { if ($body.port) { $deployPort = [int]$body.port } } catch { $deployPort = 2121 }
+                                    if ($host3 -notmatch '^\d{1,3}(\.\d{1,3}){3}$' -and $host3 -ne 'localhost') {
+                                        SendJson $ctx @{ ok = $false; error = 'Indica una IPv4 válida de la consola.' } 400
+                                    }
+                                    elseif (!$remoteFolder -or $remoteFolder -notmatch '^[/A-Za-z0-9_.\-]+$') {
+                                        SendJson $ctx @{ ok = $false; error = 'La ruta FTP remota solo puede contener letras, números, punto, guion y barra.' } 400
+                                    }
+                                    else {
+                                        try { SendJson $ctx (Invoke-PS5HSFtpDeploy $host3 $user $password $localFolder $remoteFolder $deployPort) }
+                                        catch { SendJson $ctx @{ ok = $false; error = $_.Exception.Message } 502 }
+                                    }
+                                }
+                                '/api/console/sendelf' {
+                                    $host4 = ([string]$body.host).Trim()
+                                    $elfPath = [string]$body.elfPath
+                                    if ($host4 -notmatch '^\d{1,3}(\.\d{1,3}){3}$' -and $host4 -ne 'localhost') {
+                                        SendJson $ctx @{ ok = $false; error = 'Indica una IPv4 válida de la consola.' } 400
+                                    }
+                                    else {
+                                        try { SendJson $ctx (Invoke-PS5HSSendElf $host4 $elfPath) }
+                                        catch { SendJson $ctx @{ ok = $false; error = $_.Exception.Message } 502 }
+                                    }
+                                }
                                 '/api/load' {
                                     $file = [IO.Path]::GetFileName([string]$body.file)
                                     $projectPath = Join-Path (Join-Path $script:Workspace $file) 'project.json'
@@ -3957,6 +4326,12 @@ while (!$script:StopServerRequested -and $listener.Server.IsBound) {
                                 '/api/export-zip' {
                                     $result = ExportProject $body.project ([string]$body.programCode)
                                     SendJson $ctx $result
+                                }
+                                '/api/files' {
+                                    SendJson $ctx (Invoke-PS5HSProjectFileOp $body)
+                                }
+                                '/api/files/search' {
+                                    SendJson $ctx (Invoke-PS5HSProjectFileSearch $body)
                                 }
                                 '/api/sdk-install' {
                                     $results = @()
@@ -4002,10 +4377,6 @@ while (!$script:StopServerRequested -and $listener.Server.IsBound) {
                                         SendJson $ctx @{ ok = $false; error = $_.Exception.Message } 400
                                     }
                                 }
-                                '/api/build-native' {
-                                    $result = BuildNativeProject ([string]$body.path) ([bool]$body.cleanBeforeBuild) ([string]$body.titleId) ([string]$body.name) $body.nativeModifications
-                                    SendJson $ctx $result
-                                }
                                 '/api/build-native/start' {
                                     SendJson $ctx (StartNativeBuildJob $body 'native')
                                 }
@@ -4014,10 +4385,6 @@ while (!$script:StopServerRequested -and $listener.Server.IsBound) {
                                 }
                                 '/api/build-vulkan-compute/start' {
                                     SendJson $ctx (StartNativeBuildJob $body 'compute')
-                                }
-                                '/api/build-visual-native' {
-                                    $result = BuildNativeVisualProject $body
-                                    SendJson $ctx $result
                                 }
                                 '/api/build' {
                                     $backend = [string]$body.backend

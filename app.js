@@ -76,7 +76,7 @@
   const STORAGE_KEY = 'ps5-homebrew-studio-state-v1';
   const BUILD_LOG_STORAGE_KEY = 'ps5hs:diagnostic-log:v1';
   const MAX_BUILD_LOG_ENTRIES = 500;
-  const freshProjectBase = () => ({format:'ps5vproj',formatVersion:2,name:'MiHomebrew',backend:'sharp',resolution:{width:1920,height:1080},theme:{background:'#101827',accent:'#7865f6',text:'#f0f3ff'},components:[],flows:[],assets:[],fontAssetId:'',screens:[{id:'screen-main',name:'Pantalla principal'}],currentScreen:'screen-main',settings:{titleId:'',firmware:'12.00',moduleKind:'app',renderTarget:{width:1920,height:1080}},gameScene:{schemaVersion:1,enabled:false,physics:{moveSpeed:5.55,acceleration:9,jumpSpeed:9.3,gravity:21,fallLimit:-8,playerHalfHeight:0.72},player:{spawnPlatformId:''},camera:{followDistance:8.7,followHeight:3.4,lookAhead:3.3},appearance:{skyColor:'#100B20',playerColor:'#7D89FF',playerAccentColor:'#FFD5A5',collectibleColor:'#67F3E8',goalColor:'#FF9A6B',requireCollectibles:true,surfaceTextureAssetId:'',surfaceTextureColors:[]},lighting:{ambientIntensity:0.34,ambientColor:'#B9C8FF',directional:{enabled:true,x:-0.4,y:-1,z:-0.6,intensity:0.55,color:'#DCE6FF'},points:[{id:'light-aurora',name:'Foco Aurora',x:-0.8,y:5,z:17,range:18,intensity:0.9,color:'#59DFF4'},{id:'light-faro',name:'Luz del Faro',x:1.1,y:7,z:45.5,range:20,intensity:1.15,color:'#FFD184'}]},platforms:[],objects:[]},customCode:'',manualCode:false,payloadLanguage:'c',payloadBuildMode:'managed',updatedAt:new Date().toISOString()});
+  const freshProjectBase = () => ({format:'ps5vproj',formatVersion:2,name:'MiHomebrew',backend:'sharp',resolution:{width:1920,height:1080},theme:{background:'#101827',accent:'#7865f6',text:'#f0f3ff'},components:[],flows:[],assets:[],fontAssetId:'',screens:[{id:'screen-main',name:'Pantalla principal'}],currentScreen:'screen-main',settings:{titleId:'',firmware:'12.00',moduleKind:'app',buildProfile:'release',renderTarget:{width:1920,height:1080}},gameScene:{schemaVersion:1,enabled:false,physics:{moveSpeed:5.55,acceleration:9,jumpSpeed:9.3,gravity:21,fallLimit:-8,playerHalfHeight:0.72},player:{spawnPlatformId:''},camera:{followDistance:8.7,followHeight:3.4,lookAhead:3.3},appearance:{skyColor:'#100B20',playerColor:'#7D89FF',playerAccentColor:'#FFD5A5',collectibleColor:'#67F3E8',goalColor:'#FF9A6B',requireCollectibles:true,surfaceTextureAssetId:'',surfaceTextureColors:[]},presentation:{explorer:true,decor:true,particles:true,menuFrame:true},lighting:{ambientIntensity:0.34,ambientColor:'#B9C8FF',directional:{enabled:true,x:-0.4,y:-1,z:-0.6,intensity:0.55,color:'#DCE6FF'},points:[{id:'light-aurora',name:'Foco Aurora',x:-0.8,y:5,z:17,range:18,intensity:0.9,color:'#59DFF4'},{id:'light-faro',name:'Luz del Faro',x:1.1,y:7,z:45.5,range:20,intensity:1.15,color:'#FFD184'}]},platforms:[],objects:[]},customCode:'',manualCode:false,payloadLanguage:'c',payloadBuildMode:'managed',updatedAt:new Date().toISOString()});
   const freshProject = () => Object.assign(freshProjectBase(),{description:'',gamePresentation:{iconAssetId:'',audioAssetId:''}});
   let project = freshProject();
   let modalRevision = 0;
@@ -194,7 +194,7 @@
   }
 
   function setCompactGamePane(pane){if(!['scene','properties'].includes(pane))return;const view=$('#gameView');if(!view)return;view.dataset.compactPane=pane;$$('.game-compact-pane-button').forEach(button=>{const active=button.dataset.gamePane===pane;button.classList.toggle('active',active);button.setAttribute('aria-pressed',String(active));});if(pane==='scene'&&activeView==='game')drawGameSceneCanvas();}
-  function setActiveView(view){const previousView=activeView;activeView=view;const workspace=$('.workspace');workspace.dataset.editorView=view;workspace.dataset.activePanel=activePanel;workspace.classList.toggle('game-editor-open',view==='game');$$('.editor-tab').forEach(el=>el.classList.toggle('active',el.dataset.view===view));['design','structure','logic','game','compute','code','diagnostics'].forEach(v=>$('#'+v+'View').classList.toggle('hidden',v!==view));if(previousView!==view&&activePanel==='components')renderSidePanel();if(view==='design'&&previousView!=='design')renderCanvas();if(view==='structure')renderStructure();if(view==='logic')renderFlows();if(view==='game'){renderGameScene();if($('#gameView').dataset.compactPane==='scene')drawGameSceneCanvas();}if(view==='compute')renderComputeWorkspace();if(view==='code')renderCode();if(view==='diagnostics')renderDiagnostics();}
+  function setActiveView(view){const previousView=activeView;activeView=view;const workspace=$('.workspace');workspace.dataset.editorView=view;workspace.dataset.activePanel=activePanel;workspace.classList.toggle('game-editor-open',view==='game');$$('.editor-tab').forEach(el=>el.classList.toggle('active',el.dataset.view===view));['design','structure','logic','game','compute','code','diagnostics','console'].forEach(v=>$('#'+v+'View').classList.toggle('hidden',v!==view));if(previousView!==view&&activePanel==='components')renderSidePanel();if(view==='design'&&previousView!=='design')renderCanvas();if(view==='structure')renderStructure();if(view==='logic')renderFlows();if(view==='game'){renderGameScene();if($('#gameView').dataset.compactPane==='scene')drawGameSceneCanvas();}if(view==='compute')renderComputeWorkspace();if(view==='code')renderActiveEditorTab();if(view==='diagnostics')renderDiagnostics();if(view==='console')consoleViewEntered();}
   function setActivePanel(panel){activePanel=panel;$('.workspace').dataset.activePanel=panel;$$('.rail-item').forEach(el=>el.classList.toggle('active',el.dataset.panel===panel));renderSidePanel();}
   function setRightPane(pane){activeRight=pane;$$('.right-tab').forEach(el=>el.classList.toggle('active',el.dataset.right===pane));$('#inspectorPane').classList.toggle('hidden',pane!=='inspector');$('#hierarchyPane').classList.toggle('hidden',pane!=='hierarchy');if(pane==='hierarchy')renderHierarchy();else renderInspector();}
   function setDock(dock){activeDock=dock;$$('.dock-tab').forEach(el=>el.classList.toggle('active',el.dataset.dock===dock));renderDock();}
@@ -204,7 +204,7 @@
   function showOutputDock(){setDock('output');if($('.bottom-dock')?.classList.contains('collapsed')){autoCollapsedForShortViewport=false;setDockCollapsed(false);}}
 
   function renderSidePanel(){
-    const titles={components:['Componentes','Arrastra elementos al lienzo','UI'],logic:['Lógica visual','Eventos y comportamientos','FLOW'],systems:['Subsistemas','Capacidades del entorno','API'],assets:['Recursos','Archivos del proyecto','ASSET'],sdk:['SDK y toolchains','Backends comunitarios','SDK'],templates:['Proyectos y motores','Repositorios reales de PS5','SRC'],docs:['Documentación técnica','Capacidades y límites','REF']};
+    const titles={components:['Componentes','Arrastra elementos al lienzo','UI'],logic:['Lógica visual','Eventos y comportamientos','FLOW'],systems:['Subsistemas','Capacidades del entorno','API'],assets:['Recursos','Archivos del proyecto','ASSET'],files:['Archivos del proyecto','Explora y edita los archivos reales en disco','FILE'],sdk:['SDK y toolchains','Backends comunitarios','SDK'],templates:['Proyectos y motores','Repositorios reales de PS5','SRC'],docs:['Documentación técnica','Capacidades y límites','REF']};
     const gameTools=activeView==='game'&&activePanel==='components';const t=gameTools?['Construcción 3D','Añade piezas al recorrido AGC','AGC']:titles[activePanel];$('#panelTitle').textContent=t[0];$('#panelSubtitle').textContent=t[1];$('#panelKicker').textContent=t[2];
     const root=$('#panelContent');root.innerHTML='';
     if(activePanel==='components'){
@@ -226,17 +226,33 @@
       root.innerHTML=`<button id="addAssetBtn" class="btn secondary" style="width:100%">＋ Importar recurso</button><div class="section-note">PNG/JPEG, audio, JSON y archivos binarios. Las imágenes se previsualizan en el lienzo y se conservan al exportar el proyecto.</div><div id="assetList" class="asset-list" style="margin-top:13px"></div><div class="panel-info">En un backend nativo, cada recurso necesita estar copiado en el paquete y cargarse mediante la API correspondiente.</div>`;
       $('#addAssetBtn').onclick=()=>$('#assetFileInput').click();renderAssetList();
     }else if(activePanel==='sdk'){
-      root.innerHTML=`<div class="panel-info" style="margin-top:0;margin-bottom:12px">El gestor verifica exclusivamente snapshots versionados en toolchains/. No clona repositorios ni descarga mirrors, releases o paquetes. Las fuentes ausentes o incompletas se indican como pendientes.</div><button id="installAllSdks" class="btn primary" style="width:100%;margin-bottom:10px">⌕ Verificar toolchains locales</button><button id="refreshSdkState" class="btn secondary" style="width:100%">⟳ Verificar entorno</button><div id="sdkSideStatus" style="margin-top:13px"></div>`;
-      $('#installAllSdks').onclick=()=>installSdks(REPO_CATALOG.map(x=>x.id));$('#refreshSdkState').onclick=refreshStatus;renderSdkSideStatus();
+      root.innerHTML=`<div class="panel-info" style="margin-top:0;margin-bottom:12px">El gestor verifica exclusivamente snapshots versionados en toolchains/. No clona repositorios ni descarga mirrors, releases o paquetes. Las fuentes ausentes o incompletas se indican como pendientes.</div><button id="installAllSdks" class="btn primary" style="width:100%;margin-bottom:10px">⌕ Verificar toolchains locales</button><button id="refreshSdkState" class="btn secondary" style="width:100%">⟳ Verificar entorno</button><div id="sdkSideStatus" style="margin-top:13px"></div><div id="backendCapsNote" style="margin-top:13px"></div>`;
+      $('#installAllSdks').onclick=()=>installSdks(REPO_CATALOG.map(x=>x.id));$('#refreshSdkState').onclick=refreshStatus;renderSdkSideStatus();renderBackendCapsNote();
     }else if(activePanel==='templates'){
       root.innerHTML=`<div class="panel-info" style="margin-top:0"><strong>Fuentes reales, no mockups.</strong><br>El catálogo reconoce exclusivamente copias locales bajo toolchains/ con un manifiesto de procedencia válido. Distingue bases para crear títulos, drivers y programas de referencia. Los asistentes upstream crean proyectos nativos independientes; el destino Native UI también transpila el modelo visual a C++20 para los kits OpenGL y Vulkan.</div><div class="search-wrap"><input id="sourceSearch" placeholder="Buscar OpenGL, Vulkan, boilerplate…" autocomplete="off"></div><div class="source-filters"><button class="source-filter active" data-source-filter="all">Todos</button><button class="source-filter" data-source-filter="base">Bases</button><button class="source-filter" data-source-filter="renderer">Gráficos</button><button class="source-filter" data-source-filter="ui">UI</button><button class="source-filter" data-source-filter="driver">Drivers</button><button class="source-filter" data-source-filter="dependency">Dependencias</button><button class="source-filter" data-source-filter="template">Generadores</button><button class="source-filter" data-source-filter="graphics-addon">Gráficos extra</button><button class="source-filter" data-source-filter="reference">Referencias</button><button class="source-filter" data-source-filter="ai">IA declarada</button></div><div id="sourceCatalog" class="source-catalog"></div><div class="panel-info">Verificar significa consultar únicamente toolchains/. No se descargan repositorios, submódulos, releases ni mirrors. La etiqueta IA se limita a declaraciones explícitas del proyecto, no a AGENTS.md/CLAUDE.md. No instala automáticamente todos los toolchains de Linux/WSL ni redistribuye archivos de Sony. Revisa licencias, dependencias fijadas, compatibilidad de firmware y tests antes de reutilizar código.</div>`;
       renderSourceCatalog('');
       $('#sourceSearch').addEventListener('input',e=>renderSourceCatalog(e.target.value));
       $$('.source-filter').forEach(b=>b.onclick=()=>{$$('.source-filter').forEach(x=>x.classList.toggle('active',x===b));renderSourceCatalog($('#sourceSearch').value,b.dataset.sourceFilter);});
       $('#sourceCatalog').addEventListener('click',async e=>{const nativeBuild=e.target.closest('[data-native-build]');if(nativeBuild){buildNativeProject(nativeBuild.dataset.nativeBuild,nativeBuild.dataset.nativeTitleId||'',nativeBuild.dataset.nativeName||'',nativeBuild.dataset.nativeNeedsInit==='true',nativeBuild.dataset.nativeSupportsClean==='true',nativeBuild.dataset.nativeTemplate||'');return;}if(e.target.closest('[data-refresh-native-projects]')){renderNativeProjects();return;}const install=e.target.closest('[data-source-install]');if(install){installSdks([install.dataset.sourceInstall]);return;}const create=e.target.closest('[data-source-create]');if(create){if(create.dataset.sourceCreate==='vulkan-template')openVulkanTemplateCreate();else openNativeBoilerplateCreate(create.dataset.sourceCreate);return;}const open=e.target.closest('[data-source-open]');if(open){window.open(open.dataset.sourceOpen,'_blank','noopener,noreferrer');}});
+    }else if(activePanel==='files'){
+      root.innerHTML=`<div class="panel-info" style="margin-top:0;margin-bottom:12px">Archivos reales del proyecto en disco. Haz clic en un archivo de texto para editarlo en la vista Código (Ctrl+S guarda en disco). Los binarios se listan pero no se abren; las carpetas <code>snapshots/</code> no se muestran.</div><div class="files-actions"><button id="filesNewFile" class="btn secondary small">＋ Archivo</button><button id="filesNewFolder" class="btn secondary small">＋ Carpeta</button><button id="filesRefresh" class="btn ghost small">⟳ Actualizar</button></div><div id="filesTree" class="files-tree"><div class="empty-screen">Cargando…</div></div><div class="search-wrap" style="margin-top:14px"><input id="filesSearchInput" type="search" placeholder="Buscar en todos los archivos del proyecto…" autocomplete="off"></div><button id="filesSearchBtn" class="btn secondary small" style="width:100%;margin-top:8px">Buscar en el proyecto</button><div id="filesSearchResults" style="margin-top:10px"></div>`;
+      $('#filesRefresh').addEventListener('click',refreshFilesTree);
+      $('#filesNewFile').addEventListener('click',()=>askTextDialog('Nuevo archivo','Nombre (puede incluir carpeta, p. ej. src/util.c):','',name=>void filesCreate(name,false)));
+      $('#filesNewFolder').addEventListener('click',()=>askTextDialog('Nueva carpeta','Nombre de la carpeta:','',name=>void filesCreate(name,true)));
+      $('#filesSearchBtn').addEventListener('click',runProjectSearch);
+      $('#filesSearchInput').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();runProjectSearch();}});
+      void refreshFilesTree();
     }else if(activePanel==='docs'){
       root.innerHTML=`<div class="system-tile"><strong>SharpProspero</strong><p>Aplicaciones nativas, payloads, bibliotecas y toolkit visual C#. Requiere .NET 10 y WSL en Windows.</p><a class="repo-link" href="https://github.com/SvenGDK/SharpProspero" target="_blank" rel="noreferrer">Repositorio y documentación ↗</a></div><div class="system-tile"><strong>PS5SDK</strong><p>Headers/CRT y payloads ELF; upstream indica que no construye títulos completos.</p><a class="repo-link" href="https://github.com/PS5Dev/PS5SDK" target="_blank" rel="noreferrer">Repositorio ↗</a></div><div class="system-tile"><strong>ps5link-sdk</strong><p>Enlazador nativo de títulos y examples de gráficos/entrada, necesita prospero-clang.</p><a class="repo-link" href="https://github.com/Rufidj/ps5link-sdk" target="_blank" rel="noreferrer">Repositorio ↗</a></div><div class="system-tile"><strong>etaHEN-Plugins</strong><p>SDK para plugins y daemons cargados por etaHEN; requiere Johns SDK.</p><a class="repo-link" href="https://github.com/etaHEN/etaHEN-Plugins" target="_blank" rel="noreferrer">Repositorio ↗</a></div><div class="panel-info">Consulta <a class="repo-link" href="/docs/SDK_MATRIX.md" target="_blank" rel="noreferrer">Matriz de SDKs ↗</a> y <a class="repo-link" href="/docs/PROJECT_ECOSYSTEM.md" target="_blank" rel="noreferrer">Estudio de proyectos, UI, OpenGL, Vulkan e IA ↗</a>.</div>`;
     }
+  }
+  function renderBackendCapsNote(){
+    const box=$('#backendCapsNote');if(!box)return;
+    const caps=sdkStatus?.backendCapabilities?.backends;
+    if(!caps){box.innerHTML='<div class="section-note">La tabla de capacidades por backend no está disponible en este arranque (se sirve con /api/status).</div>';return;}
+    const flag=v=>v?'sí':'no';
+    const rows=Object.entries(caps).map(([id,c])=>`<div class="asset-row"><div class="asset-preview">${c.generatesFromCanvas?'✓':'·'}</div><div class="asset-name">${esc(id)}</div><div class="asset-size">${esc(String(c.label||''))} · lienzo: ${flag(c.generatesFromCanvas)} · pantallas: ${flag(c.multiScreen)} · imágenes: ${flag(c.images)} · audio: ${flag(c.audio)}</div></div>`).join('');
+    box.innerHTML=`<div class="category-label">CAPACIDADES POR BACKEND</div>${rows}<div class="section-note">Tabla declarativa servida por /api/status (runtime/backend-capabilities.json). Los diagnósticos bloqueantes de cada proyecto se calculan en Análisis.</div>`;
   }
   function renderSourceCatalog(filter='',category='all'){
     const root=$('#sourceCatalog');if(!root)return;
@@ -450,7 +466,7 @@
               const packButton=document.createElement('button');packButton.className='btn secondary';packButton.dataset.postBuild='ultrapack';packButton.textContent='Empaquetar con UltraPack';packButton.onclick=()=>packageNativeWithUltraPack(result.path||path);modalActions.append(packButton);
             }
           }else{outcome='error';log(result.message||'El build nativo ha fallado.','ERROR');if(operationRevision===modalRevision)toast('La compilación nativa ha fallado. Revisa el log.','error');}
-          if(result.diagnostics){result.diagnostics.forEach(d=>allDiagnostics.push(d));renderDiagnostics();}
+          if(result.diagnostics){result.diagnostics.forEach(d=>allDiagnostics.push(d));renderDiagnostics();}pushCompilerDiagnostics(String(result.output||''));
         }catch(e){if(operationRevision===modalRevision){const out=$('#nativeBuildOutput');if(out)out.textContent=e.message;toast('No se pudo ejecutar el build nativo.','error');}log('Invocación del build nativo: '+e.message,'ERROR');}
         finally{buildBusy=false;syncProjectControls();if(operationRevision===modalRevision){const title=$('#modalTitle');if(title)title.textContent=outcome==='success'?'Compilación completada':'Error de compilación';$$('#modalActions button').forEach(b=>b.disabled=false);}await refreshStatus();await renderNativeProjects();}
       }}
@@ -1159,6 +1175,7 @@
     if(!project.gameScene)project.gameScene={schemaVersion:1,enabled:false,physics:{moveSpeed:5.55,acceleration:9,jumpSpeed:9.3,gravity:21,fallLimit:-8,playerHalfHeight:0.72},player:{spawnPlatformId:''},camera:{followDistance:8.7,followHeight:3.4,lookAhead:3.3},appearance:{skyColor:'#100B20',playerColor:'#7D89FF',playerAccentColor:'#FFD5A5',collectibleColor:'#67F3E8',goalColor:'#FF9A6B',requireCollectibles:true,surfaceTextureAssetId:'',surfaceTextureColors:[]},lighting:{ambientIntensity:0.34,ambientColor:'#B9C8FF',directional:{enabled:true,x:-0.4,y:-1,z:-0.6,intensity:0.55,color:'#DCE6FF'},points:[{id:'light-aurora',name:'Foco Aurora',x:-0.8,y:5,z:17,range:18,intensity:0.9,color:'#59DFF4'},{id:'light-faro',name:'Luz del Faro',x:1.1,y:7,z:45.5,range:20,intensity:1.15,color:'#FFD184'}]},platforms:[],objects:[]};
     project.gameScene.camera=Object.assign({followDistance:8.7,followHeight:3.4,lookAhead:3.3},project.gameScene.camera||{});
     project.gameScene.appearance=Object.assign({skyColor:'#100B20',playerColor:'#7D89FF',playerAccentColor:'#FFD5A5',collectibleColor:'#67F3E8',goalColor:'#FF9A6B',requireCollectibles:true},project.gameScene.appearance||{});
+    project.gameScene.presentation=Object.assign({explorer:true,decor:true,particles:true,menuFrame:true},project.gameScene.presentation||{});
     const lightingDefaults={ambientIntensity:0.34,ambientColor:'#B9C8FF',directional:{enabled:true,x:-0.4,y:-1,z:-0.6,intensity:0.55,color:'#DCE6FF'},points:[{id:'light-aurora',name:'Foco Aurora',x:-0.8,y:5,z:17,range:18,intensity:0.9,color:'#59DFF4'},{id:'light-faro',name:'Luz del Faro',x:1.1,y:7,z:45.5,range:20,intensity:1.15,color:'#FFD184'}]};
     const savedLighting=project.gameScene.lighting||{};
     const rawLights=Array.isArray(savedLighting.points)?savedLighting.points:lightingDefaults.points;
@@ -1409,7 +1426,7 @@
     const physics=scene.physics,spawnOptions=platforms.map(p=>`<option value="${esc(p.id)}" ${scene.player.spawnPlatformId===p.id?'selected':''}>${esc(p.label||p.id)}</option>`).join('');
     $('#gamePhysicsProperties').innerHTML=`<div class="game-number-grid">${[['moveSpeed','Velocidad'],['acceleration','Aceleración'],['jumpSpeed','Impulso de salto'],['gravity','Gravedad'],['fallLimit','Límite de caída'],['playerHalfHeight','Media altura jugador']].map(([key,label])=>`<label>${label}<input data-game-physics="${key}" type="number" step="0.1" value="${physics[key]}"></label>`).join('')}</div><label>Inicio del jugador<select data-game-spawn ${platforms.length?'':'disabled'}><option value="">Selecciona plataforma</option>${spawnOptions}</select></label><div class="game-control-map"><span>Stick izquierdo <b>mover</b></span><span>✕ <b>saltar</b></span><span>OPTIONS <b>pausar</b></span><span>□ <b>reiniciar</b></span><span>△ <b>sonido</b></span></div>`;
     const camera=scene.camera,appearance=scene.appearance;
-    $('#gamePresentationProperties').innerHTML=`<div class="game-number-grid"><label>Distancia de seguimiento<input data-game-camera="followDistance" type="number" min="4" max="30" step="0.1" value="${camera.followDistance}"></label><label>Altura de cámara<input data-game-camera="followHeight" type="number" min="1" max="12" step="0.1" value="${camera.followHeight}"></label><label>Anticipación<input data-game-camera="lookAhead" type="number" min="0" max="20" step="0.1" value="${camera.lookAhead}"></label></div><div class="game-number-grid game-color-grid"><label>Color del cielo<input data-game-appearance="skyColor" type="color" value="${appearance.skyColor}"></label><label>Color del jugador<input data-game-appearance="playerColor" type="color" value="${appearance.playerColor}"></label><label>Acento del jugador<input data-game-appearance="playerAccentColor" type="color" value="${appearance.playerAccentColor}"></label><label>Color de cristales<input data-game-appearance="collectibleColor" type="color" value="${appearance.collectibleColor}"></label><label>Color de la meta<input data-game-appearance="goalColor" type="color" value="${appearance.goalColor}"></label></div><label class="game-collision-toggle"><input data-game-appearance="requireCollectibles" type="checkbox" ${appearance.requireCollectibles?'checked':''}> Exigir todos los cristales para completar el nivel</label><small>Estos valores alimentan la cámara y los materiales del motor AGC generado.</small>`;
+    $('#gamePresentationProperties').innerHTML=`<div class="game-number-grid"><label>Distancia de seguimiento<input data-game-camera="followDistance" type="number" min="4" max="30" step="0.1" value="${camera.followDistance}"></label><label>Altura de cámara<input data-game-camera="followHeight" type="number" min="1" max="12" step="0.1" value="${camera.followHeight}"></label><label>Anticipación<input data-game-camera="lookAhead" type="number" min="0" max="20" step="0.1" value="${camera.lookAhead}"></label></div><div class="game-number-grid game-color-grid"><label>Color del cielo<input data-game-appearance="skyColor" type="color" value="${appearance.skyColor}"></label><label>Color del jugador<input data-game-appearance="playerColor" type="color" value="${appearance.playerColor}"></label><label>Acento del jugador<input data-game-appearance="playerAccentColor" type="color" value="${appearance.playerAccentColor}"></label><label>Color de cristales<input data-game-appearance="collectibleColor" type="color" value="${appearance.collectibleColor}"></label><label>Color de la meta<input data-game-appearance="goalColor" type="color" value="${appearance.goalColor}"></label></div><label class="game-collision-toggle"><input data-game-appearance="requireCollectibles" type="checkbox" ${appearance.requireCollectibles?'checked':''}> Exigir todos los cristales para completar el nivel</label><div class="compute-pane-heading game-physics-heading"><strong>PRESENCIA EN ESCENA (OPT-IN)</strong></div><div class="game-number-grid"><label class="game-collision-toggle"><input data-game-presentation="explorer" type="checkbox" ${project.gameScene.presentation.explorer?'checked':''}> Exploradora animada (personaje)</label><label class="game-collision-toggle"><input data-game-presentation="decor" type="checkbox" ${project.gameScene.presentation.decor?'checked':''}> Decorado de fondo (esferas y cristal)</label><label class="game-collision-toggle"><input data-game-presentation="particles" type="checkbox" ${project.gameScene.presentation.particles?'checked':''}> Partículas ambientales</label><label class="game-collision-toggle"><input data-game-presentation="menuFrame" type="checkbox" ${project.gameScene.presentation.menuFrame?'checked':''}> Marco de menú/pausa/HUD generado</label></div><small>Solo se dibuja lo que actives aquí: sin marcos, sin personaje y sin decorado que no hayas pedido. El resto de la interfaz es exactamente la de tu lienzo.</small><small>Estos valores alimentan la cámara y los materiales del motor AGC generado.</small>`;
     const surfaceAssets=(project.assets||[]).filter(asset=>/\.png$/i.test(String(asset.fileName||asset.name||''))&&String(asset.dataUrl||'').startsWith('data:image/png;base64,'));
     const surfaceOptions=surfaceAssets.map(asset=>'<option value="'+esc(asset.id)+'" '+(asset.id===appearance.surfaceTextureAssetId?'selected':'')+'>'+esc(asset.name||asset.fileName)+'</option>').join('');
     const selectedSurfaceAsset=surfaceAssets.find(asset=>asset.id===appearance.surfaceTextureAssetId)||null;
@@ -1611,6 +1628,7 @@
   let gameSourcePreviewRevision=0;
   function renderCode(){
     const editor=$('#codeEditor');
+    editor.dataset.highlightLang=editorActiveTab?languageForPath(editorActiveTab):projectModeHighlightLang();
     const computeBackend=project.backend==='vulkan-compute';
     const nativeBackend=['opengl-ui','vulkan-ui'].includes(project.backend);
     const payloadBackend=project.backend==='payload';
@@ -1648,7 +1666,7 @@
     }catch(error){editor.value='';$('#codeStatus').textContent='No se pudo generar código: '+error.message;editor.dataset.generationError='true';}
     updateGutter();
   }
-  function updateGutter(){const n=($('#codeEditor').value||'').split('\n').length;$('#codeGutter').textContent=Array.from({length:n},(_,i)=>i+1).join('\n');}
+  function updateGutter(){const n=($('#codeEditor').value||'').split('\n').length;$('#codeGutter').textContent=Array.from({length:n},(_,i)=>i+1).join('\n');scheduleCodeHighlight();}
 
   let analysisTimer=null;
   function scheduleAnalysis(){clearTimeout(analysisTimer);analysisTimer=setTimeout(runAnalysis,230);}
@@ -1738,9 +1756,11 @@
       if(project.assets.length)add('error','Los recursos del editor no se enlazan al payload','La compilación payload actual recibe código C y no copia ni enlaza assets del modelo visual.','Recursos','Incluye los recursos desde tu código/proyecto o quítalos del modelo antes de compilar.');
     }
     if(project.computeGraph){for(const item of window.PS5HSComputeGraph.validateGraph(project.computeGraph))d.push({severity:item.severity,title:item.title,message:item.message,location:'Vulkan Compute · '+item.location,fix:item.fix||'',backendScope:'vulkan-compute'});}
-    allDiagnostics=d;$('#diagCount').textContent=d.filter(x=>x.severity==='error').length;$('#problemCount').textContent=d.filter(x=>x.severity==='error'||x.severity==='warning').length;renderDiagnostics();if(activeView==='compute')renderComputeStatus();return d;
+    const backendCaps=sdkStatus?.backendCapabilities?.backends?.[project.backend]||null;
+    if(project.backend==='ps5link'&&backendCaps&&!backendCaps.images&&comps.some(c=>c.screenId===project.currentScreen&&c.type==='image'))add('warning','Imágenes no soportadas por el puente AGC','El puente visual ps5link serializa el componente, pero la plantilla AGC de esta versión no renderiza imágenes: el título compilará sin ellas. La tabla de capacidades lo declara así.','Backend ps5link','Elimina el componente de imagen del lienzo o elige un backend con soporte de texturas.');
+    allDiagnostics=d.concat(lastCompilerDiagnostics);$('#diagCount').textContent=d.filter(x=>x.severity==='error').length;$('#problemCount').textContent=d.filter(x=>x.severity==='error'||x.severity==='warning').length;renderDiagnostics();if(activeView==='compute')renderComputeStatus();return d;
   }
-  function renderDiagnostics(){const root=$('#diagnosticsList');const filter=$('#diagFilter')?.value||'all';const list=allDiagnostics.filter(d=>filter==='all'||d.severity===filter);if(!list.length){root.innerHTML=`<div class="diag-empty"><div style="font-size:26px;color:#6f61ce;margin-bottom:10px">✓</div><strong style="color:#c7d1e6">No hay diagnósticos que mostrar</strong><br>Los cambios se analizan automáticamente al editar.</div>`;return;}root.innerHTML=list.map(d=>`<div class="diagnostic-row" data-diagnostic-location="${esc(d.location)}"><div class="diag-symbol ${d.severity}">${d.severity==='error'?'×':d.severity==='warning'?'!':'i'}</div><div class="diag-main"><div class="diag-title">${esc(d.title)}</div><div class="diag-message">${esc(d.message)}</div><div class="diag-meta">${esc(d.location)}${d.fix?' · Solución: '+esc(d.fix):''}</div></div></div>`).join('');}
+  function renderDiagnostics(){const root=$('#diagnosticsList');const filter=$('#diagFilter')?.value||'all';const list=allDiagnostics.filter(d=>filter==='all'||d.severity===filter);if(!list.length){root.innerHTML=`<div class="diag-empty"><div style="font-size:26px;color:#6f61ce;margin-bottom:10px">✓</div><strong style="color:#c7d1e6">No hay diagnósticos que mostrar</strong><br>Los cambios se analizan automáticamente al editar.</div>`;return;}root.innerHTML=list.map(d=>`<div class="diagnostic-row" data-diagnostic-location="${esc(d.location)}"${d.file?` data-diag-file="${esc(d.file)}" data-diag-line="${esc(String(d.line||1))}"`:''}><div class="diag-symbol ${d.severity}">${d.severity==='error'?'×':d.severity==='warning'?'!':'i'}</div><div class="diag-main"><div class="diag-title">${esc(d.title)}</div><div class="diag-message">${esc(d.message)}</div><div class="diag-meta">${esc(d.location)}${d.fix?' · Solución: '+esc(d.fix):''}</div></div></div>`).join('');}
 
   function computeGraph(){project.computeGraph=window.PS5HSComputeGraph.normalizeGraph(project.computeGraph);return project.computeGraph;}
   function computeSelectedPass(){const graph=computeGraph();return graph.passes.find(pass=>pass.id===selectedComputePassId)||null;}
@@ -1898,7 +1918,31 @@
       {text:'Guardar y cerrar',class:'primary',action:async()=>{const operationRevision=modalRevision,projectReference=project;const saved=await saveProject();if(operationRevision!==modalRevision||project!==projectReference)return;if(saved?.currentStateSaved){closeModal();unloadProjectState();}else if(saved)toast('La copia enviada se guardó, pero hay cambios posteriores. Guarda de nuevo antes de cerrar.','warn');}}
     ]);
   }
-  function openProject(confirmed=false){if(buildBusy){toast('No se puede cambiar de proyecto mientras se compila.','warn');return;}if(isProjectOpen&&isDirty&&!confirmed){confirmDialog('Abrir otro proyecto','Hay cambios sin guardar. Si continúas y cargas otro proyecto, se descartarán los cambios actuales.',()=>openProject(true));return;}openModal('Abrir proyecto',`<p>Abre un archivo <code>.ps5vproj</code> o JSON exportado, o recupera un proyecto guardado en el espacio de trabajo de Windows.</p><button id="chooseProjectFile" class="btn secondary">Seleccionar archivo local</button><div id="savedProjectList" style="margin-top:14px"></div>`,[{text:'Cerrar',class:'ghost',action:closeModal}]);const dialogRevision=modalRevision;$('#chooseProjectFile').onclick=()=>{if(dialogRevision!==modalRevision)return;$('#projectFileInput').click();closeModal();};const list=$('#savedProjectList');api('projects').then(res=>{if(dialogRevision!==modalRevision)return;if(!res.projects?.length){list.innerHTML='<div class="empty-screen">Todavía no hay proyectos guardados en el espacio de trabajo de Windows.</div>';return;}list.innerHTML=res.projects.map(p=>`<div class="asset-row"><div class="asset-preview">◈</div><span class="asset-name">${esc(p.name)}</span><button class="btn small secondary" data-project-open="${esc(p.file)}">Abrir</button></div>`).join('');list.querySelectorAll('[data-project-open]').forEach(b=>b.onclick=async()=>{const loadRevision=modalRevision;try{const out=await api('load',{file:b.dataset.projectOpen});if(loadRevision!==modalRevision)return;const incoming=normalizeProjectModel(out.project,b.dataset.projectOpen);const migratedName=String(out.project?.name??'')!==incoming.name;project=incoming;ensureProjectScreens();isProjectOpen=true;setProjectOpenState(true);$('#projectName').value=project.name;$('#projectName').placeholder='Nombre del proyecto';$('#backendSelect').value=project.backend;selectedId=null;isPreview=false;previewSnapshot=null;resetHistory();savedState();closeModal();renderAll();toast(migratedName?'Proyecto cargado; nombre antiguo normalizado.':'Proyecto cargado',migratedName?'warn':'success');}catch(e){if(loadRevision===modalRevision)toast('No se pudo abrir el proyecto: '+e.message,'error');else log('No se pudo abrir el proyecto: '+e.message,'ERROR');}});}).catch(e=>{if(dialogRevision!==modalRevision)return;list.innerHTML=`<div class="empty-screen">No se pudo consultar el espacio de trabajo de Windows: ${esc(e.message)}<br>También puedes abrir archivos .ps5vproj.</div>`;});}
+  function openProject(confirmed=false){if(buildBusy){toast('No se puede cambiar de proyecto mientras se compila.','warn');return;}if(isProjectOpen&&isDirty&&!confirmed){confirmDialog('Abrir otro proyecto','Hay cambios sin guardar. Si continúas y cargas otro proyecto, se descartarán los cambios actuales.',()=>openProject(true));return;}openModal('Abrir proyecto',`<p>Abre un archivo <code>.ps5vproj</code> o JSON exportado, o recupera un proyecto guardado en el espacio de trabajo de Windows.</p><button id="chooseProjectFile" class="btn secondary">Seleccionar archivo local</button><div id="savedProjectList" style="margin-top:14px"></div>`,[{text:'Cerrar',class:'ghost',action:closeModal}]);const dialogRevision=modalRevision;$('#chooseProjectFile').onclick=()=>{if(dialogRevision!==modalRevision)return;$('#projectFileInput').click();closeModal();};const list=$('#savedProjectList');api('projects').then(res=>{if(dialogRevision!==modalRevision)return;if(!res.projects?.length){list.innerHTML='<div class="empty-screen">Todavía no hay proyectos guardados en el espacio de trabajo de Windows.</div>';return;}list.innerHTML=res.projects.map(p=>`<div class="asset-row"><div class="asset-preview">◈</div><span class="asset-name">${esc(p.name)}</span><button class="btn small ghost" data-project-snapshots="${esc(p.file)}" title="Historial de snapshots en disco">⏱</button><button class="btn small secondary" data-project-open="${esc(p.file)}">Abrir</button></div>`).join('');list.querySelectorAll('[data-project-snapshots]').forEach(b=>b.onclick=()=>openSnapshotPicker(b.dataset.projectSnapshots));list.querySelectorAll('[data-project-open]').forEach(b=>b.onclick=async()=>{const loadRevision=modalRevision;try{const out=await api('load',{file:b.dataset.projectOpen});if(loadRevision!==modalRevision)return;const incoming=normalizeProjectModel(out.project,b.dataset.projectOpen);const migratedName=String(out.project?.name??'')!==incoming.name;project=incoming;ensureProjectScreens();isProjectOpen=true;setProjectOpenState(true);$('#projectName').value=project.name;$('#projectName').placeholder='Nombre del proyecto';$('#backendSelect').value=project.backend;selectedId=null;isPreview=false;previewSnapshot=null;resetHistory();savedState();closeModal();renderAll();toast(migratedName?'Proyecto cargado; nombre antiguo normalizado.':'Proyecto cargado',migratedName?'warn':'success');}catch(e){if(loadRevision===modalRevision)toast('No se pudo abrir el proyecto: '+e.message,'error');else log('No se pudo abrir el proyecto: '+e.message,'ERROR');}});}).catch(e=>{if(dialogRevision!==modalRevision)return;list.innerHTML=`<div class="empty-screen">No se pudo consultar el espacio de trabajo de Windows: ${esc(e.message)}<br>También puedes abrir archivos .ps5vproj.</div>`;});}
+
+  // Historial de snapshots en disco (últimos 10 guardados por el servidor en cada /api/save).
+  function openSnapshotPicker(fileName){
+    openModal('Historial del proyecto',`<p>Snapshots del modelo guardados en disco antes de cada sobrescritura. Restaurar carga el modelo en el editor sin escribir nada hasta que vuelvas a guardar.</p><div id="snapshotList" style="margin-top:10px"><div class="empty-screen">Consultando historial…</div></div>`,[{text:'Cerrar',class:'ghost',action:closeModal}]);
+    const dialogRevision=modalRevision;
+    api('snapshots/list',{file:fileName}).then(res=>{
+      if(dialogRevision!==modalRevision)return;
+      const list=$('#snapshotList');if(!list)return;
+      if(!res.snapshots?.length){list.innerHTML='<div class="empty-screen">Todavía no hay snapshots: aparecen al guardar cambios sobre un proyecto existente.</div>';return;}
+      list.innerHTML=res.snapshots.map(s=>`<div class="asset-row"><div class="asset-preview">⏱</div><span class="asset-name">${esc(s.saved)} · ${esc(s.title||fileName)} · ${(s.size/1024).toFixed(1)} KiB</span><button class="btn small secondary" data-snapshot-restore="${esc(s.name)}">Restaurar</button></div>`).join('');
+      list.querySelectorAll('[data-snapshot-restore]').forEach(b=>b.onclick=async()=>{
+        const rev=modalRevision;
+        try{
+          const out=await api('snapshots/restore',{file:fileName,snapshot:b.dataset.snapshotRestore});
+          if(rev!==modalRevision)return;
+          project=normalizeProjectModel(out.project,fileName);
+          ensureProjectScreens();isProjectOpen=true;setProjectOpenState(true);
+          $('#projectName').value=project.name;$('#backendSelect').value=project.backend;
+          selectedId=null;isPreview=false;previewSnapshot=null;resetHistory();savedState();closeModal();renderAll();
+          toast('Snapshot restaurado en el editor. Guárdalo para hacerlo definitivo.','success');
+        }catch(e){if(rev===modalRevision)toast('No se pudo restaurar el snapshot: '+e.message,'error');}
+      });
+    }).catch(e=>{if(dialogRevision===modalRevision)$('#snapshotList').innerHTML=`<div class="empty-screen">No se pudo leer el historial: ${esc(e.message)}</div>`;});
+  }
 
   async function installSdks(ids){
     if(!ids?.length)return;
@@ -2076,7 +2120,7 @@
               const packButton=document.createElement('button');packButton.className='btn secondary';packButton.dataset.postBuild='ultrapack';packButton.textContent='Empaquetar con UltraPack';packButton.onclick=()=>packageNativeWithUltraPack(result.path);actions.append(packButton);
             }
           }else{buildOutcome='error';buildLog(traceId,result.message||'La generación o compilación nativa ha fallado.','ERROR');if(result.path)log('El proyecto upstream se conserva para corrección: '+result.path,'WARN');if(operationRevision===modalRevision)toast('Error de compilación. Consulta el registro para ver el diagnóstico.','error');}
-          if(result.diagnostics){result.diagnostics.forEach(d=>allDiagnostics.push(d));renderDiagnostics();}
+          if(result.diagnostics){result.diagnostics.forEach(d=>allDiagnostics.push(d));renderDiagnostics();}pushCompilerDiagnostics(String(result.output||''));
           if(activePanel==='templates')await renderNativeProjects();
         }catch(e){buildLog(traceId,'FALLO en generación/compilación: '+(e?.stack||e?.message||String(e)),'ERROR');if(operationRevision===modalRevision){const box=$('#nativeVisualOutput');if(box)box.textContent=e.message;toast('No se completó el build nativo. Revisa Salida y exporta el log para diagnóstico.','error');}log('Error de generación/compilación nativa: '+e.message,'ERROR');}
         finally{buildBusy=false;syncProjectControls();$('#buildBtn').innerHTML=buildOutcome==='success'?'<span>✓</span> Completado':buildOutcome==='error'?'<span>!</span> Error · Reintentar':'<span>▶</span> Compilar';if(operationRevision===modalRevision)buttons.forEach(b=>b.disabled=false);await refreshStatus();if(activePanel==='templates')await renderNativeProjects();}
@@ -2117,7 +2161,7 @@
           if(output)output.textContent=(result.message||'Proceso finalizado.')+'\n\n'+(result.output||'Sin salida del compilador.')+(result.artifact?'\n\nELF verificado: '+result.artifact:'');
           if(result.ok){outcome='success';buildLog(traceId,'Etapa 3/3 completada: ELF64 verificado y publicado para descarga.');if(result.artifact)buildLog(traceId,'ELF: '+result.artifact);if(downloadArea&&result.artifactUrl&&/^\/downloads\/[A-Za-z0-9_-]+\.elf$/.test(result.artifactUrl)){const link=document.createElement('a');link.className='btn primary';link.href=result.artifactUrl;link.download='';link.textContent='Descargar ELF';downloadArea.append(link);}if(operationRevision===modalRevision)toast('Payload compilado. ELF verificado y listo para descargar.');}
           else{buildLog(traceId,result.message||'La compilación del payload ha fallado.','ERROR');if(operationRevision===modalRevision)toast('No se pudo compilar el payload. Consulta Salida.','error');}
-          if(result.diagnostics){result.diagnostics.forEach(item=>allDiagnostics.push(item));renderDiagnostics();}
+          if(result.diagnostics){result.diagnostics.forEach(item=>allDiagnostics.push(item));renderDiagnostics();}pushCompilerDiagnostics(String(result.output||''));
           try{localStorage.setItem(STORAGE_KEY,JSON.stringify(project));savedState();}catch(error){log('No se pudo guardar el estado tras el build payload: '+error.message,'WARN');}
         }catch(error){if(output)output.textContent='No se completó el proceso.\n'+error.message;buildLog(traceId,'FALLO en compilación payload: '+(error?.stack||error?.message||String(error)),'ERROR');if(operationRevision===modalRevision)toast('No se completó el payload. Revisa Salida y exporta el log.','error');}
         finally{buildBusy=false;syncProjectControls();$('#buildBtn').innerHTML=outcome==='success'?'<span>✓</span> ELF listo':outcome==='error'?'<span>!</span> Error · Reintentar':'<span>▶</span> Compilar';if(operationRevision===modalRevision)buttons.forEach(button=>button.disabled=false);await refreshStatus();}
@@ -2142,6 +2186,7 @@
       :'Modo manual: se compilará el código C editado por ti, junto con los componentes y flujos conectados.';
     const form='<p>'+esc(modeDescription)+'</p><p>El IDE preparará un título nativo con AGC directo usando los toolchains locales. Se copiará la <code>libc.prx</code> seleccionada al título y no se subirá ni instalará en la consola.</p>'+(audioAsset?'<p>La música importada «'+esc(audioAsset.name||audioAsset.fileName)+'» se convertirá offline al formato <code>sce_sys/snd0.at9</code> con el codificador ATRAC9 incluido.</p>':'')+
       '<div class="form-field"><label>TITLE_ID de prueba</label><input id="ps5LinkBuildTitleId" maxlength="9" value="'+esc(isValidTitleId(savedTitleId)?savedTitleId:'PPSA99994')+'" pattern="PPSA[0-9]{5}"><small>Se usa un identificador temporal. Comprueba que no esté instalado en la consola.</small></div>'+
+      '<div class="form-field"><label>Perfil de compilación</label><select id="ps5LinkBuildProfile"><option value="release"'+(String(project.settings?.buildProfile||'release')==='debug'?'':' selected')+'>Release — sin trazas; avisos de error y de geometría descartada activos</option><option value="debug"'+(String(project.settings?.buildProfile||'release')==='debug'?' selected':'')+'>Debug — hitos por notificación (primer DCB, vblank, audio, GPU)</option></select><small>Release mantiene el título limpio para jugar; Debug añade las trazas para acotar cuelgues en consola. Se recuerda en el proyecto.</small></div>'+
       '<div class="form-field"><label>libc.prx local firmada para tu firmware</label><input id="ps5LinkLibcPath" value="'+esc(defaultLibcPath)+'" spellcheck="false"><small>El valor inicial apunta a la copia local del proyecto OpenGL que ya tienes. Cambia la ruta si esa libc no corresponde al firmware del PS5.</small></div>'+
       nativeModificationOptionsMarkup('ps5link',requiredKeys)+
       '<div id="ps5LinkArtifactActions"></div><pre id="ps5LinkBuildOutput" style="font:10px/1.55 Consolas,monospace;color:#aeb8cf;white-space:pre-wrap;word-break:break-word;max-height:34vh;overflow:auto">Esperando autorización. Aún no se ha integrado ni compilado ningún archivo.</pre>';
@@ -2165,7 +2210,7 @@
         buildBusy=true;syncProjectControls();$('#buildBtn').textContent='⟳ Compilando AGC';setDock('output');let outcome='error';
         try{
           project.name=$('#projectName').value.trim()||project.name||'Nebula Steps';project.backend='ps5link';project.settings=project.settings||{};project.settings.titleId=titleId;
-          const data=projectPayload();data.name=project.name;data.backend='ps5link';data.manualCode=!visualMode;data.customCode=visualMode?'':code;data.settings=data.settings||{};data.settings.titleId=titleId;
+          const data=projectPayload();data.name=project.name;data.backend='ps5link';data.manualCode=!visualMode;data.customCode=visualMode?'':code;data.settings=data.settings||{};data.settings.titleId=titleId;data.settings.buildProfile=String($('#ps5LinkBuildProfile')?.value||'release')==='debug'?'debug':'release';project.settings.buildProfile=data.settings.buildProfile;
           if(output)output.textContent='Permisos validados. Guardando bloques, flujos, código y recursos…';
           buildLog(traceId,visualMode
             ?`Generación visual: ${project.components.length} bloques de interfaz, ${project.gameScene?.platforms?.length||0} plataformas 3D y ${project.flows.filter(flow=>flow.enabled!==false&&flow.action==='gameAction').length} acciones de juego enlazadas.`
@@ -2178,7 +2223,7 @@
           if(output)output.textContent=(result.message||'Proceso finalizado.')+'\n\n'+(result.output||'Sin salida de compilación.')+(result.artifact?'\n\nArtefacto verificado: '+result.artifact:'');
           if(result.ok){outcome='success';setLastPostBuildPath(result.path||'');buildLog(traceId,'ELF64, SELF firmado y carpeta de título verificados.');if(result.artifact)buildLog(traceId,'eboot.bin: '+result.artifact);if(operationRevision===modalRevision){toast('Título AGC compilado. Pulsa Empaquetar para crear el .ffpfsc.');const actions=$('#ps5LinkArtifactActions');if(actions)actions.innerHTML='<p class="section-note">El título ya está listo. Usa <b>Empaquetar</b> en la barra superior para generar el archivo de prueba.</p>';}}
           else{buildLog(traceId,result.message||'Falló el build ps5link.','ERROR');if(operationRevision===modalRevision)toast('No se pudo compilar el título AGC. Consulta Salida.','error');}
-          if(result.diagnostics){result.diagnostics.forEach(item=>allDiagnostics.push(item));renderDiagnostics();}
+          if(result.diagnostics){result.diagnostics.forEach(item=>allDiagnostics.push(item));renderDiagnostics();}pushCompilerDiagnostics(String(result.output||''));
           try{localStorage.setItem(STORAGE_KEY,JSON.stringify(project));savedState();}catch(error){log('No se pudo guardar el proyecto después del build AGC: '+error.message,'WARN');}
         }catch(error){if(output)output.textContent='No se completó el proceso.\n'+error.message;buildLog(traceId,'FALLO en compilación ps5link: '+(error?.stack||error?.message||String(error)),'ERROR');if(operationRevision===modalRevision)toast('No se completó el build ps5link. Revisa Salida y exporta el log.','error');}
         finally{buildBusy=false;syncProjectControls();$('#buildBtn').innerHTML=outcome==='success'?'<span>✓</span> AGC listo':outcome==='error'?'<span>!</span> Error · Reintentar':'<span>▶</span> Compilar';if(operationRevision===modalRevision)buttons.forEach(button=>button.disabled=false);await refreshStatus();}
@@ -2229,7 +2274,7 @@
           if(output)output.textContent=(result.message||'Proceso finalizado.')+'\n\n'+(result.output||'Sin salida del SDK.')+(result.artifact?'\n\nArtefacto verificado: '+result.artifact:'');
           if(result.ok){outcome='success';buildLog(traceId,'Etapa 3/3 completada: el backend informó éxito.');log(result.message||'Compilación SharpProspero completada.');if(result.artifact)log('Artefacto SharpProspero: '+result.artifact);if(operationRevision===modalRevision)toast('Compilación SharpProspero completada');}
           else{outcome='error';buildLog(traceId,result.message||'La compilación SharpProspero ha fallado.','ERROR');if(operationRevision===modalRevision)toast('Compilación SharpProspero fallida. Revisa la salida.','error');}
-          if(result.diagnostics){result.diagnostics.forEach(d=>allDiagnostics.push(d));renderDiagnostics();}
+          if(result.diagnostics){result.diagnostics.forEach(d=>allDiagnostics.push(d));renderDiagnostics();}pushCompilerDiagnostics(String(result.output||''));
           try{localStorage.setItem(STORAGE_KEY,JSON.stringify(project));savedState();}catch(error){log('No se pudo guardar el estado tras la compilación: '+error.message,'WARN');}
         }catch(error){buildLog(traceId,'FALLO SharpProspero: '+(error?.stack||error?.message||String(error)),'ERROR');if(operationRevision===modalRevision&&output){output.textContent='No se completó el proceso.\n'+error.message;toast('No se completó SharpProspero. Revisa Salida y exporta el log.','error');}log('SharpProspero: '+error.message,'ERROR');}
         finally{buildBusy=false;syncProjectControls();$('#buildBtn').innerHTML=outcome==='success'?'<span>✓</span> Completado':outcome==='error'?'<span>!</span> Error · Reintentar':'<span>▶</span> Compilar';if(operationRevision===modalRevision)buttons.forEach(button=>button.disabled=false);await refreshStatus();}
@@ -2280,7 +2325,7 @@
         setModalText('#buildProgress',result.output||result.message||'Proceso finalizado.',operationRevision);
         if(result.ok){buildLog(traceId,'Etapa 3/3 completada: el backend devolvió éxito.');if(result.message)buildLog(traceId,result.message);if(result.artifact)buildLog(traceId,`Artefacto: ${result.artifact}`);if(operationRevision===modalRevision)toast('Compilación finalizada correctamente');}
         else{buildLog(traceId,result.message||'La compilación ha fallado.','ERROR');if(operationRevision===modalRevision)toast('La compilación no ha terminado correctamente. Consulta Salida.','error');}
-        if(result.diagnostics){result.diagnostics.forEach(d=>allDiagnostics.push(d));renderDiagnostics();}
+        if(result.diagnostics){result.diagnostics.forEach(d=>allDiagnostics.push(d));renderDiagnostics();}pushCompilerDiagnostics(String(result.output||''));
       }catch(e){setModalText('#buildProgress',e.message,operationRevision);buildLog(traceId,'Excepción del cliente/backend: '+(e?.stack||e?.message||String(e)),'ERROR');if(operationRevision===modalRevision)toast('Error en la compilación. Consulta Salida y exporta el log.','error');}
       finally{clearInterval(buildHeartbeat);buildBusy=false;syncProjectControls();$('#buildBtn').innerHTML='<span>▶</span> Compilar';await refreshStatus();}
     }catch(error){buildLog(traceId,'Fallo fuera de la ruta normal de compilación: '+(error?.stack||error?.message||String(error)),'ERROR');toast('La compilación se detuvo por un error interno. Exporta el log de diagnóstico.','error');if(buildBusy){buildBusy=false;syncProjectControls();}}
@@ -2334,6 +2379,115 @@
   $('#gamePlatformProperties').addEventListener('click',event=>{if(!isProjectOpen||buildBusy||event.target.id!=='gameSpawnHere')return;const scene=gameSceneModel();if(!scene.platforms.some(platform=>platform.id===selectedGamePlatformId))return;snapshot();scene.player.spawnPlatformId=selectedGamePlatformId;changed('Punto de inicio actualizado');renderGameScene();});
   $('#gameTitleProperties').addEventListener('focusout',event=>{if(event.target instanceof HTMLElement)event.target.dataset.gameHistory='';});
   $('#gameTitleProperties').addEventListener('input',event=>{if(!isProjectOpen||buildBusy)return;const field=event.target.closest('[data-game-title="description"]');if(!field)return;if(field.dataset.gameHistory!=='true'){snapshot();field.dataset.gameHistory='true';}project.description=field.value;changed('Descripción del título actualizada');});
+  /* ===== Consola PS5: klog (3232), FTP (puerto configurable, 2121 por defecto) y elfldr (9021) ===== */
+  const CONSOLE_STORAGE_KEY='ps5hs-console-v1';
+  const consoleState={polling:false,timer:null,raw:[],host:'',connected:false};
+  const PS5_ERROR_CODES=[
+    [/0x80290005/i,'VideoOut rechazó la resolución: solo 1920×1080 es universal; el resto exige ajustes de depuración'],
+    [/0x80290007/i,'VideoOut rechazó el modo de tiling (lineal requiere «Enhanced Display Buffer Attribute»)'],
+    [/0x80290012/i,'Cola de flips llena: esperar vblank antes de volver a enviar'],
+    [/0x80960003/i,'UserService ya estaba inicializado'],
+    [/0x8026000e/i,'AudioOut ya estaba inicializado'],
+    [/0x8041013d/i,'Sin sesión PSN: ruido de red habitual, no es un fallo del título'],
+    [/0x80020042/i,'Objeto no vaciable (errno 66); suele quedar un montaje residual'],
+    [/0x80b50001/i,'RTRACE de LNC: aviso interno del shell, revisar contexto'],
+    [/0x80f40002/i,'No hay proceso con ese appId (montaje USB fantasma)'],
+    [/0x8a6c0020/i,'La grabación del DCB supera el máximo de palabras por envío (0xFFFFF)'],
+    [/0x80f000ff|0x80f50005/i,'Contenido o metadato inexistente en el catálogo'],
+    [/0x80a20002|0x80a20003/i,'Servicio de datos guardados no disponible para este proceso']
+  ];
+  function consoleStore(){try{return JSON.parse(localStorage.getItem(CONSOLE_STORAGE_KEY)||'{}')||{};}catch{return {};}}
+  function consoleSave(){try{localStorage.setItem(CONSOLE_STORAGE_KEY,JSON.stringify({host:$('#consoleHost').value.trim(),folder:$('#consoleDeployFolder').value.trim(),remote:$('#consoleDeployRemote').value.trim(),port:$('#consoleDeployPort').value.trim(),elf:$('#consoleElfPath').value.trim()}));}catch{}}
+  function consoleSetStatus(text,connected){consoleState.connected=connected===true;const el=$('#consoleStatus');if(el){el.textContent=text;el.style.color=connected?'#7ee2a8':text.startsWith('Error')?'#ff9c9c':'';}const led=$('#consoleLed');if(led)led.style.display=connected?'inline-block':'none';}
+  function classifyConsoleLine(line){
+    const classes=[];
+    if(/\bEXEC \/app0\//.test(line))classes.push('k-exec');
+    if(/\[NoDraw\]|corrupted eh_frame/.test(line))classes.push('k-nodraw');
+    if(/ERROR|Failed|FALLO|exception/i.test(line))classes.push('k-error');
+    else if(/WARNING|Warn\b/i.test(line))classes.push('k-warn');
+    if(/gc_gfx_queue_status|GFX\(pipe|gc_suspend|### gc/.test(line))classes.push('k-gpu');
+    let decoded='';
+    for(const [re,explain] of PS5_ERROR_CODES){const hit=line.match(re);if(hit){decoded=hit[0]+' → '+explain;break;}}
+    return {classes,decoded};
+  }
+  function renderConsoleLog(){
+    const wrap=$('#consoleKlog');if(!wrap)return;
+    const filter=($('#consoleFilter').value||'').toLowerCase();
+    const lines=consoleState.raw.slice(-1500);
+    const html=[];
+    for(const line of lines){
+      if(filter&&!line.toLowerCase().includes(filter))continue;
+      const {classes,decoded}=classifyConsoleLine(line);
+      const escaped=line.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+      html.push(`<span class="kline ${classes.join(' ')}">${escaped}${decoded?`<span class="k-decoded">   ⟵ ${decoded.replace(/&/g,'&amp;').replace(/</g,'&lt;')}</span>`:''}</span>`);
+    }
+    wrap.innerHTML=html.join('')||'<span class="console-empty">Sin líneas'+(filter?' que coincidan con el filtro.':'. Conecta el klog o espera actividad de la consola.')+'</span>';
+    if($('#consoleAutoScroll').checked&&!filter)wrap.scrollTop=wrap.scrollHeight;
+  }
+  async function consolePollOnce(){
+    const host=$('#consoleHost').value.trim();
+    if(!host){consoleSetStatus('Falta la IP de la consola',false);return;}
+    try{
+      const result=await api(`console/klog?host=${encodeURIComponent(host)}&port=3232`);
+      if(result&&result.lines){consoleState.raw=result.lines;renderConsoleLog();}
+      consoleSetStatus(`Conectado a ${host} · ${result.lines?result.lines.length:0} líneas`,true);
+    }catch(error){consoleSetStatus('Error: '+(error.message||'sin respuesta'),false);consoleStopPolling();}
+  }
+  function consoleStopPolling(){consoleState.polling=false;if(consoleState.timer){clearTimeout(consoleState.timer);consoleState.timer=null;}$('#consoleLed')&&($('#consoleLed').textContent='●');try{api('console/klog-stop',{host:$('#consoleHost').value.trim()}).catch(()=>{});}catch{}}
+  function consoleViewEntered(){
+    const saved=consoleStore();
+    if(saved.host&&!$('#consoleHost').value)$('#consoleHost').value=saved.host;
+    if(saved.folder&&!$('#consoleDeployFolder').value)$('#consoleDeployFolder').value=saved.folder;
+    if(saved.port&&$('#consoleDeployPort'))$('#consoleDeployPort').value=saved.port;
+    if(!$('#consoleDeployFolder').value&&getLastPostBuildPath()){const folder=getLastPostBuildPath().replace(/[\\/]+$/,'');$('#consoleDeployFolder').value=folder;}
+    if(!$('#consoleElfPath').value&&getLastPostBuildPath())$('#consoleElfPath').value=getLastPostBuildPath().replace(/[\\/]+$/,'').replace(/dist([\\/])[^\\/]+$/,'build/ps5link/app.elf');
+    if(!consoleState.raw.length){$('#consoleKlog').innerHTML='<span class="console-empty">Escribe la IP de la consola. Con klogsrv en marcha, el registro aparece aquí con los códigos 0x8… traducidos.</span>';}
+    if($('#consoleKlogAuto').checked&&saved.host&&!consoleState.polling)consoleStartPolling();
+  }
+  function consoleStartPolling(){
+    if(consoleState.polling)return;
+    consoleState.polling=true;consoleSave();
+    const tick=async()=>{if(!consoleState.polling)return;await consolePollOnce();if(consoleState.polling)consoleState.timer=setTimeout(tick,1200);};
+    tick();
+  }
+  $('#consoleConnectBtn').addEventListener('click',()=>{consoleSave();consoleStartPolling();});
+  $('#consoleStopBtn').addEventListener('click',()=>{consoleStopPolling();consoleSetStatus('Captura detenida',false);log('Captura klog detenida por el usuario.','INFO');});
+  $('#consoleFilter').addEventListener('input',renderConsoleLog);
+  $('#consoleClearBtn').addEventListener('click',()=>{consoleState.raw=[];renderConsoleLog();});
+  $('#consoleDownloadBtn').addEventListener('click',()=>{
+    const text=(consoleState.raw||[]).join('\n');
+    if(!text){toast('No hay líneas de klog que descargar todavía.','warn');return;}
+    const blob=new Blob([text],{type:'text/plain;charset=utf-8'}),link=document.createElement('a');
+    link.href=URL.createObjectURL(blob);link.download='ps5-klog-'+new Date().toISOString().slice(0,19).replace(/[:T]/g,'-')+'.txt';
+    document.body.appendChild(link);link.click();link.remove();URL.revokeObjectURL(link.href);
+    toast('Registro klog descargado.');
+  });
+  window.addEventListener('pagehide',()=>{if(consoleState.polling){try{navigator.sendBeacon('/api/console/klog-stop',new Blob(['{}'],{type:'application/json'}));}catch{}}});
+  $('#consoleDeployBtn').addEventListener('click',async()=>{
+    const host=$('#consoleHost').value.trim(),folder=$('#consoleDeployFolder').value.trim(),remote=$('#consoleDeployRemote').value.trim()||'/data/homebrew/';
+    const port=Number($('#consoleDeployPort').value)||2121;
+    consoleSave();
+    if(!host||!folder){toast('Indica la IP de la consola y la carpeta local del título.','warn');return;}
+    if(port<1||port>65535){toast('El puerto FTP debe estar entre 1 y 65535.','warn');return;}
+    consoleSetStatus('Desplegando…',false);
+    try{
+      const result=await api('console/deploy',{host,localFolder:folder,remoteFolder:remote,port,user:$('#consoleDeployUser').value.trim(),password:$('#consoleDeployPass').value});
+      consoleSetStatus(`Desplegado: ${result.count} archivos en ${result.remote}`,true);
+      toast(`Título desplegado (${result.count} archivos). Regístralo con ShadowMountPlus y arranca desde el inicio.`,'success');
+      log('Despliegue FTP completado: '+result.remote,'INFO');
+    }catch(error){consoleSetStatus('Error FTP: '+error.message,false);toast('Despliegue FTP fallido: '+error.message,'error');log('Despliegue FTP: '+error.message,'ERROR');}
+  });
+  $('#consoleSendElfBtn').addEventListener('click',async()=>{
+    const host=$('#consoleHost').value.trim(),elf=$('#consoleElfPath').value.trim();
+    consoleSave();
+    if(!host||!elf){toast('Indica la IP de la consola y la ruta del ELF.','warn');return;}
+    try{
+      const result=await api('console/sendelf',{host,elfPath:elf});
+      consoleSetStatus('ELF enviado ('+result.sent+' bytes)'+(result.response?'. Respuesta: '+result.response:''),true);
+      toast('Payload enviado al elfldr.','success');log('sendelf 9021: '+elf,'INFO');
+    }catch(error){consoleSetStatus('Error elfldr: '+error.message,false);toast('Envío ELF fallido: '+error.message,'error');}
+  });
+  ['consoleHost','consoleDeployFolder','consoleDeployRemote','consoleDeployPort','consoleElfPath'].forEach(id=>$('#'+id).addEventListener('change',consoleSave));
   $('#gameTitleProperties').addEventListener('change',event=>{if(!isProjectOpen||buildBusy)return;const field=event.target.closest('[data-game-title="iconAssetId"],[data-game-title="audioAssetId"]');if(!field)return;snapshot();project.gamePresentation=Object.assign({iconAssetId:'',audioAssetId:''},project.gamePresentation||{});project.gamePresentation[field.dataset.gameTitle]=field.value||'';changed(field.dataset.gameTitle==='iconAssetId'?'Portada del título actualizada':'Música de selección vinculada');renderGameScene();});
   for(const root of [$('#gamePlatformProperties'),$('#gamePhysicsProperties')])root.addEventListener('focusout',event=>{if(event.target instanceof HTMLInputElement||event.target instanceof HTMLSelectElement)event.target.dataset.gameHistory='';});
    $('#gamePlatformProperties').addEventListener('input',event=>{if(!isProjectOpen||buildBusy)return;const field=event.target.closest('[data-game-platform]'),scene=gameSceneModel(),selected=scene.platforms.find(platform=>platform.id===selectedGamePlatformId);if(!field||!selected)return;if(field.dataset.gameHistory!=='true'){snapshot();field.dataset.gameHistory='true';}const key=field.dataset.gamePlatform;if(['checkpoint','collectible','goal','collisionEnabled'].includes(key))selected[key]=field.checked;else if(['x','height','z','halfWidth','halfDepth','collisionHalfWidth','collisionHalfHeight','collisionHalfDepth','collisionOffsetY'].includes(key))selected[key]=Number(field.value);else selected[key]=field.value;if(key==='goal'&&selected.goal)scene.platforms.filter(platform=>platform!==selected).forEach(platform=>platform.goal=false);changed('Bloque de juego actualizado');$('#gameSceneSummary').textContent=`${scene.platforms.length} plataforma${scene.platforms.length===1?'':'s'} · ${scene.platforms.filter(platform=>platform.collectible).length} cristales`;const row=$(`#gamePlatformList [data-game-select="${CSS.escape(selected.id)}"]`);if(row){const label=row.querySelector('span'),marker=row.querySelector('small');if(label)label.textContent=selected.label||selected.id;if(marker){const index=scene.platforms.indexOf(selected);marker.textContent=selected.collisionEnabled===false?'SIN COLISION':selected.goal?'META':selected.checkpoint?'CHECKPOINT':selected.collectible?'CRISTAL':`BLOQUE ${index+1}`;}}drawGameSceneCanvas();});
@@ -2341,6 +2495,8 @@
   $('#gamePresentationProperties').addEventListener('change',async event=>{
     if(!isProjectOpen||buildBusy)return;
     const scene=gameSceneModel(),camera=event.target.closest('[data-game-camera]'),appearance=event.target.closest('[data-game-appearance]'),texture=event.target.closest('[data-game-texture]');
+    const presentation=event.target.closest('[data-game-presentation]');
+    if(presentation){if(presentation.type!=='checkbox')return;snapshot();scene.presentation[presentation.dataset.gamePresentation]=presentation.checked;changed('Presencia en escena actualizada');drawGameSceneCanvas();return;}
     if(texture){
       const assetId=texture.value||'',asset=(project.assets||[]).find(item=>item.id===assetId);
       let palette=[];
@@ -2367,7 +2523,8 @@
   $('#computeShaderEditor').addEventListener('focus',()=>{if(isProjectOpen&&!computeHistoryPending){snapshot();computeHistoryPending=true;}});$('#computeShaderEditor').addEventListener('blur',()=>{computeHistoryPending=false;});$('#computeShaderEditor').addEventListener('input',event=>{if(!isProjectOpen||buildBusy)return;const pass=computeSelectedPass();if(!pass)return;pass.source=event.target.value;computeGraph().revisionId=window.PS5HSComputeGraph.newRevisionId();$('#computeCodeGutter').textContent=Array.from({length:Math.max(1,event.target.value.split('\n').length)},(_,index)=>index+1).join('\n');$('#computeCodeStatus').textContent=`GLSL 450 · ${event.target.value.length.toLocaleString('es-ES')} caracteres`;changed('Shader GLSL editado');renderComputeStatus();});
   let projectNameHistoryPending=false;
   $('#dismissNotice').onclick=()=>{$('.app-shell').classList.add('notice-dismissed');$('#noticeStrip').remove();};$('#dockToggle').onclick=()=>{autoCollapsedForShortViewport=false;setDockCollapsed(!$('.bottom-dock').classList.contains('collapsed'));};$('#canvasSizeBtn').onclick=()=>openCanvasSizeDialog();$('#renderTargetBtn').onclick=()=>openRenderTargetDialog();$('#gridBtn').onclick=()=>{showGrid=!showGrid;renderCanvas();};$('#isolateLayerBtn').onclick=()=>toggleLayerIsolation();$('#fitBtn').onclick=()=>{zoom=100;fitCanvasToViewport();$('#canvasStage').style.transform='scale(1)';$('#canvasStage').style.transformOrigin='center center';$('#zoomValue').textContent='100%';renderCanvas();};$('#centerBtn').onclick=()=>{const canvas=canvasResolution();snapshot();screenComponents().forEach(c=>{c.x=clamp(c.x,0,canvas.width-c.w);c.y=clamp(c.y,0,canvas.height-c.h);});renderCanvas();changed('Lienzo comprobado');};
-  $('#backendSelect').onchange=()=>{const previous=project.backend;if(previous!==$('#backendSelect').value)snapshot();project.backend=$('#backendSelect').value;if(project.backend==='vulkan-compute'&&!project.computeGraph)project.computeGraph=window.PS5HSComputeGraph.createDefaultGraph();if(previous!==project.backend&&project.backend==='ps5link'){project.manualCode=false;project.customCode='';gameSceneModel().enabled=true;}else if(previous!==project.backend&&project.manualCode){project.manualCode=false;project.customCode='';toast('Se regenerará el código para el nuevo backend.','warn');}changed('Backend actualizado');renderCode();if(project.backend==='ps5link')setActiveView('game');else if(project.backend==='payload')setActiveView('code');if(activeView==='compute')renderComputeWorkspace();runAnalysis();};
+  const NON_UI_BACKEND_NOTICE={payload:'El backend payload compila src/main.c|cpp a ELF y no incorpora los widgets del lienzo.',ps5sdk:'ps5sdk es una toolchain de títulos: no genera desde el lienzo.',etahen:'etahen es un backend de referencia (plugins/toolchain): no genera desde el lienzo.','sharp-payload':'Un payload no aloja el toolkit de pantalla de una aplicación visual.'};
+  $('#backendSelect').onchange=()=>{const previous=project.backend;if(previous!==$('#backendSelect').value)snapshot();project.backend=$('#backendSelect').value;if(project.backend==='vulkan-compute'&&!project.computeGraph)project.computeGraph=window.PS5HSComputeGraph.createDefaultGraph();if(previous!==project.backend&&project.backend==='ps5link'){project.manualCode=false;project.customCode='';gameSceneModel().enabled=true;}else if(previous!==project.backend&&project.manualCode){project.manualCode=false;project.customCode='';toast('Se regenerará el código para el nuevo backend.','warn');}if(NON_UI_BACKEND_NOTICE[project.backend])toast(NON_UI_BACKEND_NOTICE[project.backend]+' Revisa el panel Diagnósticos.','warn');changed('Backend actualizado');renderCode();if(project.backend==='ps5link')setActiveView('game');else if(project.backend==='payload')setActiveView('code');if(activeView==='compute')renderComputeWorkspace();runAnalysis();};
   $('#projectName').addEventListener('input',()=>{if(!isProjectOpen){setProjectOpenState(true);project.name=$('#projectName').value;changed('Proyecto visual abierto');return;}if(!projectNameHistoryPending){snapshot();projectNameHistoryPending=true;}project.name=$('#projectName').value;changed('Nombre del proyecto actualizado');});$('#projectName').addEventListener('blur',()=>{projectNameHistoryPending=false;});
   $('#projectFileInput').onchange=e=>{if(e.target.files?.[0])importProjectFile(e.target.files[0]);e.target.value='';};$('#assetFileInput').onchange=e=>{addAsset(e.target.files?.[0]);e.target.value='';};
   $('#canvasStage').addEventListener('dragover',e=>{if(e.dataTransfer.types.includes('application/x-ps5-component')){e.preventDefault();$('#canvasStage').classList.add('is-drop-target');}});$('#canvasStage').addEventListener('dragleave',e=>{if(!$('#canvasStage').contains(e.relatedTarget))$('#canvasStage').classList.remove('is-drop-target');});$('#canvasStage').addEventListener('drop',e=>{e.preventDefault();$('#canvasStage').classList.remove('is-drop-target');const type=e.dataTransfer.getData('application/x-ps5-component');if(!type)return;if(!Object.hasOwn(TYPES,type)){toast('El elemento arrastrado no corresponde a un componente conocido.','error');log('Arrastre rechazado: tipo de componente no registrado: '+type,'ERROR');return;}const r=$('#canvasStage').getBoundingClientRect();if(!(r.width>0&&r.height>0)){toast('No se puede calcular la posición del componente porque el lienzo no tiene dimensiones.','error');return;}const canvas=canvasResolution(),mapping=canvasToOutputMapping(),outputX=(e.clientX-r.left)/r.width*mapping.width,outputY=(e.clientY-r.top)/r.height*mapping.height,x=(outputX-mapping.offsetX)/mapping.scale,y=(outputY-mapping.offsetY)/mapping.scale;if(x<0||y<0||x>canvas.width||y>canvas.height){toast('Suelta el componente dentro del área útil del lienzo.','warn');return;}try{makeComponent(type,x,y);}catch(error){toast(error.message,'error');log('No se pudo crear el componente: '+error.message,'ERROR');}});$('#canvasStage').addEventListener('click',e=>{if(e.target===$('#canvasStage')||e.target===$('#canvasElements')){if(!isPreview)selectComponent(null);}});
@@ -2387,13 +2544,286 @@
   }
   $('#regenerateCodeBtn').onclick=()=>{if(project.backend==='ps5link'){if(project.manualCode){void convertPs5LinkToVisual();return;}renderCode();toast('Fuente regenerado desde Juego 3D y Flujos');void saveProject();return;}snapshot();project.manualCode=false;project.customCode='';renderCode();changed('Código regenerado');toast('Código regenerado desde el modelo visual');};$('#copyCodeBtn').onclick=async()=>{try{await navigator.clipboard.writeText($('#codeEditor').value);toast('Código copiado al portapapeles');}catch{ $('#codeEditor').select();document.execCommand('copy');toast('Código copiado');}};
   $('#payloadLanguage').onchange=()=>{if(project.backend!=='payload'||project.payloadBuildMode==='upstream-makefile')return;snapshot();project.payloadLanguage=$('#payloadLanguage').value==='cpp'?'cpp':'c';if(!project.manualCode)project.customCode='';changed('Lenguaje del payload actualizado');renderCode();runAnalysis();};
-  $('#codeEditor').addEventListener('input',()=>{project.manualCode=true;project.customCode=$('#codeEditor').value;$('#codeStatus').textContent='Código fuente editado manualmente';updateGutter();changed('Código editado');});$('#codeEditor').addEventListener('scroll',()=>{$('#codeGutter').scrollTop=$('#codeEditor').scrollTop;});
+  $('#codeEditor').addEventListener('input',()=>{updateGutter();if(editorActiveTab){const tab=editorTabs.find(t=>t.path===editorActiveTab);if(tab){tab.content=$('#codeEditor').value;tab.dirty=true;renderEditorTabs();$('#codeStatus').textContent='Archivo sin guardar (Ctrl+S escribe en disco)';}return;}project.manualCode=true;project.customCode=$('#codeEditor').value;$('#codeStatus').textContent='Código fuente editado manualmente';changed('Código editado');});$('#codeEditor').addEventListener('scroll',()=>{$('#codeGutter').scrollTop=$('#codeEditor').scrollTop;const hl=$('#codeHighlight');if(hl){hl.scrollTop=$('#codeEditor').scrollTop;hl.scrollLeft=$('#codeEditor').scrollLeft;}});
+  /* ===== 1.1.57 · IDE: resaltado de sintaxis, buscar/reemplazar, pestañas multi-archivo y explorador de archivos ===== */
+  const CODE_LANG_BY_EXT={c:'c',h:'c',cpp:'cpp',cc:'cpp',cxx:'cpp',hpp:'cpp',hh:'cpp',cs:'csharp',js:'js',json:'json',glsl:'glsl',vert:'glsl',frag:'glsl',comp:'glsl',yml:'yaml',yaml:'yaml',xml:'xml',html:'html',css:'css',sh:'sh',bat:'bat',ps1:'ps1'};
+  const HIGHLIGHT_LANG_LABEL={c:'C',cpp:'C++',csharp:'C#',js:'JavaScript',json:'JSON',glsl:'GLSL 450',yaml:'YAML',xml:'XML',html:'HTML',css:'CSS',sh:'Shell',bat:'Batch',ps1:'PowerShell',plain:'Texto'};
+  const HIGHLIGHT_KEYWORDS={
+    c:'alignas alignof auto bool break case char class const constexpr continue decltype default delete do double dynamic_cast else enum explicit extern false float for friend goto if inline int long mutable namespace new noexcept nullptr operator private protected public register restrict return short signed sizeof static struct switch this throw true try typedef typeid typename union unsigned using virtual void volatile while int8_t int16_t int32_t int64_t uint8_t uint16_t uint32_t uint64_t size_t ssize_t ptrdiff_t',
+    cpp:'alignas alignof auto bool break case catch char class concept const consteval constexpr constinit continue decltype default delete do double dynamic_cast else enum explicit export extern false final float for friend goto if inline int long mutable namespace new noexcept nullptr operator override private protected public register return short signed sizeof static struct switch template this throw true try typedef typeid typename union unsigned using virtual void volatile while std int8_t int16_t int32_t int64_t uint8_t uint16_t uint32_t uint64_t size_t ssize_t',
+    csharp:'abstract as async await base bool break byte case catch char checked class const continue decimal default delegate do double dynamic else enum event explicit extern false finally fixed float for foreach get goto if implicit in int interface internal is lock long namespace new null object operator out override params private protected public readonly ref return sbyte sealed set short sizeof stackalloc string struct switch this throw true try typeof uint ulong unchecked unsafe ushort using var virtual void volatile while',
+    js:'async await break case catch class const continue debugger default delete do else export extends false finally for from function get if import in instanceof let new null of return set static super switch this throw true typeof undefined var void while yield',
+    json:'true false null',
+    glsl:'attribute bool break buffer case centroid coherent const continue default discard do double dvec2 dvec3 dvec4 else flat float for if in inout int invariant layout long mat2 mat3 mat4 out patch precision readonly restrict return sampler2D sampler3D shared short signed struct switch true typedef uvec2 uvec3 uvec4 uniform unsigned varying void volatile while writeonly vec2 vec3 vec4 ivec2 ivec3 ivec4 bvec2 bvec3 bvec4 gl_VertexID gl_InstanceID gl_GlobalInvocationID gl_LocalInvocationID gl_WorkGroupID gl_NumWorkGroups gl_LocalInvocationIndex gl_Position gl_FragColor',
+    yaml:'true false null yes no on off'
+  };
+  let editorTabs=[],editorActiveTab=null,highlightTimer=null,lastCompilerDiagnostics=[],filesTreeCache=null;
+  function languageForPath(p){const ext=String(p||'').toLowerCase().split('.').pop();return CODE_LANG_BY_EXT[ext]||'plain';}
+  function languageLabelFor(lang){return HIGHLIGHT_LANG_LABEL[lang]||'Texto';}
+  function projectModeHighlightLang(){return project.backend==='sharp'?'csharp':project.backend==='vulkan-compute'?'glsl':project.backend==='payload'&&project.payloadLanguage==='cpp'?'cpp':'c';}
+  function highlightSource(source,lang){
+    if(source==null)return'';
+    if(source.length>600000)return esc(source);
+    const keywords=HIGHLIGHT_KEYWORDS[lang];
+    if(!keywords)return esc(source);
+    const kwAlt=keywords.split(/\s+/).filter(Boolean).join('|');
+    const RE_STR=/"(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*'/;
+    const RE_COM=/\/\/[^\n]*|\/\*[\s\S]*?\*\//;
+    const RE_PRE=/^[ \t]*#[ \t]*\w+[^\n]*/;
+    const RE_NUM=/\b0x[0-9a-fA-F]+\b|\b\d+(?:\.\d+)?(?:[eE][+-]?\d+)?[fFuUlL]*\b/;
+    const re=new RegExp('('+RE_STR.source+')|('+RE_COM.source+')|('+RE_PRE.source+')|('+RE_NUM.source+')|(\\b(?:'+kwAlt+')\\b)','gm');
+    let out='',last=0,m;
+    while((m=re.exec(source))!==null){
+      out+=esc(source.slice(last,m.index));
+      const cls=m[1]?'tok-str':m[2]?'tok-com':m[3]?'tok-pre':m[4]?'tok-num':'tok-kw';
+      out+='<span class="'+cls+'">'+esc(m[0])+'</span>';
+      last=m.index+m[0].length;
+      if(!m[0].length)re.lastIndex+=1;
+    }
+    out+=esc(source.slice(last));
+    return out;
+  }
+  function scheduleCodeHighlight(){if(highlightTimer)clearTimeout(highlightTimer);highlightTimer=setTimeout(renderCodeHighlight,80);}
+  function renderCodeHighlight(){
+    const hl=$('#codeHighlight');if(!hl)return;
+    const editor=$('#codeEditor'),value=editor.value||'';
+    hl.innerHTML=highlightSource(value,editor.dataset.highlightLang||'plain')+'\n';
+    hl.scrollTop=editor.scrollTop;hl.scrollLeft=editor.scrollLeft;
+  }
+  function currentProjectFolder(){return slug(project.name);}
+  function renderEditorTabs(){
+    const strip=$('#codeTabs');if(!strip)return;
+    const parts=[`<button class="code-tab${editorActiveTab?'':' active'}" data-tab-project="1"><span>Código del proyecto</span></button>`];
+    editorTabs.forEach(tab=>{parts.push(`<button class="code-tab${editorActiveTab===tab.path?' active':''}" data-tab-path="${esc(tab.path)}" title="${esc(tab.path)}"><span>${esc(tab.path.split('/').pop())}${tab.dirty?' ●':''}</span><i class="code-tab-close" data-tab-close="${esc(tab.path)}" title="Cerrar pestaña">×</i></button>`);});
+    strip.innerHTML=parts.join('');
+    strip.hidden=editorTabs.length===0;
+  }
+  function renderActiveEditorTab(){renderEditorTabs();if(editorActiveTab){renderDiskTab(editorActiveTab);}else{renderCode();}}
+  function renderDiskTab(path){
+    const tab=editorTabs.find(t=>t.path===path);
+    if(!tab){editorActiveTab=null;renderActiveEditorTab();return;}
+    const editor=$('#codeEditor'),lang=languageForPath(path);
+    editor.value=tab.content;editor.readOnly=false;editor.dataset.highlightLang=lang;
+    editor.removeAttribute('data-generation-error');
+    $('#codeFileName').textContent=path;
+    $('#codeLanguageBadge').textContent=languageLabelFor(lang);
+    $('#codeStatus').textContent=tab.dirty?'Archivo sin guardar (Ctrl+S escribe en disco)':'Archivo de disco · Ctrl+S guarda · Ctrl+F busca';
+    updateGutter();
+  }
+  async function openProjectFile(path,line){
+    if(!isProjectOpen){toast('Abre o crea un proyecto para editar sus archivos.','warn');return null;}
+    try{
+      let tab=editorTabs.find(t=>t.path===path);
+      if(!tab){
+        const res=await api('files',{op:'read',project:currentProjectFolder(),path});
+        tab={path,content:String(res.content??''),dirty:false};
+        editorTabs.push(tab);
+      }
+      editorActiveTab=path;
+      if(activeView!=='code')setActiveView('code');else renderActiveEditorTab();
+      if(line)jumpEditorToLine(line);
+      return tab;
+    }catch(error){toast('No se pudo abrir '+path+': '+error.message,'error');return null;}
+  }
+  function jumpEditorToLine(line){
+    const editor=$('#codeEditor'),target=Math.max(1,Number(line)||1),lines=(editor.value||'').split('\n');
+    const start=lines.slice(0,target-1).reduce((sum,text)=>sum+text.length+1,0),end=start+(lines[target-1]||'').length;
+    editor.focus();editor.setSelectionRange(start,end);editor.scrollTop=Math.max(0,(target-3)*17.27);
+    $('#codeGutter').scrollTop=editor.scrollTop;updateGutter();
+  }
+  function closeEditorTab(path){
+    const tab=editorTabs.find(t=>t.path===path);if(!tab)return;
+    const run=()=>{editorTabs=editorTabs.filter(t=>t.path!==path);if(editorActiveTab===path)editorActiveTab=null;renderActiveEditorTab();};
+    if(tab.dirty)confirmDialog('Cerrar pestaña',`«${path}» tiene cambios sin guardar. ¿Cerrar de todos modos?`,run);else run();
+  }
+  async function saveDiskFile(){
+    if(!editorActiveTab)return null;
+    const tab=editorTabs.find(t=>t.path===editorActiveTab);if(!tab)return null;
+    try{
+      await api('files',{op:'write',project:currentProjectFolder(),path:tab.path,content:$('#codeEditor').value});
+      tab.content=$('#codeEditor').value;tab.dirty=false;
+      $('#codeStatus').textContent='Archivo guardado en disco';renderEditorTabs();
+      toast('Archivo guardado: '+tab.path);log('Archivo guardado: '+tab.path,'INFO');
+      return true;
+    }catch(error){toast('No se pudo guardar el archivo: '+error.message,'error');return false;}
+  }
+  /* Buscar/reemplazar en el editor */
+  const codeFindState={matches:[],index:-1};
+  function openCodeFind(withReplace){
+    if(activeView!=='code')setActiveView('code');
+    const bar=$('#codeFindBar');if(!bar)return;
+    bar.classList.remove('hidden');
+    $('#codeFindReplaceRow').classList.toggle('hidden',!withReplace);
+    const input=$('#codeFindInput');input.focus();input.select();
+    runCodeFind();
+  }
+  function closeCodeFind(){const bar=$('#codeFindBar');if(bar)bar.classList.add('hidden');}
+  function runCodeFind(delta=0){
+    const editor=$('#codeEditor'),needle=($('#codeFindInput').value||'').toLowerCase();
+    const hay=(editor.value||'').toLowerCase();
+    const matches=[];
+    if(needle){let pos=0;while(matches.length<5000){const found=hay.indexOf(needle,pos);if(found<0)break;matches.push([found,found+needle.length]);pos=found+needle.length;}}
+    codeFindState.matches=matches;
+    const count=matches.length;
+    if(!count){codeFindState.index=-1;$('#codeFindCount').textContent='0';return;}
+    if(delta)codeFindState.index=(codeFindState.index+delta+count)%count;
+    else if(codeFindState.index<0||codeFindState.index>=count)codeFindState.index=0;
+    const [start,end]=matches[codeFindState.index];
+    editor.setSelectionRange(start,end);
+    const line=editor.value.slice(0,start).split('\n').length;
+    editor.scrollTop=Math.max(0,(line-3)*17.27);
+    $('#codeGutter').scrollTop=editor.scrollTop;
+    $('#codeFindCount').textContent=(codeFindState.index+1)+' / '+count;
+  }
+  function codeReplaceOne(){
+    const {index,matches}=codeFindState;
+    if(index<0||!matches[index])return;
+    const editor=$('#codeEditor'),[start,end]=matches[index],replacement=$('#codeReplaceInput').value;
+    editor.setRangeText(replacement,start,end,'end');
+    editor.dispatchEvent(new Event('input',{bubbles:true}));
+    runCodeFind(0);
+  }
+  function codeReplaceAll(){
+    const query=$('#codeFindInput').value;
+    if(!query)return;
+    const editor=$('#codeEditor');
+    const re=new RegExp(query.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'),'gi');
+    const before=editor.value,replacement=($('#codeReplaceInput').value||'').replace(/\$/g,'$$$$');
+    const after=before.replace(re,replacement);
+    editor.value=after;
+    editor.dispatchEvent(new Event('input',{bubbles:true}));
+    toast(before===after?'No hubo coincidencias que reemplazar.':'Se reemplazaron todas las coincidencias.');
+  }
+  function openGoToLine(){
+    if(activeView!=='code')setActiveView('code');
+    openModal('Ir a línea',`<label style="display:block">Número de línea<input id="goToLineValue" type="number" min="1" style="width:100%" value="1"></label>`,[{text:'Cancelar',class:'ghost',action:closeModal},{text:'Ir',class:'primary',action:()=>{const line=Number($('#goToLineValue').value)||1;closeModal();if(editorActiveTab)renderDiskTab(editorActiveTab);jumpEditorToLine(line);}}]);
+  }
+  /* Diagnósticos del compilador → panel Diagnósticos con línea clicable */
+  function parseCompilerDiagnostics(logText){
+    const out=[],text=String(logText||'');
+    if(!text)return out;
+    const clang=/^\s*([\w .\-\/\\]+\.(?:c|cpp|cxx|cc|h|hpp|hh|cs|glsl|vert|frag|comp)):(\d+):(?:(\d+):)?\s*(fatal\s+)?(error|warning):\s*(.*)$/gim;
+    const msvc=/^\s*([\w .\-\/\\]+\.(?:c|cpp|cxx|cc|h|hpp|cs))\((\d+)(?:,(\d+))?\):\s*(error|warning)\s*(C\d+)?:\s*(.*)$/gim;
+    const collect=(re,fmt)=>{let m;while((m=re.exec(text))!==null&&out.length<200){out.push(fmt(m));}};
+    collect(clang,m=>{const file=m[1].replace(/\\/g,'/').replace(/^\.\//,'');return{severity:m[5].toLowerCase()==='error'?'error':'warning',title:(m[4]?'Error fatal del compilador: ':'Compilador: ')+(m[6]||'').slice(0,140),message:(m[6]||'').slice(0,400),location:file+':'+m[2],file,line:Number(m[2])||1};});
+    collect(msvc,m=>{const file=m[1].replace(/\\/g,'/');return{severity:m[4].toLowerCase()==='error'?'error':'warning',title:'Compilador '+(m[5]||'')+': '+(m[6]||'').slice(0,140),message:(m[6]||'').slice(0,400),location:file+':'+m[2],file,line:Number(m[2])||1};});
+    return out;
+  }
+  function pushCompilerDiagnostics(logText){
+    lastCompilerDiagnostics=parseCompilerDiagnostics(logText);
+    if(lastCompilerDiagnostics.length)log(`Diagnósticos del compilador: ${lastCompilerDiagnostics.length} entrada(s) añadidas al panel.`,'INFO');
+    runAnalysis();
+  }
+  /* Explorador de archivos del proyecto en disco */
+  function filesIconFor(name){const ext=String(name||'').toLowerCase().split('.').pop();return {c:'C',h:'H',cpp:'C++',hpp:'C++',cs:'C#',js:'JS',json:'{}',md:'MD',glsl:'GL',makefile:'MK'}[ext]||'·';}
+  async function refreshFilesTree(){
+    const box=$('#filesTree');if(!box)return;
+    if(!isProjectOpen){box.innerHTML='<div class="empty-screen">Abre o crea un proyecto para explorar sus archivos en disco.</div>';return;}
+    try{
+      const res=await api('files',{op:'list',project:currentProjectFolder()});
+      filesTreeCache=res.items||[];
+      const rootLabel=$('#filesRoot');if(rootLabel)rootLabel.textContent=String(res.root||'');
+      renderFilesTree();
+    }catch(error){filesTreeCache=null;box.innerHTML=`<div class="empty-screen">No se pudo listar el proyecto: ${esc(error.message)}</div>`;}
+  }
+  function renderFilesTree(){
+    const box=$('#filesTree');if(!box)return;
+    if(!filesTreeCache){box.innerHTML='<div class="empty-screen">Sin datos. Pulsa «Actualizar».</div>';return;}
+    const sorted=[...filesTreeCache].sort((a,b)=>(Number(b.dir)-Number(a.dir))||String(a.path).localeCompare(String(b.path)));
+    if(!sorted.length){box.innerHTML='<div class="empty-screen">El proyecto todavía no tiene archivos en disco: guarda el proyecto para crearlos.</div>';return;}
+    box.innerHTML=sorted.map(item=>{
+      const depth=String(item.path).split('/').length-1,name=String(item.path).split('/').pop();
+      const icon=item.dir?'▤':filesIconFor(name);
+      const buttons=`<button class="btn small ghost" data-file-rename="${esc(item.path)}" title="Renombrar o mover">✎</button><button class="btn small ghost" data-file-delete="${esc(item.path)}" title="Eliminar">✕</button>`;
+      const rowClass=`file-row asset-row${(!item.dir&&item.text)?' editable':''}`;
+      const size=item.dir?'':`<span class="asset-size">${item.text?(Number(item.size)/1024).toFixed(1)+' KiB':'binario'}</span>`;
+      return `<div class="${rowClass}" style="padding-left:${8+depth*14}px" data-file-open="${esc(item.path)}" data-file-dir="${item.dir?'1':'0'}" title="${esc(item.path)}"><span class="asset-preview">${icon}</span><span class="asset-name">${esc(name)}</span>${size}${buttons}</div>`;
+    }).join('');
+  }
+  async function filesCreate(path,isFolder){
+    if(!isProjectOpen){toast('Abre un proyecto primero.','warn');return;}
+    const clean=String(path||'').trim().replace(/\\/g,'/').replace(/^\/+/,'');
+    if(!clean){toast('Escribe un nombre válido.','warn');return;}
+    try{
+      await api('files',{op:'create',project:currentProjectFolder(),path:clean,type:isFolder?'folder':'file'});
+      toast('Creado: '+clean);log((isFolder?'Carpeta':'Archivo')+' creado en el proyecto: '+clean,'INFO');
+      void refreshFilesTree();
+    }catch(error){toast('No se pudo crear: '+error.message,'error');}
+  }
+  async function filesRename(oldPath,newPath){
+    const clean=String(newPath||'').trim().replace(/\\/g,'/').replace(/^\/+/,'');
+    if(!clean||clean===oldPath)return;
+    try{
+      await api('files',{op:'rename',project:currentProjectFolder(),path:oldPath,newPath:clean});
+      const tab=editorTabs.find(t=>t.path===oldPath);
+      if(tab){tab.path=clean;if(editorActiveTab===oldPath)editorActiveTab=clean;renderActiveEditorTab();}
+      toast('Renombrado a '+clean);void refreshFilesTree();
+    }catch(error){toast('No se pudo renombrar: '+error.message,'error');}
+  }
+  async function filesDelete(path){
+    try{
+      await api('files',{op:'delete',project:currentProjectFolder(),path});
+      editorTabs=editorTabs.filter(t=>{if(t.path===path){if(editorActiveTab===path)editorActiveTab=null;return false;}return true;});
+      if(activeView==='code')renderActiveEditorTab();
+      toast('Eliminado: '+path);log('Archivo eliminado del proyecto: '+path,'INFO');
+      void refreshFilesTree();
+    }catch(error){toast('No se pudo eliminar: '+error.message,'error');}
+  }
+  async function runProjectSearch(){
+    const box=$('#filesSearchResults'),query=($('#filesSearchInput').value||'').trim();
+    if(!box)return;
+    if(!query){box.innerHTML='<div class="section-note">Escribe un texto para buscar en todos los archivos de texto del proyecto.</div>';return;}
+    if(!isProjectOpen){box.innerHTML='<div class="empty-screen">Abre un proyecto primero.</div>';return;}
+    box.innerHTML='<div class="empty-screen">Buscando…</div>';
+    try{
+      const res=await api('files/search',{project:currentProjectFolder(),query});
+      const results=res.results||[];
+      if(!results.length){box.innerHTML='<div class="empty-screen">Sin coincidencias en archivos de texto (se omiten snapshots y binarios).</div>';return;}
+      box.innerHTML=(res.truncated?'<div class="section-note">Resultado truncado a 200 coincidencias.</div>':'')+results.map(r=>`<div class="asset-row" data-search-open="${esc(r.path)}" data-search-line="${Number(r.line)||1}" title="Abrir en el editor"><span class="asset-preview">↳</span><span class="asset-name">${esc(r.path)}:${Number(r.line)||1}</span><span class="asset-size">${esc(r.text)}</span></div>`).join('');
+    }catch(error){box.innerHTML=`<div class="empty-screen">No se pudo buscar: ${esc(error.message)}</div>`;}
+  }
+  function askTextDialog(title,label,initial,run){
+    openModal(title,`<label style="display:block">${esc(label)}<input id="askTextValue" style="width:100%" value="${esc(initial||'')}" spellcheck="false"></label>`,[{text:'Cancelar',class:'ghost',action:closeModal},{text:'Aceptar',class:'primary',action:()=>{const value=$('#askTextValue').value.trim();closeModal();if(value)run(value);}}]);
+    setTimeout(()=>{$('#askTextValue')?.focus();$('#askTextValue')?.select();},0);
+  }
+  /* Delegación global única: filas del explorador, resultados de búsqueda y pestañas */
+  document.addEventListener('click',async e=>{
+    const rename=e.target.closest('[data-file-rename]');
+    if(rename){e.stopPropagation();askTextDialog('Renombrar o mover',rename.dataset.fileRename+' →',rename.dataset.fileRename,newPath=>void filesRename(rename.dataset.fileRename,newPath));return;}
+    const del=e.target.closest('[data-file-delete]');
+    if(del){e.stopPropagation();confirmDialog('Eliminar',`¿Eliminar «${del.dataset.fileDelete}» del proyecto en disco? Esta acción no se puede deshacer.`,()=>void filesDelete(del.dataset.fileDelete));return;}
+    const search=e.target.closest('[data-search-open]');
+    if(search){void openProjectFile(search.dataset.searchOpen,search.dataset.searchLine);return;}
+    const open=e.target.closest('[data-file-open]');
+    if(open&&open.dataset.fileDir!=='1')void openProjectFile(open.dataset.fileOpen);
+  });
+  $('#codeTabs').addEventListener('click',e=>{
+    const close=e.target.closest('[data-tab-close]');
+    if(close){e.stopPropagation();closeEditorTab(close.dataset.tabClose);return;}
+    const tabBtn=e.target.closest('[data-tab-path]');
+    if(tabBtn){editorActiveTab=tabBtn.dataset.tabPath;renderActiveEditorTab();return;}
+    if(e.target.closest('[data-tab-project]')){editorActiveTab=null;renderActiveEditorTab();}
+  });
+  $('#codeFindInput').addEventListener('input',()=>{codeFindState.index=-1;runCodeFind();});
+  $('#codeFindInput').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();runCodeFind(e.shiftKey?-1:1);}if(e.key==='Escape'){e.preventDefault();closeCodeFind();}});
+  $('#codeReplaceInput').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();codeReplaceOne();}if(e.key==='Escape'){e.preventDefault();closeCodeFind();}});
+  $('#codeFindPrev').addEventListener('click',()=>runCodeFind(-1));
+  $('#codeFindNext').addEventListener('click',()=>runCodeFind(1));
+  $('#codeFindClose').addEventListener('click',closeCodeFind);
+  $('#codeFindToggleReplace').addEventListener('click',()=>{$('#codeFindReplaceRow').classList.toggle('hidden');$('#codeReplaceInput')?.focus();});
+  $('#codeReplaceOne').addEventListener('click',codeReplaceOne);
+  $('#codeReplaceAll').addEventListener('click',codeReplaceAll);
+  window.addEventListener('beforeunload',e=>{if((isProjectOpen&&isDirty)||editorTabs.some(t=>t.dirty)){e.preventDefault();e.returnValue='';}});
   window.addEventListener('keydown',e=>{
     if(buildBusy){if((e.ctrlKey&&!e.altKey&&['s','z','y'].includes(e.key.toLowerCase()))||e.key==='Delete'||['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.key))e.preventDefault();return;}
     const editingTarget=['INPUT','TEXTAREA','SELECT'].includes(document.activeElement?.tagName)||document.activeElement?.isContentEditable;
-    if(e.ctrlKey&&!e.altKey&&e.key.toLowerCase()==='s'){e.preventDefault();saveProject();return;}
+    if(e.ctrlKey&&!e.altKey&&e.key.toLowerCase()==='s'){e.preventDefault();if(activeView==='code'&&editorActiveTab){void saveDiskFile();}else{saveProject();}return;}
     if(e.ctrlKey&&!e.altKey&&!editingTarget&&e.key.toLowerCase()==='z'){e.preventDefault();undo();return;}
     if(e.ctrlKey&&!e.altKey&&!editingTarget&&e.key.toLowerCase()==='y'){e.preventDefault();redo();return;}
+    if(e.ctrlKey&&!e.altKey&&activeView==='code'&&(e.key.toLowerCase()==='f'||e.key.toLowerCase()==='h')){e.preventDefault();openCodeFind(e.key.toLowerCase()==='h');return;}
+    if(e.ctrlKey&&!e.altKey&&activeView==='code'&&e.key.toLowerCase()==='g'){e.preventDefault();openGoToLine();return;}
+    if(e.key==='F5'&&!isPreview){e.preventDefault();$('#previewBtn')?.click();return;}
+    if(e.key==='Escape'&&!$('#codeFindBar')?.classList.contains('hidden')){closeCodeFind();return;}
     if(e.key==='Escape'&&isPreview)stopPreview();
     if(e.key==='Delete'&&!isPreview&&!editingTarget&&selectedId)deleteComponent(selectedId);
     if(!isPreview&&!editingTarget&&selectedId&&['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.key)){
@@ -2408,7 +2838,7 @@
   // Browser recovery autosave is independent from explicit project saving.
   setInterval(()=>{if(!isProjectOpen)return;try{localStorage.setItem(STORAGE_KEY,JSON.stringify(project));}catch(error){if(error?.name==='QuotaExceededError')log('El navegador no tiene espacio para el autosalvado; exporta el proyecto para conservarlo.','WARN');}},12000);
   const stageWrap=$('.canvas-stage-wrap');if(stageWrap&&window.ResizeObserver){const stageObserver=new ResizeObserver(()=>{if(fitCanvasToViewport()&&activeView==='design')renderCanvas();if(activeView==='game')drawGameSceneCanvas();});stageObserver.observe(stageWrap);}window.addEventListener('resize',()=>{if(fitCanvasToViewport()&&activeView==='design')renderCanvas();if(activeView==='game')drawGameSceneCanvas();});
-  setProjectOpenState(isProjectOpen);renderAll();if(!isProjectOpen){$('#dirtyPill').textContent='SIN PROYECTO';$('#canvasState').textContent='No hay proyecto visual abierto. Las carpetas nativas y sus artefactos se conservan.';}log('PS5 Homebrew Studio v1.1.56 inicializado.');log('Editor visual: lienzo adaptable, capas aislables, pantallas múltiples, inspector, flujos, escenas y física 3D AGC, cámara de escena libre, seis mallas primitivas editables, código generado de solo lectura y grafo Vulkan Compute.');log('Backends: SharpProspero C#/NativeAOT, OpenGL/Vulkan UI C++20, Vulkan Compute GLSL/SPIR-V, juegos AGC desde bloques visuales y PS5 Payload SDK C/C++ a ELF.');log('La compilación requiere dependencias reales; solo se informa éxito cuando el proceso termina correctamente y se verifica el artefacto.');
+  setProjectOpenState(isProjectOpen);renderAll();if(!isProjectOpen){$('#dirtyPill').textContent='SIN PROYECTO';$('#canvasState').textContent='No hay proyecto visual abierto. Las carpetas nativas y sus artefactos se conservan.';}log('PS5 Homebrew Studio v1.1.57 inicializado.');log('Editor visual: lienzo adaptable, capas aislables, pantallas múltiples, inspector, flujos, escenas y física 3D AGC, cámara de escena libre, seis mallas primitivas editables, código generado de solo lectura y grafo Vulkan Compute.');log('Backends: SharpProspero C#/NativeAOT, OpenGL/Vulkan UI C++20, Vulkan Compute GLSL/SPIR-V, juegos AGC desde bloques visuales y PS5 Payload SDK C/C++ a ELF.');log('La compilación requiere dependencias reales; solo se informa éxito cuando el proceso termina correctamente y se verifica el artefacto.');
   window.__PS5HS_BOOT_READY=true;
   refreshStatus();
 })();

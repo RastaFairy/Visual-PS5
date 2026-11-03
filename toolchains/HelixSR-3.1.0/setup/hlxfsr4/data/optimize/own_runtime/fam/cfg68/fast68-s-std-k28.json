@@ -1,0 +1,120 @@
+{
+ "name": "fast68-s-std-k28",
+ "family": [
+  1920,
+  1080
+ ],
+ "model": 0,
+ "inv": 0,
+ "ae": 0,
+ "dmv": 1,
+ "jit": 1,
+ "nl": 1,
+ "scratch": 50054784,
+ "passes": [
+  {
+   "dxil": "optimize/variants/sm66/sm68-out-pre-s-std-k28.dxil",
+   "cb": "main",
+   "kind": "pre",
+   "barrier_before": false,
+   "role": 1
+  },
+  {
+   "dxil": "optimize/variants/sm66/shaders-d6721ccdc64fabfdb2aa96abaeb5dd75dc267a53009ba0ec83b127822e2670bd.dxil",
+   "cb": "tensor",
+   "kind": "tiny",
+   "barrier_before": false,
+   "role": 0,
+   "tiny": [
+    0,
+    961,
+    541
+   ]
+  },
+  {
+   "dxil": "optimize/variants/sm66/first-os2-first-s-std.dxil",
+   "cb": "none",
+   "kind": "first",
+   "barrier_before": true,
+   "role": 0,
+   "wcb": "optimize/variants/first-os2/first-s-std.sm68.wcb.bin",
+   "wcb_reg": 0
+  },
+  {
+   "dxil": "optimize/variants/sm66/shaders-697596b667309a8682d3a7f8f580e88abcb9a3cce5aab7f6f28f70c12d67146a.dxil",
+   "cb": "tensor",
+   "kind": "tiny",
+   "barrier_before": false,
+   "role": 0,
+   "tiny": [
+    2,
+    961,
+    541
+   ]
+  },
+  {
+   "dxil": "optimize/variants/sm66/shaders-3217e78f00864248f2221124b656f30f9ea52f7967a7dc0f95fa64f9fdf43507.dxil",
+   "cb": "tensor",
+   "kind": "tiny",
+   "barrier_before": false,
+   "role": 0,
+   "tiny": [
+    3,
+    481,
+    271
+   ]
+  },
+  {
+   "dxil": "optimize/variants/sm66/sm68-tuned-combo15-5a0c08654f950393ac2ab8ac1ecb29ac31c45ce5f2b8693a0ffeb5c96d2910bc.dxil",
+   "cb": "tensor",
+   "kind": "p57",
+   "barrier_before": true,
+   "role": 0,
+   "wcb": "optimize/variants/sm68/tuned-combo15-5a0c08654f950393ac2ab8ac1ecb29ac31c45ce5f2b8693a0ffeb5c96d2910bc.wcb.bin",
+   "wcb_reg": 0
+  },
+  {
+   "dxil": "optimize/variants/sm66/shaders-218a845714480074d7c93ea9ce174f56235d97871020385ff109db93a03c881a.dxil",
+   "cb": "tensor",
+   "kind": "tiny",
+   "barrier_before": false,
+   "role": 0,
+   "tiny": [
+    4,
+    481,
+    271
+   ]
+  },
+  {
+   "dxil": "optimize/variants/sm66/sm68-tuned-combo15-c6d1b73e838c73aa5e6580fe89dde2ffdad466765f4c719a06255a2c3d64e449.dxil",
+   "cb": "tensor",
+   "kind": "p57",
+   "barrier_before": true,
+   "role": 0,
+   "wcb": "optimize/variants/sm68/tuned-combo15-c6d1b73e838c73aa5e6580fe89dde2ffdad466765f4c719a06255a2c3d64e449.wcb.bin",
+   "wcb_reg": 0
+  },
+  {
+   "dxil": "optimize/variants/sm66/shaders-37c1c5adb13785cc52112b6a719c71b312be4e8e301a954113676cb1b3507fc8.dxil",
+   "cb": "tensor",
+   "kind": "tiny",
+   "barrier_before": false,
+   "role": 0,
+   "tiny": [
+    5,
+    961,
+    541
+   ]
+  },
+  {
+   "dxil": "optimize/variants/sm66/sm68-out-post-s-std-a0n1.dxil",
+   "cb": "main",
+   "kind": "post",
+   "barrier_before": true,
+   "role": 2,
+   "wcb": "optimize/variants/sm68/out-post-s-std-a0n1.wcb.bin",
+   "wcb_reg": 0
+  }
+ ],
+ "tier": 2
+}

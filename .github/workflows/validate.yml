@@ -33,6 +33,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           node --check runtime/project-contracts.js
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node --check runtime/test-template-contract.js
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Run JavaScript regression tests
         shell: pwsh
         run: |
@@ -47,7 +49,8 @@ jobs:
             'runtime/test-api-contracts.js',
             'runtime/test-static-assets.js',
             'runtime/test-build-flow.js',
-            'runtime/test-toolchain-pins.js'
+            'runtime/test-toolchain-pins.js',
+            'runtime/test-template-contract.js'
           )
           foreach ($test in $tests) {
             Write-Host "Running $test"
@@ -73,6 +76,7 @@ jobs:
             'runtime/test-native-runtime.ps1',
             'runtime/native-modification-policy.ps1',
             'runtime/test-native-modification-policy.ps1',
+            'runtime/test-native-project-destination.ps1',
             'runtime/Build-ToolchainPack.ps1'
           )
           foreach ($path in $paths) {
@@ -91,15 +95,24 @@ jobs:
       - name: Test native modification permissions and audit trail
         shell: pwsh
         run: ./runtime/test-native-modification-policy.ps1
+      - name: Test native project destination guard
+        shell: pwsh
+        run: ./runtime/test-native-project-destination.ps1
       - name: Package versioned source ZIP
         if: github.event_name != 'pull_request'
         shell: pwsh
-        run: git archive --format=zip --prefix=PS5-Homebrew-Studio/ --output=PS5-Homebrew-Studio-v1.1.19.zip HEAD
+        run: |
+          $versionLine = (Get-Content VERSION.txt | Where-Object { $_ -match '^Version:' } | Select-Object -First 1)
+          if (-not $versionLine) { Write-Error 'VERSION.txt does not declare a version'; exit 1 }
+          $version = ($versionLine -replace '^Version:\s*','').Trim()
+          $zipName = "PS5-Homebrew-Studio-v$version"
+          git archive --format=zip --prefix=PS5-Homebrew-Studio/ --output="$zipName.zip" HEAD
+          Add-Content $env:GITHUB_ENV "ZIP_NAME=$zipName"
       - name: Upload versioned source ZIP
         if: github.event_name != 'pull_request'
         uses: actions/upload-artifact@v7.0.2
         with:
-          name: PS5-Homebrew-Studio-v1.1.19
-          path: PS5-Homebrew-Studio-v1.1.19.zip
+          name: ${{ env.ZIP_NAME }}
+          path: ${{ env.ZIP_NAME }}.zip
           if-no-files-found: error
           retention-days: 30

@@ -4,14 +4,14 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="color-scheme" content="dark" />
-  <meta name="application-version" content="1.1.56" />
+  <meta name="application-version" content="1.1.57" />
   <title>PS5 Homebrew Studio</title>
-  <link rel="stylesheet" href="styles.css?v=1.1.56" />
+  <link rel="stylesheet" href="styles.css?v=1.1.57" />
 </head>
 <body>
   <div class="app-shell">
     <header class="topbar">
-      <div class="brand"><div class="brand-mark">P<span>5</span></div><div><strong>Homebrew Studio</strong><small>VISUAL IDE · VERSION 1.1.56</small></div></div>
+      <div class="brand"><div class="brand-mark">P<span>5</span></div><div><strong>Homebrew Studio</strong><small>VISUAL IDE · VERSION 1.1.57</small></div></div>
       <div class="project-head"><span class="live-dot"></span><input id="projectName" value="MiHomebrew" aria-label="Nombre del proyecto"/><span class="dirty-pill" id="dirtyPill">SIN GUARDAR</span></div>
       <div class="top-actions">
         <button id="newProjectBtn" class="btn ghost">Nuevo</button>
@@ -32,6 +32,7 @@
         <button class="rail-item" data-panel="logic" title="Lógica"><b>⌘</b><span>Lógica</span></button>
         <button class="rail-item" data-panel="systems" title="Sistemas"><b>⚙</b><span>Sistemas</span></button>
         <button class="rail-item" data-panel="assets" title="Recursos"><b>◩</b><span>Recursos</span></button>
+        <button class="rail-item" data-panel="files" title="Archivos del proyecto en disco"><b>❐</b><span>Archivos</span></button>
         <button class="rail-item" data-panel="templates" title="Proyectos y motores"><b>⬡</b><span>Proyectos</span></button>
         <div class="rail-spacer"></div>
         <button class="rail-item" data-panel="sdk" title="SDK y toolchains"><b>⬇</b><span>SDKs</span></button>
@@ -53,9 +54,10 @@
             <button class="editor-tab" data-view="compute">Vulkan Compute</button>
             <button class="editor-tab" data-view="code">Código</button>
             <button class="editor-tab" data-view="diagnostics">Diagnósticos <span class="count-badge" id="diagCount">0</span></button>
+            <button class="editor-tab" data-view="console">Consola PS5 <span class="count-badge" id="consoleLed" style="display:none">●</span></button>
           </div>
           <div class="editor-tab-controls" role="group" aria-label="Destino y vista previa">
-            <label class="target-select-label">DESTINO</label><select id="backendSelect" class="compact-select" aria-label="Backend"><option value="sharp">SharpProspero · Aplicación C#</option><option value="opengl-ui">Native UI · OpenGL 4.6 / C++20</option><option value="vulkan-ui">Native UI · Vulkan / RADV / C++20</option><option value="vulkan-compute">Vulkan Compute · GLSL / SPIR-V</option><option value="sharp-payload">SharpProspero · Payload (sin integración)</option><option value="ps5sdk">PS5SDK · ELF payload (sin integración)</option><option value="payload">ps5-payload-dev/sdk · Payload ELF · offline</option><option value="ps5link">ps5link · Título nativo</option><option value="etahen">etaHEN · Plugin</option></select>
+            <label class="target-select-label">DESTINO</label><select id="backendSelect" class="compact-select" aria-label="Backend"><optgroup label="Generadores visuales (del lienzo)"><option value="sharp">SharpProspero · Aplicación C#</option><option value="opengl-ui">Native UI · OpenGL 4.6 / C++20</option><option value="vulkan-ui">Native UI · Vulkan / RADV / C++20</option><option value="vulkan-compute">Vulkan Compute · GLSL / SPIR-V</option><option value="ps5link">ps5link · Título nativo AGC</option></optgroup><optgroup label="Payloads C/C++ con código manual"><option value="payload">ps5-payload-dev/sdk · Payload ELF · offline</option><option value="sharp-payload">SharpProspero · Payload (sin integración)</option><option value="ps5sdk">PS5SDK · ELF payload (sin integración)</option></optgroup><optgroup label="Referencia (no genera desde el lienzo)"><option value="etahen">etaHEN · Plugin</option></optgroup></select>
             <button id="previewBtn" class="btn secondary small">▷ Vista previa</button>
           </div>
         </div>
@@ -114,9 +116,45 @@
           <input id="computeReportFile" type="file" accept=".json,application/json" hidden />
         </div>
 
-        <div class="view-container hidden" id="codeView"><div class="canvas-toolbar"><div class="breadcrumbs"><span>Proyecto</span><i>/</i><b id="codeFileName">Program.cs</b><span class="language-badge" id="codeLanguageBadge">C# · SharpProspero</span><select id="payloadLanguage" class="compact-select" aria-label="Lenguaje del payload" hidden><option value="c">C</option><option value="cpp">C++20</option></select></div><div class="canvas-tools"><button id="regenerateCodeBtn" class="btn secondary small">↻ Regenerar desde diseño</button><button id="copyCodeBtn" class="btn ghost small">Copiar</button></div></div><div class="code-area"><div class="code-gutter" id="codeGutter">1</div><textarea id="codeEditor" spellcheck="false" aria-label="Código fuente generado"></textarea></div><div class="code-footer"><span id="codeStatus">Código generado desde el modelo visual</span><span id="codeFooterHint">La compilación usa el modelo del proyecto</span></div></div>
+        <div class="view-container hidden" id="codeView"><div class="canvas-toolbar"><div class="breadcrumbs"><span>Proyecto</span><i>/</i><b id="codeFileName">Program.cs</b><span class="language-badge" id="codeLanguageBadge">C# · SharpProspero</span><select id="payloadLanguage" class="compact-select" aria-label="Lenguaje del payload" hidden><option value="c">C</option><option value="cpp">C++20</option></select></div><div class="canvas-tools"><button id="regenerateCodeBtn" class="btn secondary small">↻ Regenerar desde diseño</button><button id="copyCodeBtn" class="btn ghost small">Copiar</button></div></div><div class="code-tabs" id="codeTabs" hidden></div><div class="code-find hidden" id="codeFindBar"><input id="codeFindInput" type="search" placeholder="Buscar en el código…" aria-label="Buscar en el código"><span id="codeFindCount" class="code-find-count">0</span><button id="codeFindPrev" class="btn ghost small" type="button" title="Anterior (Mayús+Entrar)">↑</button><button id="codeFindNext" class="btn ghost small" type="button" title="Siguiente (Entrar)">↓</button><button id="codeFindToggleReplace" class="btn ghost small" type="button" title="Reemplazar (Ctrl+H)">⇄</button><button id="codeFindClose" class="btn ghost small" type="button" title="Cerrar (Esc)">×</button><div class="code-find-replace hidden" id="codeFindReplaceRow"><input id="codeReplaceInput" type="text" placeholder="Reemplazar por…" aria-label="Reemplazar por"><button id="codeReplaceOne" class="btn secondary small" type="button">Reemplazar</button><button id="codeReplaceAll" class="btn secondary small" type="button">Todo</button></div></div><div class="code-area"><div class="code-gutter" id="codeGutter">1</div><div class="code-stack"><pre class="code-highlight" id="codeHighlight" aria-hidden="true"></pre><textarea id="codeEditor" spellcheck="false" aria-label="Código fuente"></textarea></div></div><div class="code-footer"><span id="codeStatus">Código generado desde el modelo visual</span><span id="codeFooterHint">La compilación usa el modelo del proyecto</span></div></div>
 
         <div class="view-container hidden" id="diagnosticsView"><div class="canvas-toolbar"><div class="breadcrumbs"><span>Proyecto</span><i>/</i><b>Diagnósticos</b></div><div class="canvas-tools"><select id="diagFilter" class="compact-select"><option value="all">Todos los diagnósticos</option><option value="error">Errores</option><option value="warning">Advertencias</option><option value="info">Información</option></select><button id="recheckBtn" class="btn secondary small">⟳ Analizar</button></div></div><div id="diagnosticsList" class="diagnostics-list"></div></div>
+
+        <div class="view-container hidden" id="consoleView">
+          <div class="canvas-toolbar"><div class="breadcrumbs"><span>Proyecto</span><i>/</i><b>Consola PS5</b></div><div class="canvas-tools"><span id="consoleStatus" class="structure-summary">Sin conectar</span><button id="consoleClearBtn" class="btn secondary small">Limpiar</button></div></div>
+          <div class="console-layout">
+            <aside class="console-side">
+              <div class="compute-pane-heading"><strong>CONEXIÓN</strong></div>
+              <div class="game-physics-properties">
+                <label>IP de la consola<input id="consoleHost" type="text" inputmode="ipv4" placeholder="192.168.1.23" spellcheck="false"></label>
+                <label class="check-row"><input id="consoleKlogAuto" type="checkbox" checked> Capturar klog automáticamente (klogsrv · 3232)</label>
+                <button id="consoleConnectBtn" class="btn secondary small" type="button">Probar conexión</button>
+                <button id="consoleStopBtn" class="btn ghost small" type="button">Detener captura</button>
+                <small id="consoleHint" class="section-note">Requiere klogsrv/ftpsrv activos en la consola. El IDE solo habla con esta IP y nunca expone tu equipo a la red.</small>
+              </div>
+              <div class="compute-pane-heading"><strong>DESPLIEGUE FTP</strong></div>
+              <div class="game-physics-properties">
+                <label>Puerto FTP <small>(ftpsrv de ps5-payload-dev: 2121)</small><input id="consoleDeployPort" type="number" min="1" max="65535" value="2121"></label>
+                <label>Carpeta local del título<input id="consoleDeployFolder" type="text" spellcheck="false" placeholder="Ruta del título compilado (dist/…)"></label>
+                <label>Ruta remota<input id="consoleDeployRemote" type="text" spellcheck="false" value="/data/homebrew/"></label>
+                <label>Usuario FTP <small>(vacío = anónimo)</small><input id="consoleDeployUser" type="text" spellcheck="false" autocomplete="off"></label>
+                <label>Contraseña<input id="consoleDeployPass" type="password" autocomplete="new-password"></label>
+                <button id="consoleDeployBtn" class="btn secondary small" type="button">Desplegar título</button>
+                <small class="section-note">Sube eboot.bin, sce_sys y sce_module con --ftp-create-dirs al puerto configurado. Registra la carpeta con ShadowMountPlus si aún no aparece en el inicio.</small>
+              </div>
+              <div class="compute-pane-heading"><strong>ELF LOADER · 9021</strong></div>
+              <div class="game-physics-properties">
+                <label>ELF local<input id="consoleElfPath" type="text" spellcheck="false" placeholder="build/ps5link/app.elf"></label>
+                <button id="consoleSendElfBtn" class="btn secondary small" type="button">Enviar payload</button>
+                <small class="section-note">Envía el ELF al loader de etaHEN/kstuff. Los títulos de ps5link se lanzan desde la pantalla de inicio, no desde aquí.</small>
+              </div>
+            </aside>
+            <section class="console-main">
+              <div class="console-toolbar"><input id="consoleFilter" type="search" placeholder="Filtrar líneas (EXEC, NoDraw, gc_gfx, 0x80…)" aria-label="Filtrar klog"><label class="check-row small"><input id="consoleAutoScroll" type="checkbox" checked> Autoscroll</label><button id="consoleDownloadBtn" class="btn ghost small" type="button">Descargar .txt</button></div>
+              <div id="consoleKlog" class="console-klog" aria-label="Registro del kernel de la consola" aria-live="polite"></div>
+            </section>
+          </div>
+        </div>
       </section>
 
       <aside class="right-panel">
@@ -201,14 +239,14 @@
     });
   })();
   </script>
-  <script src="runtime/project-contracts.js?v=1.1.56"></script>
-  <script src="runtime/unicode-fonts.js?v=1.1.56"></script>
-  <script src="runtime/native-modification-policy.js?v=1.1.56"></script>
-  <script src="runtime/native-generator.js?v=1.1.56"></script>
-  <script src="runtime/payload-generator.js?v=1.1.56"></script>
-  <script src="runtime/compute-graph.js?v=1.1.56"></script>
-  <script src="runtime/layer-model.js?v=1.1.56"></script>
-  <script src="app.js?v=1.1.56"></script>
+  <script src="runtime/project-contracts.js?v=1.1.57"></script>
+  <script src="runtime/unicode-fonts.js?v=1.1.57"></script>
+  <script src="runtime/native-modification-policy.js?v=1.1.57"></script>
+  <script src="runtime/native-generator.js?v=1.1.57"></script>
+  <script src="runtime/payload-generator.js?v=1.1.57"></script>
+  <script src="runtime/compute-graph.js?v=1.1.57"></script>
+  <script src="runtime/layer-model.js?v=1.1.57"></script>
+  <script src="app.js?v=1.1.57"></script>
 </body>
 </html>
 

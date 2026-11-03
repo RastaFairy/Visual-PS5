@@ -1,0 +1,127 @@
+{
+ "name": "w16-m-std-k03",
+ "family": [
+  3840,
+  2160
+ ],
+ "model": 0,
+ "inv": 1,
+ "ae": 1,
+ "dmv": 0,
+ "jit": 0,
+ "nl": 0,
+ "scratch": 199641984,
+ "passes": [
+  {
+   "dxil": "optimize/variants/w64/g/shaders-02628d0fc30c772aa5eb381156bcdd87cdc3434cb79451ed19adef77c54b4b2b-sm66.dxil",
+   "cb": "ae",
+   "kind": "ae",
+   "barrier_before": false,
+   "role": 3
+  },
+  {
+   "dxil": "optimize/variants/w64/mypre/pre-m-std-k03-h.w64.dxil",
+   "cb": "main",
+   "kind": "pre",
+   "barrier_before": false,
+   "role": 1
+  },
+  {
+   "dxil": "optimize/variants/w64/g/shaders-0211c5e41ba337f88867d450a7e0a64b8d587518ff1432edce4bf580e3718495-sm66.dxil",
+   "cb": "tensor",
+   "kind": "tiny",
+   "barrier_before": false,
+   "role": 0,
+   "tiny": [
+    0,
+    1921,
+    1081
+   ]
+  },
+  {
+   "dxil": "optimize/variants/w64/gcn16/first2-m-std.w64.dxil",
+   "cb": "tensor",
+   "kind": "first2",
+   "barrier_before": true,
+   "role": 0,
+   "wcb": "optimize/variants/w64/gcn16/first2-m-std.sm68.wcb.bin",
+   "wcb_reg": 1
+  },
+  {
+   "dxil": "optimize/variants/w64/g/shaders-2203808bcfc786633fe826310c85fb57a66440464f304896e219b74452b9eb4e-sm66.dxil",
+   "cb": "tensor",
+   "kind": "tiny",
+   "barrier_before": false,
+   "role": 0,
+   "tiny": [
+    2,
+    1921,
+    1081
+   ]
+  },
+  {
+   "dxil": "optimize/variants/w64/g/shaders-51aa3ec1db48c10a1477202755f71e72ed2ea09bfa7c76cfa63321fb3f83ae19-sm66.dxil",
+   "cb": "tensor",
+   "kind": "tiny",
+   "barrier_before": false,
+   "role": 0,
+   "tiny": [
+    3,
+    961,
+    541
+   ]
+  },
+  {
+   "dxil": "optimize/variants/w64/g/sm68-tuned-gf16mix-3efec580be0dad7d85a643302b5963495c8a347330d3a6bec92e7ff96ba99aa2-sm66.dxil",
+   "cb": "tensor",
+   "kind": "p57",
+   "barrier_before": true,
+   "role": 0,
+   "wcb": "optimize/variants/sm68/tuned-gf16mix-3efec580be0dad7d85a643302b5963495c8a347330d3a6bec92e7ff96ba99aa2.wcb.bin",
+   "wcb_reg": 0
+  },
+  {
+   "dxil": "optimize/variants/w64/g/shaders-0dbd8249025f533ced94d16e9a6608821a4c3a2851c8ebe8c2f7f078e317720d-sm66.dxil",
+   "cb": "tensor",
+   "kind": "tiny",
+   "barrier_before": false,
+   "role": 0,
+   "tiny": [
+    4,
+    961,
+    541
+   ]
+  },
+  {
+   "dxil": "optimize/variants/w64/g/sm68-tuned-gf16mix-35dbfd6cbbd84819d2ab46849f02c3a87790575ff7d6c3bfa63f239b7abbbcd2-sm66.dxil",
+   "cb": "tensor",
+   "kind": "p57",
+   "barrier_before": true,
+   "role": 0,
+   "wcb": "optimize/variants/sm68/tuned-gf16mix-35dbfd6cbbd84819d2ab46849f02c3a87790575ff7d6c3bfa63f239b7abbbcd2.wcb.bin",
+   "wcb_reg": 0
+  },
+  {
+   "dxil": "optimize/variants/w64/g/shaders-0b6e801630518739f8d0905f318f1739598704ebf1ea8892e20d208e424f3d16-sm66.dxil",
+   "cb": "tensor",
+   "kind": "tiny",
+   "barrier_before": false,
+   "role": 0,
+   "tiny": [
+    5,
+    1921,
+    1081
+   ]
+  },
+  {
+   "dxil": "optimize/variants/w64/gcn16/post9-m-std-a1n0.w64.dxil",
+   "cb": "main",
+   "kind": "post",
+   "barrier_before": true,
+   "role": 2,
+   "wcb": "optimize/variants/w64/gcn16/post9-m-std-a1n0.sm68.wcb.bin",
+   "wcb_reg": 0
+  }
+ ],
+ "tier": 4
+}

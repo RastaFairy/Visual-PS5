@@ -345,6 +345,51 @@ button.structure-detail-item:hover{border-color:#7465d8;color:#e2ddff}
 .game-platform-row{gap:3px}
 .game-platform-row>button:first-child{padding:4px 6px;font-size:8px}
 .game-platform-row>button:first-child i{width:8px;height:8px;flex-basis:8px}
+
+/* 1.1.57: resaltado de sintaxis, buscar/reemplazar, pestañas de archivos y explorador de archivos */
+.code-stack{position:relative;flex:1;min-width:0;display:flex}
+.code-stack .code-highlight{position:absolute;top:0;right:0;bottom:0;left:0;margin:0;overflow:hidden;pointer-events:none;padding:13px 15px;font:11px/1.57 Consolas,'Cascadia Code',monospace;white-space:pre;tab-size:4;color:#c7d6e7;z-index:0}
+.code-stack textarea{color:transparent;caret-color:#c7d6e7;position:relative;z-index:1}
+.code-stack textarea::selection{background:rgba(127,102,255,.38);color:transparent}
+.code-tabs{display:flex;gap:4px;padding:6px 10px 0;border-bottom:1px solid #212737;background:#0c0f16;flex-wrap:wrap}
+.code-tab{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;background:#151a27;border:1px solid #232a3d;border-bottom:none;border-radius:6px 6px 0 0;color:#93a0bd;font:11px/1.4 Consolas,monospace;cursor:pointer}
+.code-tab.active{color:#e8eaf2;background:#1c2333;border-color:#3d4663}
+.code-tab-close{font-style:normal;color:#6b7692;padding:0 3px;border-radius:3px}
+.code-tab-close:hover{color:#ff9c9c;background:#2a3147}
+.code-find{display:flex;align-items:center;gap:6px;padding:6px 10px;background:#131824;border-bottom:1px solid #212737;flex-wrap:wrap}
+.code-find input[type=search],.code-find input[type=text]{flex:1;min-width:130px;max-width:320px;background:#0e121c;border:1px solid #2a3147;border-radius:6px;color:#e8eaf2;padding:5px 8px;font:11px/1.4 Consolas,monospace}
+.code-find-count{color:#93a0bd;font:11px/1.4 Consolas,monospace;white-space:nowrap}
+.code-find-replace{display:flex;align-items:center;gap:6px;flex:1 1 100%}
+.code-highlight .tok-kw{color:#c792ea}
+.code-highlight .tok-str{color:#c3e88d}
+.code-highlight .tok-com{color:#5b6b85;font-style:italic}
+.code-highlight .tok-num{color:#f78c6c}
+.code-highlight .tok-pre{color:#82aaff}
+.code-highlight .tok-fn{color:#82aaff}
+.files-actions{display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap}
+.files-tree{max-height:360px;overflow:auto;border:1px solid #212737;border-radius:8px;background:#0c0f16;padding:6px}
+.file-row{cursor:pointer}
+.file-row.editable:hover{background:#1a2133}
 .game-platform-row>button:first-child small{font-size:6px}
 .game-platform-row>.tree-eye{font-size:12px;padding:1px 6px}
 .game-list-empty{padding:13px 10px;text-align:center;color:#8994ab;border:1px dashed #343d54;border-radius:6px;font-size:9px;line-height:1.5}
+
+/* ===== Consola PS5 (klog + FTP + elfldr) ===== */
+.console-layout{display:grid;grid-template-columns:280px 1fr;gap:10px;flex:1;min-height:0;padding:10px}
+.console-side{display:flex;flex-direction:column;gap:2px;overflow:auto;background:#0d1220;border:1px solid #26304a;border-radius:8px;padding:8px}
+.console-side .game-physics-properties{display:flex;flex-direction:column;gap:7px;padding:2px 4px 10px}
+.console-side label{display:flex;flex-direction:column;gap:3px;font-size:9px;color:#a9b4cc;font-weight:600;letter-spacing:.02em}
+.console-side label.check-row{flex-direction:row;align-items:center;gap:6px}
+.console-side input[type=text],.console-side input[type=password]{background:#111829;border:1px solid #2c3650;border-radius:5px;color:#e8ecf8;padding:6px 7px;font-size:10px}
+.console-main{display:flex;flex-direction:column;gap:6px;min-height:0;background:#0a0e1a;border:1px solid #26304a;border-radius:8px;padding:8px}
+.console-toolbar{display:flex;align-items:center;gap:8px}
+.console-toolbar input[type=search]{flex:1;background:#111829;border:1px solid #2c3650;border-radius:5px;color:#e8ecf8;padding:5px 8px;font-size:10px}
+.console-klog{flex:1;overflow:auto;font:10px/1.6 Consolas,'Cascadia Mono',monospace;color:#c7d2e8;background:#070b14;border:1px solid #1d2540;border-radius:6px;padding:8px 10px;white-space:pre-wrap;word-break:break-word}
+.console-klog .kline{display:block}
+.console-klog .k-exec{color:#7ee2a8}
+.console-klog .k-error{color:#ff9c9c}
+.console-klog .k-warn{color:#ffd28a}
+.console-klog .k-gpu{color:#9db8ff}
+.console-klog .k-nodraw{color:#ffb36b;font-weight:700}
+.console-klog .k-decoded{color:#8ef0e2}
+.console-empty{color:#6d788a;padding:8px}

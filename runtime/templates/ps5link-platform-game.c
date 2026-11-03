@@ -193,6 +193,19 @@ static void notify_rc(const char *msg, int rc) {
     notify(buf);
 }
 
+/* Writes msg followed by a decimal count - for diagnostics like dropped batches. */
+static void notify_uint(const char *msg, unsigned int value) {
+    char buf[96];
+    int len = 0;
+    for (; msg[len] && len < 84; len++) buf[len] = msg[len];
+    char digits[10];
+    int count = 0;
+    do { digits[count++] = (char)('0' + value % 10u); value /= 10u; } while (value && count < 10);
+    while (count && len < 94) buf[len++] = digits[--count];
+    buf[len] = 0;
+    notify(buf);
+}
+
 /* ---- shader-binary ELF container parsing (mirrors ShaderBinary.cs Load()) ---- */
 typedef struct { const unsigned char *header; unsigned int header_len; const unsigned char *code; unsigned int code_len; } ShaderParts;
 
@@ -340,6 +353,31 @@ static void put_vertex(unsigned char *p, int i,
 #include "ps5hs_game_scene.h"
 #include <stdint.h>
 
+/* Presentación editable desde el IDE: el motor no impone decorado, personaje
+ * ni marcos de menú. Cada bloque es opt-in del modelo visual; si la cabecera
+ * de escena no los define (código manual antiguo), el motor no los dibuja
+ * salvo que el dev los pida definiendo el macro antes de incluir la escena. */
+#ifndef PS5HS_GAME_EXPLORER_ENABLED
+#define PS5HS_GAME_EXPLORER_ENABLED 0
+#endif
+#ifndef PS5HS_GAME_DECOR_ENABLED
+#define PS5HS_GAME_DECOR_ENABLED 0
+#endif
+#ifndef PS5HS_GAME_PARTICLES_ENABLED
+#define PS5HS_GAME_PARTICLES_ENABLED 0
+#endif
+#ifndef PS5HS_GAME_MENU_FRAME_ENABLED
+#define PS5HS_GAME_MENU_FRAME_ENABLED 0
+#endif
+
+/* Trazas de diagnóstico solo en compilación Debug (-DPS5HS_DEBUG=1).
+ * Los avisos de error y de geometría descartada se notifican siempre. */
+#ifdef PS5HS_DEBUG
+#define PS5HS_TRACE(msg) notify(msg)
+#else
+#define PS5HS_TRACE(msg) ((void)0)
+#endif
+
 extern int sceUserServiceInitialize(const void *);
 extern int sceUserServiceGetInitialUser(int *);
 extern int scePadInit(void);
@@ -383,6 +421,7 @@ typedef struct { unsigned char r,g,b,reserved; } PadColor;
 typedef struct {
     unsigned char *vertices; unsigned int *indices;
     unsigned int vertex_count,index_count,max_vertices,max_indices;
+    unsigned int dropped; /* lotes descartados por falta de espacio: se notifican, nunca se callan */
 } MeshBatch;
 typedef struct {
     float x,z,top,half_x,half_z;
@@ -478,7 +517,7 @@ static unsigned int shade_color_at(unsigned int color,float face,Vec3 normal,Vec
 }
 static void batch_init(MeshBatch *b,DirectMem *v,DirectMem *i,unsigned int mv,unsigned int mi){
     b->vertices=(unsigned char*)v->ptr;b->indices=(unsigned int*)i->ptr;
-    b->vertex_count=b->index_count=0;b->max_vertices=mv;b->max_indices=mi;
+    b->vertex_count=b->index_count=0;b->max_vertices=mv;b->max_indices=mi;b->dropped=0;
 }
 static void add_cube(MeshBatch *b,float x,float y,float z,float hx,float hy,float hz,float angle,unsigned int color){
     static const float N[6][3]={{0,0,-1},{0,0,1},{-1,0,0},{1,0,0},{0,1,0},{0,-1,0}};
@@ -488,7 +527,7 @@ static void add_cube(MeshBatch *b,float x,float y,float z,float hx,float hy,floa
         {{-1,1,-1},{-1,1,1},{1,1,1},{1,1,-1}},{{-1,-1,1},{-1,-1,-1},{1,-1,-1},{1,-1,1}}
     };
     static const float S[6]={0.72f,0.94f,0.58f,0.82f,1.20f,0.44f};
-    if(b->vertex_count+24>b->max_vertices||b->index_count+36>b->max_indices)return;
+    if(b->vertex_count+24>b->max_vertices||b->index_count+36>b->max_indices){b->dropped++;return;}
     float c=m_cos(angle),s=m_sin(angle);unsigned int base=b->vertex_count;
     for(int f=0;f<6;f++){
         for(int k=0;k<4;k++){
@@ -506,7 +545,7 @@ static void add_cube(MeshBatch *b,float x,float y,float z,float hx,float hy,floa
 static void add_octahedron(MeshBatch *b,float x,float y,float z,float hx,float hy,float hz,float angle,unsigned int color){
     static const float V[6][3]={{0,1,0},{0,-1,0},{1,0,0},{0,0,1},{-1,0,0},{0,0,-1}};
     static const unsigned char F[8][3]={{0,2,3},{0,3,4},{0,4,5},{0,5,2},{1,3,2},{1,4,3},{1,5,4},{1,2,5}};
-    if(b->vertex_count+24>b->max_vertices||b->index_count+24>b->max_indices)return;
+    if(b->vertex_count+24>b->max_vertices||b->index_count+24>b->max_indices){b->dropped++;return;}
     float c=m_cos(angle),s=m_sin(angle);unsigned int base=b->vertex_count;
     for(int face=0;face<8;face++){
         Vec3 local[3];
@@ -526,7 +565,7 @@ static void add_octahedron(MeshBatch *b,float x,float y,float z,float hx,float h
 }
 static Vec3 rotate_y_vector(Vec3 p,float c,float s){return vec3(p.x*c+p.z*s,p.y,-p.x*s+p.z*c);}
 static void add_surface_triangle(MeshBatch *b,Vec3 a,Vec3 c,Vec3 d,Vec3 center,float angle,unsigned int color,float face){
-    if(b->vertex_count+3>b->max_vertices||b->index_count+3>b->max_indices)return;
+    if(b->vertex_count+3>b->max_vertices||b->index_count+3>b->max_indices){b->dropped++;return;}
     Vec3 normal=normalize3(cross3(sub3(c,a),sub3(d,a)));
     Vec3 centroid=vec3((a.x+c.x+d.x)/3.0f,(a.y+c.y+d.y)/3.0f,(a.z+c.z+d.z)/3.0f);
     if(dot3(normal,sub3(centroid,center))<0){Vec3 swap=c;c=d;d=swap;normal=vec3(-normal.x,-normal.y,-normal.z);}
@@ -540,7 +579,7 @@ static void add_surface_triangle(MeshBatch *b,Vec3 a,Vec3 c,Vec3 d,Vec3 center,f
 }
 static void add_uv_sphere(MeshBatch *b,float x,float y,float z,float hx,float hy,float hz,float angle,unsigned int color){
     enum { SEGMENTS=10, STACKS=5 };
-    if(b->vertex_count+SEGMENTS*STACKS*4>b->max_vertices||b->index_count+SEGMENTS*STACKS*6>b->max_indices)return;
+    if(b->vertex_count+SEGMENTS*STACKS*4>b->max_vertices||b->index_count+SEGMENTS*STACKS*6>b->max_indices){b->dropped++;return;}
     float cs=m_cos(angle),sn=m_sin(angle);unsigned int base=b->vertex_count;
     for(int stack=0;stack<STACKS;stack++)for(int segment=0;segment<SEGMENTS;segment++){
         float lat0=-PI_F*0.5f+PI_F*(float)stack/(float)STACKS,lat1=-PI_F*0.5f+PI_F*(float)(stack+1)/(float)STACKS;
@@ -559,7 +598,7 @@ static void add_uv_sphere(MeshBatch *b,float x,float y,float z,float hx,float hy
 }
 static void add_tapered_cylinder(MeshBatch *b,float x,float y,float z,float hx,float hy,float hz,float angle,float top_radius,unsigned int color){
     enum { SEGMENTS=12 };
-    if(b->vertex_count+SEGMENTS*4+SEGMENTS*6>b->max_vertices||b->index_count+SEGMENTS*6+SEGMENTS*6>b->max_indices)return;
+    if(b->vertex_count+SEGMENTS*4+SEGMENTS*6>b->max_vertices||b->index_count+SEGMENTS*6+SEGMENTS*6>b->max_indices){b->dropped++;return;}
     float cs=m_cos(angle),sn=m_sin(angle);unsigned int base=b->vertex_count;
     for(int segment=0;segment<SEGMENTS;segment++){
         float a0=TAU_F*(float)segment/(float)SEGMENTS,a1=TAU_F*(float)(segment+1)/(float)SEGMENTS;
@@ -589,7 +628,7 @@ static void add_square_pyramid(MeshBatch *b,float x,float y,float z,float hx,flo
     add_surface_triangle(b,base[0],base[3],base[2],center,angle,color,0.72f);
 }
 static void add_surface_tile(MeshBatch *b,float x0,float x1,float z0,float z1,float y,unsigned int color){
-    if(b->vertex_count+4>b->max_vertices||b->index_count+6>b->max_indices)return;
+    if(b->vertex_count+4>b->max_vertices||b->index_count+6>b->max_indices){b->dropped++;return;}
     unsigned int v=b->vertex_count;
     Vec3 p[4]={vec3(x0,y,z0),vec3(x0,y,z1),vec3(x1,y,z1),vec3(x1,y,z0)};
     for(int i=0;i<4;i++)put_vertex(b->vertices,(int)(v+(unsigned int)i),p[i].x,p[i].y,p[i].z,0,1,0,
@@ -599,7 +638,7 @@ static void add_surface_tile(MeshBatch *b,float x0,float x1,float z0,float z1,fl
     b->vertex_count+=4;b->index_count+=6;
 }
 static void ui_rect(MeshBatch *b,float x,float y,float w,float h,unsigned int color){
-    if(w<=0||h<=0||b->vertex_count+4>b->max_vertices||b->index_count+6>b->max_indices)return;
+    if(w<=0||h<=0||b->vertex_count+4>b->max_vertices||b->index_count+6>b->max_indices){if(w>0&&h>0)b->dropped++;return;}
     unsigned int v=b->vertex_count;
     float x0=2*x/SCREEN_W-1,x1=2*(x+w)/SCREEN_W-1,y0=1-2*y/SCREEN_H,y1=1-2*(y+h)/SCREEN_H;
     put_vertex(b->vertices,(int)v,x0,y0,0,0,0,1,color);
@@ -822,7 +861,8 @@ static void audio_frame(void){
                 sample+=m_sin(audio_sfx_phase)*0.20f;audio_sfx_samples--;}
         }
         sample=clampf(sample,-0.90f,0.90f);int16_t v=(int16_t)(sample*32767);pcm[i*2]=v;pcm[i*2+1]=v;music_sample++;
-    }(void)sceAudioOutOutput(audio_port,pcm);
+    }
+    if(sceAudioOutOutput(audio_port,pcm)<0){audio_enabled=0;(void)sceAudioOutClose(audio_port);audio_port=-1;}
 }
 static void add_platform(MeshBatch *b,int i){
     Platform *p=&level[i];unsigned int stone=(i/4)%3==0?0xFF514D78u:((i/4)%3==1?0xFF59495Fu:0xFF424F7Cu);
@@ -889,14 +929,19 @@ static void build_scene(MeshBatch *b){
         else if(object->shape==5)add_square_pyramid(b,object->x,object->y,object->z,object->half_width,object->half_height,object->half_depth,angle,object->color);
         else add_cube(b,object->x,object->y,object->z,object->half_width,object->half_height,object->half_depth,angle,object->color);
     }
+    /* Decorado y partículas: solo si el dev los activa en el modelo visual. */
+#if PS5HS_GAME_PARTICLES_ENABLED
     for(int i=0;i<30;i++){
         float x=(float)((i*37)%31-15)*1.9f,y=3+(float)((i*19)%17)*0.53f,z=18+(float)((i*23)%25)*3.2f;
         float size=i%5==0?0.075f:0.045f;
         add_octahedron(b,x,y,z,size,size*1.4f,size,world_time*0.15f,i%4==0?0xFF77D9FFu:0xFFEEE7FFu);
     }
+#endif
+#if PS5HS_GAME_DECOR_ENABLED
     add_uv_sphere(b,-8,8,35,1.8f,1.0f,1.2f,0.18f,0xFF7569A8u);
     add_uv_sphere(b,9,10,62,2.2f,1.25f,1.8f,-0.24f,0xFF424E81u);
     add_octahedron(b,6,5,20,0.55f,0.8f,0.55f,world_time*0.18f,0xFFFFC58Cu);
+#endif
     for(int i=PLATFORM_COUNT-1;i>=0;i--){
         add_platform(b,i);
         if(i==PS5HS_GAME_GOAL_INDEX){Platform *p=&level[i];float surface_y=p->top+p->collision_offset_y;
@@ -915,7 +960,9 @@ static void build_scene(MeshBatch *b){
         add_uv_sphere(b,light->x,light->y+0.06f,light->z,0.18f,0.19f,0.18f,world_time*0.28f,light->color);
         add_octahedron(b,light->x,light->y+0.06f,light->z,0.09f,0.13f,0.09f,-world_time*0.32f,0xFFF4FCFFu);
     }
+#if PS5HS_GAME_EXPLORER_ENABLED
     add_nebula_explorer(b);
+#endif
 }
 static void ui_component(MeshBatch *ui,const Ps5HSVisualComponent *c,float progress){
     if(!c->visible)return;if(equal(c->id,PS5HS_GAME_PAUSE_COMPONENT_ID)&&(current_screen!=2||game_won))return;if(equal(c->id,PS5HS_GAME_START_COMPONENT_ID)&&game_won)return;
@@ -942,12 +989,16 @@ static void ui_component(MeshBatch *ui,const Ps5HSVisualComponent *c,float progr
 }
 static void build_ui(MeshBatch *ui){
     ui->vertex_count=ui->index_count=0;float start_z=level[PS5HS_GAME_SPAWN_INDEX].z;float goal_z=level[PS5HS_GAME_GOAL_INDEX].z;float route_length=goal_z-start_z;float progress=absf(route_length)>0.001f?clampf((hero.z-start_z)/route_length,0,1):0;
+    /* Marcos de menú/pausa/victoria y barra HUD: decoración opt-in, no forzada.
+     * Sin este marco, la interfaz es exactamente la que el dev dibujó en el lienzo. */
+#if PS5HS_GAME_MENU_FRAME_ENABLED
     if(current_screen==0){ui_rect(ui,470,76,980,500,0xF2111830u);ui_rect(ui,470,76,980,4,0xFF5EE6D0u);
         ui_rect(ui,490,545,940,2,0xFF6F87C9u);ui_rect(ui,500,88,6,470,0xFF7C66FFu);
         ui_rect(ui,300,170,8,8,0xFF63D6C8u);ui_rect(ui,1580,225,6,6,0xFFFFD780u);ui_rect(ui,1515,465,10,10,0xFF7888FFu);
     }else if(current_screen==1){ui_rect(ui,500,80,920,620,0xF20C1024u);ui_rect(ui,500,80,920,5,0xFFFFD880u);}
     else if(game_won){ui_rect(ui,470,300,980,430,0xF20B1026u);ui_rect(ui,470,300,980,5,0xFFFFD875u);}
     else ui_rect(ui,0,0,SCREEN_W,58,0xB910142Au);
+#endif
     unsigned short activeScreen=(unsigned short)(current_screen==0?PS5HS_GAME_MENU_SCREEN_INDEX:current_screen==1?PS5HS_GAME_PAUSE_SCREEN_INDEX:PS5HS_GAME_PLAY_SCREEN_INDEX);
     for(unsigned int i=0;i<ps5hs_visual_component_count;i++){
         const Ps5HSVisualComponent *c=&ps5hs_visual_components[i];int pauseButton=equal(c->id,PS5HS_GAME_PAUSE_COMPONENT_ID);
@@ -994,6 +1045,9 @@ static int render_frame(int frame,DirectMem *fb,DirectMem *dcbMem,DirectMem *ctx
     if(frame>=2&&wait_until_flip_visible(video,(long long)frame-1)<0)return -1;
     MeshBatch scene,ui;batch_init(&scene,sceneV,sceneI,SCENE_MAX_VERTS,SCENE_MAX_INDICES);build_scene(&scene);
     batch_init(&ui,uiV,uiI,UI_MAX_VERTS,UI_MAX_INDICES);build_ui(&ui);
+    unsigned int dropped=scene.dropped+ui.dropped;
+    static unsigned char overflow_reported=0;
+    if(dropped&&!overflow_reported){overflow_reported=1;notify_uint(PS5HS_GAME_TITLE ": geometria descartada por lotes llenos: ",dropped);}
     float ex=hero.x*0.72f,ey=hero.y+PS5HS_GAME_CAMERA_FOLLOW_HEIGHT,ez=hero.z-PS5HS_GAME_CAMERA_FOLLOW_DISTANCE;
     if(current_screen==0){ex=0;ey=hero.y+PS5HS_GAME_CAMERA_FOLLOW_HEIGHT+0.7f;ez=hero.z-PS5HS_GAME_CAMERA_FOLLOW_DISTANCE;}if(current_screen==1){ey=hero.y+PS5HS_GAME_CAMERA_FOLLOW_HEIGHT;ez=hero.z-PS5HS_GAME_CAMERA_FOLLOW_DISTANCE-1.1f;}
     float mvp[16],identity[16];view_projection(mvp,vec3(ex,ey,ez),vec3(hero.x,hero.y+0.20f,hero.z+PS5HS_GAME_CAMERA_LOOK_AHEAD));mat_identity(identity);
@@ -1059,20 +1113,19 @@ static int render_frame(int frame,DirectMem *fb,DirectMem *dcbMem,DirectMem *ctx
     sceAgcDcbSetFlip(dcb,(unsigned int)video,slot,1,(long long)frame);
     struct{void *words;unsigned int wordCount;unsigned char flag;}submit;
     submit.words=dcb->bottom;submit.wordCount=(unsigned int)(dcb->up_cursor-dcb->bottom);submit.flag=0;
+    if(submit.wordCount==0){notify(PS5HS_GAME_TITLE ": DCB vacio antes de enviar");return -1;}
     rc=sceAgcDriverSubmitDcb(&submit);
     if(rc<0){notify_rc(PS5HS_GAME_TITLE ": Submit fallo",rc);return -1;}
-    if(frame==0)notify(PS5HS_GAME_TITLE ": primer DCB AGC enviado");
+    PS5HS_TRACE(PS5HS_GAME_TITLE ": primer DCB AGC enviado");
     rc=sceAgcSuspendPoint();
     if(rc<0){notify_rc(PS5HS_GAME_TITLE ": SuspendPoint fallo",rc);return -1;}
     rc=sceVideoOutWaitVblank(video);
     if(rc<0){notify_rc(PS5HS_GAME_TITLE ": WaitVblank fallo",rc);return -1;}
-    if(frame==0)notify(PS5HS_GAME_TITLE ": primer vblank completado");
+    PS5HS_TRACE(PS5HS_GAME_TITLE ": primer vblank completado");
     return 0;
 }
 int main(void){
-    /* Release the launch splash/compositor before taking VideoOut for AGC. */
-    (void)sceSystemServiceHideSplashScreen();
-    notify(PS5HS_GAME_TITLE ": AGC directo y DualSense");
+    PS5HS_TRACE(PS5HS_GAME_TITLE ": AGC directo y DualSense");
     static unsigned long long agcState;int rc=sceAgcInit(&agcState,8);
     if(rc<0){notify_rc(PS5HS_GAME_TITLE ": AGC fallo",rc);return 1;}
     int video=sceVideoOutOpen(SCE_USER_SYSTEM,VIDEOOUT_BUS_MAIN,0,0);
@@ -1116,14 +1169,16 @@ int main(void){
         ALLOC_OR_FAIL(uiI[i],UI_MAX_INDICES*4,DIRECT_MEM_MIN_ALIGN,"UI indices");
     }
     void *defaults=sceAgcGetRegisterDefaults();CxRegister **blocks=*(CxRegister***)((unsigned char*)defaults+0);
+    PS5HS_TRACE(PS5HS_GAME_TITLE ": GPU inicializado");
     unsigned int cxCount=*(unsigned int*)((unsigned char*)defaults+0x20);CxRegister *cxRecords=blocks?blocks[0]:0;
     pad_handle=open_pad();if(pad_handle<0)notify(PS5HS_GAME_TITLE ": no se pudo abrir DualSense");
-    int audioInit=sceAudioOutInit();
-    if(audioInit>=0||(unsigned int)audioInit==0x8026000Eu){
-        audio_port=sceAudioOutOpen(0xFF,0,0,AUDIO_GRAIN,AUDIO_RATE,1);
-        if(audio_port<0){error_notice("AudioOutOpen fallo",audio_port);audio_enabled=0;}
-    }else{error_notice("AudioOutInit fallo",audioInit);audio_enabled=0;}
-    reset_run();current_screen=0;unsigned int previous=0;int frame=0;
+    reset_run();current_screen=0;unsigned int previous=0;int frame=0;int audio_ready=0;
+    /* La imagen va antes que el audio: la primera presentacion AGC no depende de
+     * un servicio que pueda bloquear el hilo. El splash se retira aqui, con todo
+     * inicializado, como en la plantilla C# probada en hardware; el audio se abre
+     * tras el primer flip y un Output que falle desactiva el sonido en vez de
+     * reintentarse dentro del bucle. */
+    (void)sceSystemServiceHideSplashScreen();
     for(;;frame++){
         world_time+=1.0f/60.0f;unsigned char data[1024];for(int i=0;i<1024;i++)data[i]=0;
         unsigned int buttons=0;float ax=0,forward=0;
@@ -1140,11 +1195,21 @@ int main(void){
         else update_game(ax,forward,cross);
         previous=buttons;
         if(rumble_frames>0&&--rumble_frames==0&&pad_handle>=0){PadVibration stop={0,0};(void)scePadSetVibration(pad_handle,&stop);}
-        audio_frame();int slot=frame&1;
+        int slot=frame&1;
         if(render_frame(frame,&fb[slot],&dcb[slot],&ctx[slot],&sh[slot],&prim[slot],&cons[slot],&dcbState[slot],
             vs,ps,cxRecords,cxCount,video,W,H,slot,&sceneV[slot],&sceneI[slot],&uiV[slot],&uiI[slot],cbOff,vbOff)<0){
             notify(PS5HS_GAME_TITLE ": renderer detenido por un error AGC");return 1;
         }
+        if(!audio_ready){
+            audio_ready=1;
+            int audioInit=sceAudioOutInit();
+            if(audioInit>=0||(unsigned int)audioInit==0x8026000Eu){
+                audio_port=sceAudioOutOpen(0xFF,0,0,AUDIO_GRAIN,AUDIO_RATE,1);
+                if(audio_port<0){error_notice("AudioOutOpen fallo",audio_port);audio_enabled=0;}
+                else PS5HS_TRACE(PS5HS_GAME_TITLE ": audio listo");
+            }else{error_notice("AudioOutInit fallo",audioInit);audio_enabled=0;}
+        }
+        audio_frame();
     }
     if(audio_port>=0)(void)sceAudioOutClose(audio_port);
     if(pad_handle>=0)(void)scePadClose(pad_handle);
