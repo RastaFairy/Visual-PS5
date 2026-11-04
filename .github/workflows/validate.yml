@@ -33,6 +33,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           node --check runtime/project-contracts.js
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node --check runtime/flowcode-generator.js
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           node --check runtime/test-template-contract.js
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Run JavaScript regression tests
@@ -50,7 +52,8 @@ jobs:
             'runtime/test-static-assets.js',
             'runtime/test-build-flow.js',
             'runtime/test-toolchain-pins.js',
-            'runtime/test-template-contract.js'
+            'runtime/test-template-contract.js',
+            'runtime/test-flowcode-generator.js'
           )
           foreach ($test in $tests) {
             Write-Host "Running $test"

@@ -77,7 +77,7 @@
   const STORAGE_KEY = 'ps5-homebrew-studio-state-v1';
   const BUILD_LOG_STORAGE_KEY = 'ps5hs:diagnostic-log:v1';
   const MAX_BUILD_LOG_ENTRIES = 500;
-  const freshProjectBase = () => ({format:'ps5vproj',formatVersion:2,name:'MiHomebrew',backend:'sharp',resolution:{width:1920,height:1080},theme:{background:'#101827',accent:'#7865f6',text:'#f0f3ff'},components:[],flows:[],assets:[],fontAssetId:'',screens:[{id:'screen-main',name:'Pantalla principal'}],currentScreen:'screen-main',settings:{titleId:'',firmware:'12.00',moduleKind:'app',buildProfile:'release',renderTarget:{width:1920,height:1080}},gameScene:{schemaVersion:1,enabled:false,physics:{moveSpeed:5.55,acceleration:9,jumpSpeed:9.3,gravity:21,fallLimit:-8,playerHalfHeight:0.72},player:{spawnPlatformId:''},camera:{followDistance:8.7,followHeight:3.4,lookAhead:3.3},appearance:{skyColor:'#100B20',playerColor:'#7D89FF',playerAccentColor:'#FFD5A5',collectibleColor:'#67F3E8',goalColor:'#FF9A6B',requireCollectibles:true,surfaceTextureAssetId:'',surfaceTextureColors:[]},presentation:{explorer:true,decor:true,particles:true,menuFrame:true},lighting:{ambientIntensity:0.34,ambientColor:'#B9C8FF',directional:{enabled:true,x:-0.4,y:-1,z:-0.6,intensity:0.55,color:'#DCE6FF'},points:[{id:'light-aurora',name:'Foco Aurora',x:-0.8,y:5,z:17,range:18,intensity:0.9,color:'#59DFF4'},{id:'light-faro',name:'Luz del Faro',x:1.1,y:7,z:45.5,range:20,intensity:1.15,color:'#FFD184'}]},platforms:[],objects:[]},customCode:'',manualCode:false,payloadLanguage:'c',payloadBuildMode:'managed',updatedAt:new Date().toISOString()});
+  const freshProjectBase = () => ({format:'ps5vproj',formatVersion:2,name:'MiHomebrew',backend:'sharp',resolution:{width:1920,height:1080},theme:{background:'#101827',accent:'#7865f6',text:'#f0f3ff'},components:[],flows:[],assets:[],fontAssetId:'',screens:[{id:'screen-main',name:'Pantalla principal'}],currentScreen:'screen-main',settings:{titleId:'',firmware:'12.00',moduleKind:'app',buildProfile:'release',renderTarget:{width:1920,height:1080}},gameScene:{schemaVersion:1,enabled:false,physics:{moveSpeed:5.55,acceleration:9,jumpSpeed:9.3,gravity:21,fallLimit:-8,playerHalfHeight:0.72},player:{spawnPlatformId:''},camera:{followDistance:8.7,followHeight:3.4,lookAhead:3.3},appearance:{skyColor:'#100B20',playerColor:'#7D89FF',playerAccentColor:'#FFD5A5',collectibleColor:'#67F3E8',goalColor:'#FF9A6B',requireCollectibles:true,surfaceTextureAssetId:'',surfaceTextureColors:[]},presentation:{explorer:true,decor:true,particles:true,menuFrame:true},lighting:{ambientIntensity:0.34,ambientColor:'#B9C8FF',directional:{enabled:true,x:-0.4,y:-1,z:-0.6,intensity:0.55,color:'#DCE6FF'},points:[{id:'light-aurora',name:'Foco Aurora',x:-0.8,y:5,z:17,range:18,intensity:0.9,color:'#59DFF4'},{id:'light-faro',name:'Luz del Faro',x:1.1,y:7,z:45.5,range:20,intensity:1.15,color:'#FFD184'}]},platforms:[],objects:[]},customCode:'',manualCode:false,payloadLanguage:'c',payloadBuildMode:'managed',flowProgram:{schemaVersion:1,enabled:false,vars:[],blocks:[]},updatedAt:new Date().toISOString()});
   const freshProject = () => Object.assign(freshProjectBase(),{description:'',gamePresentation:{iconAssetId:'',audioAssetId:''}});
   let project = freshProject();
   let modalRevision = 0;
@@ -197,7 +197,7 @@
   }
 
   function setCompactGamePane(pane){if(!['scene','properties'].includes(pane))return;const view=$('#gameView');if(!view)return;view.dataset.compactPane=pane;$$('.game-compact-pane-button').forEach(button=>{const active=button.dataset.gamePane===pane;button.classList.toggle('active',active);button.setAttribute('aria-pressed',String(active));});if(pane==='scene'&&activeView==='game')drawGameSceneCanvas();}
-  function setActiveView(view){const previousView=activeView;activeView=view;const workspace=$('.workspace');workspace.dataset.editorView=view;workspace.dataset.activePanel=activePanel;workspace.classList.toggle('game-editor-open',view==='game');$$('.editor-tab').forEach(el=>el.classList.toggle('active',el.dataset.view===view));['design','structure','logic','game','compute','code','diagnostics','console'].forEach(v=>$('#'+v+'View').classList.toggle('hidden',v!==view));if(previousView!==view&&activePanel==='components')renderSidePanel();if(view==='design'&&previousView!=='design')renderCanvas();if(view==='structure')renderStructure();if(view==='logic')renderFlows();if(view==='game'){renderGameScene();if($('#gameView').dataset.compactPane==='scene')drawGameSceneCanvas();}if(view==='compute')renderComputeWorkspace();if(view==='code')renderActiveEditorTab();if(view==='diagnostics')renderDiagnostics();if(view==='console')consoleViewEntered();}
+  function setActiveView(view){const previousView=activeView;activeView=view;const workspace=$('.workspace');workspace.dataset.editorView=view;workspace.dataset.activePanel=activePanel;workspace.classList.toggle('game-editor-open',view==='game');$$('.editor-tab').forEach(el=>el.classList.toggle('active',el.dataset.view===view));['design','structure','logic','game','compute','flow','code','diagnostics','console'].forEach(v=>$('#'+v+'View').classList.toggle('hidden',v!==view));if(previousView!==view&&activePanel==='components')renderSidePanel();if(view==='design'&&previousView!=='design')renderCanvas();if(view==='structure')renderStructure();if(view==='logic')renderFlows();if(view==='game'){renderGameScene();if($('#gameView').dataset.compactPane==='scene')drawGameSceneCanvas();}if(view==='compute')renderComputeWorkspace();if(view==='flow')renderFlowView();if(view==='code')renderActiveEditorTab();if(view==='diagnostics')renderDiagnostics();if(view==='console')consoleViewEntered();}
   function setActivePanel(panel){activePanel=panel;$('.workspace').dataset.activePanel=panel;$$('.rail-item').forEach(el=>el.classList.toggle('active',el.dataset.panel===panel));renderSidePanel();}
   function setRightPane(pane){activeRight=pane;$$('.right-tab').forEach(el=>el.classList.toggle('active',el.dataset.right===pane));$('#inspectorPane').classList.toggle('hidden',pane!=='inspector');$('#hierarchyPane').classList.toggle('hidden',pane!=='hierarchy');if(pane==='hierarchy')renderHierarchy();else renderInspector();}
   function setDock(dock){activeDock=dock;$$('.dock-tab').forEach(el=>el.classList.toggle('active',el.dataset.dock===dock));renderDock();}
@@ -1490,6 +1490,11 @@
   }
 
   function generateCode(){
+    if(project.backend==='payload'&&project.flowProgram&&Array.isArray(project.flowProgram.blocks)&&project.flowProgram.blocks.length){
+      const flowResult=window.PS5HSFlowCode.generate(project.flowProgram);
+      flowResult.diagnostics.forEach(item=>add(item.severity,'Flujo · '+item.title,item.message,'Flujo del payload','Abre la pestaña Flujo para corregir el programa visual.'));
+      if(project.manualCode&&String(project.customCode||'').includes('FLOWCODE-BEGIN')===false)add('info','El flujo visual no se ha aplicado','Hay un programa de bloques, pero src/main.c contiene código manual distinto. Pulsa «Generar src/main.c» en la pestaña Flujo para aplicarlo.','Flujo del payload');
+    }
     if(project.backend==='payload'){
       const generator=window.PS5HSPayloadCodegen;
       if(!generator?.generate)throw new Error('No se ha cargado runtime/payload-generator.js. Reinicia Homebrew Studio desde start.bat y vuelve a abrir el proyecto.');
@@ -2354,7 +2359,7 @@
     }catch(error){buildLog(traceId,'Fallo fuera de la ruta normal de compilación: '+(error?.stack||error?.message||String(error)),'ERROR');toast('La compilación se detuvo por un error interno. Exporta el log de diagnóstico.','error');if(buildBusy){buildBusy=false;syncProjectControls();}}
   }
 
-  function renderAll(){renderSidePanel();renderCanvas();renderInspector();renderHierarchy();renderFlows();renderGameScene();renderCode();runAnalysis();setActiveView(activeView);setRightPane(activeRight);if(activeView==='structure')renderStructure();}
+  function renderAll(){applyBackendVisibility();renderSidePanel();renderCanvas();renderInspector();renderHierarchy();renderFlows();renderGameScene();renderCode();runAnalysis();setActiveView(activeView);setRightPane(activeRight);if(activeView==='structure')renderStructure();}
   function addAsset(file){
     if(!file)return;
     if(buildBusy){toast('No se pueden importar recursos mientras se compila.','warn');return;}
@@ -2546,8 +2551,51 @@
   $('#computeShaderEditor').addEventListener('focus',()=>{if(isProjectOpen&&!computeHistoryPending){snapshot();computeHistoryPending=true;}});$('#computeShaderEditor').addEventListener('blur',()=>{computeHistoryPending=false;});$('#computeShaderEditor').addEventListener('input',event=>{if(!isProjectOpen||buildBusy)return;const pass=computeSelectedPass();if(!pass)return;pass.source=event.target.value;computeGraph().revisionId=window.PS5HSComputeGraph.newRevisionId();$('#computeCodeGutter').textContent=Array.from({length:Math.max(1,event.target.value.split('\n').length)},(_,index)=>index+1).join('\n');$('#computeCodeStatus').textContent=`GLSL 450 · ${event.target.value.length.toLocaleString('es-ES')} caracteres`;changed('Shader GLSL editado');renderComputeStatus();});
   let projectNameHistoryPending=false;
   $('#dismissNotice').onclick=()=>{$('.app-shell').classList.add('notice-dismissed');$('#noticeStrip').remove();};$('#dockToggle').onclick=()=>{autoCollapsedForShortViewport=false;setDockCollapsed(!$('.bottom-dock').classList.contains('collapsed'));};$('#canvasSizeBtn').onclick=()=>openCanvasSizeDialog();$('#renderTargetBtn').onclick=()=>openRenderTargetDialog();$('#gridBtn').onclick=()=>{showGrid=!showGrid;renderCanvas();};$('#isolateLayerBtn').onclick=()=>toggleLayerIsolation();$('#fitBtn').onclick=()=>{zoom=100;fitCanvasToViewport();$('#canvasStage').style.transform='scale(1)';$('#canvasStage').style.transformOrigin='center center';$('#zoomValue').textContent='100%';renderCanvas();};$('#centerBtn').onclick=()=>{const canvas=canvasResolution();snapshot();screenComponents().forEach(c=>{c.x=clamp(c.x,0,canvas.width-c.w);c.y=clamp(c.y,0,canvas.height-c.h);});renderCanvas();changed('Lienzo comprobado');};
+  /* 1.1.60 · Interfaz dependiente del SDK: cada destino muestra solo sus pestañas y paneles */
+  const BACKEND_VIEWS={
+    sharp:['design','structure','logic','code','diagnostics'],
+    'opengl-ui':['design','structure','logic','code','diagnostics'],
+    'vulkan-ui':['design','structure','logic','code','diagnostics'],
+    'vulkan-compute':['compute','code','diagnostics'],
+    ps5link:['game','design','logic','code','diagnostics','console'],
+    payload:['flow','code','diagnostics','console'],
+    'sharp-payload':['flow','code','diagnostics','console'],
+    ps5sdk:['flow','code','diagnostics','console'],
+    etahen:['code','diagnostics','console']
+  };
+  const BACKEND_PANELS={
+    sharp:['components','logic','systems','assets','files','templates','sdk','docs'],
+    'opengl-ui':['components','logic','systems','assets','files','templates','sdk','docs'],
+    'vulkan-ui':['components','logic','systems','assets','files','templates','sdk','docs'],
+    'vulkan-compute':['systems','files','sdk','docs'],
+    ps5link:['components','logic','systems','assets','files','templates','sdk','docs'],
+    payload:['files','sdk','docs'],
+    'sharp-payload':['files','sdk','docs'],
+    ps5sdk:['files','sdk','docs'],
+    etahen:['files','sdk','docs']
+  };
+  function applyBackendVisibility(){
+    const views=BACKEND_VIEWS[project.backend]||BACKEND_VIEWS.sharp;
+    $$('.editor-tab').forEach(el=>{el.hidden=!views.includes(el.dataset.view);});
+    if(activeView&&!views.includes(activeView))setActiveView(views[0]);
+    const panels=BACKEND_PANELS[project.backend]||BACKEND_PANELS.sharp;
+    $$('.rail-item').forEach(el=>{el.hidden=!panels.includes(el.dataset.panel);});
+    if(activePanel&&!panels.includes(activePanel))setActivePanel(panels[0]);
+  }
+  function menu_close(){const menu=$('#moreMenu');if(menu)menu.classList.add('hidden');$('#moreMenuBtn').setAttribute('aria-expanded','false');}
+  $('#moreMenuBtn').addEventListener('click',event=>{
+    event.stopPropagation();
+    const menu=$('#moreMenu'),nowHidden=menu.classList.toggle('hidden');
+    $('#moreMenuBtn').setAttribute('aria-expanded',String(!nowHidden));
+  });
+  document.addEventListener('click',event=>{
+    const menu=$('#moreMenu');
+    if(!menu||menu.classList.contains('hidden'))return;
+    if(!event.target.closest('.menu-wrap'))menu_close();
+  });
+  $('#moreMenu').addEventListener('click',event=>{if(event.target.closest('.dropdown-item:not([disabled])'))menu_close();});
   const NON_UI_BACKEND_NOTICE={payload:'El backend payload compila src/main.c|cpp a ELF y no incorpora los widgets del lienzo.',ps5sdk:'ps5sdk es una toolchain de títulos: no genera desde el lienzo.',etahen:'etahen es un backend de referencia (plugins/toolchain): no genera desde el lienzo.','sharp-payload':'Un payload no aloja el toolkit de pantalla de una aplicación visual.'};
-  $('#backendSelect').onchange=()=>{const previous=project.backend;if(previous!==$('#backendSelect').value)snapshot();project.backend=$('#backendSelect').value;if(project.backend==='vulkan-compute'&&!project.computeGraph)project.computeGraph=window.PS5HSComputeGraph.createDefaultGraph();if(previous!==project.backend&&project.backend==='ps5link'){project.manualCode=false;project.customCode='';gameSceneModel().enabled=true;}else if(previous!==project.backend&&project.manualCode){project.manualCode=false;project.customCode='';toast('Se regenerará el código para el nuevo backend.','warn');}if(NON_UI_BACKEND_NOTICE[project.backend])toast(NON_UI_BACKEND_NOTICE[project.backend]+' Revisa el panel Diagnósticos.','warn');changed('Backend actualizado');renderCode();if(project.backend==='ps5link')setActiveView('game');else if(project.backend==='payload')setActiveView('code');if(activeView==='compute')renderComputeWorkspace();runAnalysis();};
+  $('#backendSelect').onchange=()=>{const previous=project.backend;if(previous!==$('#backendSelect').value)snapshot();project.backend=$('#backendSelect').value;if(project.backend==='vulkan-compute'&&!project.computeGraph)project.computeGraph=window.PS5HSComputeGraph.createDefaultGraph();if(previous!==project.backend&&project.backend==='ps5link'){project.manualCode=false;project.customCode='';gameSceneModel().enabled=true;}else if(previous!==project.backend&&project.manualCode){project.manualCode=false;project.customCode='';toast('Se regenerará el código para el nuevo backend.','warn');}if(NON_UI_BACKEND_NOTICE[project.backend])toast(NON_UI_BACKEND_NOTICE[project.backend]+' Revisa el panel Diagnósticos.','warn');changed('Backend actualizado');applyBackendVisibility();renderCode();if(project.backend==='ps5link')setActiveView('game');else if(project.backend==='payload')setActiveView('flow');if(activeView==='compute')renderComputeWorkspace();runAnalysis();};
   $('#projectName').addEventListener('input',()=>{if(!isProjectOpen){setProjectOpenState(true);project.name=$('#projectName').value;changed('Proyecto visual abierto');return;}if(!projectNameHistoryPending){snapshot();projectNameHistoryPending=true;}project.name=$('#projectName').value;changed('Nombre del proyecto actualizado');});$('#projectName').addEventListener('blur',()=>{projectNameHistoryPending=false;});
   $('#projectFileInput').onchange=e=>{if(e.target.files?.[0])importProjectFile(e.target.files[0]);e.target.value='';};$('#assetFileInput').onchange=e=>{addAsset(e.target.files?.[0]);e.target.value='';};
   $('#canvasStage').addEventListener('dragover',e=>{if(e.dataTransfer.types.includes('application/x-ps5-component')){e.preventDefault();$('#canvasStage').classList.add('is-drop-target');}});$('#canvasStage').addEventListener('dragleave',e=>{if(!$('#canvasStage').contains(e.relatedTarget))$('#canvasStage').classList.remove('is-drop-target');});$('#canvasStage').addEventListener('drop',e=>{e.preventDefault();$('#canvasStage').classList.remove('is-drop-target');const type=e.dataTransfer.getData('application/x-ps5-component');if(!type)return;if(!Object.hasOwn(TYPES,type)){toast('El elemento arrastrado no corresponde a un componente conocido.','error');log('Arrastre rechazado: tipo de componente no registrado: '+type,'ERROR');return;}const r=$('#canvasStage').getBoundingClientRect();if(!(r.width>0&&r.height>0)){toast('No se puede calcular la posición del componente porque el lienzo no tiene dimensiones.','error');return;}const canvas=canvasResolution(),mapping=canvasToOutputMapping(),outputX=(e.clientX-r.left)/r.width*mapping.width,outputY=(e.clientY-r.top)/r.height*mapping.height,x=(outputX-mapping.offsetX)/mapping.scale,y=(outputY-mapping.offsetY)/mapping.scale;if(x<0||y<0||x>canvas.width||y>canvas.height){toast('Suelta el componente dentro del área útil del lienzo.','warn');return;}try{makeComponent(type,x,y);}catch(error){toast(error.message,'error');log('No se pudo crear el componente: '+error.message,'ERROR');}});$('#canvasStage').addEventListener('click',e=>{if(e.target===$('#canvasStage')||e.target===$('#canvasElements')){if(!isPreview)selectComponent(null);}});
@@ -2567,6 +2615,19 @@
   }
   $('#regenerateCodeBtn').onclick=()=>{if(project.backend==='ps5link'){if(project.manualCode){void convertPs5LinkToVisual();return;}renderCode();toast('Fuente regenerado desde Juego 3D y Flujos');void saveProject();return;}snapshot();project.manualCode=false;project.customCode='';renderCode();changed('Código regenerado');toast('Código regenerado desde el modelo visual');};$('#copyCodeBtn').onclick=async()=>{try{await navigator.clipboard.writeText($('#codeEditor').value);toast('Código copiado al portapapeles');}catch{ $('#codeEditor').select();document.execCommand('copy');toast('Código copiado');}};
   $('#payloadLanguage').onchange=()=>{if(project.backend!=='payload'||project.payloadBuildMode==='upstream-makefile')return;snapshot();project.payloadLanguage=$('#payloadLanguage').value==='cpp'?'cpp':'c';if(!project.manualCode)project.customCode='';changed('Lenguaje del payload actualizado');renderCode();runAnalysis();};
+  /* 1.1.60: crear ficheros .c/.h del proyecto desde la pestaña Código (build multi-fichero) */
+  const flowCreateSource=ext=>{
+    if(!isProjectOpen){toast('Abre o crea un proyecto primero.','warn');return;}
+    askTextDialog('Nuevo fichero '+ext,'Ruta relativa dentro del proyecto (p. ej. src/motor'+ext+'):', 'src/nuevo'+ext, path=>{
+      const clean=String(path||'').trim().replace(/\\/g,'/').replace(/^\/+/,'');
+      if(!clean.toLowerCase().endsWith(ext)){toast('El nombre debe terminar en '+ext+'.','warn');return;}
+      api('files',{op:'create',project:currentProjectFolder(),path:clean,type:'file'})
+        .then(()=>{toast('Creado '+clean);void openProjectFile(clean);})
+        .catch(error=>toast('No se pudo crear: '+error.message,'error'));
+    });
+  };
+  $('#flowNewCBtn').addEventListener('click',()=>flowCreateSource('.c'));
+  $('#flowNewHBtn').addEventListener('click',()=>flowCreateSource('.h'));
   $('#codeEditor').addEventListener('input',()=>{updateGutter();if(editorActiveTab){const tab=editorTabs.find(t=>t.path===editorActiveTab);if(tab){tab.content=$('#codeEditor').value;tab.dirty=true;renderEditorTabs();$('#codeStatus').textContent='Archivo sin guardar (Ctrl+S escribe en disco)';}return;}project.manualCode=true;project.customCode=$('#codeEditor').value;$('#codeStatus').textContent='Código fuente editado manualmente';changed('Código editado');});$('#codeEditor').addEventListener('scroll',()=>{$('#codeGutter').scrollTop=$('#codeEditor').scrollTop;const hl=$('#codeHighlight');if(hl){hl.scrollTop=$('#codeEditor').scrollTop;hl.scrollLeft=$('#codeEditor').scrollLeft;}});
   /* ===== 1.1.57 · IDE: resaltado de sintaxis, buscar/reemplazar, pestañas multi-archivo y explorador de archivos ===== */
   const CODE_LANG_BY_EXT={c:'c',h:'c',cpp:'cpp',cc:'cpp',cxx:'cpp',hpp:'cpp',hh:'cpp',cs:'csharp',js:'js',json:'json',glsl:'glsl',vert:'glsl',frag:'glsl',comp:'glsl',yml:'yaml',yaml:'yaml',xml:'xml',html:'html',css:'css',sh:'sh',bat:'bat',ps1:'ps1'};
@@ -2837,6 +2898,279 @@
   $('#codeReplaceOne').addEventListener('click',codeReplaceOne);
   $('#codeReplaceAll').addEventListener('click',codeReplaceAll);
   window.addEventListener('beforeunload',e=>{if((isProjectOpen&&isDirty)||editorTabs.some(t=>t.dirty)){e.preventDefault();e.returnValue='';}});
+  /* ===== 1.1.60 · Editor visual de flujos (Flowcode) para payloads ===== */
+  const FLOW_KINDS={
+    start:{label:'▶ Inicio',summary:()=>'Punto de entrada'},
+    end:{label:'■ Fin',summary:()=>'Termina el flujo'},
+    set:{label:'＝ Asignar',summary:b=>String(b.code||'…')},
+    if:{label:'？ Decisión',summary:b=>'if ('+String(b.cond||'…')+')'},
+    while:{label:'↻ Mientras',summary:b=>'while ('+String(b.cond||'…')+')'},
+    delay:{label:'⏱ Esperar',summary:b=>String(b.ms||'0')+' ms'},
+    read:{label:'⇩ Leer dato',summary:b=>String(b.var||'…')+' ← '+String(b.source||'…')},
+    notify:{label:'💬 Notificar',summary:b=>'«'+String(b.text||'…')+'»'},
+    call:{label:'→ Llamar',summary:b=>String(b.fn||'…')+'(' + String(b.args||'') + ')'},
+    return:{label:'⏎ Return',summary:b=>String(b.value||'void')}
+  };
+  const FLOW_PORT_FIELDS={if:['then','else'],while:['body','exit']};
+  const flowModel=()=>{
+    if(!window.PS5HSProjectContracts||!window.PS5HSProjectContracts.isRecord){/* fallback defensivo */}
+    if(!project.flowProgram||typeof project.flowProgram!=='object')project.flowProgram={schemaVersion:1,enabled:false,vars:[],blocks:[]};
+    if(!Array.isArray(project.flowProgram.vars))project.flowProgram.vars=[];
+    if(!Array.isArray(project.flowProgram.blocks))project.flowProgram.blocks=[];
+    return project.flowProgram;
+  };
+  let flowSelectionId='',flowWiring=null,flowCounter=0;
+  const FLOW_BACKEND_LABELS={ps5link:'ps5link · Título nativo AGC',sharp:'SharpProspero · Aplicación C#','opengl-ui':'Native UI · OpenGL','vulkan-ui':'Native UI · Vulkan','vulkan-compute':'Vulkan Compute','sharp-payload':'SharpProspero · Payload',ps5sdk:'PS5SDK',etahen:'etaHEN · Plugin',payload:'payload'};
+  const flowBlockById=id=>flowModel().blocks.find(b=>b.id===id);
+  function flowNewId(kind){flowCounter+=1;return 'blk-'+kind+'-'+Date.now().toString(36)+'-'+flowCounter;}
+  function flowRender(){
+    const stage=$('#flowBlocks'),wires=$('#flowWires');if(!stage)return;
+    if(!isProjectOpen){stage.innerHTML='<div class="flow-empty">Abre o crea un proyecto para programar su flujo.</div>';wires.innerHTML='';return;}
+    const model=flowModel();
+    const blocks=model.blocks;
+    if(!blocks.length){
+      stage.innerHTML='<div class="flow-empty"><strong>Programa visual vacío</strong><span>Encadena bloques del estilo Flowcode (inicio, decisiones, bucles, lecturas de datos, notificaciones) y genera el C del payload.</span><button id="flowSeedBtn" class="btn secondary small">Crear programa de ejemplo</button></div>';
+      wires.innerHTML='';
+      $('#flowSeedBtn').onclick=flowSeed;flowRenderSide();flowRenderInspector();return;
+    }
+    stage.innerHTML='';
+    for(const b of blocks){
+      const meta=FLOW_KINDS[b.kind]||{label:b.kind,summary:()=>'?'};
+      const el=document.createElement('div');
+      el.className='flow-block k-'+b.kind+(b.id===flowSelectionId?' selected':'');
+      el.style.left=(b.x||40)+'px';el.style.top=(b.y||40)+'px';el.dataset.flowId=b.id;
+      el.innerHTML=`<div class="flow-kind">${esc(meta.label)}</div><div class="flow-summary">${esc(meta.summary(b))}</div>`;
+      const ports=b.kind==='if'?[['then','p-then'],['else','p-else']]:b.kind==='while'?[['body','p-body'],['exit','p-exit']]:b.kind==='end'||b.kind==='return'?[]:[['next','p-next']];
+      for(const [field,cls] of ports){
+        const port=document.createElement('i');
+        port.className='flow-port '+cls;port.dataset.flowPort=field;port.dataset.flowFrom=b.id;port.title='Arrastra hasta otro bloque';
+        el.append(port);
+      }
+      stage.append(el);
+    }
+    flowRenderWires();flowRenderSide();flowRenderInspector();
+  }
+  function flowPortPoint(blockEl,field){
+    const b=flowBlockById(blockEl.dataset.flowId)||{};
+    const x=(b.x||0),y=(b.y||0);
+    const multi=field&&field!=='next';
+    const w=180;
+    if(!multi)return {x:x+w+6,y:y+18};
+    if(field==='then'||field==='body')return {x:x+w+6,y:y+16};
+    return {x:x+w+6,y:y+44};
+  }
+  function flowRenderWires(tempPath){
+    const wires=$('#flowWires');if(!wires)return;
+    const parts=[];
+    const link=(fromId,field,toId,cls)=>{
+      const fromEl=$(`#flowBlocks [data-flow-id="${fromId}"]`),toEl=$(`#flowBlocks [data-flow-id="${toId}"]`);
+      if(!fromEl||!toEl)return;
+      const a=flowPortPoint(fromEl,field);
+      const bx=toEl.offsetLeft,by=toEl.offsetHeight/2+toEl.offsetTop;
+      const dx=Math.max(30,Math.abs(bx-a.x)/2);
+      parts.push(`<path class="${cls}" d="M ${a.x} ${a.y} C ${a.x+dx} ${a.y}, ${bx-dx} ${by}, ${bx} ${by}"/>`);
+    };
+    for(const b of flowModel().blocks){
+      if(b.next)link(b.id,'next',b.next,'');
+      if(b.then)link(b.id,'then',b.then,'w-then');
+      if(b.else)link(b.id,'else',b.else,'w-else');
+      if(b.body)link(b.id,'body',b.body,'w-body');
+      if(b.exit)link(b.id,'exit',b.exit,'w-exit');
+    }
+    if(tempPath)parts.push(`<path class="w-temp" d="${tempPath}"/>`);
+    wires.innerHTML=parts.join('');
+  }
+  function flowRenderSide(){
+    const list=$('#flowVarList'),fns=$('#flowFnList');if(!list)return;
+    const model=flowModel();
+    list.innerHTML=model.vars.length?model.vars.map((v,i)=>`<div class="flow-var-row"><span>${esc(v.name)}</span><span class="asset-size">${esc(v.type)}${v.init?' = '+esc(v.init):''}</span><button class="btn ghost small" data-flow-var-del="${i}" title="Eliminar">✕</button></div>`).join(''):'<div class="empty-screen">Sin variables todavía.</div>';
+    list.querySelectorAll('[data-flow-var-del]').forEach(btn=>btn.onclick=()=>{snapshot();model.vars.splice(Number(btn.dataset.flowVarDel),1);changed('Variable del flujo eliminada');flowRender();});
+    const flows=[...new Set(model.blocks.filter(b=>b.kind==='start').map(b=>String(b.flow||'main')))];
+    fns.innerHTML=flows.map(f=>`<div class="flow-fn-row"><span>${f==='main'?'★ main (entrada)':esc(f)+'()'}</span></div>`).join('')||'<div class="empty-screen">Sin flujos.</div>';
+  }
+  function flowRenderInspector(){
+    const box=$('#flowInspector');if(!box)return;
+    const b=flowBlockById(flowSelectionId);
+    if(!b){box.innerHTML='<div class="empty-screen">Selecciona un bloque para editar sus propiedades.</div>';return;}
+    const meta=FLOW_KINDS[b.kind];
+    const fields=[];
+    const field=(id,label,type='text',value='',placeholder='')=>fields.push(`<label>${label}<input id="${id}" type="${type}" value="${esc(value)}" placeholder="${esc(placeholder)}" spellcheck="false"></label>`);
+    const targetSelect=(id,label,current)=>{const opts=flowModel().blocks.filter(x=>x.id!==b.id&&x.kind!=='start').map(x=>`<option value="${esc(x.id)}"${x.id===current?' selected':''}>${esc(FLOW_KINDS[x.kind]?FLOW_KINDS[x.kind].label:x.id)} · ${esc((x.code||x.cond||x.text||x.fn||x.ms||'').slice(0,26))}</option>`).join('');fields.push(`<label>${label}<select id="${id}"><option value="">— sin conectar —</option>${opts}</select></label>`);};
+    box.innerHTML=`<h4>${esc(meta.label)}</h4>`+( {
+      set:()=>{field('fi-code','Sentencia C (sin el ; final)','text',b.code||'','contador = contador + 1');return true;},
+      if:()=>{field('fi-cond','Condición C (se evalúa verdadera/falsa)','text',b.cond||'','contador < 10');targetSelect('fi-then','Entonces →',b.then);targetSelect('fi-else','Si no →',b.else);return true;},
+      while:()=>{field('fi-cond','Condición del bucle','text',b.cond||'','vidas > 0');targetSelect('fi-body','Cuerpo →',b.body);targetSelect('fi-exit','Al salir →',b.exit);return true;},
+      delay:()=>{field('fi-ms','Milisegundos de espera','text',b.ms||'500','500');return true;},
+      read:()=>{field('fi-var','Guardar en variable','text',b.var||'','t0');fields.push(`<label>Origen del dato<select id="fi-src"><option value="time_ms"${b.source==='time_ms'?' selected':''}>Reloj — milisegundos</option><option value="time_us"${b.source==='time_us'?' selected':''}>Reloj — microsegundos</option><option value="rand"${b.source==='rand'?' selected':''}>Número aleatorio</option></select></label>`);return true;},
+      notify:()=>{field('fi-text','Texto de la notificación','text',b.text||'','¡Hola PS5!');return true;},
+      call:()=>{const others=flowModel().blocks.filter(x=>x.kind==='start'&&String(x.flow||'main')!=='main');fields.push(`<label>Función a llamar<select id="fi-fn">${others.map(x=>`<option value="${esc(String(x.flow))}"${String(x.flow)===String(b.fn)?' selected':''}>${esc(String(x.flow))}()</option>`).join('')||'<option value="">— crea una función primero —</option>'}</select></label>`);field('fi-args','Argumentos (C, opcional)','text',b.args||'','');return true;},
+      return:()=>{field('fi-value','Valor de retorno (opcional en main)','text',b.value||'','');return true;},
+      start:()=>{fields.push('<div class="section-note">Entrada del flujo. Conecta su puerto derecho al primer paso.</div>');return false;},
+      end:()=>{fields.push('<div class="section-note">Fin del flujo. En main equivale a return 0.</div>');return false;}
+    }[b.kind]||(()=>false))();
+    fields.push('<button id="fi-delete" class="btn ghost small" style="margin-top:8px">✕ Eliminar bloque</button>');
+    box.innerHTML=fields.join('');
+    const bind=(id,prop,isNum)=>{const el=$('#'+id);if(!el)return;el.addEventListener('input',()=>{b[prop]=el.value;changed('Programa visual editado');flowRefreshBlockText(b);flowRenderWires();});};
+    if(b.kind==='set')bind('fi-code','code');
+    if(b.kind==='if'){bind('fi-cond','cond');const th=$('#fi-then');if(th)th.addEventListener('change',()=>{b.then=th.value;changed('Conexión actualizada');flowRender();});const el2=$('#fi-else');if(el2)el2.addEventListener('change',()=>{b.else=el2.value;changed('Conexión actualizada');flowRender();});}
+    if(b.kind==='while'){bind('fi-cond','cond');const bd=$('#fi-body');if(bd)bd.addEventListener('change',()=>{b.body=bd.value;changed('Conexión actualizada');flowRender();});const ex=$('#fi-exit');if(ex)ex.addEventListener('change',()=>{b.exit=ex.value;changed('Conexión actualizada');flowRender();});}
+    if(b.kind==='delay')bind('fi-ms','ms');
+    if(b.kind==='read'){bind('fi-var','var');const src=$('#fi-src');if(src)src.addEventListener('change',()=>{b.source=src.value;changed('Origen de datos actualizado');flowRefreshBlockText(b);});}
+    if(b.kind==='notify')bind('fi-text','text');
+    if(b.kind==='call'){const fn=$('#fi-fn');if(fn)fn.addEventListener('change',()=>{b.fn=fn.value;changed('Función actualizada');flowRefreshBlockText(b);});bind('fi-args','args');}
+    if(b.kind==='return')bind('fi-value','value');
+    $('#fi-delete').onclick=()=>{snapshot();flowDeleteBlock(b.id);};
+  }
+  function flowRefreshBlockText(b){
+    const el=$(`#flowBlocks [data-flow-id="${b.id}"]`);if(!el)return;
+    const meta=FLOW_KINDS[b.kind];el.querySelector('.flow-summary').textContent=meta.summary(b);
+  }
+  function flowDeleteBlock(id){
+    const model=flowModel();
+    model.blocks=model.blocks.filter(b=>b.id!==id);
+    for(const b of model.blocks){for(const f of ['next','then','else','body','exit'])if(b[f]===id)b[f]='';}
+    if(flowSelectionId===id)flowSelectionId='';
+    changed('Bloque eliminado del programa');flowRender();
+  }
+  function flowSeed(){
+    snapshot();
+    const model=flowModel();
+    model.blocks=[
+      {id:flowNewId('start'),kind:'start',flow:'main',x:60,y:80,next:'b-set'},
+      {id:'b-set',kind:'set',x:60,y:170,code:'vueltas = 3;',next:'b-while'},
+      {id:'b-while',kind:'while',x:60,y:260,cond:'vueltas > 0',body:'b-notify',exit:'b-end'},
+      {id:'b-notify',kind:'notify',x:300,y:350,text:'Quedan vueltas…',next:'b-dec'},
+      {id:'b-dec',kind:'set',x:300,y:440,code:'vueltas = vueltas - 1;',next:'b-while'},
+      {id:'b-end',kind:'notify',x:60,y:350,text:'¡Programa terminado!',next:'b-endblk'},
+      {id:'b-endblk',kind:'end',x:60,y:440},
+      {id:'b-varnote',kind:'set',x:0,y:0,code:'(crea variables en el panel izquierdo)',next:''}
+    ];
+    model.blocks.pop();
+    model.vars=[{name:'vueltas',type:'int',init:'3'}];
+    model.enabled=true;
+    changed('Programa de ejemplo creado');flowRender();
+  }
+  function flowAddBlock(kind){
+    if(!isProjectOpen){toast('Abre o crea un proyecto primero.','warn');return;}
+    snapshot();
+    const model=flowModel();
+    const b={id:flowNewId(kind),kind,x:80+(model.blocks.length%6)*30,y:80+(model.blocks.length%9)*36};
+    if(kind==='delay')b.ms='500';
+    if(kind==='read'){b.var='';b.source='time_ms';}
+    if(kind==='notify')b.text='';
+    if(kind==='set')b.code='';
+    if(kind==='if'){b.cond='';b.then='';b.else='';}
+    if(kind==='while'){b.cond='';b.body='';b.exit='';}
+    if(kind==='start')b.flow='main';
+    model.blocks.push(b);
+    const sel=flowBlockById(flowSelectionId);
+    if(sel&&b.kind!=='start'&&sel.kind!=='if'&&sel.kind!=='while'&&sel.kind!=='end'&&sel.kind!=='return'){sel.next=b.id;}
+    flowSelectionId=b.id;
+    changed('Bloque «'+FLOW_KINDS[kind].label+'» añadido');flowRender();
+  }
+  function flowGenerateIntoPayload(){
+    if(!isProjectOpen){toast('Abre o crea un proyecto primero.','warn');return;}
+    const result=window.PS5HSFlowCode.generate(flowModel());
+    const errors=result.diagnostics.filter(d=>d.severity==='error');
+    if(errors.length){toast('El programa tiene '+errors.length+' error(es): '+errors[0].title,'error');runAnalysis();setActiveView('diagnostics');return;}
+    flowModel().enabled=true;
+    const apply=()=>{
+      snapshot();
+      project.customCode=result.code;project.manualCode=true;
+      changed('Programa visual generado como C del payload');renderCode();runAnalysis();
+      toast('C generado ('+result.code.length.toLocaleString('es-ES')+' caracteres). Guarda el proyecto para escribirlo en src/.','success');
+    };
+    const applyWithBackend=()=>{
+      if(project.backend!=='payload'){
+        confirmDialog('Cambiar el destino a payload','El programa visual genera C para el backend payload, pero el destino actual es «'+(FLOW_BACKEND_LABELS[project.backend]||project.backend)+'». ¿Cambiar a payload y aplicar el programa generado? Se creará un punto de deshacer.',()=>{$('#backendSelect').value='payload';$('#backendSelect').dispatchEvent(new Event('change'));apply();});
+        return;
+      }
+      apply();
+    };
+    if(project.customCode&&!project.customCode.includes('FLOWCODE-BEGIN')){
+      confirmDialog('Reemplazar código manual','src/main.c tiene código escrito a mano que no procede del editor visual. ¿Reemplazarlo por el programa generado? Se creará un punto de deshacer.',applyWithBackend);
+      return;
+    }
+    applyWithBackend();
+  }
+  function renderFlowView(){
+    if(!$('#flowBlocks'))return;
+    if(!window.PS5HSFlowCode){toast('Falta runtime/flowcode-generator.js; el editor de flujos no puede iniciarse.','error');return;}
+    flowRender();
+  }
+  $('#flowStage').addEventListener('mousedown',event=>{
+    if(!isProjectOpen)return;
+    const port=event.target.closest('.flow-port');
+    const blockEl=event.target.closest('.flow-block');
+    if(port){
+      event.preventDefault();
+      flowWiring={from:port.dataset.flowFrom,port:port.dataset.flowPort};
+      return;
+    }
+    if(blockEl){
+      flowSelectionId=blockEl.dataset.flowId;
+      const b=flowBlockById(flowSelectionId);
+      snapshot();
+      const startX=event.clientX,startY=event.clientY,origX=b.x||0,origY=b.y||0;
+      const stage=$('#flowStage');
+      const onMove=e2=>{b.x=Math.max(0,Math.round((origX+e2.clientX-startX)/10)*10);b.y=Math.max(0,Math.round((origY+e2.clientY-startY)/10)*10);blockEl.style.left=b.x+'px';blockEl.style.top=b.y+'px';flowRenderWires();};
+      const onUp=()=>{document.removeEventListener('mousemove',onMove);document.removeEventListener('mouseup',onUp);changed('Programa visual reorganizado');};
+      document.addEventListener('mousemove',onMove);document.addEventListener('mouseup',onUp);
+      flowRenderInspector();
+      return;
+    }
+    if(event.target.id==='flowStage'){flowSelectionId='';flowRenderInspector();flowRender();}
+  });
+  document.addEventListener('mousemove',event=>{
+    if(!flowWiring)return;
+    const stage=$('#flowStage');if(!stage)return;
+    const rect=stage.getBoundingClientRect();
+    const fromEl=$(`#flowBlocks [data-flow-id="${flowWiring.from}"]`);
+    if(!fromEl)return;
+    const a=flowPortPoint(fromEl,flowWiring.port);
+    const mx=event.clientX-rect.left,my=event.clientY-rect.top;
+    flowRenderWires(`M ${a.x} ${a.y} C ${a.x+60} ${a.y}, ${mx-60} ${my}, ${mx} ${my}`);
+  });
+  document.addEventListener('mouseup',event=>{
+    if(!flowWiring)return;
+    const target=event.target.closest?event.target.closest('.flow-block'):null;
+    const wiring=flowWiring;flowWiring=null;
+    if(!target){flowRenderWires();return;}
+    const toId=target.dataset.flowId;
+    if(toId===wiring.from){flowRenderWires();return;}
+    const from=flowBlockById(wiring.from),to=flowBlockById(toId);
+    if(!from||!to){flowRenderWires();return;}
+    snapshot();
+    from[wiring.port]=toId;
+    changed('Conexión del programa actualizada');flowRender();
+  });
+  document.addEventListener('keydown',event=>{
+    if(activeView!=='flow'||!flowSelectionId||buildBusy)return;
+    const editing=['INPUT','TEXTAREA','SELECT'].includes(document.activeElement?.tagName);
+    if(event.key==='Delete'&&!editing){event.preventDefault();snapshot();flowDeleteBlock(flowSelectionId);}
+  });
+  $('#flowValidateBtn').addEventListener('click',()=>{runAnalysis();setActiveView('diagnostics');toast('Análisis actualizado con los diagnósticos del programa visual.');});
+  $('#flowGenerateBtn').addEventListener('click',flowGenerateIntoPayload);
+  $('#flowVarAdd').addEventListener('click',()=>{
+    if(!isProjectOpen){toast('Abre o crea un proyecto primero.','warn');return;}
+    const name=$('#flowVarName').value.trim(),type=$('#flowVarType').value,init=$('#flowVarInit').value.trim();
+    if(!window.PS5HSFlowCode.validIdent(name)){toast('Nombre de variable inválido: usa letras, números y _, empezando por letra.','warn');return;}
+    const model=flowModel();
+    if(model.vars.some(v=>v.name===name)){toast('Esa variable ya existe.','warn');return;}
+    snapshot();model.vars.push({name,type,init});changed('Variable «'+name+'» añadida');flowRender();
+  });
+  $('#flowFnAdd').addEventListener('click',()=>{
+    if(!isProjectOpen){toast('Abre o crea un proyecto primero.','warn');return;}
+    askTextDialog('Nueva función','Nombre de la función (se llamará con el bloque Llamar):','',name=>{
+      if(!window.PS5HSFlowCode.validIdent(name)){toast('Nombre inválido: usa letras, números y _, empezando por letra.','warn');return;}
+      const model=flowModel();
+      if(model.blocks.some(b=>b.kind==='start'&&String(b.flow||'main')===name)){toast('Ya existe una función con ese nombre.','warn');return;}
+      snapshot();
+      model.blocks.push({id:flowNewId('start'),kind:'start',flow:name,x:520,y:80,next:''});
+      changed('Función «'+name+'» creada');flowRender();
+    });
+  });
+  /* ===== fin 1.1.60 · editor de flujos ===== */
   window.addEventListener('keydown',e=>{
     if(buildBusy){if((e.ctrlKey&&!e.altKey&&['s','z','y'].includes(e.key.toLowerCase()))||e.key==='Delete'||['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.key))e.preventDefault();return;}
     const editingTarget=['INPUT','TEXTAREA','SELECT'].includes(document.activeElement?.tagName)||document.activeElement?.isContentEditable;
@@ -2854,7 +3188,7 @@
     }
   });
   /* ===== 1.1.59 · tema e idioma viven en runtime/ps5hs-ui-theme.js y runtime/ps5hs-i18n.js ===== */
-  window.PS5HSI18N.onLanguageChange=()=>{if(isProjectOpen)renderSidePanel();};
+  window.PS5HSI18N.onLanguageChange=()=>{if(isProjectOpen){renderSidePanel();if(activeView==='flow')flowRender();}};
 const shortViewportDockQuery=window.matchMedia?.('(max-height:600px)');
   shortViewportDockQuery?.addEventListener?.('change',syncDockToViewportHeight);
   syncDockToViewportHeight();
@@ -2863,7 +3197,7 @@ const shortViewportDockQuery=window.matchMedia?.('(max-height:600px)');
   // Browser recovery autosave is independent from explicit project saving.
   setInterval(()=>{if(!isProjectOpen)return;try{localStorage.setItem(STORAGE_KEY,JSON.stringify(project));}catch(error){if(error?.name==='QuotaExceededError')log('El navegador no tiene espacio para el autosalvado; exporta el proyecto para conservarlo.','WARN');}},12000);
   const stageWrap=$('.canvas-stage-wrap');if(stageWrap&&window.ResizeObserver){const stageObserver=new ResizeObserver(()=>{if(fitCanvasToViewport()&&activeView==='design')renderCanvas();if(activeView==='game')drawGameSceneCanvas();});stageObserver.observe(stageWrap);}window.addEventListener('resize',()=>{if(fitCanvasToViewport()&&activeView==='design')renderCanvas();if(activeView==='game')drawGameSceneCanvas();});
-  setProjectOpenState(isProjectOpen);renderAll();if(!isProjectOpen){$('#dirtyPill').textContent='SIN PROYECTO';$('#canvasState').textContent='No hay proyecto visual abierto. Las carpetas nativas y sus artefactos se conservan.';}log('PS5 Homebrew Studio v1.1.59 inicializado.');log('Editor visual: lienzo adaptable, capas aislables, pantallas múltiples, inspector, flujos, escenas y física 3D AGC, cámara de escena libre, seis mallas primitivas editables, código generado de solo lectura y grafo Vulkan Compute.');log('Backends: SharpProspero C#/NativeAOT, OpenGL/Vulkan UI C++20, Vulkan Compute GLSL/SPIR-V, juegos AGC desde bloques visuales y PS5 Payload SDK C/C++ a ELF.');log('La compilación requiere dependencias reales; solo se informa éxito cuando el proceso termina correctamente y se verifica el artefacto.');
+  setProjectOpenState(isProjectOpen);renderAll();applyBackendVisibility();if(!isProjectOpen){$('#dirtyPill').textContent='SIN PROYECTO';$('#canvasState').textContent='No hay proyecto visual abierto. Las carpetas nativas y sus artefactos se conservan.';}log('PS5 Homebrew Studio v1.1.60 inicializado.');log('Editor visual: lienzo adaptable, capas aislables, pantallas múltiples, inspector, flujos, escenas y física 3D AGC, cámara de escena libre, seis mallas primitivas editables, código generado de solo lectura y grafo Vulkan Compute.');log('Backends: SharpProspero C#/NativeAOT, OpenGL/Vulkan UI C++20, Vulkan Compute GLSL/SPIR-V, juegos AGC desde bloques visuales y PS5 Payload SDK C/C++ a ELF.');log('La compilación requiere dependencias reales; solo se informa éxito cuando el proceso termina correctamente y se verifica el artefacto.');
   window.__PS5HS_BOOT_READY=true;
   refreshStatus();
 })();

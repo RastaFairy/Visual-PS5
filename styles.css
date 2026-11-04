@@ -513,3 +513,44 @@ html[data-theme='light'] .topbar{background:rgba(238,240,246,.97)}
 html[data-theme='light'] .btn.primary{color:#fff}
 html[data-theme='light'] .brand-mark{color:#fff}
 
+
+/* 1.1.60: editor visual de flujos (Flowcode) para payloads */
+.flow-layout{display:flex;flex:1;min-height:0;gap:10px;padding:10px}
+.flow-side{width:235px;flex:0 0 235px;overflow:auto;display:flex;flex-direction:column;gap:9px;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:10px}
+.flow-var-list,.flow-fn-list{display:flex;flex-direction:column;gap:4px}
+.flow-var-row,.flow-fn-row{display:flex;align-items:center;gap:6px;font:10px/1.4 Consolas,monospace;color:var(--text);padding:4px 6px;background:var(--surface2);border:1px solid var(--line);border-radius:5px}
+.flow-var-row .asset-size,.flow-fn-row .asset-size{margin-left:auto;color:var(--muted)}
+.flow-var-form{display:flex;flex-direction:column;gap:6px}
+.flow-var-form input,.flow-var-form select{background:var(--surface2);border:1px solid var(--line2);border-radius:5px;color:var(--text);padding:5px 8px;font-size:10px}
+.flow-palette{display:flex;gap:5px;padding:7px 10px;background:var(--surface);border-bottom:1px solid var(--line);flex-wrap:wrap}
+.flow-palette .btn{font-size:9.5px}
+.flow-canvas-wrap{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--surface);border:1px solid var(--line);border-radius:8px;overflow:hidden}
+#flowStage{position:relative;width:2000px;height:1500px;background-image:radial-gradient(circle,rgba(127,102,255,.16) 1px,transparent 1px);background-size:24px 24px;transform-origin:0 0}
+#flowWires{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:1}
+#flowWires path{stroke:var(--accent2);stroke-width:2.2;fill:none}
+#flowWires path.w-then{stroke:var(--green)}#flowWires path.w-else{stroke:var(--yellow)}#flowWires path.w-body{stroke:var(--cyan)}#flowWires path.w-exit{stroke:var(--muted)}#flowWires path.w-temp{stroke-dasharray:6 4;stroke:var(--accent)}
+#flowBlocks{position:absolute;inset:0;z-index:2}
+.flow-block{position:absolute;width:180px;background:var(--surface3);border:1.5px solid var(--line2);border-radius:8px;padding:7px 9px;cursor:grab;user-select:none;box-shadow:0 2px 8px rgba(0,0,0,.28)}
+.flow-block.selected{border-color:var(--accent);box-shadow:0 0 0 2px rgba(127,102,255,.35)}
+.flow-block .flow-kind{font-size:8.5px;letter-spacing:.7px;color:var(--accent2);text-transform:uppercase}
+.flow-block .flow-summary{font:10px/1.45 Consolas,monospace;color:var(--text);margin-top:2px;word-break:break-word;max-height:58px;overflow:hidden}
+.flow-block.k-start{border-color:var(--green)}.flow-block.k-end{border-color:var(--red)}.flow-block.k-if{border-color:var(--yellow)}.flow-block.k-while{border-color:var(--cyan)}
+.flow-port{position:absolute;width:13px;height:13px;border-radius:50%;background:var(--surface);border:2px solid var(--accent2);cursor:crosshair;z-index:3}
+.flow-port:hover{background:var(--accent2)}
+.flow-port.p-next{right:-7px;top:50%;transform:translateY(-50%)}
+.flow-port.p-then{right:-7px;top:10px}.flow-port.p-else{right:-7px;bottom:10px}
+.flow-port.p-body{right:-7px;top:12px}.flow-port.p-exit{right:-7px;bottom:12px}
+.flow-inspector{width:255px;flex:0 0 255px;overflow:auto;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:10px;display:flex;flex-direction:column;gap:8px}
+.flow-inspector h4{margin:0;font-size:10px;letter-spacing:.6px;color:var(--accent2);text-transform:uppercase}
+.flow-inspector label{display:block;font-size:9.5px;color:var(--muted);margin:6px 0 3px}
+.flow-inspector input,.flow-inspector select,.flow-inspector textarea{width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--line2);border-radius:5px;color:var(--text);padding:5px 8px;font:10px/1.4 Consolas,monospace}
+.flow-empty{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;color:var(--muted);text-align:center}
+
+/* 1.1.60: menú de acciones secundarias + pestañas/rail según backend */
+.menu-wrap{position:relative}
+.dropdown-menu{position:absolute;right:0;top:calc(100% + 6px);background:var(--surface3);border:1px solid var(--line2);border-radius:8px;min-width:210px;padding:6px;display:flex;flex-direction:column;gap:2px;z-index:80;box-shadow:0 10px 28px rgba(0,0,0,.45)}
+.dropdown-item{background:transparent;border:0;color:var(--text);text-align:left;padding:8px 10px;border-radius:6px;font-size:11px;cursor:pointer}
+.dropdown-item:hover{background:var(--surface2)}
+.dropdown-item[disabled]{opacity:.45;cursor:default}
+.dropdown-item[disabled]:hover{background:transparent}
+.editor-tab[hidden],.rail-item[hidden]{display:none!important}

@@ -148,6 +148,34 @@
       objects: Array.isArray(incomingGame.objects) ? incomingGame.objects.map(object => isRecord(object) ? { ...object } : object) : Array.isArray(gameDefaults.objects) ? gameDefaults.objects.map(object => ({ ...object })) : []
     };
     if (project.gameScene.schemaVersion !== 1) throw new Error(`Versión de escena de juego no compatible: ${String(project.gameScene.schemaVersion)}.`);
+    /* Programa visual de bloques (Flowcode) para el backend payload: opcional, pero
+       si viene debe ser coherente. El generador (flowcode-generator.js) valida el resto. */
+    const flowDefaults = { schemaVersion: 1, enabled: false, vars: [], blocks: [] };
+    if (Object.hasOwn(value, 'flowProgram') && !isRecord(value.flowProgram)) throw new Error('flowProgram debe ser un objeto de programa de bloques.');
+    const incomingFlow = isRecord(value.flowProgram) ? value.flowProgram : {};
+    if (Object.hasOwn(incomingFlow, 'enabled') && typeof incomingFlow.enabled !== 'boolean') throw new Error('flowProgram.enabled debe ser booleano.');
+    if (Object.hasOwn(incomingFlow, 'vars') && !Array.isArray(incomingFlow.vars)) throw new Error('flowProgram.vars debe ser una lista.');
+    if (Object.hasOwn(incomingFlow, 'blocks') && !Array.isArray(incomingFlow.blocks)) throw new Error('flowProgram.blocks debe ser una lista.');
+    project.flowProgram = {
+      ...flowDefaults,
+      ...incomingFlow,
+      vars: Array.isArray(incomingFlow.vars) ? incomingFlow.vars.map(v => isRecord(v) ? { ...v } : v) : [],
+      blocks: Array.isArray(incomingFlow.blocks) ? incomingFlow.blocks.map(b => isRecord(b) ? { ...b } : b) : []
+    };
+    if (project.flowProgram.schemaVersion !== 1) throw new Error(`Versión de programa de bloques no compatible: ${String(project.flowProgram.schemaVersion)}.`);
+    if (!Array.isArray(project.flowProgram.blocks) || project.flowProgram.blocks.length > 512) throw new Error('El programa visual admite entre 0 y 512 bloques.');
+    if (project.flowProgram.vars.length > 64) throw new Error('El programa visual admite hasta 64 variables.');
+    const flowBlockIds = new Set();
+    for (const block of project.flowProgram.blocks) {
+      if (!isRecord(block)) throw new Error('Hay un bloque del programa visual que no es válido.');
+      const id = String(block.id ?? '').trim();
+      if (!id || flowBlockIds.has(id)) throw new Error('Cada bloque del programa visual necesita un identificador único.');
+      flowBlockIds.add(id);
+      for (const numericKey of ['x','y']) {
+        const n = block[numericKey];
+        if (n !== undefined && (typeof n !== 'number' || !Number.isFinite(n))) throw new Error(`El bloque ${id} necesita una posición ${numericKey} numérica y finita.`);
+      }
+    }
     if (!Array.isArray(project.gameScene.platforms) || project.gameScene.platforms.length > 128) throw new Error('La escena admite entre 0 y 128 bloques de plataforma.');
     const platformIds = new Set();
     project.gameScene.platforms = project.gameScene.platforms.map((platform, index) => {

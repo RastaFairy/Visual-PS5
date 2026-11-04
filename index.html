@@ -4,14 +4,14 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="color-scheme" content="dark" />
-  <meta name="application-version" content="1.1.59" />
+  <meta name="application-version" content="1.1.60" />
   <title>PS5 Homebrew Studio</title>
-  <link rel="stylesheet" href="styles.css?v=1.1.59" />
+  <link rel="stylesheet" href="styles.css?v=1.1.60" />
 </head>
 <body>
   <div class="app-shell">
     <header class="topbar">
-      <div class="brand"><div class="brand-mark">P<span>5</span></div><div><strong>Homebrew Studio</strong><small>VISUAL IDE · VERSION 1.1.59</small></div></div>
+      <div class="brand"><div class="brand-mark">P<span>5</span></div><div><strong>Homebrew Studio</strong><small>VISUAL IDE · VERSION 1.1.60</small></div></div>
       <div class="project-head"><span class="live-dot"></span><input id="projectName" value="MiHomebrew" aria-label="Nombre del proyecto"/><span class="dirty-pill" id="dirtyPill">SIN GUARDAR</span></div>
       <div class="top-actions">
         <select id="uiLangSelect" class="compact-select" aria-label="Idioma de la interfaz" title="Idioma de la interfaz"><option value="es">ES</option><option value="en">EN</option></select>
@@ -19,10 +19,16 @@
         <button id="newProjectBtn" class="btn ghost" data-i18n="btn.new">Nuevo</button>
         <button id="openProjectBtn" class="btn ghost" data-i18n="btn.open">Abrir</button>
         <button id="saveProjectBtn" class="btn ghost" data-i18n="btn.save">Guardar</button>
-        <button id="closeProjectBtn" class="btn ghost" data-i18n="btn.closeProject">Cerrar proyecto</button>
-        <button id="exportProjectBtn" class="btn secondary" data-i18n="btn.exportProject">Exportar proyecto</button>
-        <button id="integrationSettingsBtn" class="btn ghost" title="Configurar Python y PS5 UltraPack" data-i18n="btn.tools">Herramientas</button>
-        <button id="postBuildPackBtn" class="btn secondary" disabled title="Compila y verifica un título nativo para habilitar esta acción" data-i18n="btn.pack">Empaquetar</button><button id="buildBtn" class="btn primary"><span>▶</span> <span data-i18n="btn.build">Compilar</span></button>
+        <div class="menu-wrap">
+          <button id="moreMenuBtn" class="btn ghost" aria-haspopup="true" aria-expanded="false" title="Más acciones">⋯</button>
+          <div id="moreMenu" class="dropdown-menu hidden" role="menu">
+            <button id="closeProjectBtn" class="dropdown-item" role="menuitem" data-i18n="btn.closeProject">Cerrar proyecto</button>
+            <button id="exportProjectBtn" class="dropdown-item" role="menuitem" data-i18n="btn.exportProject">Exportar proyecto</button>
+            <button id="integrationSettingsBtn" class="dropdown-item" role="menuitem" data-i18n="btn.tools">Herramientas</button>
+            <button id="postBuildPackBtn" class="dropdown-item" role="menuitem" data-i18n="btn.pack" disabled title="Compila y verifica un título nativo para habilitar esta acción">Empaquetar</button>
+          </div>
+        </div>
+        <button id="buildBtn" class="btn primary"><span>▶</span> <span data-i18n="btn.build">Compilar</span></button>
       </div>
     </header>
 
@@ -54,6 +60,7 @@
             <button class="editor-tab" data-view="logic"><span data-i18n="tab.logic">Flujos</span></button>
             <button class="editor-tab" data-view="game"><span data-i18n="tab.game">Juego 3D</span></button>
             <button class="editor-tab" data-view="compute"><span data-i18n="tab.compute">Vulkan Compute</span></button>
+            <button class="editor-tab" data-view="flow"><span data-i18n="tab.flow">Flujo</span></button>
             <button class="editor-tab" data-view="code"><span data-i18n="tab.code">Código</span></button>
             <button class="editor-tab" data-view="diagnostics"><span data-i18n="tab.diagnostics">Diagnósticos</span> <span class="count-badge" id="diagCount">0</span></button>
             <button class="editor-tab" data-view="console"><span data-i18n="tab.console">Consola PS5</span> <span class="count-badge" id="consoleLed" style="display:none">●</span></button>
@@ -118,7 +125,34 @@
           <input id="computeReportFile" type="file" accept=".json,application/json" hidden />
         </div>
 
-        <div class="view-container hidden" id="codeView"><div class="canvas-toolbar"><div class="breadcrumbs"><span>Proyecto</span><i>/</i><b id="codeFileName">Program.cs</b><span class="language-badge" id="codeLanguageBadge">C# · SharpProspero</span><select id="payloadLanguage" class="compact-select" aria-label="Lenguaje del payload" hidden><option value="c">C</option><option value="cpp">C++20</option></select></div><div class="canvas-tools"><button id="regenerateCodeBtn" class="btn secondary small">↻ Regenerar desde diseño</button><button id="copyCodeBtn" class="btn ghost small">Copiar</button></div></div><div class="code-tabs" id="codeTabs" hidden></div><div class="code-find hidden" id="codeFindBar"><input id="codeFindInput" type="search" placeholder="Buscar en el código…" aria-label="Buscar en el código"><span id="codeFindCount" class="code-find-count">0</span><button id="codeFindPrev" class="btn ghost small" type="button" title="Anterior (Mayús+Entrar)">↑</button><button id="codeFindNext" class="btn ghost small" type="button" title="Siguiente (Entrar)">↓</button><button id="codeFindToggleReplace" class="btn ghost small" type="button" title="Reemplazar (Ctrl+H)">⇄</button><button id="codeFindClose" class="btn ghost small" type="button" title="Cerrar (Esc)">×</button><div class="code-find-replace hidden" id="codeFindReplaceRow"><input id="codeReplaceInput" type="text" placeholder="Reemplazar por…" aria-label="Reemplazar por"><button id="codeReplaceOne" class="btn secondary small" type="button">Reemplazar</button><button id="codeReplaceAll" class="btn secondary small" type="button">Todo</button></div></div><div class="code-area"><div class="code-gutter" id="codeGutter">1</div><div class="code-stack"><pre class="code-highlight" id="codeHighlight" aria-hidden="true"></pre><textarea id="codeEditor" spellcheck="false" aria-label="Código fuente"></textarea></div></div><div class="code-footer"><span id="codeStatus">Código generado desde el modelo visual</span><span id="codeFooterHint">La compilación usa el modelo del proyecto</span></div></div>
+        <div class="view-container hidden" id="flowView">
+          <div class="canvas-toolbar"><div class="breadcrumbs"><span data-i18n="crumb.project">Proyecto</span><i>/</i><b data-i18n="crumb.flow">Flujo del payload</b></div><div class="canvas-tools"><span id="flowStatus" class="structure-summary">Programa visual de bloques → C</span><button id="flowValidateBtn" class="btn ghost small" type="button">Validar</button><button id="flowGenerateBtn" class="btn primary small" type="button">Generar src/main.c</button></div></div>
+          <div class="flow-layout">
+            <aside class="flow-side">
+              <div class="compute-pane-heading"><strong>VARIABLES</strong><span id="flowVarCount">0</span></div>
+              <div id="flowVarList" class="flow-var-list"></div>
+              <div class="flow-var-form">
+                <input id="flowVarName" type="text" placeholder="nombre" spellcheck="false" maxlength="48">
+                <select id="flowVarType" class="compact-select"><option value="int">int</option><option value="unsigned">unsigned</option><option value="float">float</option><option value="bool">bool</option><option value="string">string</option></select>
+                <input id="flowVarInit" type="text" placeholder="inicial (opcional)" spellcheck="false">
+                <button id="flowVarAdd" class="btn secondary small" type="button">＋ Variable</button>
+              </div>
+              <div class="compute-pane-heading"><strong>FUNCIONES</strong></div>
+              <div id="flowFnList" class="flow-fn-list"></div>
+              <button id="flowFnAdd" class="btn ghost small" type="button" style="width:100%">＋ Función (flujo propio)</button>
+              <small class="section-note">Los flujos con nombre se generan como funciones <code>static void</code>; llámalas con el bloque Llamar. El flujo <code>main</code> es el punto de entrada.</small>
+            </aside>
+            <section class="flow-canvas-wrap">
+              <div id="flowStage">
+                <svg id="flowWires" xmlns="http://www.w3.org/2000/svg"></svg>
+                <div id="flowBlocks"></div>
+              </div>
+            </section>
+            <aside class="flow-inspector" id="flowInspector"><div class="empty-screen">Selecciona un bloque para editar sus propiedades.</div></aside>
+          </div>
+        </div>
+
+        <div class="view-container hidden" id="codeView"><div class="canvas-toolbar"><div class="breadcrumbs"><span>Proyecto</span><i>/</i><b id="codeFileName">Program.cs</b><span class="language-badge" id="codeLanguageBadge">C# · SharpProspero</span><select id="payloadLanguage" class="compact-select" aria-label="Lenguaje del payload" hidden><option value="c">C</option><option value="cpp">C++20</option></select></div><div class="canvas-tools"><button id="flowNewCBtn" class="btn ghost small" type="button" title="Crear un fichero .c nuevo en src/">＋ .c</button><button id="flowNewHBtn" class="btn ghost small" type="button" title="Crear un fichero .h nuevo en src/">＋ .h</button><button id="regenerateCodeBtn" class="btn secondary small">↻ Regenerar desde diseño</button><button id="copyCodeBtn" class="btn ghost small">Copiar</button></div></div><div class="code-tabs" id="codeTabs" hidden></div><div class="code-find hidden" id="codeFindBar"><input id="codeFindInput" type="search" placeholder="Buscar en el código…" aria-label="Buscar en el código"><span id="codeFindCount" class="code-find-count">0</span><button id="codeFindPrev" class="btn ghost small" type="button" title="Anterior (Mayús+Entrar)">↑</button><button id="codeFindNext" class="btn ghost small" type="button" title="Siguiente (Entrar)">↓</button><button id="codeFindToggleReplace" class="btn ghost small" type="button" title="Reemplazar (Ctrl+H)">⇄</button><button id="codeFindClose" class="btn ghost small" type="button" title="Cerrar (Esc)">×</button><div class="code-find-replace hidden" id="codeFindReplaceRow"><input id="codeReplaceInput" type="text" placeholder="Reemplazar por…" aria-label="Reemplazar por"><button id="codeReplaceOne" class="btn secondary small" type="button">Reemplazar</button><button id="codeReplaceAll" class="btn secondary small" type="button">Todo</button></div></div><div class="code-area"><div class="code-gutter" id="codeGutter">1</div><div class="code-stack"><pre class="code-highlight" id="codeHighlight" aria-hidden="true"></pre><textarea id="codeEditor" spellcheck="false" aria-label="Código fuente"></textarea></div></div><div class="code-footer"><span id="codeStatus">Código generado desde el modelo visual</span><span id="codeFooterHint">La compilación usa el modelo del proyecto</span></div></div>
 
         <div class="view-container hidden" id="diagnosticsView"><div class="canvas-toolbar"><div class="breadcrumbs"><span>Proyecto</span><i>/</i><b>Diagnósticos</b></div><div class="canvas-tools"><select id="diagFilter" class="compact-select"><option value="all">Todos los diagnósticos</option><option value="error">Errores</option><option value="warning">Advertencias</option><option value="info">Información</option></select><button id="recheckBtn" class="btn secondary small">⟳ Analizar</button></div></div><div id="diagnosticsList" class="diagnostics-list"></div></div>
 
@@ -241,14 +275,15 @@
     });
   })();
   </script>
-  <script src="runtime/project-contracts.js?v=1.1.59"></script>
-  <script src="runtime/unicode-fonts.js?v=1.1.59"></script>
-  <script src="runtime/native-modification-policy.js?v=1.1.59"></script>
-  <script src="runtime/native-generator.js?v=1.1.59"></script>
-  <script src="runtime/payload-generator.js?v=1.1.59"></script>
-  <script src="runtime/compute-graph.js?v=1.1.59"></script>
-  <script src="runtime/layer-model.js?v=1.1.59"></script>
-  <script src="runtime/ps5hs-i18n.js?v=1.1.59"></script><script src="runtime/ps5hs-ui-theme.js?v=1.1.59"></script><script src="app.js?v=1.1.59"></script>
+  <script src="runtime/project-contracts.js?v=1.1.60"></script>
+  <script src="runtime/unicode-fonts.js?v=1.1.60"></script>
+  <script src="runtime/native-modification-policy.js?v=1.1.60"></script>
+  <script src="runtime/native-generator.js?v=1.1.60"></script>
+  <script src="runtime/payload-generator.js?v=1.1.60"></script>
+  <script src="runtime/compute-graph.js?v=1.1.60"></script>
+<script src="runtime/flowcode-generator.js?v=1.1.60"></script>
+  <script src="runtime/layer-model.js?v=1.1.60"></script>
+  <script src="runtime/ps5hs-i18n.js?v=1.1.60"></script><script src="runtime/ps5hs-ui-theme.js?v=1.1.60"></script><script src="app.js?v=1.1.60"></script>
 </body>
 </html>
 

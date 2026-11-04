@@ -1,5 +1,14 @@
 # Registro de cambios
 
+## 1.1.60 — 2026-11-04
+
+- Editor visual de flujos estilo Flowcode para payloads: nueva pestaña Flujo con lienzo de bloques arrastrables (Inicio, Fin, Asignar, Decisión, Mientras, Esperar, Leer dato, Notificar, Llamar, Return), cables SVG por puerto (Entonces/Si no/Cuerpo/Al salir), variables tipadas (int, unsigned, float, bool, string) y funciones como flujos con nombre.
+- Generador bloques→C (runtime/flowcode-generator.js): emisión estructurada con fusión de ramas, bucles, prototipos adelantados, notificaciones nativas de la PS5 (sceKernelSendNotificationRequest) y lecturas de datos (reloj µs/ms, aleatorio); diagnósticos de conexión rota, bloque inalcanzable, variable inválida y ciclo sin bucle; cubierto por la suite test-flowcode-generator.js (9 casos) en CI.
+- Integración respetuosa con el desarrollador: «Generar src/main.c» valida antes, avisa si hay código manual distinto, pide confirmación para cambiar el destino a payload, crea punto de deshacer y deja el C editable a mano.
+- Build payload multi-fichero: el Makefile gestionado compila todo src/*.c|cpp a objetos (build/obj) y los enlaza junto al main — ya no está limitado a un único fichero.
+- Pestaña Código: botones «＋ .c» y «＋ .h» para crear ficheros nuevos en src/ y abrirlos al instante en el editor multi-pestaña.
+- Interfaz dependiente del SDK: las pestañas y el panel lateral muestran solo lo relevante al destino elegido (payload → Flujo/Código/Diagnósticos/Consola; ps5link añade Juego 3D; sharp/OpenGL/Vulkan UI muestran Diseño/Estructura/Flujos; vulkan-compute solo su grafo). Las acciones secundarias (Cerrar proyecto, Exportar, Herramientas, Empaquetar) se agrupan en un menú «⋯» de la barra superior.
+
 ## 1.1.59 — 2026-11-03
 
 - Modularización: server.ps1 (4.447 → 4.017 líneas) extrae consola PS5, estado del entorno, validación del modelo, explorador de archivos y configuración de build payload a cinco ficheros dot-sourced (runtime/server-*.ps1); el frontend separa el motor i18n y el tema a runtime/ps5hs-i18n.js y runtime/ps5hs-ui-theme.js, servidos por la allowlist estática.
