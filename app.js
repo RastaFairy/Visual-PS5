@@ -1444,6 +1444,7 @@
     $('#gameAddPlatform').disabled=buildBusy||!isProjectOpen||platforms.length>=128;$('#gameAddObject').disabled=buildBusy||!isProjectOpen||objects.length>=128;$('#gameAddObjectMini').disabled=buildBusy||!isProjectOpen||objects.length>=128;$('#gameAddCollectible').disabled=buildBusy||!selected;$('#gameAddCheckpoint').disabled=buildBusy||!selected;$('#gameSetGoal').disabled=buildBusy||!selected;$('#gameAddLight').disabled=buildBusy||!isProjectOpen||scene.lighting.points.length>=4;
     $$('#panelContent [data-game-palette]').forEach(button=>{button.disabled=buildBusy||!isProjectOpen||(['collectible','checkpoint','goal'].includes(button.dataset.gamePalette)&&!selected)||button.dataset.gamePalette==='light'&&scene.lighting.points.length>=4||button.dataset.gamePalette==='platform'&&platforms.length>=128||button.dataset.gamePalette==='object'&&objects.length>=128;});
     drawGameSceneCanvas();
+    renderHammerViewports();
     const canvas=$('#gameSceneCanvas');
     canvas.oncontextmenu=event=>event.preventDefault();
     canvas.onwheel=event=>{if(buildBusy||isPreview)return;event.preventDefault();gameEditorCamera.zoom=clamp(gameEditorCamera.zoom*Math.exp(-event.deltaY*0.001),0.35,3.5);drawGameSceneCanvas();};
@@ -3171,6 +3172,276 @@
     });
   });
   /* ===== fin 1.1.60 · editor de flujos ===== */
+  /* ===== 1.1.61 · Editor de escena estilo Valve Hammer: viewports ortográficos ===== */
+  const HAMMER_VIEWS={
+    top:{label:'SUPERIOR · X/Z',u:'x',v:'z',vDir:1,uName:'X',vName:'Z'},
+    front:{label:'FRONTAL · X/Y',u:'x',v:'y',vDir:-1,uName:'X',vName:'Y'},
+    side:{label:'LATERAL · Z/Y',u:'z',v:'y',vDir:-1,uName:'Z',vName:'Y'}
+  };
+  const hammer={tool:'select',snap:0.5,base:34,vps:{top:{zoom:1,cx:0,cy:0},front:{zoom:1,cx:0,cy:2},side:{zoom:1,cx:0,cy:2}},drag:null};
+  const hammerPlatVExtent=p=>[p.height-0.9,p.height];
+  function hammerRectOf(item,view){
+    if(view==='top')return {u0:item.x-item.halfWidth,u1:item.x+item.halfWidth,v0:item.z-item.halfDepth,v1:item.z+item.halfDepth};
+    if(view==='front')return {u0:item.x-item.halfWidth,u1:item.x+item.halfWidth,v0:item.y!==undefined?item.y-item.halfHeight:(item.height-0.9),v1:item.y!==undefined?item.y+item.halfHeight:item.height};
+    return {u0:item.z-item.halfDepth,u1:item.z+item.halfDepth,v0:item.y!==undefined?item.y-item.halfHeight:(item.height-0.9),v1:item.y!==undefined?item.y+item.halfHeight:item.height};
+  }
+  function hammerScene(){const s=gameSceneModel();return{platforms:s.platforms||[],objects:s.objects||[],player:s.player||{}};}
+  function hammerCanvas(view){return document.querySelector(`.hv-canvas[data-hv="${view}"]`);}
+  function renderHammerViewports(){
+    for(const view of ['top','front','side'])renderHammerViewport(view);
+  }
+  function renderHammerViewport(view){
+    const canvas=hammerCanvas(view);if(!canvas)return;
+    const wrap=canvas.parentElement,dpr=window.devicePixelRatio||1;
+    const cw=wrap.clientWidth,ch=Math.max(60,wrap.clientHeight-22);
+    if(!cw)return;
+    if(canvas.width!==Math.round(cw*dpr)||canvas.height!==Math.round(ch*dpr)){canvas.width=Math.round(cw*dpr);canvas.height=Math.round(ch*dpr);canvas.style.height=ch+'px';}
+    const g=canvas.getContext('2d');g.setTransform(dpr,0,0,dpr,0,0);
+    const vp=hammer.vps[view],meta=HAMMER_VIEWS[view];
+    const s2w=(sx,sv)=>({u:vp.cx+(sx-cw/2)/(hammer.base*vp.zoom),v:vp.cy+meta.vDir*(sv-ch/2)/(hammer.base*vp.zoom)});
+    const w2s=(wu,wv)=>({x:cw/2+(wu-vp.cx)*hammer.base*vp.zoom,y:ch/2+meta.vDir*(wv-vp.cy)*hammer.base*vp.zoom});
+    g.clearRect(0,0,cw,ch);
+    /* rejilla adaptativa */
+    const stepW=hammer.base*vp.zoom;let worldStep=hammer.grid;while(worldStep*stepW<14)worldStep*=2;while(worldStep*stepW>90)worldStep/=2;
+    const tl=s2w(0,0),br=s2w(cw,ch);
+    const u0=Math.min(tl.u,br.u),u1=Math.max(tl.u,br.u);
+    const vLo=Math.min(tl.v,br.v),vHi=Math.max(tl.v,br.v);
+    g.strokeStyle='rgba(127,102,255,.10)';g.lineWidth=1;
+    for(let u=Math.floor(u0/worldStep)*worldStep;u<=u1;u+=worldStep){const p=w2s(u,0);g.beginPath();g.moveTo(p.x,0);g.lineTo(p.x,ch);g.stroke();}
+    for(let v=Math.floor(vLo/worldStep)*worldStep;v<=vHi;v+=worldStep){const p=w2s(0,v);g.beginPath();g.moveTo(0,p.y);g.lineTo(cw,p.y);g.stroke();}
+    /* ejes */
+    const origin=w2s(0,0);
+    g.strokeStyle='rgba(255,116,132,.5)';g.beginPath();g.moveTo(0,origin.y);g.lineTo(cw,origin.y);g.stroke();
+    g.strokeStyle='rgba(103,243,232,.5)';g.beginPath();g.moveTo(origin.x,0);g.lineTo(origin.x,ch);g.stroke();
+    const {platforms,objects,player}=hammerScene();
+    /* plataformas */
+    for(const p of platforms){
+      const r=hammerRectOf(p,view);
+      const a=w2s(Math.min(r.u0,r.u1),Math.min(r.v0,r.v1)),b=w2s(Math.max(r.u0,r.u1),Math.max(r.v0,r.v1));
+      const selected=p.id===selectedGamePlatformId;
+      g.fillStyle=selected?'rgba(127,102,255,.30)':(p.color||'#5A8BFF')+'55';
+      g.fillRect(a.x,a.y,b.x-a.x,b.y-a.y);
+      g.strokeStyle=selected?'#a496ff':(p.goal?'#FFC76A':'#8891a7');g.lineWidth=selected?2:1.2;
+      g.strokeRect(a.x,a.y,b.x-a.x,b.y-a.y);
+      if(selected)hammerDrawHandles(g,a,b);
+      const label=w2s((r.u0+r.u1)/2,(r.v0+r.v1)/2);
+      if(stepW*hammer.base*vp.zoom>18){g.fillStyle=selected?'#dcd6ff':'#aeb8cf';g.font='9px Consolas,monospace';g.textAlign='center';g.fillText(p.label||p.id,label.x,label.y+3);}
+    }
+    /* objetos 3D */
+    for(const o of objects){
+      const r=hammerRectOf(o,view);
+      const a=w2s(Math.min(r.u0,r.u1),Math.min(r.v0,r.v1)),b=w2s(Math.max(r.u0,r.u1),Math.max(r.v0,r.v1));
+      const selected=o.id===selectedGameObjectId;
+      g.fillStyle=(o.color||'#59DFF4')+'3c';
+      g.fillRect(a.x,a.y,b.x-a.x,b.y-a.y);
+      g.strokeStyle=selected?'#a496ff':(o.color||'#59DFF4');g.lineWidth=selected?2:1.2;
+      g.strokeRect(a.x,a.y,b.x-a.x,b.y-a.y);
+      if(selected)hammerDrawHandles(g,a,b);
+    }
+    /* meta e inicio */
+    for(const p of platforms){
+      if(p.goal){const r=hammerRectOf(p,view),c=w2s((r.u0+r.u1)/2,(r.v0+r.v1)/2);g.strokeStyle='#FFC76A';g.lineWidth=2;g.beginPath();g.arc(c.x,c.y,7,0,Math.PI*2);g.stroke();}
+      if(p.collectible){const r=hammerRectOf(p,view),c=w2s((r.u0+r.u1)/2,Math.min(r.v0,r.v1));g.fillStyle='#67F3E8';g.beginPath();g.moveTo(c.x,c.y-5);g.lineTo(c.x+4,c.y);g.lineTo(c.x,c.y+5);g.lineTo(c.x-4,c.y);g.fill();}
+      if(player.spawnPlatformId===p.id){const c=w2s(p.x,p.height);g.fillStyle='#7ee2a8';g.beginPath();g.moveTo(c.x,c.y-9);g.lineTo(c.x+6,c.y+3);g.lineTo(c.x-6,c.y+3);g.fill();}
+    }
+    /* preview de dibujo */
+    if(hammer.drag&&hammer.drag.mode==='draw'&&hammer.drag.view===view){
+      const r=hammer.drag.rect;
+      const a=w2s(Math.min(r.u0,r.u1),Math.min(r.v0,r.v1)),b=w2s(Math.max(r.u0,r.u1),Math.max(r.v0,r.v1));
+      g.fillStyle='rgba(127,102,255,.25)';g.fillRect(a.x,a.y,b.x-a.x,b.y-a.y);
+      g.strokeStyle='#a496ff';g.setLineDash([5,4]);g.strokeRect(a.x,a.y,b.x-a.x,b.y-a.y);g.setLineDash([]);
+      g.fillStyle='#aeb8cf';g.font='9px Consolas,monospace';g.textAlign='left';
+      g.fillText(`${Math.abs(r.u1-r.u0).toFixed(1)} × ${Math.abs(r.v1-r.v0).toFixed(1)} m`,b.x+6,b.y-4);
+    }
+  }
+  function hammerDrawHandles(g,a,b){
+    g.fillStyle='#a496ff';
+    const xs=[a.x,(a.x+b.x)/2,b.x],ys=[a.y,(a.y+b.y)/2,b.y];
+    for(const x of xs)for(const y of ys)g.fillRect(x-2.5,y-2.5,5,5);
+  }
+  function hammerSnapVal(v){return Math.round(v/hammer.snap)*hammer.snap;}
+  function hammerHit(view,sx,sy){
+    const canvas=hammerCanvas(view);if(!canvas)return null;
+    const vp=hammer.vps[view],cw=canvas.clientWidth,ch=canvas.clientHeight,meta=HAMMER_VIEWS[view];
+    const w2s=(wu,wv)=>({x:cw/2+(wu-vp.cx)*hammer.base*vp.zoom,y:ch/2+meta.vDir*(wv-vp.cy)*hammer.base*vp.zoom});
+    const {platforms,objects}=hammerScene();
+    const hitRect=(r,px,py)=>{const a=w2s(Math.min(r.u0,r.u1),Math.min(r.v0,r.v1)),b=w2s(Math.max(r.u0,r.u1),Math.max(r.v0,r.v1));return px>=a.x-3&&px<=b.x+3&&py>=a.y-3&&py<=b.y+3;};
+    /* handles del seleccionado primero */
+    const selId=selectedGameObjectId||selectedGamePlatformId;
+    const selItem=objects.find(o=>o.id===selId)||platforms.find(p=>p.id===selId);
+    if(selItem){
+      const r=hammerRectOf(selItem,view);
+      const corners={u0:r.u0,u1:r.u1,v0:r.v0,v1:r.v1};
+      const a=w2s(Math.min(r.u0,r.u1),Math.min(r.v0,r.v1)),b=w2s(Math.max(r.u0,r.u1),Math.max(r.v0,r.v1));
+      const midU=(a.x+b.x)/2,midV=(a.y+b.y)/2;
+      const probes=[
+        {x:a.x,y:a.y,gu:'u0',gv:'v0'},{x:midU,y:a.y,gu:'umid',gv:'v0'},{x:b.x,y:a.y,gu:'u1',gv:'v0'},
+        {x:a.x,y:midV,gu:'u0',gv:'vmid'},{x:b.x,y:midV,gu:'u1',gv:'vmid'},
+        {x:a.x,y:b.y,gu:'u0',gv:'v1'},{x:midU,y:b.y,gu:'umid',gv:'v1'},{x:b.x,y:b.y,gu:'u1',gv:'v1'}
+      ];
+      for(const pr of probes)if(Math.abs(sx-pr.x)<=5&&Math.abs(sy-pr.y)<=5)return {item:selItem,kind:selItem.halfHeight!==undefined&&selItem.top_color===undefined&&selItem.height===undefined?'object':'platform',handle:{gu:pr.gu,gv:pr.gv}};
+    }
+    for(const o of [...objects].reverse())if(hitRect(hammerRectOf(o,view),sx,sy))return {item:o,kind:'object',handle:null};
+    for(const p of [...platforms].reverse())if(hitRect(hammerRectOf(p,view),sx,sy))return {item:p,kind:'platform',handle:null};
+    return null;
+  }
+  function hammerSelect(item,kind){
+    if(kind==='platform'){selectedGamePlatformId=item.id;selectedGameObjectId='';gameEntityTab='platforms';}
+    else{selectedGameObjectId=item.id;selectedGamePlatformId='';gameEntityTab='objects';}
+  }
+  function hammerWorldAt(view,canvas,event){
+    const vp=hammer.vps[view],rect=canvas.getBoundingClientRect(),meta=HAMMER_VIEWS[view];
+    const sx=event.clientX-rect.left,sy=event.clientY-rect.top;
+    return {u:vp.cx+(sx-rect.width/2)/(hammer.base*vp.zoom),v:vp.cy+meta.vDir*(sy-rect.height/2)/(hammer.base*vp.zoom),sx,sy};
+  }
+  function renderHammer(){
+    if(activeView!=='game')return;
+    renderHammerViewports();
+    const drawActive=hammer.tool==='draw';
+    $('#hammerToolSelect')?.classList.toggle('active',!drawActive);
+    $('#hammerToolDraw')?.classList.toggle('active',drawActive);
+  }
+  function hammerInit(){
+    for(const view of ['top','front','side']){
+      const canvas=hammerCanvas(view);if(!canvas)continue;
+      canvas.addEventListener('wheel',event=>{
+        if(buildBusy||isPreview)return;event.preventDefault();
+        const vp=hammer.vps[view];
+        const before=hammerWorldAt(view,canvas,event);
+        vp.zoom=clamp(vp.zoom*Math.exp(-event.deltaY*0.0012),0.3,5);
+        const after=hammerWorldAt(view,canvas,event);
+        vp.cx+=before.u-after.u;vp.cy+=before.v-after.v;
+        renderHammerViewports();
+      },{passive:false});
+      canvas.addEventListener('contextmenu',event=>event.preventDefault());
+      canvas.addEventListener('pointerdown',event=>{
+        if(buildBusy||isPreview||!isProjectOpen)return;
+        const vp=hammer.vps[view];
+        if(event.button===1||event.button===2){
+          hammer.drag={mode:'pan',view,startX:event.clientX,startY:event.clientY,cx:vp.cx,cy:vp.cy};
+          event.preventDefault();return;
+        }
+        if(event.button!==0)return;
+        const world=hammerWorldAt(view,canvas,event);
+        if(hammer.tool==='draw'&&view==='top'){
+          const scene=hammerScene();
+          if(scene.platforms.length>=128){toast('El editor admite hasta 128 plataformas.','warn');return;}
+          const u=hammerSnapVal(world.u),v=hammerSnapVal(world.v);
+          hammer.drag={mode:'draw',view,anchor:{u,v},rect:{u0:u,u1:u,v0:v,v1:v}};
+          return;
+        }
+        const hit=hammerHit(view,world.sx,world.sy);
+        if(hit&&hit.handle){
+          snapshot();
+          const r=hammerRectOf(hit.item,view);
+          hammer.drag={mode:'resize',view,item:hit.item,kind:hit.kind,handle:hit.handle,orig:{...r}};
+          return;
+        }
+        if(hit){
+          hammerSelect(hit.item,hit.kind);
+          snapshot();
+          hammer.drag={mode:'move',view,item:hit.item,kind:hit.kind,startU:world.u,startV:world.v,orig:{x:hit.item.x,z:hit.item.z,y:hit.item.y,height:hit.item.height}};
+          renderGameScene();
+          return;
+        }
+        if(selectedGamePlatformId||selectedGameObjectId){selectedGamePlatformId='';selectedGameObjectId='';renderGameScene();}
+      });
+    }
+    document.addEventListener('pointermove',event=>{
+      if(!hammer.drag)return;
+      const view=hammer.drag.view,canvas=hammerCanvas(view);
+      if(!canvas)return;
+      const world=hammerWorldAt(view,canvas,event);
+      const drag=hammer.drag;
+      if(drag.mode==='pan'){
+        const dx=(event.clientX-drag.startX)/(hammer.base*hammer.vps[view].zoom),dy=(event.clientY-drag.startY)/(hammer.base*hammer.vps[view].zoom);
+        const vp=hammer.vps[view],meta=HAMMER_VIEWS[view];
+        vp.cx=drag.cx-dx;vp.cy=drag.cy-meta.vDir*dy;
+        renderHammerViewports();return;
+      }
+      if(drag.mode==='draw'){
+        const u=hammerSnapVal(world.u),v=hammerSnapVal(world.v);
+        drag.rect={u0:Math.min(drag.anchor.u,u),u1:Math.max(drag.anchor.u,u),v0:Math.min(drag.anchor.v,v),v1:Math.max(drag.anchor.v,v)};
+        renderHammerViewports();return;
+      }
+      if(drag.mode==='move'){
+        const du=hammerSnapVal(world.u-drag.startU),dv=hammerSnapVal(world.v-drag.startV);
+        const meta=HAMMER_VIEWS[view];
+        const uKey=meta.u==='x'?'x':'z',vKey=meta.v==='z'?'z':'y';
+        if(drag.kind==='platform'){
+          drag.item.x=hammerSnapVal(drag.orig.x)+(uKey==='x'?du:0);
+          drag.item.z=hammerSnapVal(drag.orig.z)+(uKey==='z'?du:0);
+          if(vKey==='z')drag.item.z=hammerSnapVal(drag.orig.z)+dv;
+          if(vKey==='y')drag.item.height=hammerSnapVal(drag.orig.height)+dv;
+        }else{
+          drag.item.x=hammerSnapVal(drag.orig.x)+(uKey==='x'?du:0);
+          drag.item.z=hammerSnapVal(drag.orig.z)+(uKey==='z'?du:0);
+          drag.item.y=hammerSnapVal(drag.orig.y||0)+(meta.v==='y'?dv:0);
+        }
+        renderHammerViewports();return;
+      }
+      if(drag.mode==='resize'){
+        const {gu,gv}=drag.handle,orig=drag.orig,item=drag.item,meta=HAMMER_VIEWS[view];
+        const targetU=hammerSnapVal(world.u),targetV=hammerSnapVal(world.v);
+        const applyExtent=(edgeKey,fixed,moving,minSize,apply)=>{
+          if(moving-fixed===0)return;
+          const lo=Math.min(fixed,moving),hi=Math.max(fixed,moving);
+          if(hi-lo<minSize)return;
+          apply(lo,hi);
+        };
+        if(drag.kind==='platform'){
+          const uKey=meta.u==='x'?'halfWidth':'halfDepth';
+          if(gu!=='umid'){
+            const fixed=gu==='u0'?orig.u1:orig.u0;
+            applyExtent(gu,fixed,targetU,0.5,(lo,hi)=>{
+              if(uKey==='halfWidth'){item.x=hammerSnapVal((lo+hi)/2);item.halfWidth=Math.max(0.25,(hi-lo)/2);}
+              else{item.z=hammerSnapVal((lo+hi)/2);item.halfDepth=Math.max(0.25,(hi-lo)/2);}
+            });
+          }
+          if(gv!=='vmid'){
+            const fixed=gv==='v0'?orig.v1:orig.v0;
+            applyExtent(gv,fixed,targetV,0.9,(lo,hi)=>{
+              if(meta.v==='z'){item.z=hammerSnapVal((lo+hi)/2);item.halfDepth=Math.max(0.25,(hi-lo)/2);}
+              else{item.height=Math.max(0,hammerSnapVal(hi));}
+            });
+          }
+        }else{
+          if(gu!=='umid'){const span=Math.abs(targetU-(orig.u0+orig.u1)/2);if(span>=0.2){if(meta.u==='x')item.halfWidth=Math.max(0.2,span);else item.halfDepth=Math.max(0.2,span);}}
+          if(gv!=='vmid'&&meta.v==='y'){const span=Math.abs(targetV-(orig.v0+orig.v1)/2);if(span>=0.2)item.halfHeight=Math.max(0.2,span);}
+        }
+        renderHammerViewports();return;
+      }
+    });
+    document.addEventListener('pointerup',event=>{
+      if(!hammer.drag)return;
+      const drag=hammer.drag;
+      if(drag.mode==='draw'&&drag.view==='top'){
+        const r=drag.rect,w=Math.abs(r.u1-r.u0),d=Math.abs(r.v1-r.v0);
+        if(w>=0.5&&d>=0.5){
+          const scene=hammerScene();
+          snapshot();
+          const index=scene.platforms.length;
+          const platform={id:'platform-'+(index+1)+'-'+Date.now().toString(36).slice(-4),label:'Plataforma '+String(index+1).padStart(2,'0'),x:hammerSnapVal((r.u0+r.u1)/2),height:0,z:hammerSnapVal((r.v0+r.v1)/2),halfWidth:Math.max(0.25,w/2),halfDepth:Math.max(0.25,d/2),collisionEnabled:true,checkpoint:false,collectible:false,goal:false,color:'#5A8BFF'};
+          scene.enabled=true;scene.platforms.push(platform);
+          if(!scene.player.spawnPlatformId)scene.player.spawnPlatformId=platform.id;
+          hammerSelect(platform,'platform');
+          changed('Plataforma dibujada en el editor Hammer');
+        }
+      }else if(drag.mode==='move'||drag.mode==='resize'){
+        changed(drag.mode==='move'?'Posición actualizada en el editor Hammer':'Tamaño actualizado en el editor Hammer');
+        if(drag.kind==='platform')renderGameScene();else renderGameScene();
+        return;
+      }
+      hammer.drag=null;renderHammerViewports();
+    });
+    $('#hammerToolSelect')?.addEventListener('click',()=>{hammer.tool='select';renderHammer();});
+    $('#hammerToolDraw')?.addEventListener('click',()=>{hammer.tool='draw';renderHammer();toast('Arrastra en la vista SUPERIOR para dibujar una plataforma.','info');});
+    $('#hammerSnap')?.addEventListener('change',event=>{hammer.snap=Number(event.target.value)||0.5;});
+    $$('[data-hv-reset]').forEach(btn=>btn.addEventListener('click',()=>{const vp=hammer.vps[btn.dataset.hvReset];if(vp){vp.zoom=1;vp.cx=0;vp.cy=btn.dataset.hvReset==='top'?0:2;renderHammerViewports();}}));
+    window.addEventListener('resize',()=>renderHammerViewports());
+  }
+  /* ===== fin 1.1.61 · Hammer ===== */
+
   window.addEventListener('keydown',e=>{
     if(buildBusy){if((e.ctrlKey&&!e.altKey&&['s','z','y'].includes(e.key.toLowerCase()))||e.key==='Delete'||['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.key))e.preventDefault();return;}
     const editingTarget=['INPUT','TEXTAREA','SELECT'].includes(document.activeElement?.tagName)||document.activeElement?.isContentEditable;
@@ -3188,6 +3459,7 @@
     }
   });
   /* ===== 1.1.59 · tema e idioma viven en runtime/ps5hs-ui-theme.js y runtime/ps5hs-i18n.js ===== */
+  hammerInit();
   window.PS5HSI18N.onLanguageChange=()=>{if(isProjectOpen){renderSidePanel();if(activeView==='flow')flowRender();}};
 const shortViewportDockQuery=window.matchMedia?.('(max-height:600px)');
   shortViewportDockQuery?.addEventListener?.('change',syncDockToViewportHeight);
@@ -3197,7 +3469,7 @@ const shortViewportDockQuery=window.matchMedia?.('(max-height:600px)');
   // Browser recovery autosave is independent from explicit project saving.
   setInterval(()=>{if(!isProjectOpen)return;try{localStorage.setItem(STORAGE_KEY,JSON.stringify(project));}catch(error){if(error?.name==='QuotaExceededError')log('El navegador no tiene espacio para el autosalvado; exporta el proyecto para conservarlo.','WARN');}},12000);
   const stageWrap=$('.canvas-stage-wrap');if(stageWrap&&window.ResizeObserver){const stageObserver=new ResizeObserver(()=>{if(fitCanvasToViewport()&&activeView==='design')renderCanvas();if(activeView==='game')drawGameSceneCanvas();});stageObserver.observe(stageWrap);}window.addEventListener('resize',()=>{if(fitCanvasToViewport()&&activeView==='design')renderCanvas();if(activeView==='game')drawGameSceneCanvas();});
-  setProjectOpenState(isProjectOpen);renderAll();applyBackendVisibility();if(!isProjectOpen){$('#dirtyPill').textContent='SIN PROYECTO';$('#canvasState').textContent='No hay proyecto visual abierto. Las carpetas nativas y sus artefactos se conservan.';}log('PS5 Homebrew Studio v1.1.60 inicializado.');log('Editor visual: lienzo adaptable, capas aislables, pantallas múltiples, inspector, flujos, escenas y física 3D AGC, cámara de escena libre, seis mallas primitivas editables, código generado de solo lectura y grafo Vulkan Compute.');log('Backends: SharpProspero C#/NativeAOT, OpenGL/Vulkan UI C++20, Vulkan Compute GLSL/SPIR-V, juegos AGC desde bloques visuales y PS5 Payload SDK C/C++ a ELF.');log('La compilación requiere dependencias reales; solo se informa éxito cuando el proceso termina correctamente y se verifica el artefacto.');
+  setProjectOpenState(isProjectOpen);renderAll();applyBackendVisibility();if(!isProjectOpen){$('#dirtyPill').textContent='SIN PROYECTO';$('#canvasState').textContent='No hay proyecto visual abierto. Las carpetas nativas y sus artefactos se conservan.';}log('PS5 Homebrew Studio v1.1.61 inicializado.');log('Editor visual: lienzo adaptable, capas aislables, pantallas múltiples, inspector, flujos, escenas y física 3D AGC, cámara de escena libre, seis mallas primitivas editables, código generado de solo lectura y grafo Vulkan Compute.');log('Backends: SharpProspero C#/NativeAOT, OpenGL/Vulkan UI C++20, Vulkan Compute GLSL/SPIR-V, juegos AGC desde bloques visuales y PS5 Payload SDK C/C++ a ELF.');log('La compilación requiere dependencias reales; solo se informa éxito cuando el proceso termina correctamente y se verifica el artefacto.');
   window.__PS5HS_BOOT_READY=true;
   refreshStatus();
 })();

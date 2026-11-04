@@ -1,5 +1,12 @@
 # Registro de cambios
 
+## 1.1.61 — 2026-11-04
+
+- Editor de escena estilo Valve Hammer: la vista de Juego 3D pasa a una rejilla 2×2 con tres viewports ortográficos (Superior X/Z, Frontal X/Y, Lateral Z/Y) más la cámara 3D, todos sincronizados sobre el mismo modelo.
+- Rejilla con paso adaptativo, ajuste configurable (0,25/0,5/1/2 m) y ejes de coordenadas; zoom con rueda centrado en el cursor y paneo con botón central/derecho por viewport.
+- Dibujo de plataformas arrastrando un rectángulo en la vista Superior con medidas en vivo; mover arrastrando y redimensionar por bordes y esquinas con ajuste a rejilla, para plataformas (semiejes y altura) y mallas 3D (halfWidth/halfDepth/halfHeight).
+- Selección sincronizada con el inspector y las listas existentes; marcadores de inicio, meta, cristales y checkpoints en las tres vistas; herramientas Seleccionar/Dibujar con atajos S/B.
+
 ## 1.1.60 — 2026-11-04
 
 - Editor visual de flujos estilo Flowcode para payloads: nueva pestaña Flujo con lienzo de bloques arrastrables (Inicio, Fin, Asignar, Decisión, Mientras, Esperar, Leer dato, Notificar, Llamar, Return), cables SVG por puerto (Entonces/Si no/Cuerpo/Al salir), variables tipadas (int, unsigned, float, bool, string) y funciones como flujos con nombre.
