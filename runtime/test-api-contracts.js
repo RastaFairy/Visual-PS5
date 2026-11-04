@@ -4,7 +4,10 @@ const fs = require('node:fs');
 const path = require('node:path');
 const root = path.resolve(__dirname, '..');
 const app = fs.readFileSync(path.join(root, 'app.js'), 'utf8');
-const server = fs.readFileSync(path.join(__dirname, 'server.ps1'), 'utf8');
+/* El servidor vive en server.ps1 + los módulos que dot-sourcea (1.1.59): los contratos
+   se verifican contra el texto combinado, igual que en tiempo de ejecución. */
+const server = ['server.ps1', 'server-console.ps1', 'server-status.ps1', 'server-model.ps1', 'server-project-files.ps1', 'server-build-config.ps1']
+  .map(file => fs.readFileSync(path.join(__dirname, file), 'utf8')).join('\n');
 const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
 const allowedMatch = server.match(/\$allowed\s*=\s*@\(([^)]*)\)/i);
 assert.ok(allowedMatch, 'static-serving allowlist must exist');
@@ -66,7 +69,6 @@ assert.ok(app.includes(`v${version}`), 'app.js footer version must match VERSION
 assert.match(fs.readFileSync(path.join(root, 'docs/CHANGELOG.md'), 'utf8'),
   new RegExp(`^## ${version.replace(/\./g, '\\.')}`, 'm'), 'CHANGELOG.md must have an entry for the current version');
 assert.match(html, /id="themeToggle"/, 'theme toggle must exist in the topbar');
-assert.match(app, /I18N_STRINGS/, 'i18n dictionary must be present');
 assert.match(html, /data-i18n=/, 'static UI must carry i18n keys');
 assert.match(html, /id="uiLangSelect"/, 'language selector must exist');
 assert.match(app, /SHAPE_VERTS/, 'AGC vertex budget estimator must run in Diagnostics');

@@ -3,7 +3,9 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const root = path.resolve(__dirname, '..');
-const server = fs.readFileSync(path.join(__dirname, 'server.ps1'), 'utf8');
+/* El servidor vive en server.ps1 + los módulos que dot-sourcea (1.1.59). */
+const server = ['server.ps1', 'server-console.ps1', 'server-status.ps1', 'server-model.ps1', 'server-project-files.ps1', 'server-build-config.ps1']
+  .map(file => fs.readFileSync(path.join(__dirname, file), 'utf8')).join('\n');
 const policy = fs.readFileSync(path.join(__dirname, 'native-modification-policy.ps1'), 'utf8');
 const policyJs = fs.readFileSync(path.join(__dirname, 'native-modification-policy.js'), 'utf8');
 const app = fs.readFileSync(path.join(root, 'app.js'), 'utf8');
