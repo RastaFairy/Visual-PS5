@@ -1,5 +1,10 @@
 # Registro de cambios
 
+## 1.1.62 — 2026-11-04
+
+- Editor Flowcode reelaborado: paleta de bloques que se arrastra al lienzo (fantasma de arrastre y suelta donde quieras), puertos de entrada visibles en cada bloque, cables solo arrastrando entre puertos (fuera desplegables) y chips de desconexión en el inspector.
+- Editor Hammer ampliado: el panel lateral se oculta en la vista de Juego 3D para dar más aire, rejilla con línea mayor cada cinco y reglas de medida en los bordes con coordenadas en vivo, celda ajustada resaltada bajo el cursor y asa central ⠿ para redimensionar los cuatro viewports.
+
 ## 1.1.61 — 2026-11-04
 
 - Editor de escena estilo Valve Hammer: la vista de Juego 3D pasa a una rejilla 2×2 con tres viewports ortográficos (Superior X/Z, Frontal X/Y, Lateral Z/Y) más la cámara 3D, todos sincronizados sobre el mismo modelo.
