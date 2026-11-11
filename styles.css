@@ -578,8 +578,6 @@ html[data-theme='light'] .hammer-viewport{background:#f2f4fa}
 .flow-block .flow-inport.target{border-color:var(--green);background:rgba(103,243,232,.3)}
 .flow-wire-chip{display:flex;align-items:center;gap:6px;font:9.5px Consolas,monospace;color:var(--muted);background:var(--surface2);border-radius:5px;padding:3px 6px;margin-top:4px}
 .flow-wire-chip button{background:transparent;border:0;color:var(--red);cursor:pointer;margin-left:auto}
-.workspace[data-editor-view='game']{grid-template-columns:61px 0px minmax(360px,1fr) 278px}
-.workspace[data-editor-view='game'] .left-panel{display:none}
 .hammer-grid{position:relative}
 #hammerCross{position:absolute;width:18px;height:18px;margin:-9px 0 0 -9px;border-radius:50%;background:var(--accent);border:2px solid var(--surface);cursor:move;z-index:5;box-shadow:0 0 8px rgba(127,102,255,.6)}
 .hammer-viewport .hv-ruler{color:var(--muted);font:8.5px Consolas,monospace}

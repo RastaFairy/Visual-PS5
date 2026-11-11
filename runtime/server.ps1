@@ -2887,6 +2887,32 @@ typedef struct {
   $collidableObjectCount=@($objects|Where-Object{$_.collisionEnabled -eq $true}).Count
   return @{enabled=$true;platforms=$platforms.Count;objects=$objectCount;collidableObjects=$collidableObjectCount;collectibles=$collectibleIndex;lights=$lightCount;surfaceTexture=($surfaceTextureEnabled -eq 1);goalIndex=$goalIndices[0];spawnIndex=$spawnIndex;presentation=@{explorer=($explorerEnabled -eq 1);decor=($decorEnabled -eq 1);particles=($particlesEnabled -eq 1);menuFrame=($menuFrameEnabled -eq 1)}}
 }
+function Ensure-PS5HSProjectLibc([string]$ProjectRoot,[string]$Distribution) {
+  # libc.prx por proyecto, generada solo cuando se procede a compilar, al estilo de los
+  # runtimes respaldados: el boilerplate vendorizado reproduce el runtime (doble build
+  # byte-idéntico + SHA-256 + firma) y el resultado se cachea en runtime/ del proyecto.
+  $libcDir = Join-Path $ProjectRoot 'runtime'
+  $libcPath = Join-Path $libcDir 'libc.prx'
+  if ((Test-Path -LiteralPath $libcPath -PathType Leaf) -and (Get-Item -LiteralPath $libcPath).Length -ge 65536) {
+    return @{ ok = $true; path = $libcPath; message = 'libc.prx reutilizada de este proyecto.' }
+  }
+  $boilerplate = Join-Path $script:Toolchains 'ps5-native-app-boilerplate'
+  $rebuild = Join-Path $boilerplate 'tools/rebuild-libc.sh'
+  if (!(Test-Path -LiteralPath $rebuild -PathType Leaf)) {
+    return @{ ok = $false; message = 'Falta el reproductor de libc del boilerplate vendorizado.'; output = $rebuild }
+  }
+  $wsl = CmdInfo 'wsl.exe'
+  if (!$wsl.ok) { return @{ ok = $false; message = 'WSL no disponible para reproducir la libc.'; output = '' } }
+  $wslRoot = ConvertToWslPath $boilerplate
+  $wslOut = ConvertToWslPath $libcDir
+  $cmd = 'mkdir -p ' + (BashQuote $wslOut) + ' && cd ' + (BashQuote $wslRoot) + ' && bash tools/rebuild-libc.sh && cp runtime/libc.prx ' + (BashQuote $wslOut) + '/libc.prx'
+  $output = @(& $wsl.path -d $Distribution --exec bash -lc $cmd 2>&1 | ForEach-Object { $_.ToString() })
+  if ($LASTEXITCODE -ne 0 -or !(Test-Path -LiteralPath $libcPath -PathType Leaf) -or (Get-Item -LiteralPath $libcPath).Length -lt 65536) {
+    return @{ ok = $false; message = 'La reproducción de libc.prx falló en WSL.'; output = ($output -join [Environment]::NewLine) }
+  }
+  return @{ ok = $true; path = $libcPath; message = 'libc.prx generada por proyecto (runtime respaldado reproducido).' }
+}
+
 function BuildPS5LinkProject($P,[string]$Code,$Policy=$null,[string]$LibcPath='') {
   $backend = 'ps5link'
   $requestedAudioId = [string]$P.gamePresentation.audioAssetId
@@ -2944,9 +2970,13 @@ function BuildPS5LinkProject($P,[string]$Code,$Policy=$null,[string]$LibcPath=''
   if (@($P.components).Count -eq 0) { return @{ok=$false;message='El proyecto ps5link necesita bloques visuales.';output='Añade componentes desde Diseño para que el título integre la interfaz generada en el IDE.';exitCode=2} }
   $titleId = ([string]$P.settings.titleId).Trim().ToUpperInvariant()
   if (!(TestPS5HSTitleId $titleId)) { return @{ok=$false;message='TITLE_ID no válido.';output='Usa un identificador PPSA seguido de cinco cifras.';exitCode=2} }
-  if ([string]::IsNullOrWhiteSpace($LibcPath)) { return @{ok=$false;message='Falta una libc.prx firmada y compatible con el firmware de la consola.';output='Selecciona la copia local correspondiente a tu firmware. El IDE solo la copia al título de salida.';exitCode=2} }
-  try { $LibcPath = AssertPS5HSNativePathNoReparsePoints -Path $LibcPath } catch { return @{ok=$false;message='La ruta de libc.prx no es válida.';output=$_.Exception.Message;exitCode=2} }
-  if (!(Test-Path -LiteralPath $LibcPath -PathType Leaf) -or (Get-Item -LiteralPath $LibcPath).Length -lt 65536) { return @{ok=$false;message='No se encontró una libc.prx válida en la ruta indicada.';output=$LibcPath;exitCode=2} }
+  # libc.prx: con ruta manual se valida aquí; sin ruta se genera por proyecto al compilar
+  # (reproducción del runtime respaldado: doble build idéntico + SHA-256 + firma).
+  $libcManual = -not [string]::IsNullOrWhiteSpace($LibcPath)
+  if ($libcManual) {
+    try { $LibcPath = AssertPS5HSNativePathNoReparsePoints -Path $LibcPath } catch { return @{ok=$false;message='La ruta de libc.prx no es válida.';output=$_.Exception.Message;exitCode=2} }
+    if (!(Test-Path -LiteralPath $LibcPath -PathType Leaf) -or (Get-Item -LiteralPath $LibcPath).Length -lt 65536) { return @{ok=$false;message='No se encontró una libc.prx válida en la ruta indicada.';output=$LibcPath;exitCode=2} }
+  }
   $iconAssets = @($P.assets | Where-Object { ([string]$_.fileName -match '(?i)\.png$') -and [string]$_.dataUrl -match '^data:image/png;base64,' })
   $requestedIconId = [string]$P.gamePresentation.iconAssetId
   $iconAsset = if ($requestedIconId) { @($iconAssets | Where-Object { [string]$_.id -ceq $requestedIconId } | Select-Object -First 1) } else { @($iconAssets | Select-Object -First 1) }
@@ -2999,6 +3029,11 @@ function BuildPS5LinkProject($P,[string]$Code,$Policy=$null,[string]$LibcPath=''
   $iconHeight = if ($iconBytes.Length -ge 24) { [byte[]]@($iconBytes[23],$iconBytes[22],$iconBytes[21],$iconBytes[20]) } else { [byte[]]@(0,0,0,0) }
   if ($iconBytes.Length -lt 24 -or $iconBytes[0] -ne 137 -or [Text.Encoding]::ASCII.GetString($iconBytes,1,3) -cne 'PNG' -or [BitConverter]::ToUInt32($iconWidth,0) -ne 512 -or [BitConverter]::ToUInt32($iconHeight,0) -ne 512) { return @{ok=$false;message='La portada debe ser un PNG de 512 × 512 píxeles.';output=$iconPath;exitCode=2} }
   Copy-Item -LiteralPath $iconPath -Destination (Join-Path $titleFolder 'sce_sys/icon0.png') -Force
+  if (!$libcManual) {
+    $libcEnsure = Ensure-PS5HSProjectLibc $projectRoot $distribution
+    if (!$libcEnsure.ok) { return @{ok=$false;message=$libcEnsure.message;output=$libcEnsure.output;exitCode=2} }
+    $LibcPath = $libcEnsure.path
+  }
   Copy-Item -LiteralPath $LibcPath -Destination (Join-Path $titleFolder 'sce_module/libc.prx') -Force
   $contentTail = (($slug -replace '[^A-Za-z0-9]','').ToUpperInvariant() + '0000000000000000').Substring(0,16)
   $param = [ordered]@{
