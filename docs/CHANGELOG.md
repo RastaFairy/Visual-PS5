@@ -1,5 +1,19 @@
 # Registro de cambios
 
+## 1.1.64 — 2026-11-11
+
+- Corrige 17 bugs acumulados de iteraciones rápidas (detectados por auditoría con agentes):
+  - CRÍTICO: `FLOW_IDENT_RE` y `flowEnsureVar` eliminados accidentalmente por el swap del módulo Hammer — la edición de variables del Flowcode nunca guardaba.
+  - CRÍTICO: El generador leía `block.cond` pero el inspector guardaba `varName/comparison/value` — todo if/while generaba `if (0)`.
+  - CRÍTICO: El gesto resize escribía `height=NaN` — el proyecto dejaba de poder guardarse.
+  - CRÍTICO: Los binds de `while` se descartaban (el dispatcher perdía el `{binds}` del return).
+  - CRÍTICO: Los campos de delay/read/notify/call/return no tenían binds — 5 de 9 tipos de bloque inconfigurables.
+  - server.ps1: restaurada la selección de icono por `gamePresentation.iconAssetId` (el BYPASS-TEST tomaba siempre el primer asset); eliminado `Write-Host "DEBUG-ICON"` y el prefijo `ICON-DBG` del error.
+  - "Nebula Steps" eliminado de mensajes de producción.
+  - `#modalTitle` añadido al modal (el título del build nunca se actualizaba).
+  - Hammer: marcador de inicio en ejes correctos, checkpoint dibujado en las 3 vistas, splitter con listener único y init al entrar la vista.
+  - Flowcode: `h4` del inspector preservado, bind prematuro eliminado, `flowAddBlock` muerto eliminado.
+
 ## 1.1.62 — 2026-11-04
 
 - Editor Flowcode reelaborado: paleta de bloques que se arrastra al lienzo (fantasma de arrastre y suelta donde quieras), puertos de entrada visibles en cada bloque, cables solo arrastrando entre puertos (fuera desplegables) y chips de desconexión en el inspector.

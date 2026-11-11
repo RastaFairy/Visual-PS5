@@ -197,7 +197,7 @@
   }
 
   function setCompactGamePane(pane){if(!['scene','properties'].includes(pane))return;const view=$('#gameView');if(!view)return;view.dataset.compactPane=pane;$$('.game-compact-pane-button').forEach(button=>{const active=button.dataset.gamePane===pane;button.classList.toggle('active',active);button.setAttribute('aria-pressed',String(active));});if(pane==='scene'&&activeView==='game')drawGameSceneCanvas();}
-  function setActiveView(view){const previousView=activeView;activeView=view;const workspace=$('.workspace');workspace.dataset.editorView=view;workspace.dataset.activePanel=activePanel;workspace.classList.toggle('game-editor-open',view==='game');$$('.editor-tab').forEach(el=>el.classList.toggle('active',el.dataset.view===view));['design','structure','logic','game','compute','flow','code','diagnostics','console'].forEach(v=>$('#'+v+'View').classList.toggle('hidden',v!==view));if(previousView!==view&&activePanel==='components')renderSidePanel();if(view==='design'&&previousView!=='design')renderCanvas();if(view==='structure')renderStructure();if(view==='logic')renderFlows();if(view==='game'){renderGameScene();if($('#gameView').dataset.compactPane==='scene')drawGameSceneCanvas();}if(view==='compute')renderComputeWorkspace();if(view==='flow')renderFlowView();if(view==='code')renderActiveEditorTab();if(view==='diagnostics')renderDiagnostics();if(view==='console')consoleViewEntered();}
+  function setActiveView(view){const previousView=activeView;activeView=view;const workspace=$('.workspace');workspace.dataset.editorView=view;workspace.dataset.activePanel=activePanel;workspace.classList.toggle('game-editor-open',view==='game');$$('.editor-tab').forEach(el=>el.classList.toggle('active',el.dataset.view===view));['design','structure','logic','game','compute','flow','code','diagnostics','console'].forEach(v=>$('#'+v+'View').classList.toggle('hidden',v!==view));if(previousView!==view&&activePanel==='components')renderSidePanel();if(view==='design'&&previousView!=='design')renderCanvas();if(view==='structure')renderStructure();if(view==='logic')renderFlows();if(view==='game'){renderGameScene();renderHammer();if($('#gameView').dataset.compactPane==='scene')drawGameSceneCanvas();}if(view==='compute')renderComputeWorkspace();if(view==='flow')renderFlowView();if(view==='code')renderActiveEditorTab();if(view==='diagnostics')renderDiagnostics();if(view==='console')consoleViewEntered();}
   function setActivePanel(panel){activePanel=panel;$('.workspace').dataset.activePanel=panel;$$('.rail-item').forEach(el=>el.classList.toggle('active',el.dataset.panel===panel));renderSidePanel();}
   function setRightPane(pane){activeRight=pane;$$('.right-tab').forEach(el=>el.classList.toggle('active',el.dataset.right===pane));$('#inspectorPane').classList.toggle('hidden',pane!=='inspector');$('#hierarchyPane').classList.toggle('hidden',pane!=='hierarchy');if(pane==='hierarchy')renderHierarchy();else renderInspector();}
   function setDock(dock){activeDock=dock;$$('.dock-tab').forEach(el=>el.classList.toggle('active',el.dataset.dock===dock));renderDock();}
@@ -1900,7 +1900,7 @@
   let statusRequestRevision=0;
   async function refreshStatus(){const requestRevision=++statusRequestRevision;try{const nextStatus=await api('status');if(requestRevision!==statusRequestRevision)return;sdkStatus=nextStatus;renderSdkSideStatus();if(activePanel==='templates')renderSourceCatalog($('#sourceSearch')?.value||'', $('.source-filter.active')?.dataset.sourceFilter||'all');else await renderNativeProjects();if(requestRevision!==statusRequestRevision)return;scheduleAnalysis();renderDock();log('Entorno actualizado.','INFO');}catch(e){if(requestRevision===statusRequestRevision)log('No se pudo consultar el estado del entorno: '+e.message,'WARN');}}
 
-  function openModal(title,body,actions=[]){modalRevision++;const layer=$('#modalLayer');layer.innerHTML=`<div class="modal"><div class="modal-head"><strong>${esc(title)}</strong><button id="modalClose" aria-label="Cerrar">×</button></div><div class="modal-body">${body}</div><div class="modal-actions" id="modalActions"></div></div>`;layer.classList.remove('hidden');$('#modalClose').onclick=closeModal;actions.forEach(a=>{const b=document.createElement('button');b.className='btn '+(a.class||'ghost');b.textContent=a.text;b.onclick=a.action;$('#modalActions').append(b);});layer.onclick=e=>{if(e.target===layer)closeModal();};}
+  function openModal(title,body,actions=[]){modalRevision++;const layer=$('#modalLayer');layer.innerHTML=`<div class="modal"><div class="modal-head"><strong id="modalTitle">${esc(title)}</strong><button id="modalClose" aria-label="Cerrar">×</button></div><div class="modal-body">${body}</div><div class="modal-actions" id="modalActions"></div></div>`;layer.classList.remove('hidden');$('#modalClose').onclick=closeModal;actions.forEach(a=>{const b=document.createElement('button');b.className='btn '+(a.class||'ghost');b.textContent=a.text;b.onclick=a.action;$('#modalActions').append(b);});layer.onclick=e=>{if(e.target===layer)closeModal();};}
   function closeModal(){modalRevision++;$('#modalLayer').classList.add('hidden');$('#modalLayer').innerHTML='';}
   function normalizeProjectModel(value,sourceName){
     const source=value&&typeof value==='object'&&!Array.isArray(value)&&!value.format&&Array.isArray(value.components)?{...value,format:'ps5vproj',formatVersion:1}:value;
@@ -2238,7 +2238,7 @@
         const output=$('#ps5LinkBuildOutput'),buttons=$$('#modalActions button');buttons.forEach(button=>button.disabled=true);
         buildBusy=true;syncProjectControls();$('#buildBtn').textContent='⟳ Compilando AGC';setDock('output');let outcome='error';
         try{
-          project.name=$('#projectName').value.trim()||project.name||'Nebula Steps';project.backend='ps5link';project.settings=project.settings||{};project.settings.titleId=titleId;
+          project.name=$('#projectName').value.trim()||project.name||'MiHomebrew';project.backend='ps5link';project.settings=project.settings||{};project.settings.titleId=titleId;
           const data=projectPayload();data.name=project.name;data.backend='ps5link';data.manualCode=!visualMode;data.customCode=visualMode?'':code;data.settings=data.settings||{};data.settings.titleId=titleId;data.settings.buildProfile=String($('#ps5LinkBuildProfile')?.value||'release')==='debug'?'debug':'release';project.settings.buildProfile=data.settings.buildProfile;
           if(output)output.textContent='Permisos validados. Guardando bloques, flujos, código y recursos…';
           buildLog(traceId,visualMode
@@ -3055,7 +3055,7 @@
     }[b.kind]||(()=>false))();
     if(renderResult&&renderResult.binds)flowBindFields(b,renderResult.binds,box);
     fields.push('<button id="fi-delete" class="btn ghost small" style="margin-top:8px">✕ Eliminar bloque</button>');
-    box.innerHTML=fields.join('');
+    box.innerHTML='<h4>'+esc(meta.label)+'</h4>'+fields.join('');
 
 
     box.querySelectorAll('[data-flow-unwire]').forEach(btn=>btn.addEventListener('click',()=>{snapshot();b[btn.dataset.flowUnwire]='';changed('Conexión eliminada');flowRender();}));
@@ -3358,8 +3358,9 @@
     }
     for(const p of platforms){
       if(p.goal){const r=hammerRectOf(p,view),c=w2s((r.u0+r.u1)/2,(r.v0+r.v1)/2);g.strokeStyle='#FFC76A';g.lineWidth=2;g.beginPath();g.arc(c.x,c.y,7,0,Math.PI*2);g.stroke();}
+      if(p.checkpoint){const r=hammerRectOf(p,view);const c=w2s((r.u0+r.u1)/2,Math.min(r.v0,r.v1));g.strokeStyle='#7ee2a8';g.lineWidth=1.5;g.strokeRect(c.x-5,c.y-5,10,10);}
       if(p.collectible){const r=hammerRectOf(p,view),c=w2s((r.u0+r.u1)/2,Math.min(r.v0,r.v1));g.fillStyle='#67F3E8';g.beginPath();g.moveTo(c.x,c.y-5);g.lineTo(c.x+4,c.y);g.lineTo(c.x,c.y+5);g.lineTo(c.x-4,c.y);g.fill();}
-      if(player.spawnPlatformId===p.id){const c=w2s(p.x,p.height);g.fillStyle='#7ee2a8';g.beginPath();g.moveTo(c.x,c.y-9);g.lineTo(c.x+6,c.y+3);g.lineTo(c.x-6,c.y+3);g.fill();}
+      if(player.spawnPlatformId===p.id){const rc=hammerRectOf(p,view);const c=w2s((rc.u0+rc.u1)/2,(rc.v0+rc.v1)/2);g.fillStyle='#7ee2a8';g.beginPath();g.moveTo(c.x,c.y-9);g.lineTo(c.x+6,c.y+3);g.lineTo(c.x-6,c.y+3);g.fill();}
     }
     if(hammer.gesture&&hammer.gesture.renderPreview)hammer.gesture.renderPreview(g,w2s,cw,ch,view);
     function stepVisible(majorEvery,px){return px>14;}
@@ -3442,7 +3443,7 @@
               else{item.z=Math.round((lo+hi)/2*10)/10;item.halfDepth=Math.max(0.25,(hi-lo)/2);}
             }else{
               const span=Math.abs(targetU-(orig.u0+orig.u1)/2);
-              if(span>=0.2){if(meta.u==='x')item.halfWidth=Math.max(0.2,span);else item.halfDepth=Math.max(0.2,span);}
+              if(span>=0.2){if(meta.u==='x')item.halfWidth=Math.max(0.2,Number.isFinite(span)?span:orig.halfWidth);else item.halfDepth=Math.max(0.2,Number.isFinite(span)?span:orig.halfDepth);}
             }
           }
         }
@@ -3451,10 +3452,10 @@
           const lo=Math.min(fixed,targetV),hi=Math.max(fixed,targetV);
           if(kind==='platform'){
             if(meta.v==='z'){if(hi-lo>=0.5){item.z=Math.round((lo+hi)/2*10)/10;item.halfDepth=Math.max(0.25,(hi-lo)/2);}}
-            else{item.height=Math.max(0,Math.round(hi*10)/10);}
+            else{item.height=Math.max(0,Number.isFinite(Math.round(hi*10)/10)?Math.round(hi*10)/10:orig.height);}
           }else if(meta.v==='y'){
             const span=Math.abs(targetV-(orig.v0+orig.v1)/2);
-            if(span>=0.2)item.halfHeight=Math.max(0.2,span);
+            item.halfHeight=Math.max(0.2,Number.isFinite(span)?span:orig.halfHeight);
           }
         }
       },
@@ -3611,7 +3612,8 @@
     if(cross){cross.style.left=(grid.clientWidth*hammer.colFrac)+'px';cross.style.top=(grid.clientHeight*hammer.rowFrac)+'px';}
   }
   function hammerInitSplit(){
-    const cross=document.querySelector('#hammerCross');if(!cross)return;
+    const cross=document.querySelector('#hammerCross');if(!cross||cross.dataset.splitBound)return;
+    cross.dataset.splitBound='1';
     cross.addEventListener('pointerdown',event=>{
       event.preventDefault();
       const grid=document.querySelector('.hammer-grid');
@@ -3657,7 +3659,7 @@ const shortViewportDockQuery=window.matchMedia?.('(max-height:600px)');
   // Browser recovery autosave is independent from explicit project saving.
   setInterval(()=>{if(!isProjectOpen)return;try{localStorage.setItem(STORAGE_KEY,JSON.stringify(project));}catch(error){if(error?.name==='QuotaExceededError')log('El navegador no tiene espacio para el autosalvado; exporta el proyecto para conservarlo.','WARN');}},12000);
   const stageWrap=$('.canvas-stage-wrap');if(stageWrap&&window.ResizeObserver){const stageObserver=new ResizeObserver(()=>{if(fitCanvasToViewport()&&activeView==='design')renderCanvas();if(activeView==='game')drawGameSceneCanvas();});stageObserver.observe(stageWrap);}window.addEventListener('resize',()=>{if(fitCanvasToViewport()&&activeView==='design')renderCanvas();if(activeView==='game')drawGameSceneCanvas();});
-  setProjectOpenState(isProjectOpen);renderAll();applyBackendVisibility();if(!isProjectOpen){$('#dirtyPill').textContent='SIN PROYECTO';$('#canvasState').textContent='No hay proyecto visual abierto. Las carpetas nativas y sus artefactos se conservan.';}log('PS5 Homebrew Studio v1.1.62 inicializado.');log('Editor visual: lienzo adaptable, capas aislables, pantallas múltiples, inspector, flujos, escenas y física 3D AGC, cámara de escena libre, seis mallas primitivas editables, código generado de solo lectura y grafo Vulkan Compute.');log('Backends: SharpProspero C#/NativeAOT, OpenGL/Vulkan UI C++20, Vulkan Compute GLSL/SPIR-V, juegos AGC desde bloques visuales y PS5 Payload SDK C/C++ a ELF.');log('La compilación requiere dependencias reales; solo se informa éxito cuando el proceso termina correctamente y se verifica el artefacto.');
+  setProjectOpenState(isProjectOpen);renderAll();applyBackendVisibility();if(!isProjectOpen){$('#dirtyPill').textContent='SIN PROYECTO';$('#canvasState').textContent='No hay proyecto visual abierto. Las carpetas nativas y sus artefactos se conservan.';}log('PS5 Homebrew Studio v1.1.64 inicializado.');log('Editor visual: lienzo adaptable, capas aislables, pantallas múltiples, inspector, flujos, escenas y física 3D AGC, cámara de escena libre, seis mallas primitivas editables, código generado de solo lectura y grafo Vulkan Compute.');log('Backends: SharpProspero C#/NativeAOT, OpenGL/Vulkan UI C++20, Vulkan Compute GLSL/SPIR-V, juegos AGC desde bloques visuales y PS5 Payload SDK C/C++ a ELF.');log('La compilación requiere dependencias reales; solo se informa éxito cuando el proceso termina correctamente y se verifica el artefacto.');
   window.__PS5HS_BOOT_READY=true;
   refreshStatus();
 })();
