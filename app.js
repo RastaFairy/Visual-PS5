@@ -2900,12 +2900,13 @@
   $('#codeReplaceAll').addEventListener('click',codeReplaceAll);
   window.addEventListener('beforeunload',e=>{if((isProjectOpen&&isDirty)||editorTabs.some(t=>t.dirty)){e.preventDefault();e.returnValue='';}});
   /* ===== 1.1.60 · Editor visual de flujos (Flowcode) para payloads ===== */
+  const FLOW_OPS={assign:['=','+','-','*','/'],compare:['>','<','==','!=','>=','<=']};
   const FLOW_KINDS={
     start:{label:'▶ Inicio',summary:()=>'Punto de entrada'},
     end:{label:'■ Fin',summary:()=>'Termina el flujo'},
-    set:{label:'＝ Asignar',summary:b=>String(b.code||'…')},
-    if:{label:'？ Decisión',summary:b=>'if ('+String(b.cond||'…')+')'},
-    while:{label:'↻ Mientras',summary:b=>'while ('+String(b.cond||'…')+')'},
+    set:{label:'＝ Asignar',summary:b=>(b.varName||'…')+' '+(b.operation||'=')+' '+(b.value||'…')},
+    if:{label:'？ Decisión',summary:b=>'¿'+(b.varName||'…')+' '+(b.comparison||'?')+' '+(b.value||'…')+'?'},
+    while:{label:'↻ Mientras',summary:b=>'mientras '+(b.varName||'…')+' '+(b.comparison||'?')+' '+(b.value||'…')},
     delay:{label:'⏱ Esperar',summary:b=>String(b.ms||'0')+' ms'},
     read:{label:'⇩ Leer dato',summary:b=>String(b.var||'…')+' ← '+String(b.source||'…')},
     notify:{label:'💬 Notificar',summary:b=>'«'+String(b.text||'…')+'»'},
@@ -2992,6 +2993,44 @@
     const flows=[...new Set(model.blocks.filter(b=>b.kind==='start').map(b=>String(b.flow||'main')))];
     fns.innerHTML=flows.map(f=>`<div class="flow-fn-row"><span>${f==='main'?'★ main (entrada)':esc(f)+'()'}</span></div>`).join('')||'<div class="empty-screen">Sin flujos.</div>';
   }
+
+  function flowVarSelect(id,current){
+    const vars=flowModel().vars;
+    const opts=vars.map(v=>'<option value="'+esc(v.name)+'"'+(v.name===current?' selected':'')+'>'+esc(v.name)+' ('+v.type+')</option>').join('');
+    return '<select id="'+id+'" class="compact-select"><option value="">—</option>'+opts+'<option value="__new__">＋ nueva…</option></select><input id="'+id+'_new" class="compact-select hidden" placeholder="nombre" spellcheck="false" maxlength="48">';
+  }
+  function flowBindFields(b,binds,box){
+    if(!binds)return;
+    for(const bind of binds){
+      const el=box.querySelector('#'+bind.id);
+      if(!el)continue;
+      const apply=()=>{
+        let v=el.value.trim();
+        if(!v&&bind.prop!=='varName')return;
+        if(bind.id.includes('varName')){
+          if(v==='__new__'){return;}
+          if(v&&!FLOW_IDENT_RE.test(v)){toast('Nombre de variable inválido.','warn');return;}
+          if(v&&!flowModel().vars.some(v2=>v2.name===v)){flowEnsureVar(v,'int');toast('Variable creada: '+v);}
+        }
+        b[bind.prop]=v;changed('Programa visual editado');flowRefreshBlockText(b);flowRenderWires();
+      };
+      el.addEventListener(bind.event||'input',apply);
+    }
+    box.querySelectorAll('select[id*="varName"]').forEach(sel=>{
+      sel.addEventListener('change',()=>{
+        if(sel.value!=='__new__')return;
+        const input=box.querySelector('#'+sel.id+'_new');
+        if(!input)return;
+        sel.classList.add('hidden');input.classList.remove('hidden');input.focus();
+        input.addEventListener('change',()=>{
+          const name=input.value.trim();
+          if(name&&FLOW_IDENT_RE.test(name)){flowEnsureVar(name,'int');b.varName=name;changed('Variable creada: '+name);flowRefreshBlockText(b);flowRenderWires();}
+          else{toast('Nombre de variable inválido.','warn');}
+        });
+      });
+    });
+  }
+
   function flowRenderInspector(){
     const box=$('#flowInspector');if(!box)return;
     const b=flowBlockById(flowSelectionId);
@@ -3001,10 +3040,11 @@
     const field=(id,label,type='text',value='',placeholder='')=>fields.push(`<label>${label}<input id="${id}" type="${type}" value="${esc(value)}" placeholder="${esc(placeholder)}" spellcheck="false"></label>`);
     const wireChip=(field,label)=>{const target=String(b[field]||'');const t=flowBlockById(target);
       fields.push(`<div class="flow-wire-chip"><span>${label} → ${t?esc((t.code||t.cond||t.text||t.fn||t.ms||FLOW_KINDS[t.kind].label).slice(0,24)):'— sin conectar —'}</span>${t?`<button type="button" title="Desconectar" data-flow-unwire="${field}">✕</button>`:''}</div>`);};
+    let renderResult=null;
     box.innerHTML=`<h4>${esc(meta.label)}</h4>`+( {
-      set:()=>{field('fi-code','Sentencia C (sin el ; final)','text',b.code||'','contador = contador + 1');return true;},
-      if:()=>{field('fi-cond','Condición C (se evalúa verdadera/falsa)','text',b.cond||'','contador < 10');wireChip('then','Entonces');wireChip('else','Si no');return true;},
-      while:()=>{field('fi-cond','Condición del bucle','text',b.cond||'','vidas > 0');wireChip('body','Cuerpo');wireChip('exit','Al salir');return true;},
+      set:()=>{fields.push('<label>Variable</label>'+flowVarSelect('fi-varName',b.varName||''));fields.push('<label>Operación</label><select id="fi-op" class="compact-select">'+FLOW_OPS.assign.map(op=>'<option value="'+op+'"'+((b.operation||'=')===op?' selected':'')+'>'+op+'</option>').join('')+'</select>');fields.push('<label>Valor</label><input id="fi-val" type="text" value="'+esc(b.value||'0')+'" spellcheck="false">');renderResult={binds:[{id:'fi-varName',prop:'varName',autoVar:true},{id:'fi-op',prop:'operation',event:'change'},{id:'fi-val',prop:'value'}]};},
+      if:()=>{fields.push('<label>Variable</label>'+flowVarSelect('fi-varName',b.varName||''));fields.push('<label>Comparación</label><select id="fi-cmp" class="compact-select">'+FLOW_OPS.compare.map(c=>'<option value="'+c+'"'+((b.comparison||'>')===c?' selected':'')+'>'+c+'</option>').join('')+'</select>');fields.push('<label>Valor</label><input id="fi-val" type="text" value="'+esc(b.value||'0')+'" spellcheck="false">');wireChip('then','Entonces');wireChip('else','Si no');renderResult={binds:[{id:'fi-varName',prop:'varName',autoVar:true},{id:'fi-cmp',prop:'comparison',event:'change'},{id:'fi-val',prop:'value'}]};},
+      while:()=>{fields.push('<label>Variable</label>'+flowVarSelect('fi-varName',b.varName||''));fields.push('<label>Comparación</label><select id="fi-cmp" class="compact-select">'+FLOW_OPS.compare.map(c=>'<option value="'+c+'"'+((b.comparison||'>')===c?' selected':'')+'>'+c+'</option>').join('')+'</select>');fields.push('<label>Valor</label><input id="fi-val" type="text" value="'+esc(b.value||'0')+'" spellcheck="false">');wireChip('body','Cuerpo');wireChip('exit','Al salir');return {binds:[{id:'fi-varName',prop:'varName',autoVar:true},{id:'fi-cmp',prop:'comparison',event:'change'},{id:'fi-val',prop:'value'}]};},
       delay:()=>{field('fi-ms','Milisegundos de espera','text',b.ms||'500','500');return true;},
       read:()=>{field('fi-var','Guardar en variable','text',b.var||'','t0');fields.push(`<label>Origen del dato<select id="fi-src"><option value="time_ms"${b.source==='time_ms'?' selected':''}>Reloj — milisegundos</option><option value="time_us"${b.source==='time_us'?' selected':''}>Reloj — microsegundos</option><option value="rand"${b.source==='rand'?' selected':''}>Número aleatorio</option></select></label>`);return true;},
       notify:()=>{field('fi-text','Texto de la notificación','text',b.text||'','¡Hola PS5!');return true;},
@@ -3013,18 +3053,13 @@
       start:()=>{fields.push('<div class="section-note">Entrada del flujo. Conecta su puerto derecho al primer paso.</div>');return false;},
       end:()=>{fields.push('<div class="section-note">Fin del flujo. En main equivale a return 0.</div>');return false;}
     }[b.kind]||(()=>false))();
+    if(renderResult&&renderResult.binds)flowBindFields(b,renderResult.binds,box);
     fields.push('<button id="fi-delete" class="btn ghost small" style="margin-top:8px">✕ Eliminar bloque</button>');
     box.innerHTML=fields.join('');
-    const bind=(id,prop,isNum)=>{const el=$('#'+id);if(!el)return;el.addEventListener('input',()=>{b[prop]=el.value;changed('Programa visual editado');flowRefreshBlockText(b);flowRenderWires();});};
-    if(b.kind==='set')bind('fi-code','code');
-    if(b.kind==='if'){bind('fi-cond','cond');const th=$('#fi-then');if(th)th.addEventListener('change',()=>{b.then=th.value;changed('Conexión actualizada');flowRender();});const el2=$('#fi-else');if(el2)el2.addEventListener('change',()=>{b.else=el2.value;changed('Conexión actualizada');flowRender();});}
-    if(b.kind==='while'){bind('fi-cond','cond');const bd=$('#fi-body');if(bd)bd.addEventListener('change',()=>{b.body=bd.value;changed('Conexión actualizada');flowRender();});const ex=$('#fi-exit');if(ex)ex.addEventListener('change',()=>{b.exit=ex.value;changed('Conexión actualizada');flowRender();});}
-    if(b.kind==='delay')bind('fi-ms','ms');
-    if(b.kind==='read'){bind('fi-var','var');const src=$('#fi-src');if(src)src.addEventListener('change',()=>{b.source=src.value;changed('Origen de datos actualizado');flowRefreshBlockText(b);});}
-    if(b.kind==='notify')bind('fi-text','text');
-    if(b.kind==='call'){const fn=$('#fi-fn');if(fn)fn.addEventListener('change',()=>{b.fn=fn.value;changed('Función actualizada');flowRefreshBlockText(b);});bind('fi-args','args');}
-    if(b.kind==='return')bind('fi-value','value');
+
+
     box.querySelectorAll('[data-flow-unwire]').forEach(btn=>btn.addEventListener('click',()=>{snapshot();b[btn.dataset.flowUnwire]='';changed('Conexión eliminada');flowRender();}));
+    if(renderResult&&renderResult.binds)flowBindFields(b,renderResult.binds,box);
     $('#fi-delete').onclick=()=>{snapshot();flowDeleteBlock(b.id);};
   }
   function flowRefreshBlockText(b){
